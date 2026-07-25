@@ -142,6 +142,7 @@ export async function listDriverTrips(
           _id: unknown;
           tripNumber: number;
           requestId: unknown;
+          driverId?: unknown;
           date: string;
           assignedDriver?: {
             name?: string;
@@ -166,6 +167,25 @@ export async function listDriverTrips(
         }[]
       >(),
   ]);
+
+  const driverIds = Array.from(
+    new Set(
+      rawTrips
+        .map((trip) => (trip.driverId ? String(trip.driverId) : null))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  const assignedDriverEntries = await Promise.all(
+    driverIds.map(async (driverId) => [
+      driverId,
+      await buildAssignedDriver(driverId),
+    ] as const),
+  );
+  const assignedDriverById = new Map(
+    assignedDriverEntries
+      .filter(([, assignedDriver]) => Boolean(assignedDriver))
+      .map(([driverId, assignedDriver]) => [driverId, assignedDriver]),
+  );
 
   const requestIds = Array.from(
     new Set(rawTrips.map((t) => String(t.requestId))),
@@ -209,6 +229,9 @@ export async function listDriverTrips(
         trip.createdAt instanceof Date
           ? trip.createdAt.toISOString()
           : String(trip.createdAt),
+      assignedDriver: trip.driverId
+        ? assignedDriverById.get(String(trip.driverId)) ?? null
+        : null,
     })),
   };
 }
@@ -270,6 +293,25 @@ export async function listUserTrips(
       >(),
   ]);
 
+  const driverIds = Array.from(
+    new Set(
+      rawTrips
+        .map((trip) => (trip.driverId ? String(trip.driverId) : null))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  const assignedDriverEntries = await Promise.all(
+    driverIds.map(async (driverId) => [
+      driverId,
+      await buildAssignedDriver(driverId),
+    ] as const),
+  );
+  const assignedDriverById = new Map(
+    assignedDriverEntries
+      .filter(([, assignedDriver]) => Boolean(assignedDriver))
+      .map(([driverId, assignedDriver]) => [driverId, assignedDriver]),
+  );
+
   const requestIds = Array.from(
     new Set(rawTrips.map((t) => String(t.requestId))),
   );
@@ -312,6 +354,9 @@ export async function listUserTrips(
         trip.createdAt instanceof Date
           ? trip.createdAt.toISOString()
           : String(trip.createdAt),
+      assignedDriver: trip.driverId
+        ? assignedDriverById.get(String(trip.driverId)) ?? null
+        : null,
     })),
   };
 }
