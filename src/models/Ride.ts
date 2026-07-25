@@ -1,5 +1,5 @@
 import { Schema, model, models, Types, type InferSchemaType } from "mongoose";
-import { PointSchema, StopSchema } from "./Trip"; // extract these from Trip.ts
+import { PointSchema, StopSchema, StationSchema } from "./Trip";
 
 export const AssignedDriverSchema = new Schema(
   {
@@ -24,6 +24,8 @@ const RidePassengerSchema = new Schema(
     dropoffOrder: { type: Number, required: true, min: 0 },
     numberOfPassengers: { type: Number, required: true, min: 1, default: 1 },
     tripCost: { type: Number, required: true, min: 0, default: 0 },
+    pickupStation: { type: StationSchema, required: false },
+    dropoffStation: { type: StationSchema, required: false },
     status: {
       type: String,
       required: true,
@@ -74,6 +76,8 @@ const RideSchema = new Schema(
     },
     // combined, ordered pickup/dropoff sequence across all passengers on this ride
     route: { type: [StopSchema], default: [] },
+    pickupStation: { type: StationSchema, required: false },
+    dropoffStation: { type: StationSchema, required: false },
     startTime: { type: String, required: true },
     endTime: { type: String, required: true },
     passengers: { type: [RidePassengerSchema], default: [] },

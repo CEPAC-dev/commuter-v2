@@ -1,4 +1,4 @@
-import type { LatLng } from "./geo";
+import type { GeoPoint, LatLng, StationSelection } from "./geo";
 
 // ── Status enums (single source of truth; were duplicated across pages) ───────
 
@@ -23,6 +23,69 @@ export type BookingStatus =
 export type TripStatus = BookingStatus;
 
 // ── API / view-model row shapes ───────────────────────────────────────────────
+
+export type RideStatus =
+  | "matched"
+  | "confirmed"
+  | "active"
+  | "completed"
+  | "cancelled";
+
+export interface RidePassengerRow {
+  tripId: string;
+  pickupAddress: string;
+  dropoffAddress: string;
+  pickupOrder: number;
+  dropoffOrder: number;
+  numberOfPassengers: number;
+  tripCost: number;
+  status: string;
+  pickupStation?: StationSelection | null;
+  dropoffStation?: StationSelection | null;
+}
+
+export interface RideRouteStopRow {
+  address: string;
+  boarding: number;
+  alighting: number;
+  waitingMinutes: number;
+}
+
+/** Flat ride row for driver ongoing view on /my-trips and GET /api/ride. */
+export interface RideListRow {
+  id: string;
+  rideNumber: number;
+  date: string;
+  status: RideStatus;
+  vehicleType: string;
+  rideType: "private" | "shared";
+  startTime: string;
+  endTime: string;
+  totalCost: number;
+  passengerCount: number;
+  passengers: RidePassengerRow[];
+  route: RideRouteStopRow[];
+  pickupStation?: StationSelection | null;
+  dropoffStation?: StationSelection | null;
+  createdAt: string;
+}
+
+export interface RidePassengerDetail extends RidePassengerRow {
+  pickup: GeoPoint | null;
+  dropoff: GeoPoint | null;
+}
+
+export interface RideRouteStopDetail extends RideRouteStopRow {
+  point: GeoPoint | null;
+}
+
+/** Full ride detail for driver /my-trips/[id] when viewing a matched ride. */
+export interface RideDetailView
+  extends Omit<RideListRow, "passengers" | "route"> {
+  passengers: RidePassengerDetail[];
+  route: RideRouteStopDetail[];
+  chatTripId: string | null;
+}
 
 /** Flat trip row for the /my-trips history list and GET /api/trips. */
 export interface TripListRow {
