@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
-import { createRide, getRidesByDriver } from "@/lib/services/rideService";
+import {
+  createRide,
+  getRidesByDriver,
+  getRideByPassengerIncluded,
+} from "@/lib/services/rideService";
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,12 +25,16 @@ export async function GET(req: NextRequest) {
     await connectDB();
     const { searchParams } = new URL(req.url);
     const driverId = searchParams.get("driverId");
+    const passengerId = searchParams.get("passengerId");
     const date = searchParams.get("date") ?? undefined;
+    if (passengerId) {
+      const rides = await getRideByPassengerIncluded(passengerId);
+      return NextResponse.json({ data: rides });
+    }
 
     if (!driverId) {
       return NextResponse.json({ error: "driverId is required" }, { status: 400 });
     }
-
     const rides = await getRidesByDriver(driverId, date);
     return NextResponse.json({ data: rides });
   } catch (err: any) {

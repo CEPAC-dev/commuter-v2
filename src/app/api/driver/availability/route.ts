@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
           lat: endLocation.lat,
           lng: endLocation.lng,
         },
-        seatsRemaining: seats,
+        // seatsRemaining: seats,
         ...(startNearestStation && {
           startNearestStation: {
             id: startNearestStation.id,

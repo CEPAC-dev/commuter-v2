@@ -23,7 +23,7 @@ const AvailabilitySchema = new Schema(
     endNearestStation: { type: StationSchema, required: false },
     startTime: { type: String, required: true }, // "HH:MM"
     endTime: { type: String, required: true }, // "HH:MM"
-    seatsRemaining: { type: Number, required: true, min: 0 },
+    // seatsRemaining: { type: Number, required: true, min: 0 },
     status: {
       type: String,
       required: true,

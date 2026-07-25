@@ -1,7 +1,14 @@
 import mongoose, { Types } from "mongoose";
+import { connectDB } from "@/lib/db/mongoose";
 import { Ride, type RideDoc } from "../../models/Ride";
 import { Trip, type TripDoc } from "../../models/Trip";
 import { Availability, type AvailabilityDoc } from "../../models/Availability";
+import type {
+  RideDetailView,
+  RideListRow,
+  RideStatus,
+} from "@/types/booking";
+import type { GeoPoint, StationSelection } from "@/types/geo";
 
 type MatchResult = {
   availabilityId: Types.ObjectId | string;
@@ -19,8 +26,12 @@ type MatchResult = {
     pickupOrder: number;
     dropoffOrder: number;
     numberOfPassengers: number;
+    tripCost: number;
     priceEgp?: number;
   }>;
+  totalCost?: number;
+  status?: string;
+  seatsRemaining?: number;
   route?: any[]; // StopSchema-compatible array optional; if absent will be calculated
 };
 
@@ -33,17 +44,37 @@ async function createRide(matchResult: MatchResult) {
     ).session(session);
     if (!availability) throw new Error("Availability not found");
 
-    const passengersForRide = matchResult.passengers.map((p) => ({
-      tripId: p.tripId,
-      userId: p.userId || null,
-      pickup: p.pickup,
-      dropoff: p.dropoff,
-      pickupOrder: p.pickupOrder,
-      dropoffOrder: p.dropoffOrder,
-      numberOfPassengers: p.numberOfPassengers || 1,
-      status: "waiting",
-    }));
+    const tripIds = matchResult.passengers.map((p) => p.tripId);
+    const trips = await Trip.find({ _id: { $in: tripIds } })
+      .select("pickupStation dropoffStation")
+      .session(session)
+      .lean<
+        {
+          _id: unknown;
+          pickupStation?: StationSelection;
+          dropoffStation?: StationSelection;
+        }[]
+      >();
+    const tripById = new Map(trips.map((trip) => [String(trip._id), trip]));
 
+    const passengersForRide = matchResult.passengers.map((p) => {
+      const trip = tripById.get(String(p.tripId));
+      return {
+        tripId: p.tripId,
+        userId: p.userId || null,
+        pickup: p.pickup,
+        dropoff: p.dropoff,
+        pickupOrder: p.pickupOrder,
+        dropoffOrder: p.dropoffOrder,
+        tripCost: p.priceEgp || 0,
+        numberOfPassengers: p.numberOfPassengers || 1,
+        pickupStation: trip?.pickupStation ?? undefined,
+        dropoffStation: trip?.dropoffStation ?? undefined,
+        status: "waiting",
+      };
+    });
+
+    const firstTrip = tripById.get(String(matchResult.passengers[0]?.tripId));
     const rideNumber = await getNextSequence("rideNumber", session);
     const rideDoc = new Ride({
       rideNumber,
@@ -55,7 +86,17 @@ async function createRide(matchResult: MatchResult) {
       startTime: matchResult.startTime,
       endTime: matchResult.endTime,
       passengers: passengersForRide,
+      totalCost: passengersForRide.reduce(
+        (sum, p) => sum + (p.tripCost || 0),
+        0,
+      ),
       route: matchResult.route || [],
+      ...(matchResult.rideType === "shared"
+        ? {
+            pickupStation: firstTrip?.pickupStation ?? undefined,
+            dropoffStation: firstTrip?.dropoffStation ?? undefined,
+          }
+        : {}),
     });
 
     // if route absent, compute basic route from passengers
@@ -145,20 +186,236 @@ function recalculateRouteFromPassengers(passengers: any[]) {
 }
 
 async function getRideById(id: string | Types.ObjectId) {
+  await connectDB();
   return Ride.findById(id).lean();
+}
+
+function toGeoPoint(raw: Record<string, unknown> | null | undefined): GeoPoint | null {
+  if (
+    !raw ||
+    typeof raw.lat !== "number" ||
+    typeof raw.lng !== "number" ||
+    Number.isNaN(raw.lat) ||
+    Number.isNaN(raw.lng)
+  ) {
+    return null;
+  }
+  return {
+    lat: raw.lat,
+    lng: raw.lng,
+    address: typeof raw.address === "string" ? raw.address : "—",
+  };
+}
+
+function toStation(
+  raw: Record<string, unknown> | null | undefined,
+): StationSelection | null {
+  if (
+    !raw ||
+    typeof raw.id !== "number" ||
+    typeof raw.lat !== "number" ||
+    typeof raw.lng !== "number" ||
+    Number.isNaN(raw.lat) ||
+    Number.isNaN(raw.lng)
+  ) {
+    return null;
+  }
+  return {
+    id: raw.id,
+    lat: raw.lat,
+    lng: raw.lng,
+    name: typeof raw.name === "string" ? raw.name : "—",
+    stationType:
+      typeof raw.stationType === "string" ? raw.stationType : "station",
+    direction: typeof raw.direction === "string" ? raw.direction : undefined,
+  };
+}
+
+function mapPassengerRow(p: Record<string, any>) {
+  return {
+    tripId: String(p.tripId),
+    pickupAddress: p.pickup?.address ?? "—",
+    dropoffAddress: p.dropoff?.address ?? "—",
+    pickupOrder: p.pickupOrder ?? 0,
+    dropoffOrder: p.dropoffOrder ?? 0,
+    numberOfPassengers: p.numberOfPassengers ?? 1,
+    tripCost: p.tripCost ?? 0,
+    status: p.status ?? "waiting",
+    pickupStation: toStation(p.pickupStation),
+    dropoffStation: toStation(p.dropoffStation),
+  };
+}
+
+function mapRideToDetailView(ride: Record<string, any>): RideDetailView {
+  const passengers = (ride.passengers ?? []).map((p: Record<string, any>) => ({
+    ...mapPassengerRow(p),
+    pickup: toGeoPoint(p.pickup),
+    dropoff: toGeoPoint(p.dropoff),
+  }));
+
+  return {
+    id: String(ride._id),
+    rideNumber: ride.rideNumber,
+    date: ride.date,
+    status: ride.status as RideStatus,
+    vehicleType: ride.vehicleType,
+    rideType: ride.rideType,
+    startTime: ride.startTime,
+    endTime: ride.endTime,
+    totalCost: ride.totalCost ?? 0,
+    passengerCount: passengers.reduce(
+      (sum: number, p: { numberOfPassengers: number }) =>
+        sum + (p.numberOfPassengers || 1),
+      0,
+    ),
+    passengers,
+    route: (ride.route ?? []).map((stop: Record<string, any>) => ({
+      address: stop.point?.address ?? "—",
+      point: toGeoPoint(stop.point),
+      boarding: stop.boarding ?? 0,
+      alighting: stop.alighting ?? 0,
+      waitingMinutes: stop.waitingMinutes ?? 0,
+    })),
+    pickupStation: toStation(ride.pickupStation),
+    dropoffStation: toStation(ride.dropoffStation),
+    chatTripId: passengers[0]?.tripId ?? null,
+    createdAt:
+      ride.createdAt instanceof Date
+        ? ride.createdAt.toISOString()
+        : String(ride.createdAt ?? new Date().toISOString()),
+  };
+}
+
+async function getDriverRide(
+  driverId: string | Types.ObjectId,
+  id: string,
+): Promise<RideDetailView | null> {
+  if (!Types.ObjectId.isValid(id)) return null;
+
+  await connectDB();
+  const driverOid = new Types.ObjectId(String(driverId));
+  const lookupId = new Types.ObjectId(id);
+
+  let ride = await Ride.findOne({ _id: lookupId, driverId: driverOid }).lean();
+  if (!ride) {
+    ride = await Ride.findOne({
+      driverId: driverOid,
+      "passengers.tripId": lookupId,
+    }).lean();
+  }
+
+  if (!ride) return null;
+  return mapRideToDetailView(ride as Record<string, any>);
 }
 
 async function getRideByNumber(rideNumber: number) {
   return Ride.findOne({ rideNumber }).lean();
 }
 
+const RIDE_STATUS_GROUPS: Record<string, RideStatus[]> = {
+  ongoing: ["matched", "confirmed", "active"],
+  previous: ["completed", "cancelled"],
+};
+
+export interface ListDriverRidesOptions {
+  page?: number;
+  pageSize?: number;
+  statusGroup?: "ongoing" | "previous";
+  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+function mapRideToListRow(ride: Record<string, any>): RideListRow {
+  const passengers = (ride.passengers ?? []).map((p: Record<string, any>) =>
+    mapPassengerRow(p),
+  );
+
+  return {
+    id: String(ride._id),
+    rideNumber: ride.rideNumber,
+    date: ride.date,
+    status: ride.status as RideStatus,
+    vehicleType: ride.vehicleType,
+    rideType: ride.rideType,
+    startTime: ride.startTime,
+    endTime: ride.endTime,
+    totalCost: ride.totalCost ?? 0,
+    passengerCount: passengers.reduce(
+      (sum: number, p: { numberOfPassengers: number }) =>
+        sum + (p.numberOfPassengers || 1),
+      0,
+    ),
+    passengers,
+    route: (ride.route ?? []).map((stop: Record<string, any>) => ({
+      address: stop.point?.address ?? "—",
+      boarding: stop.boarding ?? 0,
+      alighting: stop.alighting ?? 0,
+      waitingMinutes: stop.waitingMinutes ?? 0,
+    })),
+    pickupStation: toStation(ride.pickupStation),
+    dropoffStation: toStation(ride.dropoffStation),
+    createdAt:
+      ride.createdAt instanceof Date
+        ? ride.createdAt.toISOString()
+        : String(ride.createdAt ?? new Date().toISOString()),
+  };
+}
+
 async function getRidesByDriver(
   driverId: string | Types.ObjectId,
-  date?: string,
-) {
-  const q: any = { driverId };
-  if (date) q.date = date;
-  return Ride.find(q).sort({ date: -1, startTime: 1 }).lean();
+  options?: string | ListDriverRidesOptions,
+): Promise<RideListRow[] | { rows: RideListRow[]; total: number; page: number }> {
+  await connectDB();
+
+  const opts: ListDriverRidesOptions =
+    typeof options === "string" ? { date: options } : (options ?? {});
+
+  const {
+    page,
+    pageSize = 12,
+    statusGroup,
+    date,
+    dateFrom,
+    dateTo,
+  } = opts;
+
+  const q: Record<string, unknown> = {
+    driverId: new Types.ObjectId(String(driverId)),
+  };
+
+  if (statusGroup && RIDE_STATUS_GROUPS[statusGroup]) {
+    q.status = { $in: RIDE_STATUS_GROUPS[statusGroup] };
+  }
+  if (date) {
+    q.date = date;
+  } else if (dateFrom || dateTo) {
+    const dateCond: Record<string, string> = {};
+    if (dateFrom) dateCond.$gte = dateFrom;
+    dateCond.$lte = dateTo || dateFrom!;
+    q.date = dateCond;
+  }
+
+  const query = Ride.find(q).sort({ date: -1, startTime: 1 });
+
+  if (page) {
+    const [total, rides] = await Promise.all([
+      Ride.countDocuments(q),
+      query
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
+    ]);
+
+    return {
+      total,
+      page,
+      rows: rides.map((ride) => mapRideToListRow(ride as Record<string, any>)),
+    };
+  }
+
+  const rides = await query.lean();
+  return rides.map((ride) => mapRideToListRow(ride as Record<string, any>));
 }
 
 async function getActiveRideForDriver(driverId: string | Types.ObjectId) {
@@ -207,6 +464,14 @@ async function addPassengerToRide(
     if (!availability) throw new Error("Availability not found");
     // no seatsRemaining checks for now
 
+    const trip = await Trip.findById(passenger.tripId)
+      .select("pickupStation dropoffStation")
+      .session(session)
+      .lean<{
+        pickupStation?: StationSelection;
+        dropoffStation?: StationSelection;
+      }>();
+
     ride.passengers.push({
       tripId: passenger.tripId,
       userId: passenger.userId || null,
@@ -215,6 +480,8 @@ async function addPassengerToRide(
       pickupOrder: passenger.pickupOrder,
       dropoffOrder: passenger.dropoffOrder,
       numberOfPassengers: passenger.numberOfPassengers || 1,
+      pickupStation: trip?.pickupStation ?? undefined,
+      dropoffStation: trip?.dropoffStation ?? undefined,
       status: "waiting",
     });
 
@@ -293,6 +560,19 @@ async function recalculateRoute(rideId: string | Types.ObjectId) {
   return ride;
 }
 
+async function getRideByPassengerIncluded(
+  passengerId: string | Types.ObjectId,
+) {
+  // Match either a passenger's tripId or userId to be flexible about passed id
+  const q: any = {
+    $or: [
+      { "passengers.tripId": passengerId },
+      { "passengers.userId": passengerId },
+    ],
+  };
+  return Ride.find(q).sort({ date: -1, startTime: 1 }).lean();
+}
+
 async function cancelRide(rideId: string | Types.ObjectId, reason?: string) {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -342,8 +622,10 @@ async function cancelRide(rideId: string | Types.ObjectId, reason?: string) {
 export {
   createRide,
   getRideById,
+  getDriverRide,
   getRideByNumber,
   getRidesByDriver,
+  getRideByPassengerIncluded,
   getActiveRideForDriver,
   getRideByAvailability,
   updateRideStatus,
