@@ -81,6 +81,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Helpful non-sensitive debug info
+  console.error('Kashier request', { KASHIER_URL, merchantId: process.env.KASHIER_MERCHANT_ID });
+
   let kashierRes: Response;
   try {
     kashierRes = await fetch(KASHIER_URL, {

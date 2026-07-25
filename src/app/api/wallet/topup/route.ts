@@ -82,6 +82,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  console.error('Kashier request (topup)', { KASHIER_URL, merchantId: process.env.KASHIER_MERCHANT_ID });
+
   let kashierRes: Response;
   try {
     kashierRes = await fetch(KASHIER_URL, {
