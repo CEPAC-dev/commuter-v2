@@ -83,19 +83,31 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify(body),
     });
-  } catch {
+  } catch (err) {
+    console.error("Kashier fetch error:", err);
     return NextResponse.json(
       { error: "Failed to reach payment gateway." },
       { status: 502 },
     );
   }
 
-  const kashierData = await kashierRes.json();
+  // Read raw text and attempt safe JSON parse (some upstream errors return HTML)
+  const kashierText = await kashierRes.text();
+  let kashierData: any = null;
+  try {
+    kashierData = JSON.parse(kashierText);
+  } catch (err) {
+    console.error("Kashier non-JSON response", kashierRes.status, kashierText.substring(0, 200));
+    return NextResponse.json(
+      { error: "Payment gateway returned non-JSON response", status: kashierRes.status, details: kashierText },
+      { status: 502 },
+    );
+  }
 
   if (!kashierRes.ok || !kashierData?.sessionUrl) {
-    console.error("Kashier session error:", kashierData);
+    console.error("Kashier session error:", kashierRes.status, kashierData);
     return NextResponse.json(
-      { error: "Payment gateway rejected the request." },
+      { error: "Payment gateway rejected the request.", details: kashierData },
       { status: 502 },
     );
   }
