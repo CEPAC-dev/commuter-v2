@@ -752,8 +752,7 @@ export default async function MyTripsPage({
                       VEHICLES[trip.vehicleType as VehicleKey]?.label ??
                       trip.vehicleType;
                     const timedOut = trip.status === "time_out";
-                    const isOngoing =
-                      trip.status === "active" || trip.status === "matched";
+                    const hasAssignedDriver = Boolean(trip.assignedDriver);
                     const needsPayment =
                       trip.paymentStatus === "pending" ||
                       trip.paymentStatus === "failed";
@@ -861,7 +860,7 @@ export default async function MyTripsPage({
                             </div>
 
                             {/* Driver + car (ongoing only — passenger view) */}
-                            {!isDriver && isOngoing && (
+                            {!isDriver && hasAssignedDriver && (
                               <div
                                 style={{
                                   marginBottom: 12,

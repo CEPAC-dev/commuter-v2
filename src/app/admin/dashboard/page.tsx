@@ -5,6 +5,7 @@ import { User } from "@/models/User";
 import { Trip } from "@/models/Trip";
 import { Availability } from "@/models/Availability";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
+import MatchRideForm from "@/components/admin/MatchRideForm";
 import { ShieldCheck, Users, Route, CalendarClock, ArrowUpRight } from "lucide-react";
 
 export default async function AdminDashboardPage() {
@@ -25,33 +26,111 @@ export default async function AdminDashboardPage() {
     { title: "Availability", value: availabilityCount, icon: CalendarClock, accent: "#E8A33D", accentDeep: "#B4790C", href: "/admin/availability" },
   ];
 
+  const [availabilities, drivers, trips] = await Promise.all([
+    Availability.find({ status: { $in: ["open", "matched"] } })
+      .select("_id date startTime endTime")
+      .sort({ date: 1, startTime: 1 })
+      .lean(),
+    User.find({ role: "driver" })
+      .select("_id name phone email")
+      .sort({ name: 1 })
+      .lean(),
+    Trip.find({ status: { $in: ["submitted", "pending_payment", "matched"] }, paymentStatus: "paid" })
+      .select("_id tripNumber date pickupTime arrivalTime pickup dropoff vehicleType rideType priceEgp numberOfPassengers userId")
+      .sort({ date: 1, pickupTime: 1 })
+      .lean(),
+  ]);
+
   const tools = [
     { label: "Manage users", href: "/admin/users" },
     { label: "Manage availability", href: "/admin/availability" },
     { label: "Manage trips", href: "/admin/trips" },
   ];
 
+  const now = new Date();
+  const stamp = now.toLocaleString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return (
     <main className="admin-board">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
 
         .admin-board {
           --ink: #0B1E3D;
           --teal: #00C2A8;
           --teal-deep: #00877A;
           --amber: #E8A33D;
+          --amber-deep: #B4790C;
           --slate: #5A6A7A;
           --line: #E6EAEC;
           --canvas: #F6F8F7;
           font-family: 'Inter', system-ui, sans-serif;
           min-height: 100dvh;
-          background: var(--canvas);
+          background:
+            radial-gradient(1200px 480px at 100% -10%, rgba(0,194,168,0.07), transparent 60%),
+            var(--canvas);
           padding: 32px 20px 80px;
         }
         .admin-board * { box-sizing: border-box; }
         .admin-board .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
         .admin-board .display { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        .admin-board a:focus-visible,
+        .admin-board button:focus-visible {
+          outline: 2px solid var(--teal-deep);
+          outline-offset: 2px;
+          border-radius: 6px;
+        }
+
+        /* Route-dash rule: a dispatch-board motif -- a dashed line evokes the
+           routes this platform matches, used once as the page's signature. */
+        .route-rule {
+          height: 1px;
+          margin: 22px 0 26px;
+          background-image: repeating-linear-gradient(
+            to right,
+            var(--teal) 0 10px,
+            transparent 10px 18px
+          );
+          opacity: 0.55;
+        }
+
+        .live-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--teal-deep);
+          background: rgba(0,194,168,0.09);
+          border: 1px solid rgba(0,194,168,0.25);
+          padding: 5px 10px 5px 8px;
+          border-radius: 999px;
+        }
+        .live-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--teal);
+          box-shadow: 0 0 0 0 rgba(0,194,168,0.5);
+          animation: pulse 2.4s ease-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .live-dot { animation: none; }
+        }
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(0,194,168,0.45); }
+          70% { box-shadow: 0 0 0 7px rgba(0,194,168,0); }
+          100% { box-shadow: 0 0 0 0 rgba(0,194,168,0); }
+        }
 
         .stat-card {
           position: relative;
@@ -69,6 +148,10 @@ export default async function AdminDashboardPage() {
           transform: translateY(-2px);
           box-shadow: 0 16px 40px rgba(11,30,61,0.09);
         }
+        @media (prefers-reduced-motion: reduce) {
+          .stat-card, .stat-card .go { transition: none; }
+          .stat-card:hover { transform: none; }
+        }
         .stat-card .rail {
           position: absolute; top: 0; left: 0; right: 0; height: 3px;
         }
@@ -78,6 +161,11 @@ export default async function AdminDashboardPage() {
           transition: color 0.14s ease, transform 0.14s ease;
         }
         .stat-card:hover .go { color: var(--teal-deep); transform: translate(2px, -2px); }
+        .stat-card .foot {
+          margin: 14px 0 0;
+          font-size: 12.5px;
+          color: var(--slate);
+        }
 
         .tool-link {
           text-decoration: none;
@@ -112,15 +200,18 @@ export default async function AdminDashboardPage() {
       `}</style>
 
       <div style={{ maxWidth: 1120, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 28, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
-            <p className="mono" style={{ margin: 0, fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "#00877A" }}>
-              Admin · Overview
-            </p>
-            <h1 className="display" style={{ margin: "6px 0 0", fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 700, color: "#0B1E3D" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+              <p className="mono" style={{ margin: 0, fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "#00877A" }}>
+                Admin · Overview
+              </p>
+              <span className="live-pill"><span className="live-dot" />Live</span>
+            </div>
+            <h1 className="display" style={{ margin: 0, fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 700, color: "#0B1E3D" }}>
               Dashboard
             </h1>
-            <p style={{ margin: "6px 0 0", fontSize: 14, color: "#5A6A7A" }}>A snapshot of the network right now.</p>
+            <p className="mono" style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5A6A7A" }}>{stamp}</p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <a href="/admin/users" className="top-link">
@@ -129,6 +220,8 @@ export default async function AdminDashboardPage() {
             <AdminLogoutButton />
           </div>
         </div>
+
+        <div className="route-rule" aria-hidden="true" />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 18 }}>
           {cards.map(({ title, value, icon: Icon, accent, accentDeep, href }) => (
@@ -140,6 +233,7 @@ export default async function AdminDashboardPage() {
               </div>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#5A6A7A", textTransform: "uppercase", letterSpacing: "0.05em" }}>{title}</p>
               <h2 className="mono" style={{ margin: "8px 0 0", fontSize: 32, fontWeight: 600, color: "#0B1E3D" }}>{value}</h2>
+              <p className="foot">Tap to manage {title.toLowerCase()}</p>
             </a>
           ))}
         </div>
@@ -157,6 +251,36 @@ export default async function AdminDashboardPage() {
             ))}
           </div>
         </div>
+
+        <MatchRideForm
+          initialDate={new Date().toISOString().slice(0, 10)}
+          availabilities={availabilities.map((item) => ({
+            _id: String(item._id),
+            date: item.date,
+            startTime: item.startTime,
+            endTime: item.endTime,
+          }))}
+          drivers={drivers.map((driver) => ({
+            _id: String(driver._id),
+            name: driver.name,
+            phone: driver.phone,
+            email: driver.email,
+          }))}
+          trips={trips.map((trip) => ({
+            _id: String(trip._id),
+            tripNumber: trip.tripNumber,
+            date: trip.date,
+            pickupTime: trip.pickupTime,
+            arrivalTime: trip.arrivalTime,
+            pickup: trip.pickup,
+            dropoff: trip.dropoff,
+            vehicleType: trip.vehicleType,
+            rideType: trip.rideType,
+            priceEgp: trip.priceEgp,
+            numberOfPassengers: trip.numberOfPassengers,
+            userId: String(trip.userId),
+          }))}
+        />
       </div>
     </main>
   );
