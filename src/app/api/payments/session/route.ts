@@ -38,12 +38,16 @@ export async function POST(req: NextRequest) {
       { status: 404 },
     );
 
-  const appUrl = process.env.APP_URL;
+  let appUrl = process.env.APP_URL;
   if (!appUrl) {
-    return NextResponse.json(
-      { error: "APP_URL is not configured on the server." },
-      { status: 500 },
-    );
+    // Derive from incoming request when APP_URL is not set (safer for many deploys)
+    const proto =
+      req.headers.get("x-forwarded-proto") ||
+      req.headers.get("x-forwarded-proto") ||
+      "https";
+    const host = req.headers.get("host") || "localhost:3000";
+    appUrl = `${proto}://${host}`;
+    console.warn("APP_URL env missing; derived from request as", appUrl);
   }
   const expireAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
