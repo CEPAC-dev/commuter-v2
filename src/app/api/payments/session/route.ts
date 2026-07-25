@@ -72,6 +72,15 @@ export async function POST(req: NextRequest) {
     serverWebhook: `${appUrl}/api/payments/webhook`,
   };
 
+  // Validate Kashier credentials early to avoid opaque upstream HTML errors
+  if (!process.env.KASHIER_API_KEY || !process.env.KASHIER_SECRET_KEY || !process.env.KASHIER_MERCHANT_ID) {
+    console.error('Kashier credentials missing: KASHIER_API_KEY/KASHIER_SECRET_KEY/KASHIER_MERCHANT_ID');
+    return NextResponse.json(
+      { error: 'Kashier credentials are not configured on the server.' },
+      { status: 500 },
+    );
+  }
+
   let kashierRes: Response;
   try {
     kashierRes = await fetch(KASHIER_URL, {
