@@ -49,6 +49,7 @@ type PassengerInput = {
   dropoffOrder: number;
   numberOfPassengers: number;
   priceEgp: number;
+  seatNumbers?: number[];
 };
 
 const VEHICLE_OPTIONS = [
@@ -122,12 +123,14 @@ export default function MatchRideForm({
     });
   }
 
-  function updatePassengerInput(tripId: string, field: keyof PassengerInput, value: string | number) {
+  function updatePassengerInput(tripId: string, field: keyof PassengerInput, value: any) {
     setPassengerInputs((current) => ({
       ...current,
       [tripId]: {
         ...current[tripId],
-        [field]: field === "numberOfPassengers" || field === "priceEgp" || field === "pickupOrder" || field === "dropoffOrder"
+        [field]: Array.isArray(value)
+          ? value
+          : field === "numberOfPassengers" || field === "priceEgp" || field === "pickupOrder" || field === "dropoffOrder"
           ? Number(value)
           : value,
       },
@@ -160,6 +163,7 @@ export default function MatchRideForm({
         dropoffOrder: input.dropoffOrder,
         numberOfPassengers: input.numberOfPassengers,
         priceEgp: input.priceEgp,
+        seatNumbers: input.seatNumbers ?? [],
       };
     });
 
@@ -454,7 +458,30 @@ export default function MatchRideForm({
                           <span className="order-track" aria-hidden="true" />
                           <span className="order-badge drop" title="Dropoff order">{input.dropoffOrder}</span>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginTop: 10 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginTop: 10 }}>
+                          <label style={{ display: "grid", gap: 5 }}>
+                            <span className="field-label" style={{ fontSize: 11 }}>Assign Chair</span>
+                            <select
+                              value={input.seatNumbers?.[0] ?? ""}
+                              onChange={(e) => {
+                                const startSeat = Number(e.target.value);
+                                const count = input.numberOfPassengers || 1;
+                                const seats = startSeat ? Array.from({ length: count }, (_, i) => startSeat + i) : [];
+                                updatePassengerInput(tripId, "seatNumbers" as any, seats);
+                              }}
+                              className="field"
+                            >
+                              <option value="">Auto Seat</option>
+                              {Array.from(
+                                { length: vehicleType.includes("microbus") ? 9 : vehicleType.includes("van") ? 5 : 3 },
+                                (_, i) => i + 1,
+                              ).map((sNo) => (
+                                <option key={sNo} value={sNo}>
+                                  Chair #{sNo}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
                           <label style={{ display: "grid", gap: 5 }}>
                             <span className="field-label" style={{ fontSize: 11 }}>Pickup order</span>
                             <input type="number" min={1} value={input.pickupOrder} onChange={(e) => updatePassengerInput(tripId, "pickupOrder", e.target.value)} className="field" />

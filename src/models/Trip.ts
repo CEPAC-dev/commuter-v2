@@ -117,6 +117,7 @@ const TripSchema = new Schema(
     stops: { type: [StopSchema], default: [] },
     pickupStation: { type: StationSchema, required: false },
     dropoffStation: { type: StationSchema, required: false },
+    seatNumbers: { type: [Number], default: [] },
     pickupStationOptions: { type: [StationOptionSchema], default: [] },
     dropoffStationOptions: { type: [StationOptionSchema], default: [] },
     walkingMinToStation: { type: Number, min: 0 },

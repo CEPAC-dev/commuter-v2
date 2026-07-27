@@ -616,7 +616,13 @@ export default async function MyTripsPage({
                                               color: "#0B1E3D",
                                             }}
                                           >
-                                            {truncate(passenger.pickupAddress)}
+                                            {truncate(
+                                              ride.rideType === "shared"
+                                                ? (passenger.pickupStation?.name ??
+                                                  ride.pickupStation?.name ??
+                                                  passenger.pickupAddress)
+                                                : passenger.pickupAddress,
+                                            )}
                                           </span>
                                         </div>
                                         <div
@@ -641,7 +647,13 @@ export default async function MyTripsPage({
                                               color: "#0B1E3D",
                                             }}
                                           >
-                                            {truncate(passenger.dropoffAddress)}
+                                            {truncate(
+                                              ride.rideType === "shared"
+                                                ? (passenger.dropoffStation?.name ??
+                                                  ride.dropoffStation?.name ??
+                                                  passenger.dropoffAddress)
+                                                : passenger.dropoffAddress,
+                                            )}
                                           </span>
                                         </div>
                                       </div>

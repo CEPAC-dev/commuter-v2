@@ -8,6 +8,7 @@ import { Driver } from "@/models/Driver";
 import type {
   BookingStatus,
   PaymentStatus,
+  RideDetailView,
   TripListRow,
 } from "@/types/booking";
 import type { GeoPoint, StationSelection } from "@/types/geo";
@@ -379,6 +380,7 @@ export interface UserTripDetail {
   extraPassengers: number;
   pickupStation?: StationSelection;
   dropoffStation?: StationSelection;
+  seatNumbers?: number[];
   walkingMinToStation?: number;
   walkingMinFromStation?: number;
   pickupStationOptions: StationOption[];
@@ -399,6 +401,8 @@ export interface UserTripDetail {
   status: string;
   createdAt: string;
   assignedDriver?: AssignedDriver | null;
+  rideId?: string;
+  rideDetails?: RideDetailView | null;
 }
 
 export async function getDriverTrip(
@@ -501,6 +505,8 @@ export async function getUserTrip(
     extraPassengers: number;
     pickupStation?: StationSelection;
     dropoffStation?: StationSelection;
+    seatNumbers?: number[];
+    rideId?: unknown;
     walkingMinToStation?: number;
     walkingMinFromStation?: number;
     pickupStationOptions?: StationOption[];
@@ -528,10 +534,16 @@ export async function getUserTrip(
     ? await buildAssignedDriver(trip.driverId)
     : null;
 
+  const { getRideById } = await import("./rideService");
+  const rideDetails = trip.rideId ? await getRideById(String(trip.rideId)) : null;
+
   return {
     ...trip,
     id: String(trip._id),
     requestId: String(trip.requestId),
+    seatNumbers: trip.seatNumbers ?? [],
+    rideId: trip.rideId ? String(trip.rideId) : undefined,
+    rideDetails,
     paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
     pickupStationOptions: trip.pickupStationOptions ?? [],
     dropoffStationOptions: trip.dropoffStationOptions ?? [],
