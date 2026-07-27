@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
+import { Station } from "@/models/Station";
+import { fetchDirections } from "@/app/api/directions/route";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -171,10 +173,123 @@ export async function GET() {
     };
   });
 
+  const stationIds = Array.from(
+    new Set(
+      rows
+        .map((row) => [
+          row.originNearestStationNo,
+          row.destinationNearestStationNo,
+        ])
+        .flat()
+        .filter(
+          (id): id is number => typeof id === "number" && Number.isFinite(id),
+        ),
+    ),
+  );
+
+  const stations = await Station.find({ objectId: { $in: stationIds } })
+    .select("objectId name lat lng")
+    .lean<{ objectId: number; name: string; lat: number; lng: number }[]>();
+
+  const stationMap = new Map(
+    stations.map((station) => [station.objectId, station]),
+  );
+  const orderedStations = stationIds
+    .map((id) => stationMap.get(id))
+    .filter(
+      (
+        station,
+      ): station is {
+        objectId: number;
+        name: string;
+        lat: number;
+        lng: number;
+      } => Boolean(station),
+    );
+
+  async function getDistanceKm(
+    from: { lat: number; lng: number },
+    to: { lat: number; lng: number },
+  ) {
+    if (from.lat === to.lat && from.lng === to.lng) return 0;
+    const origin = `${from.lat},${from.lng}`;
+    const dest = `${to.lat},${to.lng}`;
+    const result = await fetchDirections(origin, dest);
+    return result[0]?.distance_km ?? 0;
+  }
+
+  async function getDurationMin(
+    from: { lat: number; lng: number },
+    to: { lat: number; lng: number },
+  ) {
+    if (from.lat === to.lat && from.lng === to.lng) return 0;
+    const origin = `${from.lat},${from.lng}`;
+    const dest = `${to.lat},${to.lng}`;
+    const result = await fetchDirections(origin, dest);
+    return result[0]?.duration_minutes ?? 0;
+  }
+
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("PrivateRideRequests");
   ws.addRow(COLUMNS);
   for (const r of rows) ws.addRow(COLUMNS.map((c) => r[c]));
+
+  const matrixSheet = wb.addWorksheet("StationMatrixDistance");
+  matrixSheet.getCell("A1").value = "District Name";
+  matrixSheet.getCell("B2").value = "District Id";
+
+  orderedStations.forEach((station, index) => {
+    const column = index + 3;
+    matrixSheet.getRow(1).getCell(column).value =
+      station.name || String(station.objectId);
+    matrixSheet.getRow(2).getCell(column).value = station.objectId;
+    matrixSheet.getRow(index + 3).getCell(1).value =
+      station.name || String(station.objectId);
+    matrixSheet.getRow(index + 3).getCell(2).value = station.objectId;
+  });
+
+  for (let rowIndex = 0; rowIndex < orderedStations.length; rowIndex++) {
+    for (let colIndex = 0; colIndex < orderedStations.length; colIndex++) {
+      const originStation = orderedStations[rowIndex];
+      const destStation = orderedStations[colIndex];
+      const distanceKm = await getDistanceKm(originStation, destStation);
+      matrixSheet.getRow(rowIndex + 3).getCell(colIndex + 3).value = distanceKm;
+    }
+  }
+
+  const durationSheet = wb.addWorksheet("StationMatrixDuration");
+  durationSheet.getCell("A1").value = "District Name";
+  durationSheet.getCell("B2").value = "District Id";
+
+  orderedStations.forEach((station, index) => {
+    const column = index + 3;
+    durationSheet.getRow(1).getCell(column).value =
+      station.name || String(station.objectId);
+    durationSheet.getRow(2).getCell(column).value = station.objectId;
+    durationSheet.getRow(index + 3).getCell(1).value =
+      station.name || String(station.objectId);
+    durationSheet.getRow(index + 3).getCell(2).value = station.objectId;
+  });
+
+  for (let rowIndex = 0; rowIndex < orderedStations.length; rowIndex++) {
+    for (let colIndex = 0; colIndex < orderedStations.length; colIndex++) {
+      const originStation = orderedStations[rowIndex];
+      const destStation = orderedStations[colIndex];
+      const durationMin = await getDurationMin(originStation, destStation);
+      durationSheet.getRow(rowIndex + 3).getCell(colIndex + 3).value = durationMin;
+    }
+  }
+
+  const stationsSheet = wb.addWorksheet("Stations");
+  stationsSheet.addRow(["District Id", "lat", "lng", "District Name"]);
+  orderedStations.forEach((station) => {
+    stationsSheet.addRow([
+      station.objectId,
+      station.lat,
+      station.lng,
+      station.name || "",
+    ]);
+  });
 
   const zip = new JSZip();
   zip.file("private-ride-requests.json", JSON.stringify(rows, null, 2));
