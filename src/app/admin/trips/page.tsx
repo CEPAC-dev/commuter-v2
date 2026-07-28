@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Route, Trash2, UserPlus, X, MapPin, Inbox } from "lucide-react";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 
@@ -360,11 +361,23 @@ export default function AdminTripsPage() {
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <Link
+              href="/admin/trips"
+              style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none", background: "#0B1E3D", color: "#ffffff" }}
+            >
+              Single Trips
+            </Link>
+            <Link
+              href="/admin/rides"
+              style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none", background: "#ffffff", color: "#5A6A7A", border: "1px solid #E6EAEC" }}
+            >
+              Matched Rides
+            </Link>
             <a
               href="/admin/dashboard"
               style={{ textDecoration: "none", padding: "11px 18px", borderRadius: 10, color: "#0B1E3D", fontWeight: 600, fontSize: 14, background: "#ffffff", border: "1px solid #E6EAEC" }}
             >
-              Back to dashboard
+              Dashboard
             </a>
             <AdminLogoutButton />
           </div>

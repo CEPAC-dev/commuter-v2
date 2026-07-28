@@ -157,14 +157,8 @@ export default async function MyTripsPage({
   let rideRows: RideListRow[] = [];
   let total = 0;
 
-  if (driverOngoingView) {
-    const result = await getRidesByDriver(session.userId, {
-      page,
-      pageSize: PAGE_SIZE,
-      statusGroup: "ongoing",
-      dateFrom,
-      dateTo,
-    });
+  if (isDriver) {
+    const result = await getRidesByDriver(session.userId, listOptions);
     if (Array.isArray(result)) {
       rideRows = result;
       total = result.length;
@@ -173,9 +167,7 @@ export default async function MyTripsPage({
       total = result.total;
     }
   } else {
-    const result = isDriver
-      ? await listDriverTrips(session.userId, listOptions)
-      : await listUserTrips(session.userId, listOptions);
+    const result = await listUserTrips(session.userId, listOptions);
     tripRows = result.rows;
     total = result.total;
   }
@@ -190,7 +182,7 @@ export default async function MyTripsPage({
 
   // Group consecutive items by day (order already sorted above).
   const dayGroups: { date: string; items: DayItem[] }[] = [];
-  const listItems: DayItem[] = driverOngoingView
+  const listItems: DayItem[] = isDriver
     ? rideRows.map((ride) => ({ kind: "ride", data: ride }))
     : tripRows.map((trip) => ({ kind: "trip", data: trip }));
 
@@ -325,9 +317,9 @@ export default async function MyTripsPage({
                     style={{ fontSize: 12, color: "#9aa7b4", fontWeight: 600 }}
                   >
                     · {group.items.length}{" "}
-                    {driverOngoingView ? "ride" : "trip"}
+                    {isDriver ? "ride" : "trip"}
                     {group.items.length === 1 ? "" : "s"}
-                    {driverOngoingView
+                    {isDriver
                       ? ` · ${group.items.reduce(
                           (sum, item) =>
                             item.kind === "ride"

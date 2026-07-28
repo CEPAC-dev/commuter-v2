@@ -3,10 +3,11 @@ import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { Trip } from "@/models/Trip";
+import { Ride } from "@/models/Ride";
 import { Availability } from "@/models/Availability";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import MatchRideForm from "@/components/admin/MatchRideForm";
-import { ShieldCheck, Users, Route, CalendarClock, ArrowUpRight } from "lucide-react";
+import { ShieldCheck, Users, Route, CalendarClock, ArrowUpRight, Car } from "lucide-react";
 
 export default async function AdminDashboardPage() {
   const session = await getSession();
@@ -14,14 +15,16 @@ export default async function AdminDashboardPage() {
   if (session.role !== "admin") redirect("/admin/signup");
 
   await connectDB();
-  const [userCount, tripCount, availabilityCount] = await Promise.all([
+  const [userCount, tripCount, rideCount, availabilityCount] = await Promise.all([
     User.countDocuments(),
     Trip.countDocuments(),
+    Ride.countDocuments(),
     Availability.countDocuments(),
   ]);
 
   const cards = [
     { title: "Users", value: userCount, icon: Users, accent: "#00C2A8", accentDeep: "#00877A", href: "/admin/users" },
+    { title: "Rides", value: rideCount, icon: Car, accent: "#00877A", accentDeep: "#00877A", href: "/admin/rides" },
     { title: "Trips", value: tripCount, icon: Route, accent: "#0B1E3D", accentDeep: "#0B1E3D", href: "/admin/trips" },
     { title: "Availability", value: availabilityCount, icon: CalendarClock, accent: "#E8A33D", accentDeep: "#B4790C", href: "/admin/availability" },
   ];
@@ -42,9 +45,10 @@ export default async function AdminDashboardPage() {
   ]);
 
   const tools = [
+    { label: "Manage rides", href: "/admin/rides" },
+    { label: "Manage trips", href: "/admin/trips" },
     { label: "Manage users", href: "/admin/users" },
     { label: "Manage availability", href: "/admin/availability" },
-    { label: "Manage trips", href: "/admin/trips" },
   ];
 
   const now = new Date();
