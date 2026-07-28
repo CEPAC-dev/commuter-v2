@@ -361,7 +361,7 @@ export async function GET() {
         });
         nextStopNumber += 1;
       } else {
-        row[numberKey] = null as never;
+        row[numberKey] = 0 as never;
         row[latKey] = 0 as never;
         row[longKey] = 0 as never;
         row[addressKey] = null as never;
