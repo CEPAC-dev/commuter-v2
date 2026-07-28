@@ -84,7 +84,7 @@ export async function PATCH(req: NextRequest) {
   const driver = await Driver.findOneAndUpdate(
     { userId: session.userId },
     update,
-    { new: true },
+    { returnDocument: "after" },
   )
     .select(
       "payoutMethod payoutMobile payoutBankName payoutAccountNumber payoutAccountHolder",

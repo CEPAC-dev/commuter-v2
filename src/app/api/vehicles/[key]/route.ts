@@ -72,7 +72,7 @@ export async function PATCH(
 
   await connectDB();
   const vehicle = await Vehicle.findOneAndUpdate({ key }, update, {
-    new: true,
+    returnDocument: "after",
   });
   if (!vehicle) {
     return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });

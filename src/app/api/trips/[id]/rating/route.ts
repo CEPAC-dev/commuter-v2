@@ -59,7 +59,9 @@ export async function POST(req: Request, { params }: RouteContext) {
   const driverRating = Number(body.driverRating);
   const carRating = Number(body.carRating);
   const feedback =
-    typeof body.feedback === "string" ? body.feedback.trim().slice(0, 1000) : "";
+    typeof body.feedback === "string"
+      ? body.feedback.trim().slice(0, 1000)
+      : "";
 
   const validRating = (n: number) => Number.isInteger(n) && n >= 1 && n <= 5;
   if (!validRating(driverRating) || !validRating(carRating)) {
@@ -82,7 +84,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   const rating = await Rating.findOneAndUpdate(
     { tripId: id, userId: session.userId },
     { driverRating, carRating, feedback },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   ).lean<{ driverRating: number; carRating: number; feedback: string }>();
 
   return NextResponse.json({ data: rating }, { status: 201 });
