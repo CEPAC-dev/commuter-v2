@@ -21,7 +21,7 @@ interface RideRouteStop {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { rideId: string } },
+  { params }: { params: Promise<{ rideId: string }> },
 ) {
   try {
     const session = await getSession();
@@ -34,7 +34,7 @@ export async function GET(
 
     await connectDB();
 
-    const { rideId } = params;
+    const { rideId } = await params;
 
     // Fetch ride
     const ride = await Ride.findById(rideId)
@@ -49,7 +49,7 @@ export async function GET(
     }
 
     // Verify driver owns this ride
-    if (ride.driverId.toString() !== session.user?.id) {
+    if (ride.driverId.toString() !== session.userId) {
       return NextResponse.json(
         { success: false, error: "Forbidden - not your ride" },
         { status: 403 },
@@ -249,7 +249,7 @@ function getNextPrivateRideAction(ride: any, logs: any[], lastLog: any) {
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { rideId: string } },
+  { params }: { params: Promise<{ rideId: string }> },
 ) {
   try {
     const session = await getSession();
@@ -262,7 +262,7 @@ export async function POST(
 
     await connectDB();
 
-    const { rideId } = params;
+    const { rideId } = await params;
     const body = await request.json();
 
     // Fetch ride
@@ -276,7 +276,7 @@ export async function POST(
     }
 
     // Verify driver owns this ride
-    if (ride.driverId.toString() !== session.user?.id) {
+    if (ride.driverId.toString() !== session.userId) {
       return NextResponse.json(
         { success: false, error: "Forbidden - not your ride" },
         { status: 403 },
@@ -295,7 +295,7 @@ export async function POST(
     } = body;
 
     const driverId = ride.driverId;
-    const tripIds = ride.passengers.map((p) => p.tripId);
+    const tripIds = ride.passengers.map((p: { tripId: unknown }) => p.tripId);
 
     let result: any = { success: false };
 

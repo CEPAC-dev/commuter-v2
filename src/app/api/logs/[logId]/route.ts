@@ -9,12 +9,12 @@ import { getSession } from "@/lib/auth/session";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { logId: string } },
+  { params }: { params: Promise<{ logId: string }> },
 ) {
   try {
     await connectDB();
 
-    const { logId } = params;
+    const { logId } = await params;
 
     const log = await Log.findById(logId).lean();
 
@@ -41,7 +41,7 @@ export async function GET(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { logId: string } },
+  { params }: { params: Promise<{ logId: string }> },
 ) {
   try {
     const session = await getSession();
@@ -62,7 +62,7 @@ export async function DELETE(
 
     await connectDB();
 
-    const { logId } = params;
+    const { logId } = await params;
 
     const log = await Log.findByIdAndDelete(logId);
 
