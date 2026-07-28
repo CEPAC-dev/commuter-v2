@@ -29,26 +29,34 @@ interface PrivateRow {
   passId: number | null;
   originNearestStationNo: number | null;
   destinationNearestStationNo: number | null;
-  stop1Lat: number;
-  stop1Long: number;
-  stop1Alighting: number;
-  stop1Boarding: number;
-  stop1WaitingTime: number;
-  stop2Lat: number;
-  stop2Long: number;
-  stop2Alighting: number;
-  stop2Boarding: number;
-  stop2WaitingTime: number;
-  stop3Lat: number;
-  stop3Long: number;
-  stop3Alighting: number;
-  stop3Boarding: number;
-  stop3WaitingTime: number;
-  stop4Lat: number;
-  stop4Long: number;
-  stop4Alighting: number;
-  stop4Boarding: number;
-  stop4WaitingTime: number;
+  stop1Number: number | null;
+  stop1Lat: number | null;
+  stop1Long: number | null;
+  stop1Address: string | null;
+  stop1Alighting: number | null;
+  stop1Boarding: number | null;
+  stop1WaitingTime: number | null;
+  stop2Number: number | null;
+  stop2Lat: number | null;
+  stop2Long: number | null;
+  stop2Address: string | null;
+  stop2Alighting: number | null;
+  stop2Boarding: number | null;
+  stop2WaitingTime: number | null;
+  stop3Number: number | null;
+  stop3Lat: number | null;
+  stop3Long: number | null;
+  stop3Address: string | null;
+  stop3Alighting: number | null;
+  stop3Boarding: number | null;
+  stop3WaitingTime: number | null;
+  stop4Number: number | null;
+  stop4Lat: number | null;
+  stop4Long: number | null;
+  stop4Address: string | null;
+  stop4Alighting: number | null;
+  stop4Boarding: number | null;
+  stop4WaitingTime: number | null;
   readyFrom: string;
   shouldArrivebefore: string;
   rideType: number;
@@ -93,23 +101,19 @@ const PRIVATE_COLUMNS: (keyof PrivateRow)[] = [
   "passId",
   "originNearestStationNo",
   "destinationNearestStationNo",
-  "stop1Lat",
-  "stop1Long",
+  "stop1Number",
   "stop1Alighting",
   "stop1Boarding",
   "stop1WaitingTime",
-  "stop2Lat",
-  "stop2Long",
+  "stop2Number",
   "stop2Alighting",
   "stop2Boarding",
   "stop2WaitingTime",
-  "stop3Lat",
-  "stop3Long",
+  "stop3Number",
   "stop3Alighting",
   "stop3Boarding",
   "stop3WaitingTime",
-  "stop4Lat",
-  "stop4Long",
+  "stop4Number",
   "stop4Alighting",
   "stop4Boarding",
   "stop4WaitingTime",
@@ -218,7 +222,7 @@ export async function GET() {
       pickupStation?: { id: number };
       dropoffStation?: { id: number };
       stops?: {
-        point?: { lat: number; lng: number };
+        point?: { address: string; lat: number; lng: number };
         alighting?: number;
         boarding?: number;
         waitingMinutes?: number;
@@ -286,38 +290,94 @@ export async function GET() {
     drivers.map((driver) => [String(driver.userId), driver.carType]),
   );
 
+  let nextStopNumber = 5000;
+  const syntheticStations: StationInfo[] = [];
+
   const privateRows: PrivateRow[] = privateTrips.map((trip) => {
     const s = trip.stops ?? [];
-    return {
+    const row: PrivateRow = {
       rideId: trip.tripNumber,
       passId: userNumberMap.get(String(trip.userId)) ?? null,
       originNearestStationNo: trip.pickupStation?.id ?? null,
       destinationNearestStationNo: trip.dropoffStation?.id ?? null,
-      stop1Lat: s[0]?.point?.lat ?? 0,
-      stop1Long: s[0]?.point?.lng ?? 0,
-      stop1Alighting: s[0]?.alighting ?? 0,
-      stop1Boarding: s[0]?.boarding ?? 0,
-      stop1WaitingTime: s[0]?.waitingMinutes ?? 0,
-      stop2Lat: s[1]?.point?.lat ?? 0,
-      stop2Long: s[1]?.point?.lng ?? 0,
-      stop2Alighting: s[1]?.alighting ?? 0,
-      stop2Boarding: s[1]?.boarding ?? 0,
-      stop2WaitingTime: s[1]?.waitingMinutes ?? 0,
-      stop3Lat: s[2]?.point?.lat ?? 0,
-      stop3Long: s[2]?.point?.lng ?? 0,
-      stop3Alighting: s[2]?.alighting ?? 0,
-      stop3Boarding: s[2]?.boarding ?? 0,
-      stop3WaitingTime: s[2]?.waitingMinutes ?? 0,
-      stop4Lat: s[3]?.point?.lat ?? 0,
-      stop4Long: s[3]?.point?.lng ?? 0,
-      stop4Alighting: s[3]?.alighting ?? 0,
-      stop4Boarding: s[3]?.boarding ?? 0,
-      stop4WaitingTime: s[3]?.waitingMinutes ?? 0,
+      stop1Number: null,
+      stop1Lat: null,
+      stop1Long: null,
+      stop1Address: null,
+      stop1Alighting: null,
+      stop1Boarding: null,
+      stop1WaitingTime: null,
+      stop2Number: null,
+      stop2Lat: null,
+      stop2Long: null,
+      stop2Address: null,
+      stop2Alighting: null,
+      stop2Boarding: null,
+      stop2WaitingTime: null,
+      stop3Number: null,
+      stop3Lat: null,
+      stop3Long: null,
+      stop3Address: null,
+      stop3Alighting: null,
+      stop3Boarding: null,
+      stop3WaitingTime: null,
+      stop4Number: null,
+      stop4Lat: null,
+      stop4Long: null,
+      stop4Address: null,
+      stop4Alighting: null,
+      stop4Boarding: null,
+      stop4WaitingTime: null,
       readyFrom: trip.pickupTime,
       shouldArrivebefore: trip.arrivalTime,
       rideType: trip.vehicleType === "private_car" ? 1 : 2,
       totalStartedPassengers: trip.numberOfPassengers,
     };
+
+    const assignStop = (
+      index: number,
+      stop: (typeof s)[number] | undefined,
+    ) => {
+      const point = stop?.point;
+      const stopKey = `stop${index}` as const;
+      const numberKey = `${stopKey}Number` as keyof PrivateRow;
+      const latKey = `${stopKey}Lat` as keyof PrivateRow;
+      const longKey = `${stopKey}Long` as keyof PrivateRow;
+      const addressKey = `${stopKey}Address` as keyof PrivateRow;
+      const alightingKey = `${stopKey}Alighting` as keyof PrivateRow;
+      const boardingKey = `${stopKey}Boarding` as keyof PrivateRow;
+      const waitingKey = `${stopKey}WaitingTime` as keyof PrivateRow;
+
+      if (point?.lat != null && point?.lng != null) {
+        row[numberKey] = nextStopNumber as never;
+        row[latKey] = point.lat as never;
+        row[longKey] = point.lng as never;
+        row[addressKey] = (point.address ?? null) as never;
+        syntheticStations.push({
+          objectId: nextStopNumber,
+          name: point.address ?? "",
+          lat: point.lat,
+          lng: point.lng,
+        });
+        nextStopNumber += 1;
+      } else {
+        row[numberKey] = null as never;
+        row[latKey] = 0 as never;
+        row[longKey] = 0 as never;
+        row[addressKey] = null as never;
+      }
+
+      row[alightingKey] = (stop?.alighting ?? 0) as never;
+      row[boardingKey] = (stop?.boarding ?? 0) as never;
+      row[waitingKey] = (stop?.waitingMinutes ?? 0) as never;
+    };
+
+    assignStop(1, s[0]);
+    assignStop(2, s[1]);
+    assignStop(3, s[2]);
+    assignStop(4, s[3]);
+
+    return row;
   });
 
   const sharedRows: SharedRow[] = sharedTrips.map((trip) => ({
@@ -374,6 +434,7 @@ export async function GET() {
         ...availabilityRows
           .map((row) => [row.startNearestStationNo, row.endNearestStationNo])
           .flat(),
+        ...syntheticStations.map((station) => station.objectId),
       ].filter(
         (id): id is number => typeof id === "number" && Number.isFinite(id),
       ),
@@ -387,8 +448,11 @@ export async function GET() {
   const stationMap = new Map(
     stations.map((station) => [station.objectId, station]),
   );
+  const syntheticStationMap = new Map(
+    syntheticStations.map((station) => [station.objectId, station]),
+  );
   const orderedStations = stationIds
-    .map((id) => stationMap.get(id))
+    .map((id) => stationMap.get(id) ?? syntheticStationMap.get(id))
     .filter((station): station is StationInfo => Boolean(station));
 
   const routeCache = new Map<
@@ -474,36 +538,7 @@ export async function GET() {
   adjustWorksheetSizing(matrixDuration);
 
   const privateSheet = wb.addWorksheet("PrivateRideRequests");
-  privateSheet.addRow([
-    "rideId",
-    "passId",
-    "originNearestStationNo",
-    "destinationNearestStationNo",
-    "stop1Lat",
-    "stop1Long",
-    "stop1Alighting",
-    "stop1Boarding",
-    "stop1WaitingTime",
-    "stop2Lat",
-    "stop2Long",
-    "stop2Alighting",
-    "stop2Boarding",
-    "stop2WaitingTime",
-    "stop3Lat",
-    "stop3Long",
-    "stop3Alighting",
-    "stop3Boarding",
-    "stop3WaitingTime",
-    "stop4Lat",
-    "stop4Long",
-    "stop4Alighting",
-    "stop4Boarding",
-    "stop4WaitingTime",
-    "readyFrom",
-    "shouldArrivebefore",
-    "rideType",
-    "totalStartedPassengers",
-  ]);
+  privateSheet.addRow(PRIVATE_COLUMNS.map((column) => column));
   for (const row of privateRows) {
     privateSheet.addRow(PRIVATE_COLUMNS.map((column) => row[column]));
   }
