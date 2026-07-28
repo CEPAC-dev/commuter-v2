@@ -40,6 +40,7 @@ export default async function AdminUsersPage() {
     return {
       ...(plainUser as Record<string, unknown>),
       _id: String(plainUser._id),
+      userNumber: typeof plainUser.userNumber === "number" ? plainUser.userNumber : undefined,
       role: typeof plainUser.role === "string" ? plainUser.role : "passenger",
       driver: plainDriver
         ? {
