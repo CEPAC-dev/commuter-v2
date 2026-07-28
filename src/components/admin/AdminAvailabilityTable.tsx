@@ -9,11 +9,19 @@ interface AvailabilityRecord {
     _id?: string;
     name?: string;
     phone?: string;
+    carType?: string;
   } | null;
   date?: string;
   startTime?: string;
   endTime?: string;
 }
+
+const CAR_TYPE_LABELS: Record<string, string> = {
+  private: "Private car",
+  taxi: "Taxi",
+  van: "Van",
+  microbus: "Microbus",
+};
 
 export default function AdminAvailabilityTable({ initialRecords }: { initialRecords: AvailabilityRecord[] }) {
   const [records, setRecords] = useState(initialRecords);
@@ -57,6 +65,7 @@ export default function AdminAvailabilityTable({ initialRecords }: { initialReco
               <th style={{ textAlign: "left", padding: "14px 16px", color: "#0B1E3D", fontSize: 13 }}>Driver ID</th>
               <th style={{ textAlign: "left", padding: "14px 16px", color: "#0B1E3D", fontSize: 13 }}>Driver Name</th>
               <th style={{ textAlign: "left", padding: "14px 16px", color: "#0B1E3D", fontSize: 13 }}>Date</th>
+              <th style={{ textAlign: "left", padding: "14px 16px", color: "#0B1E3D", fontSize: 13 }}>Car type</th>
               <th style={{ textAlign: "left", padding: "14px 16px", color: "#0B1E3D", fontSize: 13 }}>Window</th>
               <th style={{ textAlign: "left", padding: "14px 16px", color: "#0B1E3D", fontSize: 13 }}>Action</th>
             </tr>
@@ -67,6 +76,7 @@ export default function AdminAvailabilityTable({ initialRecords }: { initialReco
                 <td style={{ padding: "14px 16px", color: "#0B1E3D", fontWeight: 600 }}>{record.driver?._id ? String(record.driver._id).slice(-6) : "—"}</td>
                 <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>{record.driver?.name ?? "—"}</td>
                 <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>{record.date ?? "—"}</td>
+                <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>{CAR_TYPE_LABELS[record.driver?.carType ?? ""] ?? "—"}</td>
                 <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>{record.startTime ?? "—"} → {record.endTime ?? "—"}</td>
                 <td style={{ padding: "14px 16px" }}>
                   <button

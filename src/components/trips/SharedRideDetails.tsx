@@ -18,6 +18,7 @@ interface Props {
   distanceKm: number;
   durationMinutes: number;
   to12h: (hhmm: string) => string;
+  isDriver?: boolean;
 }
 
 export default function SharedRideDetails({
@@ -35,31 +36,39 @@ export default function SharedRideDetails({
   distanceKm,
   durationMinutes,
   to12h,
+  isDriver = false,
 }: Props) {
   const pickupOpt = pickupStationOptions.find((o) => o.id === pickupStation?.id);
   const dropoffOpt = dropoffStationOptions.find(
     (o) => o.id === dropoffStation?.id,
   );
 
-  const walkToKm = pickupOpt?.distanceKm ?? 0;
-  const walkToMin = pickupOpt?.walkingMin ?? walkingMinToStation ?? 0;
-  const walkFromKm = dropoffOpt?.distanceKm ?? 0;
-  const walkFromMin = dropoffOpt?.walkingMin ?? walkingMinFromStation ?? 0;
+  const walkToKm = isDriver ? 0 : (pickupOpt?.distanceKm ?? 0);
+  const walkToMin = isDriver ? 0 : (pickupOpt?.walkingMin ?? walkingMinToStation ?? 0);
+  const walkFromKm = isDriver ? 0 : (dropoffOpt?.distanceKm ?? 0);
+  const walkFromMin = isDriver ? 0 : (dropoffOpt?.walkingMin ?? walkingMinFromStation ?? 0);
 
-  const totalKm = walkToKm + distanceKm + walkFromKm;
-  const totalMin = walkToMin + durationMinutes + walkFromMin;
+  const totalKm = isDriver ? distanceKm : (walkToKm + distanceKm + walkFromKm);
+  const totalMin = isDriver ? durationMinutes : (walkToMin + durationMinutes + walkFromMin);
 
-  const segLines = [
-    { label: "Walk to station", value: `${walkToKm.toFixed(2)} km · ${walkToMin} min` },
-    {
-      label: "Ride (station → station)",
-      value: `${distanceKm.toFixed(1)} km · ${durationMinutes} min`,
-    },
-    {
-      label: "Walk to destination",
-      value: `${walkFromKm.toFixed(2)} km · ${walkFromMin} min`,
-    },
-  ];
+  const segLines = isDriver
+    ? [
+        {
+          label: "Ride (station → station)",
+          value: `${distanceKm.toFixed(1)} km · ${durationMinutes} min`,
+        },
+      ]
+    : [
+        { label: "Walk to station", value: `${walkToKm.toFixed(2)} km · ${walkToMin} min` },
+        {
+          label: "Ride (station → station)",
+          value: `${distanceKm.toFixed(1)} km · ${durationMinutes} min`,
+        },
+        {
+          label: "Walk to destination",
+          value: `${walkFromKm.toFixed(2)} km · ${walkFromMin} min`,
+        },
+      ];
 
   return (
     <div
@@ -85,12 +94,14 @@ export default function SharedRideDetails({
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <RideDetailRow
-          icon={<MapPin size={15} />}
-          color="#00C2A8"
-          headline="Origin"
-          value={pickup.address}
-        />
+        {!isDriver && (
+          <RideDetailRow
+            icon={<MapPin size={15} />}
+            color="#00C2A8"
+            headline="Origin"
+            value={pickup.address}
+          />
+        )}
         <RideDetailRow
           icon={<Clock size={15} />}
           color="#00C2A8"
@@ -98,22 +109,26 @@ export default function SharedRideDetails({
           value={to12h(pickupTime)}
         />
 
-        {pickupStation && (
+        {(pickupStation || isDriver) && (
           <div
-            style={{
-              borderLeft: "2px dashed #E2E8F0",
-              marginLeft: 7,
-              paddingLeft: 16,
-            }}
+            style={
+              !isDriver
+                ? {
+                    borderLeft: "2px dashed #E2E8F0",
+                    marginLeft: 7,
+                    paddingLeft: 16,
+                  }
+                : undefined
+            }
           >
             <RideDetailRow
               icon={<MapPin size={15} />}
               color="#00C2A8"
               headline="Pickup station"
               value={
-                walkToMin
-                  ? `${pickupStation.name} · ${walkToMin} min walk`
-                  : pickupStation.name
+                walkToMin && !isDriver
+                  ? `${pickupStation?.name ?? "Pickup station"} · ${walkToMin} min walk`
+                  : (pickupStation?.name ?? "Pickup station")
               }
             />
           </div>
@@ -126,33 +141,39 @@ export default function SharedRideDetails({
           value={`${extraPassengers} extra passenger${extraPassengers === 1 ? "" : "s"}`}
         />
 
-        {dropoffStation && (
+        {(dropoffStation || isDriver) && (
           <div
-            style={{
-              borderLeft: "2px dashed #E2E8F0",
-              marginLeft: 7,
-              paddingLeft: 16,
-            }}
+            style={
+              !isDriver
+                ? {
+                    borderLeft: "2px dashed #E2E8F0",
+                    marginLeft: 7,
+                    paddingLeft: 16,
+                  }
+                : undefined
+            }
           >
             <RideDetailRow
               icon={<MapPin size={15} />}
               color="#E74C3C"
               headline="Dropoff station"
               value={
-                walkFromMin
-                  ? `${dropoffStation.name} · ${walkFromMin} min walk`
-                  : dropoffStation.name
+                walkFromMin && !isDriver
+                  ? `${dropoffStation?.name ?? "Dropoff station"} · ${walkFromMin} min walk`
+                  : (dropoffStation?.name ?? "Dropoff station")
               }
             />
           </div>
         )}
 
-        <RideDetailRow
-          icon={<MapPin size={15} />}
-          color="#E74C3C"
-          headline="Destination"
-          value={dropoff.address}
-        />
+        {!isDriver && (
+          <RideDetailRow
+            icon={<MapPin size={15} />}
+            color="#E74C3C"
+            headline="Destination"
+            value={dropoff.address}
+          />
+        )}
         <RideDetailRow
           icon={<Clock size={15} />}
           color="#E74C3C"

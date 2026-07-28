@@ -28,6 +28,8 @@ import type { PaymentStatus } from "@/types/booking";
 import { listUserTrips } from "@/lib/services/trips";
 import { Types } from "mongoose";
 
+const PRIVATE_VEHICLE_KEYS = new Set(["private_car", "taxi_private"] as const);
+
 /** Fetch total distance/duration for an origin→...waypoints...→dest route directly from Google (no internal HTTP hop). */
 async function fetchServerRoute(
   points: { lat: number; lng: number }[],
@@ -198,9 +200,10 @@ export async function POST(req: NextRequest) {
     }
     const vKey = t.vehicleType as keyof typeof VEHICLES;
     const vehicle = vehiclesMap[vKey];
-    const isShared = vehicle.ride === "shared";
+    const isShared = !PRIVATE_VEHICLE_KEYS.has(vKey);
+    const tripRideType = PRIVATE_VEHICLE_KEYS.has(vKey) ? "private" : "shared";
 
-    if (!isShared) {
+    if (tripRideType === "private") {
       if (!t.pickupTime || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.pickupTime)) {
         return NextResponse.json(
           { error: "Invalid pickupTime" },
@@ -389,7 +392,7 @@ export async function POST(req: NextRequest) {
         pickup: t.pickup,
         dropoff: t.dropoff,
         vehicleType: vKey,
-        rideType: vehicle.ride,
+        rideType: tripRideType,
         arrivalTime,
         pickupTime: t.pickupTime,
         distanceKm: route.distanceKm,
@@ -486,7 +489,7 @@ export async function POST(req: NextRequest) {
         lng: t.dropoff.lng,
       },
       vehicleType: vKey,
-      rideType: vehicle.ride,
+      rideType: tripRideType,
       arrivalTime: t.arrivalTime,
       pickupTime,
       distanceKm: route.distanceKm,

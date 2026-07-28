@@ -28,11 +28,12 @@ export async function getVehicles(): Promise<
 
     const map = { ...VEHICLES };
     for (const d of docs) {
+      const fallback = VEHICLES[d.key];
       map[d.key] = {
         key: d.key,
         label: d.label,
         rate: d.rate,
-        ride: d.ride,
+        ride: fallback?.ride ?? d.ride,
         buffer: d.buffer,
         window: d.window,
         capacity: d.capacity,
