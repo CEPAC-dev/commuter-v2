@@ -50,7 +50,7 @@ export async function PATCH(
   const station = await Station.findOneAndUpdate(
     { objectId },
     { $set: patch },
-    { new: true },
+    { returnDocument: "after" },
   );
   if (!station)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -59,6 +59,8 @@ export async function PATCH(
     station: {
       id: station.objectId,
       name: station.name,
+      direction: station.direction,
+      stationType: station.stationType,
       lat: station.lat,
       lng: station.lng,
     },

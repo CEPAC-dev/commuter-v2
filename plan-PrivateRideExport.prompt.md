@@ -6,7 +6,7 @@ Instructions for Sonnet. Execute ONE phase at a time. Stop after each phase. Run
 Locked decisions:
 
 - Excel = real `.xlsx` via **exceljs** (add dependency).
-- Two-file delivery = **two calls** via `?format=json|xlsx` query param (no ZIP).
+- Two-file delivery = **one ZIP download** containing both JSON and `.xlsx` files.
 - Export filter = **private vehicleTypes only** (`private_car`, `taxi_private`).
 - No backfill for old trips (missing station → `null` in export).
 
@@ -88,7 +88,9 @@ Public for now. Add a comment: `// TODO: restrict to admin once dashboard exists
 
 Behaviour:
 
-- `GET`. Query param `format` = `json` (default) or `xlsx`.
+- `GET`. Download one ZIP containing both files:
+  - `private-ride-requests.json`
+  - `private-ride-requests.xlsx`
 - Query `Trip`:
   ```ts
   { status: "submitted", paymentStatus: "paid",
@@ -141,17 +143,7 @@ Behaviour:
 
 Response:
 
-- `format=json` (default): return the array as a downloadable file.
-  ```ts
-  return new NextResponse(JSON.stringify(rows, null, 2), {
-    headers: {
-      "Content-Type": "application/json",
-      "Content-Disposition":
-        'attachment; filename="private-ride-requests.json"',
-    },
-  });
-  ```
-- `format=xlsx`: build with exceljs — one worksheet, header row = `COLUMNS`,
+- Build the Excel file with exceljs — one worksheet, header row = `COLUMNS`,
   one data row per record (values in `COLUMNS` order, `null` → empty cell).
   ```ts
   import ExcelJS from "exceljs";
@@ -160,12 +152,19 @@ Response:
   ws.addRow(COLUMNS);
   for (const r of rows) ws.addRow(COLUMNS.map((c) => r[c]));
   const buf = await wb.xlsx.writeBuffer();
-  return new NextResponse(Buffer.from(buf), {
+  ```
+- Package JSON and XLSX together using `jszip`.
+  ```ts
+  import JSZip from "jszip";
+  const zip = new JSZip();
+  zip.file("private-ride-requests.json", JSON.stringify(rows, null, 2));
+  zip.file("private-ride-requests.xlsx", Buffer.from(buf));
+  const body = await zip.generateAsync({ type: "blob" });
+  return new NextResponse(body, {
     headers: {
-      "Content-Type":
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Type": "application/zip",
       "Content-Disposition":
-        'attachment; filename="private-ride-requests.xlsx"',
+        'attachment; filename="private-ride-requests.zip"',
     },
   });
   ```
@@ -174,8 +173,8 @@ Response:
 - `await connectDB()` before querying.
 
 Verify: mark a private trip `status:"submitted"` + `paymentStatus:"paid"`; hit
-`/api/admin/getPrivateRideRequests` → JSON structure exact, stops null-padded to
-4, `rideType` 1/2; `?format=xlsx` downloads a valid `.xlsx` with matching columns.
+`/api/admin/getPrivateRideRequests` → ZIP downloads with exact JSON structure,
+stops null-padded to 4, `rideType` 1/2, and valid `.xlsx` with matching columns.
 
 ---
 

@@ -151,8 +151,7 @@ export default function AppHeader({
             </Link>
           )}
           <Link
-            // href={authed ? "/create" : "/"}
-            href={"/"}
+            href={role === "driver" ? "/my-trips" : "/"}
             aria-label="Commuter home"
             style={{
               textDecoration: "none",

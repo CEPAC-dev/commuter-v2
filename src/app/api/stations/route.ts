@@ -7,6 +7,8 @@ function serialize(s: any) {
   return {
     id: s.objectId,
     name: s.name || s.direction || "",
+    direction: s.direction,
+    stationType: s.stationType,
     lat: s.lat,
     lng: s.lng,
     popupInfo: [s.direction, s.landmark, s.stationType]
@@ -15,9 +17,38 @@ function serialize(s: any) {
   };
 }
 
-// Public — used by the map to list active station points
-export async function GET() {
+// Public — used by the map to list active station points or fetch a single station by query
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const stationId = url.searchParams.get("stationId");
+  const stationNumber = url.searchParams.get("stationNumber");
+
   await connectDB();
+
+  if (stationId) {
+    const station = await Station.findById(stationId).lean();
+    if (!station) {
+      return NextResponse.json({ error: "Station not found" }, { status: 404 });
+    }
+    return NextResponse.json({ station: serialize(station) });
+  }
+
+  if (stationNumber) {
+    const objectId = Number(stationNumber);
+    if (!Number.isFinite(objectId)) {
+      return NextResponse.json(
+        { error: "Invalid stationNumber" },
+        { status: 400 },
+      );
+    }
+
+    const station = await Station.findOne({ objectId }).lean();
+    if (!station) {
+      return NextResponse.json({ error: "Station not found" }, { status: 404 });
+    }
+    return NextResponse.json({ station: serialize(station) });
+  }
+
   const stations = await Station.find({ active: true }).lean();
   return NextResponse.json({ stations: stations.map(serialize) });
 }
@@ -53,8 +84,8 @@ export async function POST(req: NextRequest) {
     objectId: nextObjectId,
     name: String(body.name ?? ""),
     direction: String(body.direction ?? ""),
-    landmark: String(body.landmark ?? ""),
     stationType: String(body.stationType ?? ""),
+    landmark: String(body.landmark ?? ""),
     lat,
     lng,
     active: body.active !== false,

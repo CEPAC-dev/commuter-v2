@@ -9,11 +9,14 @@ import {
   ArrowUpRight,
   RotateCcw,
   Loader2,
+  Banknote,
+  Landmark,
+  Smartphone,
 } from "lucide-react";
 
 interface Tx {
   id: string;
-  type: "topup" | "payment" | "refund";
+  type: "topup" | "payment" | "refund" | "earning" | "withdrawal";
   amountEgp: number;
   status: "pending" | "completed" | "failed";
   description: string;
@@ -24,25 +27,75 @@ interface Tx {
 interface WalletData {
   balanceEgp: number;
   status: string;
+  role?: string;
   transactions: Tx[];
 }
 
-const PRESETS = [50, 100, 200, 500];
+interface PayoutMethod {
+  payoutMethod: "mobile_wallet" | "bank" | null;
+  payoutMobile: string;
+  payoutBankName: string;
+  payoutAccountNumber: string;
+  payoutAccountHolder: string;
+}
 
-export default function WalletClient() {
+const PRESETS = [50, 100, 200, 500];
+const WITHDRAW_PRESETS = [100, 200, 500, 1000];
+
+export default function WalletClient({ role: initialRole }: { role?: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const topupId = params.get("topupId");
 
   const [data, setData] = useState<WalletData | null>(null);
   const [amount, setAmount] = useState<number>(100);
+  const [withdrawAmount, setWithdrawAmount] = useState<number>(200);
   const [busy, setBusy] = useState(false);
+  const [withdrawBusy, setWithdrawBusy] = useState(false);
+  const [payoutBusy, setPayoutBusy] = useState(false);
   const [error, setError] = useState("");
+  const [withdrawError, setWithdrawError] = useState("");
+  const [payoutError, setPayoutError] = useState("");
   const [notice, setNotice] = useState("");
+  const [payout, setPayout] = useState<PayoutMethod>({
+    payoutMethod: null,
+    payoutMobile: "",
+    payoutBankName: "",
+    payoutAccountNumber: "",
+    payoutAccountHolder: "",
+  });
+  const [payoutDraft, setPayoutDraft] = useState<PayoutMethod>({
+    payoutMethod: "mobile_wallet",
+    payoutMobile: "",
+    payoutBankName: "",
+    payoutAccountNumber: "",
+    payoutAccountHolder: "",
+  });
+
+  const role = data?.role ?? initialRole ?? "passenger";
+  const isDriver = role === "driver";
 
   const load = useCallback(async () => {
     const res = await fetch("/api/wallet", { cache: "no-store" });
     if (res.ok) setData(await res.json());
+  }, []);
+
+  const loadPayoutMethod = useCallback(async () => {
+    const res = await fetch("/api/wallet/payout-method", { cache: "no-store" });
+    if (!res.ok) return;
+    const json = await res.json();
+    const next: PayoutMethod = {
+      payoutMethod: json.payoutMethod ?? null,
+      payoutMobile: json.payoutMobile ?? "",
+      payoutBankName: json.payoutBankName ?? "",
+      payoutAccountNumber: json.payoutAccountNumber ?? "",
+      payoutAccountHolder: json.payoutAccountHolder ?? "",
+    };
+    setPayout(next);
+    setPayoutDraft({
+      ...next,
+      payoutMethod: next.payoutMethod ?? "mobile_wallet",
+    });
   }, []);
 
   // On return from Kashier: verify the pending top-up, then refresh.
@@ -72,15 +125,18 @@ export default function WalletClient() {
         // Clean the URL so a refresh doesn't re-verify.
         router.replace("/wallet");
       }
-      // hiii
-      // Self-heal: settle any top-ups Kashier confirmed but we missed
-      // (redirect + webhook both failed). Then load the fresh balance.
-      try {
-        await fetch("/api/wallet/reconcile", { method: "POST" });
-      } catch {
-        /* non-fatal */
+      // Self-heal: settle any top-ups Kashier confirmed but we missed.
+      if (!isDriver) {
+        try {
+          await fetch("/api/wallet/reconcile", { method: "POST" });
+        } catch {
+          /* non-fatal */
+        }
       }
       await load();
+      if (initialRole === "driver") {
+        await loadPayoutMethod();
+      }
     })();
     return () => {
       cancelled = true;
@@ -114,7 +170,103 @@ export default function WalletClient() {
       setBusy(false);
     }
   }
-// hi
+
+  async function handleSavePayoutMethod() {
+    setPayoutError("");
+    setPayoutBusy(true);
+    try {
+      const body =
+        payoutDraft.payoutMethod === "mobile_wallet"
+          ? {
+              payoutMethod: "mobile_wallet",
+              payoutMobile: payoutDraft.payoutMobile,
+            }
+          : {
+              payoutMethod: "bank",
+              payoutBankName: payoutDraft.payoutBankName,
+              payoutAccountNumber: payoutDraft.payoutAccountNumber,
+              payoutAccountHolder: payoutDraft.payoutAccountHolder,
+            };
+      const res = await fetch("/api/wallet/payout-method", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setPayoutError(json.error ?? "Could not save payout method.");
+        return;
+      }
+      const next: PayoutMethod = {
+        payoutMethod: json.payoutMethod,
+        payoutMobile: json.payoutMobile ?? "",
+        payoutBankName: json.payoutBankName ?? "",
+        payoutAccountNumber: json.payoutAccountNumber ?? "",
+        payoutAccountHolder: json.payoutAccountHolder ?? "",
+      };
+      setPayout(next);
+      setPayoutDraft(next);
+      setNotice("Payout method saved.");
+    } catch {
+      setPayoutError("Network error. Please retry.");
+    } finally {
+      setPayoutBusy(false);
+    }
+  }
+
+  async function handleWithdraw() {
+    setWithdrawError("");
+    const amt = Math.round(Number(withdrawAmount));
+    if (!isFinite(amt) || amt < 50 || amt > 10000) {
+      setWithdrawError("Enter an amount between 50 and 10,000 EGP.");
+      return;
+    }
+    if (!payout.payoutMethod) {
+      setWithdrawError("Save a payout method first.");
+      return;
+    }
+    setWithdrawBusy(true);
+    try {
+      const res = await fetch("/api/wallet/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: amt }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setWithdrawError(json.error ?? "Withdrawal failed.");
+        return;
+      }
+      setNotice(json.message ?? "Withdrawal submitted.");
+      await load();
+    } catch {
+      setWithdrawError("Network error. Please retry.");
+    } finally {
+      setWithdrawBusy(false);
+    }
+  }
+
+  const cardStyle: React.CSSProperties = {
+    background: "#fff",
+    border: "1px solid #eef0f3",
+    borderRadius: 14,
+    padding: "18px",
+    marginBottom: 24,
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    height: 48,
+    borderRadius: 10,
+    border: "1.5px solid #eef0f3",
+    padding: "0 14px",
+    fontSize: 15,
+    fontFamily: "inherit",
+    color: "#0B1E3D",
+    marginBottom: 12,
+    boxSizing: "border-box",
+  };
+
   return (
     <main
       style={{ maxWidth: 640, margin: "0 auto", padding: "28px 20px 56px" }}
@@ -139,7 +291,9 @@ export default function WalletClient() {
           }}
         >
           <WalletIcon size={16} aria-hidden="true" />
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Wallet balance</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>
+            {isDriver ? "Earnings balance" : "Wallet balance"}
+          </span>
         </div>
         <div
           style={{
@@ -169,116 +323,343 @@ export default function WalletClient() {
         </p>
       )}
 
-      {/* Top-up */}
-      <section
-        style={{
-          background: "#fff",
-          border: "1px solid #eef0f3",
-          borderRadius: 14,
-          padding: "18px",
-          marginBottom: 24,
-        }}
-      >
-        <h2
-          style={{
-            fontSize: 15,
-            fontWeight: 800,
-            color: "#0B1E3D",
-            margin: "0 0 14px",
-          }}
-        >
-          Add funds
-        </h2>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            flexWrap: "wrap",
-            marginBottom: 12,
-          }}
-        >
-          {PRESETS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setAmount(p)}
+      {isDriver ? (
+        <>
+          <section style={cardStyle}>
+            <h2
               style={{
-                flex: "1 1 0",
-                minWidth: 64,
-                height: 42,
-                borderRadius: 10,
-                border:
-                  amount === p ? "1.5px solid #00C2A8" : "1.5px solid #eef0f3",
-                background: amount === p ? "rgba(0,194,168,0.08)" : "#fff",
+                fontSize: 15,
+                fontWeight: 800,
                 color: "#0B1E3D",
+                margin: "0 0 14px",
+              }}
+            >
+              Payout method
+            </h2>
+            <p style={{ fontSize: 13, color: "#5A6A7A", margin: "0 0 14px" }}>
+              Where Kashier sends your withdrawals (mobile wallet or bank).
+            </p>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {(
+                [
+                  ["mobile_wallet", "Mobile wallet", Smartphone],
+                  ["bank", "Bank account", Landmark],
+                ] as const
+              ).map(([key, label, Icon]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() =>
+                    setPayoutDraft((p) => ({ ...p, payoutMethod: key }))
+                  }
+                  style={{
+                    flex: 1,
+                    height: 44,
+                    borderRadius: 10,
+                    border:
+                      payoutDraft.payoutMethod === key
+                        ? "1.5px solid #00C2A8"
+                        : "1.5px solid #eef0f3",
+                    background:
+                      payoutDraft.payoutMethod === key
+                        ? "rgba(0,194,168,0.08)"
+                        : "#fff",
+                    color: "#0B1E3D",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Icon size={16} aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {payoutDraft.payoutMethod === "mobile_wallet" ? (
+              <input
+                type="tel"
+                placeholder="01xxxxxxxxx"
+                value={payoutDraft.payoutMobile}
+                onChange={(e) =>
+                  setPayoutDraft((p) => ({
+                    ...p,
+                    payoutMobile: e.target.value
+                      .replace(/\D/g, "")
+                      .slice(0, 11),
+                  }))
+                }
+                aria-label="Mobile wallet number"
+                style={inputStyle}
+              />
+            ) : (
+              <>
+                <input
+                  type="text"
+                  placeholder="Bank name"
+                  value={payoutDraft.payoutBankName}
+                  onChange={(e) =>
+                    setPayoutDraft((p) => ({
+                      ...p,
+                      payoutBankName: e.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                />
+                <input
+                  type="text"
+                  placeholder="Account number"
+                  value={payoutDraft.payoutAccountNumber}
+                  onChange={(e) =>
+                    setPayoutDraft((p) => ({
+                      ...p,
+                      payoutAccountNumber: e.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                />
+                <input
+                  type="text"
+                  placeholder="Account holder name"
+                  value={payoutDraft.payoutAccountHolder}
+                  onChange={(e) =>
+                    setPayoutDraft((p) => ({
+                      ...p,
+                      payoutAccountHolder: e.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                />
+              </>
+            )}
+
+            {payoutError && (
+              <p style={{ fontSize: 13, color: "#e74c3c", margin: "0 0 12px" }}>
+                {payoutError}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSavePayoutMethod}
+              disabled={payoutBusy}
+              style={{
+                width: "100%",
+                height: 46,
+                borderRadius: 12,
+                border: "none",
+                background: payoutBusy ? "#5A6A7A" : "#00C2A8",
+                color: "#fff",
                 fontWeight: 700,
                 fontSize: 14,
-                cursor: "pointer",
+                cursor: payoutBusy ? "not-allowed" : "pointer",
                 fontFamily: "inherit",
               }}
             >
-              {p}
+              {payoutBusy ? "Saving…" : "Save payout method"}
             </button>
-          ))}
-        </div>
+          </section>
 
-        <input
-          type="number"
-          min={10}
-          max={5000}
-          value={amount}
-          onChange={(e) => setAmount(Number(e.target.value))}
-          aria-label="Top-up amount in EGP"
-          style={{
-            width: "100%",
-            height: 48,
-            borderRadius: 10,
-            border: "1.5px solid #eef0f3",
-            padding: "0 14px",
-            fontSize: 15,
-            fontFamily: "inherit",
-            color: "#0B1E3D",
-            marginBottom: 12,
-            boxSizing: "border-box",
-          }}
-        />
+          <section style={cardStyle}>
+            <h2
+              style={{
+                fontSize: 15,
+                fontWeight: 800,
+                color: "#0B1E3D",
+                margin: "0 0 14px",
+              }}
+            >
+              Withdraw earnings
+            </h2>
 
-        {error && (
-          <p style={{ fontSize: 13, color: "#e74c3c", margin: "0 0 12px" }}>
-            {error}
-          </p>
-        )}
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                marginBottom: 12,
+              }}
+            >
+              {WITHDRAW_PRESETS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setWithdrawAmount(p)}
+                  style={{
+                    flex: "1 1 0",
+                    minWidth: 64,
+                    height: 42,
+                    borderRadius: 10,
+                    border:
+                      withdrawAmount === p
+                        ? "1.5px solid #00C2A8"
+                        : "1.5px solid #eef0f3",
+                    background:
+                      withdrawAmount === p ? "rgba(0,194,168,0.08)" : "#fff",
+                    color: "#0B1E3D",
+                    fontWeight: 700,
+                    fontSize: 14,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
 
-        <button
-          type="button"
-          onClick={handleTopup}
-          disabled={busy}
-          style={{
-            width: "100%",
-            height: 50,
-            borderRadius: 12,
-            border: "none",
-            background: busy ? "#5A6A7A" : "#0B1E3D",
-            color: "#fff",
-            fontWeight: 700,
-            fontSize: 15,
-            cursor: busy ? "not-allowed" : "pointer",
-            fontFamily: "inherit",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-          }}
-        >
-          {busy ? (
-            <Loader2 size={18} className="spin" aria-hidden="true" />
-          ) : (
-            <Plus size={18} aria-hidden="true" />
+            <input
+              type="number"
+              min={50}
+              max={10000}
+              value={withdrawAmount}
+              onChange={(e) => setWithdrawAmount(Number(e.target.value))}
+              aria-label="Withdrawal amount in EGP"
+              style={inputStyle}
+            />
+
+            {withdrawError && (
+              <p style={{ fontSize: 13, color: "#e74c3c", margin: "0 0 12px" }}>
+                {withdrawError}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleWithdraw}
+              disabled={withdrawBusy || !payout.payoutMethod}
+              style={{
+                width: "100%",
+                height: 50,
+                borderRadius: 12,
+                border: "none",
+                background:
+                  withdrawBusy || !payout.payoutMethod ? "#5A6A7A" : "#0B1E3D",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: 15,
+                cursor:
+                  withdrawBusy || !payout.payoutMethod
+                    ? "not-allowed"
+                    : "pointer",
+                fontFamily: "inherit",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              {withdrawBusy ? (
+                <Loader2 size={18} className="spin" aria-hidden="true" />
+              ) : (
+                <Banknote size={18} aria-hidden="true" />
+              )}
+              {withdrawBusy
+                ? "Processing…"
+                : `Withdraw ${withdrawAmount} EGP via Kashier`}
+            </button>
+          </section>
+        </>
+      ) : (
+        <section style={cardStyle}>
+          <h2
+            style={{
+              fontSize: 15,
+              fontWeight: 800,
+              color: "#0B1E3D",
+              margin: "0 0 14px",
+            }}
+          >
+            Add funds
+          </h2>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              marginBottom: 12,
+            }}
+          >
+            {PRESETS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setAmount(p)}
+                style={{
+                  flex: "1 1 0",
+                  minWidth: 64,
+                  height: 42,
+                  borderRadius: 10,
+                  border:
+                    amount === p
+                      ? "1.5px solid #00C2A8"
+                      : "1.5px solid #eef0f3",
+                  background: amount === p ? "rgba(0,194,168,0.08)" : "#fff",
+                  color: "#0B1E3D",
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+
+          <input
+            type="number"
+            min={10}
+            max={5000}
+            value={amount}
+            onChange={(e) => setAmount(Number(e.target.value))}
+            aria-label="Top-up amount in EGP"
+            style={inputStyle}
+          />
+
+          {error && (
+            <p style={{ fontSize: 13, color: "#e74c3c", margin: "0 0 12px" }}>
+              {error}
+            </p>
           )}
-          {busy ? "Redirecting…" : `Charge ${amount} EGP`}
-        </button>
-      </section>
+
+          <button
+            type="button"
+            onClick={handleTopup}
+            disabled={busy}
+            style={{
+              width: "100%",
+              height: 50,
+              borderRadius: 12,
+              border: "none",
+              background: busy ? "#5A6A7A" : "#0B1E3D",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: 15,
+              cursor: busy ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            {busy ? (
+              <Loader2 size={18} className="spin" aria-hidden="true" />
+            ) : (
+              <Plus size={18} aria-hidden="true" />
+            )}
+            {busy ? "Redirecting…" : `Charge ${amount} EGP`}
+          </button>
+        </section>
+      )}
 
       {/* Ledger */}
       <h2
@@ -299,13 +680,16 @@ export default function WalletClient() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {data.transactions.map((t) => {
-            const isCredit = t.type === "topup" || t.type === "refund";
+            const isCredit =
+              t.type === "topup" || t.type === "refund" || t.type === "earning";
             const Icon =
-              t.type === "topup"
+              t.type === "topup" || t.type === "earning"
                 ? ArrowDownLeft
                 : t.type === "refund"
                   ? RotateCcw
-                  : ArrowUpRight;
+                  : t.type === "withdrawal"
+                    ? Banknote
+                    : ArrowUpRight;
             return (
               <div
                 key={t.id}
@@ -362,7 +746,7 @@ export default function WalletClient() {
                     fontWeight: 800,
                     fontSize: 14,
                     fontVariantNumeric: "tabular-nums",
-                    color: isCredit ? "#27AE60" : "#0B1E3D",
+                    color: isCredit ? "#27AE60" : "#FF2C2C",
                   }}
                 >
                   {isCredit ? "+" : "−"}

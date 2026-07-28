@@ -30,7 +30,7 @@ export async function PATCH(
     const result = await User.findOneAndUpdate(
       { _id: session.userId, "savedAddresses._id": id },
       { $set: setFields },
-      { new: true, select: "savedAddresses" },
+      { returnDocument: "after", select: "savedAddresses" },
     ).lean<{
       savedAddresses: {
         _id: unknown;
@@ -43,9 +43,7 @@ export async function PATCH(
 
     if (!result)
       return NextResponse.json({ error: "Not found." }, { status: 404 });
-    const updated = result.savedAddresses?.find(
-      (a) => String(a._id) === id,
-    );
+    const updated = result.savedAddresses?.find((a) => String(a._id) === id);
     return NextResponse.json({ savedAddress: updated });
   } catch {
     return NextResponse.json({ error: "Update failed." }, { status: 500 });

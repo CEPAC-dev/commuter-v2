@@ -1,29 +1,29 @@
 "use client";
 import { motion } from "motion/react";
-import { MapPin, Car, CheckCircle } from "lucide-react";
+import { Car, MapPin, CheckCircle } from "lucide-react";
 
 const STEPS = [
   {
-    icon: MapPin,
-    step: "01",
-    title: "Enter your locations",
-    desc: "Type your pickup and dropoff. Our smart autocomplete covers all of Greater Cairo.",
-    color: "#00C2A8",
-    bg: "rgba(0,194,168,0.08)",
-  },
-  {
     icon: Car,
-    step: "02",
+    step: "01",
     title: "Choose your ride",
-    desc: "Pick from private cars, taxis, or shared vans and microbuses — each with transparent pricing.",
+    desc: "Pick from private cars, taxis, or shared vans — each with transparent pricing.",
     color: "#F5A623",
     bg: "rgba(245,166,35,0.08)",
+  },
+  {
+    icon: MapPin,
+    step: "02",
+    title: "Enter your trip details",
+    desc: "Enter pickup and dropoff, set your time, add stop points, or pick the nearest station.",
+    color: "#00C2A8",
+    bg: "rgba(0,194,168,0.08)",
   },
   {
     icon: CheckCircle,
     step: "03",
     title: "Confirm & go",
-    desc: "Set your arrival time, review the computed pickup time, pay securely, and you're set.",
+    desc: "Review your pickup time, pay securely, and you're set.",
     color: "#0B1E3D",
     bg: "rgba(11,30,61,0.06)",
   },

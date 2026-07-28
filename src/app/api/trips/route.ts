@@ -20,6 +20,7 @@ import { fetchDirections } from "@/app/api/directions/route";
 import {
   findNearestStations,
   findNearestStation,
+  type Station as GeoStation,
   type StationOption,
 } from "@/lib/geo/stations";
 import type { StopInput, TripInput } from "@/types/forms";
@@ -42,6 +43,15 @@ async function fetchServerRoute(
   return {
     distanceKm: data[0].distance_km,
     durationMinutes: data[0].duration_minutes,
+  };
+}
+
+function stationPayload(station: Pick<GeoStation, "id" | "lat" | "lng" | "name">) {
+  return {
+    id: station.id,
+    lat: station.lat,
+    lng: station.lng,
+    name: station.name,
   };
 }
 
@@ -95,7 +105,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { date?: string; dates?: string[]; trips: TripInput[] };
+  let body: {
+    date?: string;
+    dates?: string[];
+    trips: TripInput[];
+    note?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -104,6 +119,7 @@ export async function POST(req: NextRequest) {
 
   const { trips } = body;
   const rawDates = body.dates ?? (body.date ? [body.date] : []);
+  const note = typeof body.note === "string" ? body.note.trim().slice(0, 1000) : "";
 
   // Basic input validation
   if (!Array.isArray(rawDates) || rawDates.length === 0) {
@@ -123,13 +139,15 @@ export async function POST(req: NextRequest) {
   }
 
   const vehiclesMap = await getVehicles();
-  const allowedVehicles = Object.keys(vehiclesMap);
+  const allowedVehicleSet = new Set(Object.keys(vehiclesMap));
 
   await connectDB();
   const stationDocs = await Station.find({ active: true }).lean();
-  const canonicalStations = stationDocs.map((station) => ({
+  const canonicalStations: GeoStation[] = stationDocs.map((station) => ({
     id: station.objectId,
     name: station.name || station.direction || "",
+    direction: station.direction,
+    stationType: station.stationType ?? "",
     lat: station.lat,
     lng: station.lng,
     popupInfo: [station.direction, station.landmark, station.stationType]
@@ -172,7 +190,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    if (!allowedVehicles.includes(t.vehicleType)) {
+    if (!allowedVehicleSet.has(t.vehicleType)) {
       return NextResponse.json(
         { error: "Invalid vehicleType" },
         { status: 400 },
@@ -358,11 +376,13 @@ export async function POST(req: NextRequest) {
         t.pickup.lat,
         t.pickup.lng,
         canonicalStations,
+        vKey,
       );
       const nearDropoff = findNearestStation(
         t.dropoff.lat,
         t.dropoff.lng,
         canonicalStations,
+        vKey,
       );
 
       serverTrips.push({
@@ -380,20 +400,10 @@ export async function POST(req: NextRequest) {
         stops,
         passengers: serverPassengers,
         ...(nearPickup && {
-          pickupStation: {
-            id: nearPickup.id,
-            lat: nearPickup.lat,
-            lng: nearPickup.lng,
-            name: nearPickup.name,
-          },
+          pickupStation: stationPayload(nearPickup),
         }),
         ...(nearDropoff && {
-          dropoffStation: {
-            id: nearDropoff.id,
-            lat: nearDropoff.lat,
-            lng: nearDropoff.lng,
-            name: nearDropoff.name,
-          },
+          dropoffStation: stationPayload(nearDropoff),
         }),
       });
       continue;
@@ -419,11 +429,13 @@ export async function POST(req: NextRequest) {
       t.pickup.lat,
       t.pickup.lng,
       canonicalStations,
+      vKey,
     );
     const dropoffStationOptions = findNearestStations(
       t.dropoff.lat,
       t.dropoff.lng,
       canonicalStations,
+      vKey,
     );
     const selectedPickup = pickupStationOptions.find(
       (station) => station.id === t.pickupStation!.id,
@@ -484,18 +496,8 @@ export async function POST(req: NextRequest) {
       numberOfPassengers: 1,
       stops: [],
       passengers: [],
-      pickupStation: {
-        id: selectedPickup.id,
-        name: selectedPickup.name,
-        lat: selectedPickup.lat,
-        lng: selectedPickup.lng,
-      },
-      dropoffStation: {
-        id: selectedDropoff.id,
-        name: selectedDropoff.name,
-        lat: selectedDropoff.lat,
-        lng: selectedDropoff.lng,
-      },
+      pickupStation: stationPayload(selectedPickup),
+      dropoffStation: stationPayload(selectedDropoff),
       pickupStationOptions,
       dropoffStationOptions,
       walkingMinToStation: selectedPickup.walkingMin,
@@ -506,12 +508,11 @@ export async function POST(req: NextRequest) {
   const perDateAmountEgp = serverTrips.reduce((sum, t) => sum + t.priceEgp, 0);
   const amountEgp = perDateAmountEgp * dates.length;
 
-  await connectDB();
-
   const request = await Request.create({
     userId: new Types.ObjectId(session.userId),
     dates,
     amountEgp,
+    note,
     paymentStatus: "pending",
     status: "pending_payment",
   });

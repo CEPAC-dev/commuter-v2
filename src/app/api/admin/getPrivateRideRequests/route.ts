@@ -1,14 +1,17 @@
-import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
+import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
+import { Station } from "@/models/Station";
+import { fetchDirections } from "@/app/api/directions/route";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 // TODO: restrict to admin once dashboard exists
-// GET /api/admin/getPrivateRideRequests?format=json|xlsx
+// GET /api/admin/getPrivateRideRequests
 
 interface StopLike {
   point?: { lat: number; lng: number };
@@ -87,13 +90,24 @@ const COLUMNS: (keyof Row)[] = [
   "totalStartedPassengers",
 ];
 
-export async function GET(req: NextRequest) {
-  const format =
-    req.nextUrl.searchParams.get("format") === "xlsx" ? "xlsx" : "json";
+function getTomorrowDate() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
 
+  const year = tomorrow.getFullYear();
+  const month = String(tomorrow.getMonth() + 1).padStart(2, "0");
+  const day = String(tomorrow.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+export async function GET() {
   await connectDB();
 
+  const tomorrow = getTomorrowDate();
+
   const trips = await Trip.find({
+    date: tomorrow,
     status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["private_car", "taxi_private"] },
@@ -159,27 +173,136 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  if (format === "xlsx") {
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet("PrivateRideRequests");
-    ws.addRow(COLUMNS);
-    for (const r of rows) ws.addRow(COLUMNS.map((c) => r[c]));
-    const buf = await wb.xlsx.writeBuffer();
-    return new NextResponse(Buffer.from(buf), {
-      headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition":
-          'attachment; filename="private-ride-requests.xlsx"',
-      },
-    });
+  const stationIds = Array.from(
+    new Set(
+      rows
+        .map((row) => [
+          row.originNearestStationNo,
+          row.destinationNearestStationNo,
+        ])
+        .flat()
+        .filter(
+          (id): id is number => typeof id === "number" && Number.isFinite(id),
+        ),
+    ),
+  );
+
+  const stations = await Station.find({ objectId: { $in: stationIds } })
+    .select("objectId name lat lng")
+    .lean<{ objectId: number; name: string; lat: number; lng: number }[]>();
+
+  const stationMap = new Map(
+    stations.map((station) => [station.objectId, station]),
+  );
+  const orderedStations = stationIds
+    .map((id) => stationMap.get(id))
+    .filter(
+      (
+        station,
+      ): station is {
+        objectId: number;
+        name: string;
+        lat: number;
+        lng: number;
+      } => Boolean(station),
+    );
+
+  async function getDistanceKm(
+    from: { lat: number; lng: number },
+    to: { lat: number; lng: number },
+  ) {
+    if (from.lat === to.lat && from.lng === to.lng) return 0;
+    const origin = `${from.lat},${from.lng}`;
+    const dest = `${to.lat},${to.lng}`;
+    const result = await fetchDirections(origin, dest);
+    return result[0]?.distance_km ?? 0;
   }
 
-  return new NextResponse(JSON.stringify(rows, null, 2), {
+  async function getDurationMin(
+    from: { lat: number; lng: number },
+    to: { lat: number; lng: number },
+  ) {
+    if (from.lat === to.lat && from.lng === to.lng) return 0;
+    const origin = `${from.lat},${from.lng}`;
+    const dest = `${to.lat},${to.lng}`;
+    const result = await fetchDirections(origin, dest);
+    return result[0]?.duration_minutes ?? 0;
+  }
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("PrivateRideRequests");
+  ws.addRow(COLUMNS);
+  for (const r of rows) ws.addRow(COLUMNS.map((c) => r[c]));
+
+  const matrixSheet = wb.addWorksheet("StationMatrixDistance");
+  matrixSheet.getCell("A1").value = "District Name";
+  matrixSheet.getCell("B2").value = "District Id";
+
+  orderedStations.forEach((station, index) => {
+    const column = index + 3;
+    matrixSheet.getRow(1).getCell(column).value =
+      station.name || String(station.objectId);
+    matrixSheet.getRow(2).getCell(column).value = station.objectId;
+    matrixSheet.getRow(index + 3).getCell(1).value =
+      station.name || String(station.objectId);
+    matrixSheet.getRow(index + 3).getCell(2).value = station.objectId;
+  });
+
+  for (let rowIndex = 0; rowIndex < orderedStations.length; rowIndex++) {
+    for (let colIndex = 0; colIndex < orderedStations.length; colIndex++) {
+      const originStation = orderedStations[rowIndex];
+      const destStation = orderedStations[colIndex];
+      const distanceKm = await getDistanceKm(originStation, destStation);
+      matrixSheet.getRow(rowIndex + 3).getCell(colIndex + 3).value = distanceKm;
+    }
+  }
+
+  const durationSheet = wb.addWorksheet("StationMatrixDuration");
+  durationSheet.getCell("A1").value = "District Name";
+  durationSheet.getCell("B2").value = "District Id";
+
+  orderedStations.forEach((station, index) => {
+    const column = index + 3;
+    durationSheet.getRow(1).getCell(column).value =
+      station.name || String(station.objectId);
+    durationSheet.getRow(2).getCell(column).value = station.objectId;
+    durationSheet.getRow(index + 3).getCell(1).value =
+      station.name || String(station.objectId);
+    durationSheet.getRow(index + 3).getCell(2).value = station.objectId;
+  });
+
+  for (let rowIndex = 0; rowIndex < orderedStations.length; rowIndex++) {
+    for (let colIndex = 0; colIndex < orderedStations.length; colIndex++) {
+      const originStation = orderedStations[rowIndex];
+      const destStation = orderedStations[colIndex];
+      const durationMin = await getDurationMin(originStation, destStation);
+      durationSheet.getRow(rowIndex + 3).getCell(colIndex + 3).value = durationMin;
+    }
+  }
+
+  const stationsSheet = wb.addWorksheet("Stations");
+  stationsSheet.addRow(["District Id", "lat", "lng", "District Name"]);
+  orderedStations.forEach((station) => {
+    stationsSheet.addRow([
+      station.objectId,
+      station.lat,
+      station.lng,
+      station.name || "",
+    ]);
+  });
+
+  const zip = new JSZip();
+  zip.file("private-ride-requests.json", JSON.stringify(rows, null, 2));
+  zip.file(
+    "private-ride-requests.xlsx",
+    Buffer.from(await wb.xlsx.writeBuffer()),
+  );
+
+  const body = await zip.generateAsync({ type: "blob" });
+  return new NextResponse(body, {
     headers: {
-      "Content-Type": "application/json",
-      "Content-Disposition":
-        'attachment; filename="private-ride-requests.json"',
+      "Content-Type": "application/zip",
+      "Content-Disposition": 'attachment; filename="private-ride-requests.zip"',
     },
   });
 }

@@ -9,6 +9,7 @@ export const metadata = { title: "Availability — Commuter" };
 export default async function AvailabilityPage() {
   const session = await getSession();
   if (!session) redirect("/login?redirect=/availability");
+  if (session.role === "admin") redirect("/admin/dashboard");
   if (session.role !== "driver") redirect("/my-trips");
 
   const [records, profile] = await Promise.all([

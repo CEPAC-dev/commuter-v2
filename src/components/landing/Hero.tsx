@@ -2,12 +2,22 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { ArrowUpDown, ChevronRight, LogIn } from "lucide-react";
+import { ArrowUpDown, ChevronRight } from "lucide-react";
 import { useTripStore } from "@/lib/store/useTripStore";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import AddressInput from "./AddressInput";
 
-export default function Hero() {
+interface Props {
+  authed?: boolean;
+}
+
+const STATS = [
+  { label: "types available", value: "4 vehicles" },
+  { label: "fully covered", value: "Greater Cairo" },
+  { label: "from", value: "4 EGP" },
+] as const;
+
+export default function Hero({ authed = false }: Props) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const { pickup, dropoff, setPickup, setDropoff, swap } = useTripStore();
@@ -92,7 +102,7 @@ export default function Hero() {
                 margin: "0 0 14px",
               }}
             >
-              Cairo&apos;s smartest commute
+              Greater Cairo&apos;s smartest commute
             </p>
             <h1
               style={{
@@ -116,28 +126,62 @@ export default function Hero() {
                 maxWidth: 400,
               }}
             >
-              Book private or shared rides across Cairo — affordable, reliable,
-              and timed precisely to your schedule.
+              Book private or shared rides across Greater Cairo — affordable,
+              reliable, and timed precisely to your schedule.
             </p>
 
-            {/* Social proof */}
+            {/* Stats */}
             <div
               style={{
                 display: "flex",
-                alignItems: "center",
-                gap: 20,
-                marginTop: 36,
+                alignItems: "stretch",
+                gap: 0,
+                marginTop: 40,
                 flexWrap: "wrap",
               }}
+              className="hero-stats"
             >
-              {[["5 vehicles", "types available"], ["Cairo", "fully covered"], ["EGP 5/km", "from"]].map(
-                ([bold, label]) => (
-                  <div key={bold} style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                    <span style={{ fontWeight: 800, fontSize: 16, color: "#ffffff" }}>{bold}</span>
-                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{label}</span>
-                  </div>
-                )
-              )}
+              {STATS.map(({ label, value }, i) => (
+                <div
+                  key={label}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    gap: 6,
+                    paddingRight: i < STATS.length - 1 ? 28 : 0,
+                    marginRight: i < STATS.length - 1 ? 28 : 0,
+                    borderRight:
+                      i < STATS.length - 1
+                        ? "1px solid rgba(255,255,255,0.12)"
+                        : "none",
+                  }}
+                  className="hero-stat"
+                >
+                  <span
+                    style={{
+                      fontSize: "clamp(15px, 2.2vw, 20px)",
+                      fontWeight: 800,
+                      letterSpacing: "-0.01em",
+                      textTransform: "capitalize",
+                      color: "#ffffff",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "rgba(255,255,255,0.48)",
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {value}
+                  </span>
+                </div>
+              ))}
             </div>
           </motion.div>
 
@@ -293,33 +337,12 @@ export default function Hero() {
                   onMouseDown={(e) => { e.currentTarget.style.transform = "scale(0.98)"; }}
                   onMouseUp={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
                 >
-                  <span style={{ color: "#ffffff", transition: "color 0.2s" }}>See prices</span>
+                  <span style={{ color: "#ffffff", transition: "color 0.2s" }}>
+                    {authed ? "See Prices" : "Log In & See Prices"}
+                  </span>
                   <ChevronRight size={18} aria-hidden="true" />
                 </button>
               </form>
-
-              <a
-                href="/login"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  marginTop: 14,
-                  fontSize: 13,
-                  color: "#5A6A7A",
-                  textDecoration: "none",
-                  padding: "8px 0",
-                  borderRadius: 8,
-                  transition: "color 0.15s",
-                  minHeight: 44,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#00C2A8"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#5A6A7A"; }}
-              >
-                <LogIn size={14} aria-hidden="true" />
-                Log in to see your recent activity
-              </a>
             </div>
           </motion.div>
         </div>
@@ -333,6 +356,15 @@ export default function Hero() {
           }
           .hero-inner {
             padding: 0 !important;
+          }
+          .hero-stat {
+            border-right: none !important;
+            margin-right: 0 !important;
+            padding-right: 0 !important;
+            min-width: calc(50% - 12px);
+          }
+          .hero-stats {
+            gap: 20px 24px !important;
           }
         }
       `}</style>

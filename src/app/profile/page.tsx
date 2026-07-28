@@ -9,6 +9,7 @@ export const metadata = { title: "Profile — Commuter" };
 export default async function ProfilePage() {
   const session = await getSession();
   if (!session) redirect("/login?redirect=/profile");
+  if (session.role === "admin") redirect("/admin/dashboard");
 
   const profile = await getProfile(session.userId, session.role);
   if (!profile) redirect("/login");
@@ -46,6 +47,7 @@ export default async function ProfilePage() {
       initialName={profile.name}
       email={profile.email}
       initialPhone={profile.phone}
+      initialProfilePic={profile.profilePic}
       initialSavedAddresses={profile.savedAddresses}
     />
   );

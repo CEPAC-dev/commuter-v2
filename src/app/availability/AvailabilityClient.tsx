@@ -218,7 +218,7 @@ export default function AvailabilityClient({
         email={email}
         role="driver"
         variant="app"
-        backHref="/"
+        backHref="/my-trips"
       />
 
       <main

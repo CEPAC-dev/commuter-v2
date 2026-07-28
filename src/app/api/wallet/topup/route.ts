@@ -72,6 +72,18 @@ export async function POST(req: NextRequest) {
     serverWebhook: `${appUrl}/api/payments/webhook`,
   };
 
+  // Validate Kashier credentials early to avoid opaque upstream HTML errors
+  if (!process.env.KASHIER_API_KEY || !process.env.KASHIER_SECRET_KEY || !process.env.KASHIER_MERCHANT_ID) {
+    console.error('Kashier credentials missing: KASHIER_API_KEY/KASHIER_SECRET_KEY/KASHIER_MERCHANT_ID');
+    await WalletTransaction.findByIdAndUpdate(tx._id, { status: 'failed' });
+    return NextResponse.json(
+      { error: 'Kashier credentials are not configured on the server.' },
+      { status: 500 },
+    );
+  }
+
+  console.error('Kashier request (topup)', { KASHIER_URL, merchantId: process.env.KASHIER_MERCHANT_ID });
+
   let kashierRes: Response;
   try {
     kashierRes = await fetch(KASHIER_URL, {
@@ -83,7 +95,8 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify(body),
     });
-  } catch {
+  } catch (err) {
+    console.error("Kashier fetch error:", err);
     await WalletTransaction.findByIdAndUpdate(tx._id, { status: "failed" });
     return NextResponse.json(
       { error: "Failed to reach payment gateway." },
@@ -91,13 +104,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const kashierData = await kashierRes.json();
-
-  if (!kashierRes.ok || !kashierData?.sessionUrl) {
-    console.error("Kashier topup session error:", kashierData);
+  // Safe parse
+  const kashierText = await kashierRes.text();
+  let kashierData: any = null;
+  try {
+    kashierData = JSON.parse(kashierText);
+  } catch (err) {
+    console.error("Kashier non-JSON response", kashierRes.status, kashierText.substring(0, 200));
     await WalletTransaction.findByIdAndUpdate(tx._id, { status: "failed" });
     return NextResponse.json(
-      { error: "Payment gateway rejected the request." },
+      { error: "Payment gateway returned non-JSON response", status: kashierRes.status, details: kashierText },
+      { status: 502 },
+    );
+  }
+
+  if (!kashierRes.ok || !kashierData?.sessionUrl) {
+    console.error("Kashier topup session error:", kashierRes.status, kashierData);
+    await WalletTransaction.findByIdAndUpdate(tx._id, { status: "failed" });
+    return NextResponse.json(
+      { error: "Payment gateway rejected the request.", details: kashierData },
       { status: 502 },
     );
   }

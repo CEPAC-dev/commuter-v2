@@ -13,6 +13,7 @@ const RequestSchema = new Schema(
       },
     },
     amountEgp: { type: Number, required: true },
+    note: { type: String, default: "", trim: true, maxlength: 1000 },
     paymentStatus: {
       type: String,
       required: true,
@@ -29,7 +30,7 @@ const RequestSchema = new Schema(
       enum: [
         "pending_payment",
         "submitted",
-        "matching",
+        "matched",
         "confirmed",
         "active",
         "completed",

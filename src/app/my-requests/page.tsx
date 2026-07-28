@@ -53,7 +53,7 @@ const STATUS_PILL: Record<
     color: "#E65100",
   },
   submitted: { label: "Submitted", bg: "#E2E8F0", color: "#5A6A7A" },
-  matching: { label: "Matching…", bg: "#FFF3E0", color: "#E65100" },
+  matched: { label: "Matched", bg: "#00C2A8", color: "#fff" },
   confirmed: { label: "Confirmed", bg: "#E8F5E9", color: "#27AE60" },
   active: { label: "Active", bg: "#00C2A8", color: "#fff" },
   completed: { label: "Completed", bg: "#0B1E3D", color: "#fff" },
@@ -108,7 +108,7 @@ const STATUS_OPTIONS: FilterDef = {
   options: [
     { value: "pending_payment", label: "Pending payment" },
     { value: "submitted", label: "Submitted" },
-    { value: "matching", label: "Matching" },
+    { value: "matched", label: "Matched" },
     { value: "confirmed", label: "Confirmed" },
     { value: "active", label: "Active" },
     { value: "completed", label: "Completed" },
@@ -123,6 +123,7 @@ export default async function MyTripsPage({
 }) {
   const session = await getSession();
   if (!session) redirect("/login?redirect=/my-requests");
+  if (session.role === "admin") redirect("/admin/dashboard");
 
   const params = await searchParams;
   const payment =

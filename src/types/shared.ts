@@ -26,7 +26,7 @@ export type GroupAction = "create" | "join";
 export type RequestStatus =
   | "available" // driver portal: visible to drivers
   | "submitted" // user submitted, awaiting match
-  | "matching" // system is searching for a match
+  | "matched" // system is finished matching
   | "finding_driver" // matched — now finding/confirming a driver
   | "driver_offered" // a driver was proposed
   | "price_raised" // driver proposed a higher price

@@ -1,6 +1,6 @@
 import { Schema, model, models, Types, type InferSchemaType } from "mongoose";
 
-const PointSchema = new Schema(
+export const PointSchema = new Schema(
   {
     address: { type: String, required: true },
     lat: { type: Number, required: true },
@@ -18,7 +18,7 @@ const PassengerDetailSchema = new Schema(
   { _id: false },
 );
 
-const StationSchema = new Schema(
+export const StationSchema = new Schema(
   {
     id: { type: Number, required: true },
     lat: { type: Number, required: true },
@@ -40,12 +40,25 @@ const StationOptionSchema = new Schema(
   { _id: false },
 );
 
-const StopSchema = new Schema(
+export const StopSchema = new Schema(
   {
     point: { type: PointSchema, required: true },
     alighting: { type: Number, required: true, min: 0 },
     boarding: { type: Number, required: true, min: 0 },
     waitingMinutes: { type: Number, required: true, min: 0 },
+  },
+  { _id: false },
+);
+
+const AssignedDriverSchema = new Schema(
+  {
+    name: { type: String, required: false },
+    phone: { type: String, required: false },
+    profilePic: { type: String, required: false },
+    carBrand: { type: String, required: false },
+    carModel: { type: String, required: false },
+    modelYear: { type: String, required: false },
+    plate: { type: String, required: false },
   },
   { _id: false },
 );
@@ -66,6 +79,17 @@ const TripSchema = new Schema(
       index: true,
     },
     userId: { type: Types.ObjectId, ref: "User", required: true, index: true },
+    driverId: {
+      type: Types.ObjectId,
+      ref: "User",
+      required: false,
+      index: true,
+    },
+    assignedDriver: {
+      type: AssignedDriverSchema,
+      required: false,
+      default: null,
+    },
     date: { type: String, required: true, index: true },
     cycleIndex: { type: Number, required: true, min: 0 },
     pickup: { type: PointSchema, required: true },
@@ -110,7 +134,7 @@ const TripSchema = new Schema(
       enum: [
         "pending_payment",
         "submitted",
-        "matching",
+        "matched",
         "confirmed",
         "active",
         "completed",
@@ -118,12 +142,20 @@ const TripSchema = new Schema(
         "time_out",
       ],
     },
+    rideId: {
+      type: Types.ObjectId,
+      ref: "Ride",
+      required: false,
+      index: true,
+      default: null,
+    },
   },
   { timestamps: true, collection: "trips" },
 );
 
 TripSchema.index({ requestId: 1, date: 1 });
 TripSchema.index({ userId: 1, date: -1 });
+TripSchema.index({ driverId: 1, date: -1 });
 
 // const existingTripModel = models.Trip;
 // if (existingTripModel && !existingTripModel.schema.path("tripNumber")) {

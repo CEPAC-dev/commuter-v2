@@ -13,7 +13,7 @@ const PAYMENT_STATUSES = new Set<PaymentStatus>([
 const BOOKING_STATUSES = new Set<BookingStatus>([
   "pending_payment",
   "submitted",
-  "matching",
+  "matched",
   "confirmed",
   "active",
   "completed",

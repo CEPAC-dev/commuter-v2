@@ -2,11 +2,16 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
+import { reconcileDriverEarnings } from "@/lib/services/tripEarnings";
 
 export async function GET() {
   const session = await getSession();
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (session.role === "driver") {
+    await reconcileDriverEarnings(session.userId);
+  }
 
   const wallet = await getOrCreateWallet(session.userId);
 
@@ -31,6 +36,7 @@ export async function GET() {
   return NextResponse.json({
     balanceEgp: wallet.balanceEgp,
     status: wallet.status,
+    role: session.role,
     transactions,
   });
 }

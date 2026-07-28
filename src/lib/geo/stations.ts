@@ -1,6 +1,8 @@
 export interface Station {
   id: number;
   name: string;
+  direction?: string;
+  stationType: string;
   lat: number;
   lng: number;
   popupInfo: string;
@@ -9,6 +11,8 @@ export interface Station {
 export interface StationOption {
   id: number;
   name: string;
+  direction?: string;
+  stationType: string;
   lat: number;
   lng: number;
   distanceKm: number;
@@ -16,9 +20,25 @@ export interface StationOption {
 }
 
 const SHARED_TYPES = new Set(["taxi_shared", "van_shared", "microbus_shared"]);
+const DEFAULT_STATION_TYPES = new Set(["1", "2", "3"]);
+const MICROBUS_STATION_TYPES = new Set(["2", "3"]);
 
 export function isSharedVehicle(vehicleType: string): boolean {
   return SHARED_TYPES.has(vehicleType);
+}
+
+function allowedStationTypes(vehicleType?: string | null): Set<string> {
+  return vehicleType === "microbus_shared"
+    ? MICROBUS_STATION_TYPES
+    : DEFAULT_STATION_TYPES;
+}
+
+function filterStationsByVehicle(
+  stations: Station[],
+  vehicleType?: string | null,
+): Station[] {
+  const allowedTypes = allowedStationTypes(vehicleType);
+  return stations.filter((station) => allowedTypes.has(station.stationType));
 }
 
 /** Haversine great-circle distance in km */
@@ -49,14 +69,17 @@ export function findNearestStations(
   lat: number,
   lng: number,
   stations: Station[],
+  selectedVehicleType?: string | null,
   limit = 5,
 ): StationOption[] {
-  return stations
+  return filterStationsByVehicle(stations, selectedVehicleType)
     .map((station) => {
       const distanceKm = haversineKm(lat, lng, station.lat, station.lng);
       return {
         id: station.id,
         name: station.name,
+        direction: station.direction,
+        stationType: station.stationType,
         lat: station.lat,
         lng: station.lng,
         distanceKm: Math.round(distanceKm * 100) / 100,
@@ -72,15 +95,27 @@ export function findNearestStation(
   lat: number,
   lng: number,
   stations: Station[],
+  selectedVehicleType?: string | null,
 ): Station | null {
-  if (!stations.length) return null;
-  let nearest = stations[0];
-  let minDist = haversineKm(lat, lng, stations[0].lat, stations[0].lng);
-  for (let i = 1; i < stations.length; i++) {
-    const d = haversineKm(lat, lng, stations[i].lat, stations[i].lng);
+  const filteredStations = filterStationsByVehicle(stations, selectedVehicleType);
+  if (!filteredStations.length) return null;
+  let nearest = filteredStations[0];
+  let minDist = haversineKm(
+    lat,
+    lng,
+    filteredStations[0].lat,
+    filteredStations[0].lng,
+  );
+  for (let i = 1; i < filteredStations.length; i++) {
+    const d = haversineKm(
+      lat,
+      lng,
+      filteredStations[i].lat,
+      filteredStations[i].lng,
+    );
     if (d < minDist) {
       minDist = d;
-      nearest = stations[i];
+      nearest = filteredStations[i];
     }
   }
   return nearest;

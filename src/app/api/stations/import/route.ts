@@ -12,8 +12,8 @@ interface RawFeature {
     OBJECTID?: number;
     name?: string;
     direction?: string;
-    landmark?: string;
     station_type?: string;
+    landmark?: string;
   };
 }
 

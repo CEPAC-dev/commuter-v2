@@ -73,16 +73,14 @@ export default function CTA() {
             lineHeight: 1.7,
           }}
         >
-          Join thousands of Cairo commuters who save time and money every day
+          Join thousands of Greater Cairo commuters who save time and money every day
           with Commuter.
         </p>
 
         <div
           style={{
             display: "flex",
-            gap: 14,
             justifyContent: "center",
-            flexWrap: "wrap",
           }}
         >
           <Link
@@ -114,34 +112,8 @@ export default function CTA() {
               e.currentTarget.style.transform = "scale(1)";
             }}
           >
-            Get started free
+            Get started 
             <ArrowRight size={18} aria-hidden="true" />
-          </Link>
-
-          <Link
-            href="#how-it-works"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "14px 28px",
-              background: "rgba(255,255,255,0.08)",
-              color: "#ffffff",
-              fontWeight: 600,
-              fontSize: 15,
-              borderRadius: 12,
-              textDecoration: "none",
-              border: "1.5px solid rgba(255,255,255,0.18)",
-              minHeight: 52,
-              transition: "background 0.2s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "rgba(255,255,255,0.15)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(255,255,255,0.08)";
-            }}
-          >
-            Learn more
           </Link>
         </div>
       </motion.div>

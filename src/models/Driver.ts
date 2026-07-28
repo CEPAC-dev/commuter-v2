@@ -52,6 +52,16 @@ const DriverSchema = new Schema(
     },
 
     documents: { type: DriverDocumentsSchema, default: () => ({}) },
+
+    // ── Payout details for Kashier withdrawals ──
+    payoutMethod: {
+      type: String,
+      enum: ["mobile_wallet", "bank"],
+    },
+    payoutMobile: { type: String, trim: true }, // 01xxxxxxxxx for Vodafone Cash etc.
+    payoutBankName: { type: String, trim: true },
+    payoutAccountNumber: { type: String, trim: true },
+    payoutAccountHolder: { type: String, trim: true },
   },
   { timestamps: true }, // createdAt = "Profile since"
 );

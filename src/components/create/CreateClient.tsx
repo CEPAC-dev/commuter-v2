@@ -76,6 +76,7 @@ export default function CreateClient({ userEmail }: Props) {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
+  const [bookingNote, setBookingNote] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [vehiclesMap, setVehiclesMap] = useState<Record<
@@ -89,6 +90,7 @@ export default function CreateClient({ userEmail }: Props) {
 
   // Hydrate from store after mount (avoid SSR mismatch)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     setTrips([defaultTrip(pickup, dropoff)]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -169,6 +171,7 @@ export default function CreateClient({ userEmail }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           dates: selectedDates,
+          note: bookingNote,
           trips: trips.map((t) => ({
             pickup: t.pickup,
             dropoff: t.dropoff,
@@ -602,6 +605,9 @@ export default function CreateClient({ userEmail }: Props) {
             {/* Preview CTA */}
             <div
               style={{
+                background: "#ffffff",
+                borderTop: "1px solid #eef0f3",
+                borderRadius: 12,
                 position: "sticky",
                 bottom: 0,
                 paddingTop: 12,
@@ -620,7 +626,9 @@ export default function CreateClient({ userEmail }: Props) {
                   }}
                 >
                   Estimated total:{" "}
-                  <strong style={{ color: "#0B1E3D" }}>
+                  <strong
+                    style={{ color: "#00C2A8", fontSize: 15, fontWeight: 800 }}
+                  >
                     {grandTotalEgp} EGP
                   </strong>
                   {
@@ -770,7 +778,11 @@ export default function CreateClient({ userEmail }: Props) {
                   (vehiclesMap?.[t.vehicleType] ?? VEHICLES[t.vehicleType])
                     .ride === "private";
                 const routePoints = [
-                  { label: "Pickup location", point: t.pickup, icon: Navigation },
+                  {
+                    label: "Pickup location",
+                    point: t.pickup,
+                    icon: Navigation,
+                  },
                   ...t.stops.map((stop, stopIndex) => ({
                     label: `Stop ${stopIndex + 1}`,
                     point: stop.point,
@@ -780,214 +792,92 @@ export default function CreateClient({ userEmail }: Props) {
                 ];
                 return (
                   <div
-                  key={t.id}
-                  style={{
-                    padding: "14px 16px",
-                    background: "#f8f9fa",
-                    borderRadius: 12,
-                    marginBottom: 10,
-                    border: "1px solid #eef0f3",
-                  }}
-                >
-                  <div
+                    key={t.id}
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      marginBottom: 8,
+                      padding: "14px 16px",
+                      background: "#f8f9fa",
+                      borderRadius: 12,
+                      marginBottom: 10,
+                      border: "1px solid #eef0f3",
                     }}
                   >
-                    <span
-                      style={{
-                        fontWeight: 700,
-                        fontSize: 14,
-                        color: "#0B1E3D",
-                      }}
-                    >
-                      Trip {i + 1}
-                    </span>
-                    <span
-                      style={{
-                        fontWeight: 800,
-                        fontSize: 15,
-                        color: "#00C2A8",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {t.vehicleType !== "" &&
-                      (vehiclesMap?.[t.vehicleType] ?? VEHICLES[t.vehicleType])
-                        .ride === "private"
-                        ? (t.priceEgp ?? 0)
-                        : finalPrice(
-                            t.priceEgp ?? 0,
-                            t.extraPassengers ?? 0,
-                            t.vehicleType,
-                          )}{" "}
-                      EGP
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "#5A6A7A",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                    }}
-                  >
-                    {isPrivate ? (
-                      <span
-                        style={{ display: "flex", alignItems: "center", gap: 8 }}
-                      >
-                        <Users size={15} color="#0B1E3D" />
-                        <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
-                          {t.numberOfPassengers} passenger
-                          {t.numberOfPassengers === 1 ? "" : "s"}
-                        </strong>
-                      </span>
-                    ) : (
-                      <span
-                        style={{ display: "flex", alignItems: "center", gap: 8 }}
-                      >
-                        <Users size={15} color="#0B1E3D" />
-                        <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
-                          {t.extraPassengers} Extra passenger
-                          {t.extraPassengers === 1 ? "" : "s"}
-                        </strong>
-                      </span>
-                    )}
-                    <span
+                    <div
                       style={{
                         display: "flex",
-                        alignItems: "center",
-                        gap: 8,
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        marginBottom: 8,
                       }}
                     >
-                      <Car
-                        size={15}
-                        color="#0B1E3D"
-                        aria-hidden="true"
-                        style={{ flexShrink: 0 }}
-                      />
-                      <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
-                        {VEHICLE_LIST_LABEL(t.vehicleType)}
-                      </strong>
-                    </span>
-                    {isPrivate ? (
-                      <div
+                      <span
                         style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 8,
-                          padding: "10px 0",
-                          borderTop: "1px solid #e5e9ee",
-                          borderBottom: "1px solid #e5e9ee",
+                          fontWeight: 700,
+                          fontSize: 14,
+                          color: "#0B1E3D",
                         }}
                       >
-                        {routePoints.map((routePoint, pointIndex) => {
-                          const Icon = routePoint.icon;
-                          const leg = t.routeLegs[pointIndex];
-                          return (
-                            <div key={routePoint.label}>
-                              <span
-                                style={{ display: "flex", alignItems: "center", gap: 8 }}
-                              >
-                                <Icon
-                                  size={15}
-                                  color={
-                                    pointIndex === routePoints.length - 1
-                                      ? "#F5A623"
-                                      : pointIndex === 0
-                                        ? "#0B1E3D"
-                                        : "#00C2A8"
-                                  }
-                                  aria-hidden="true"
-                                  style={{ flexShrink: 0 }}
-                                />
-                                <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
-                                  {routePoint.label}
-                                </strong>
-                                <span>
-                                  {routePoint.point?.address
-                                    ? formatDisplayName(routePoint.point.address)
-                                    : "—"}
-                                </span>
-                              </span>
-                              {leg && pointIndex < routePoints.length - 1 && (
-                                <span
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 6,
-                                    margin: "5px 0 0 22px",
-                                    fontSize: 12,
-                                    color: "#5A6A7A",
-                                  }}
-                                >
-                                  <Route size={13} aria-hidden="true" />
-                                  To {routePoints[pointIndex + 1].label}: {leg.distanceKm} km · {leg.durationMinutes} min
-                                  {leg.passengers != null &&
-                                    ` · ${leg.passengers} passenger${leg.passengers === 1 ? "" : "s"}`}
-                                  {leg.priceEgp != null && ` · ${leg.priceEgp} EGP`}
-                                </span>
-                              )}
-                              {t.stops[pointIndex - 1] && (
-                                <span
-                                  style={{
-                                    display: "block",
-                                    margin: "4px 0 0 23px",
-                                    fontSize: 12,
-                                    color: "#5A6A7A",
-                                  }}
-                                >
-                                  Alighting: {t.stops[pointIndex - 1].alighting} · Boarding: {t.stops[pointIndex - 1].boarding}
-                                  {t.stops[pointIndex - 1].waitingMinutes > 0 &&
-                                    ` · Wait: ${t.stops[pointIndex - 1].waitingMinutes} min`}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <>
-                        <span
-                          style={{ display: "flex", alignItems: "center", gap: 8 }}
-                        >
-                          <MapPin size={15} color="#00C2A8" aria-hidden="true" style={{ flexShrink: 0 }} />
-                          {t.pickup?.address
-                            ? formatDisplayName(t.pickup.address)
-                            : "—"}
-                        </span>
-                        <span
-                          style={{ display: "flex", alignItems: "center", gap: 8 }}
-                        >
-                          <Flag size={15} color="#F5A623" aria-hidden="true" style={{ flexShrink: 0 }} />
-                          {t.dropoff?.address
-                            ? formatDisplayName(t.dropoff.address)
-                            : "—"}
-                        </span>
-                      </>
-                    )}
-                    <span
+                        Trip {i + 1}
+                      </span>
+                      <span
+                        style={{
+                          fontWeight: 800,
+                          fontSize: 15,
+                          color: "#00C2A8",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {t.vehicleType !== "" &&
+                        (
+                          vehiclesMap?.[t.vehicleType] ??
+                          VEHICLES[t.vehicleType]
+                        ).ride === "private"
+                          ? (t.priceEgp ?? 0)
+                          : finalPrice(
+                              t.priceEgp ?? 0,
+                              t.extraPassengers ?? 0,
+                              t.vehicleType,
+                            )}{" "}
+                        EGP
+                      </span>
+                    </div>
+                    <div
                       style={{
+                        fontSize: 13,
+                        color: "#5A6A7A",
                         display: "flex",
-                        alignItems: "center",
+                        flexDirection: "column",
                         gap: 8,
                       }}
                     >
-                      <Clock
-                        size={15}
-                        color="#5A6A7A"
-                        aria-hidden="true"
-                        style={{ flexShrink: 0 }}
-                      />
-                      <span>
-                        Pickup: <strong>{to12h(t.pickupTime)}</strong> · Arrive:{" "}
-                        <strong>{to12h(t.arrivalTime)}</strong>
-                      </span>
-                    </span>
-                    {t.distanceKm && (
+                      {isPrivate ? (
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <Users size={15} color="#0B1E3D" />
+                          <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
+                            {t.numberOfPassengers} passenger
+                            {t.numberOfPassengers === 1 ? "" : "s"}
+                          </strong>
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <Users size={15} color="#0B1E3D" />
+                          <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
+                            {t.extraPassengers} Extra passenger
+                            {t.extraPassengers === 1 ? "" : "s"}
+                          </strong>
+                        </span>
+                      )}
                       <span
                         style={{
                           display: "flex",
@@ -995,149 +885,317 @@ export default function CreateClient({ userEmail }: Props) {
                           gap: 8,
                         }}
                       >
-                        <Route
+                        <Car
+                          size={15}
+                          color="#0B1E3D"
+                          aria-hidden="true"
+                          style={{ flexShrink: 0 }}
+                        />
+                        <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
+                          {VEHICLE_LIST_LABEL(t.vehicleType)}
+                        </strong>
+                      </span>
+                      {isPrivate ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 8,
+                            padding: "10px 0",
+                            borderTop: "1px solid #e5e9ee",
+                            borderBottom: "1px solid #e5e9ee",
+                          }}
+                        >
+                          {routePoints.map((routePoint, pointIndex) => {
+                            const Icon = routePoint.icon;
+                            const leg = t.routeLegs[pointIndex];
+                            return (
+                              <div key={routePoint.label}>
+                                <span
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                  }}
+                                >
+                                  <Icon
+                                    size={15}
+                                    color={
+                                      pointIndex === routePoints.length - 1
+                                        ? "#F5A623"
+                                        : pointIndex === 0
+                                          ? "#0B1E3D"
+                                          : "#00C2A8"
+                                    }
+                                    aria-hidden="true"
+                                    style={{ flexShrink: 0 }}
+                                  />
+                                  <strong
+                                    style={{
+                                      color: "#0B1E3D",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {routePoint.label}
+                                  </strong>
+                                  <span>
+                                    {routePoint.point?.address
+                                      ? formatDisplayName(
+                                          routePoint.point.address,
+                                        )
+                                      : "—"}
+                                  </span>
+                                </span>
+                                {leg && pointIndex < routePoints.length - 1 && (
+                                  <span
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 6,
+                                      margin: "5px 0 0 22px",
+                                      fontSize: 12,
+                                      color: "#5A6A7A",
+                                    }}
+                                  >
+                                    <Route size={13} aria-hidden="true" />
+                                    To {routePoints[pointIndex + 1].label}:{" "}
+                                    {leg.distanceKm} km · {leg.durationMinutes}{" "}
+                                    min
+                                    {leg.passengers != null &&
+                                      ` · ${leg.passengers} passenger${leg.passengers === 1 ? "" : "s"}`}
+                                    {leg.priceEgp != null &&
+                                      ` · ${Math.round(leg.priceEgp)} EGP`}
+                                  </span>
+                                )}
+                                {t.stops[pointIndex - 1] && (
+                                  <span
+                                    style={{
+                                      display: "block",
+                                      margin: "4px 0 0 23px",
+                                      fontSize: 12,
+                                      color: "#5A6A7A",
+                                    }}
+                                  >
+                                    Alighting:{" "}
+                                    {t.stops[pointIndex - 1].alighting} ·
+                                    Boarding: {t.stops[pointIndex - 1].boarding}
+                                    {t.stops[pointIndex - 1].waitingMinutes >
+                                      0 &&
+                                      ` · Wait: ${t.stops[pointIndex - 1].waitingMinutes} min`}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <>
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
+                          >
+                            <MapPin
+                              size={15}
+                              color="#00C2A8"
+                              aria-hidden="true"
+                              style={{ flexShrink: 0 }}
+                            />
+                            {t.pickup?.address
+                              ? formatDisplayName(t.pickup.address)
+                              : "—"}
+                          </span>
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
+                          >
+                            <Flag
+                              size={15}
+                              color="#F5A623"
+                              aria-hidden="true"
+                              style={{ flexShrink: 0 }}
+                            />
+                            {t.dropoff?.address
+                              ? formatDisplayName(t.dropoff.address)
+                              : "—"}
+                          </span>
+                        </>
+                      )}
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <Clock
                           size={15}
                           color="#5A6A7A"
                           aria-hidden="true"
                           style={{ flexShrink: 0 }}
                         />
-                        {t.distanceKm} km · {t.durationMinutes} min drive
+                        <span>
+                          Pickup: <strong>{to12h(t.pickupTime)}</strong> ·
+                          Arrive: <strong>{to12h(t.arrivalTime)}</strong>
+                        </span>
                       </span>
-                    )}
-                  </div>
+                      {t.distanceKm && (
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <Route
+                            size={15}
+                            color="#5A6A7A"
+                            aria-hidden="true"
+                            style={{ flexShrink: 0 }}
+                          />
+                          {t.distanceKm} km · {t.durationMinutes} min drive
+                        </span>
+                      )}
+                    </div>
 
-                  {/* Per-trip instructions */}
-                  <div
-                    style={{
-                      marginTop: 10,
-                      padding: "10px 12px",
-                      background: "rgba(245,166,35,0.07)",
-                      border: "1px solid rgba(245,166,35,0.35)",
-                      borderRadius: 8,
-                    }}
-                  >
-                    <p
+                    {/* Per-trip instructions */}
+                    <div
                       style={{
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: "#0B1E3D",
-                        margin: "0 0 6px",
-                        letterSpacing: "0.04em",
-                        textTransform: "uppercase",
+                        marginTop: 10,
+                        padding: "10px 12px",
+                        background: "rgba(245,166,35,0.07)",
+                        border: "1px solid rgba(245,166,35,0.35)",
+                        borderRadius: 8,
                       }}
                     >
-                      ⚠️ Instructions & Conditions
-                    </p>
-                    <ul
-                      style={{
-                        margin: 0,
-                        paddingLeft: 16,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 4,
-                      }}
-                    >
-                      <li
+                      <p
                         style={{
-                          fontSize: 12,
+                          fontSize: 11,
+                          fontWeight: 800,
                           color: "#0B1E3D",
-                          fontWeight: 600,
-                          listStyle: "inside",
+                          margin: "0 0 6px",
+                          letterSpacing: "0.04em",
+                          textTransform: "uppercase",
                         }}
                       >
-                        Be punctual — driver will not wait beyond the allowed
-                        time.
-                      </li>
-                      <li
+                        ⚠️ Instructions & Conditions
+                      </p>
+                      <ul
                         style={{
-                          fontSize: 12,
-                          color: "#e74c3c",
-                          fontWeight: 600,
-                          listStyle: "inside",
+                          margin: 0,
+                          paddingLeft: 16,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 4,
                         }}
                       >
-                        Only declared passengers may board (except for infants).
-                        All passengers are picked up and dropped off exclusively
-                        at the specified locations — no additional stops.
-                      </li>
-                      {(t.vehicleType === "van_shared" ||
-                        t.vehicleType === "microbus_shared") && (
-                        <>
-                          <li
-                            style={{
-                              fontSize: 12,
-                              color: "#e74c3c",
-                              fontWeight: 700,
-                              listStyle: "inside",
-                            }}
-                          >
-                            No extra baggage allowed
-                          </li>
-                          <li
-                            style={{
-                              fontSize: 12,
-                              color: "#e74c3c",
-                              fontWeight: 700,
-                              listStyle: "inside",
-                            }}
-                          >
-                            No waiting time for Van / Microbus — be at the
-                            pickup point on time.
-                          </li>
-                        </>
-                      )}
-                      {t.vehicleType === "taxi_shared" && (
-                        <>
-                          <li
-                            style={{
-                              fontSize: 12,
-                              color: "#e74c3c",
-                              fontWeight: 600,
-                              listStyle: "inside",
-                            }}
-                          >
-                            No extra baggage allowed
-                          </li>
-                          <li
-                            style={{
-                              fontSize: 12,
-                              color: "#0B1E3D",
-                              fontWeight: 600,
-                              listStyle: "inside",
-                            }}
-                          >
-                            Shared Taxi: maximum waiting time is{" "}
-                            <strong>3 minutes</strong>.
-                          </li>
-                        </>
-                      )}
-                      {(t.vehicleType === "private_car" ||
-                        t.vehicleType === "taxi_private") && (
-                        <>
-                          <li
-                            style={{
-                              fontSize: 12,
-                              color: "#0B1E3D",
-                              fontWeight: 600,
-                              listStyle: "inside",
-                            }}
-                          >
-                            Maximum waiting time: <strong>5 minutes</strong>.
-                          </li>
-                          <li
-                            style={{
-                              fontSize: 12,
-                              color: "#0B1E3D",
-                              fontWeight: 600,
-                              listStyle: "inside",
-                            }}
-                          >
-                            Maximum baggage: <strong>2 pieces</strong>.
-                          </li>
-                        </>
-                      )}
-                    </ul>
-                  </div>
+                        <li
+                          style={{
+                            fontSize: 12,
+                            color: "#0B1E3D",
+                            fontWeight: 600,
+                            listStyle: "inside",
+                          }}
+                        >
+                          Be punctual — driver will not wait beyond the allowed
+                          time.
+                        </li>
+                        <li
+                          style={{
+                            fontSize: 12,
+                            color: "#e74c3c",
+                            fontWeight: 600,
+                            listStyle: "inside",
+                          }}
+                        >
+                          Only declared passengers may board (except for
+                          infants). All passengers are picked up and dropped off
+                          exclusively at the specified locations — no additional
+                          stops.
+                        </li>
+                        {(t.vehicleType === "van_shared" ||
+                          t.vehicleType === "microbus_shared") && (
+                          <>
+                            <li
+                              style={{
+                                fontSize: 12,
+                                color: "#e74c3c",
+                                fontWeight: 700,
+                                listStyle: "inside",
+                              }}
+                            >
+                              No extra baggage allowed
+                            </li>
+                            <li
+                              style={{
+                                fontSize: 12,
+                                color: "#e74c3c",
+                                fontWeight: 700,
+                                listStyle: "inside",
+                              }}
+                            >
+                              No waiting time for Van / Microbus — be at the
+                              pickup point on time.
+                            </li>
+                          </>
+                        )}
+                        {t.vehicleType === "taxi_shared" && (
+                          <>
+                            <li
+                              style={{
+                                fontSize: 12,
+                                color: "#e74c3c",
+                                fontWeight: 600,
+                                listStyle: "inside",
+                              }}
+                            >
+                              No extra baggage allowed
+                            </li>
+                            <li
+                              style={{
+                                fontSize: 12,
+                                color: "#0B1E3D",
+                                fontWeight: 600,
+                                listStyle: "inside",
+                              }}
+                            >
+                              Shared Taxi: maximum waiting time is{" "}
+                              <strong>2 minutes</strong>.
+                            </li>
+                          </>
+                        )}
+                        {(t.vehicleType === "private_car" ||
+                          t.vehicleType === "taxi_private") && (
+                          <>
+                            <li
+                              style={{
+                                fontSize: 12,
+                                color: "#0B1E3D",
+                                fontWeight: 600,
+                                listStyle: "inside",
+                              }}
+                            >
+                              Maximum waiting time: <strong>2 minutes</strong>.
+                            </li>
+                            <li
+                              style={{
+                                fontSize: 12,
+                                color: "#0B1E3D",
+                                fontWeight: 600,
+                                listStyle: "inside",
+                              }}
+                            >
+                              Maximum baggage: <strong>2 back bags</strong>.
+                            </li>
+                          </>
+                        )}
+                      </ul>
+                    </div>
                   </div>
                 );
               })}
@@ -1172,6 +1230,50 @@ export default function CreateClient({ userEmail }: Props) {
                   </span>
                 </div>
               )}
+
+              <div style={{ marginTop: 16 }}>
+                <label
+                  htmlFor="booking-note"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#0B1E3D",
+                    display: "block",
+                    marginBottom: 6,
+                  }}
+                >
+                  Add note
+                </label>
+                <textarea
+                  id="booking-note"
+                  value={bookingNote}
+                  onChange={(event) =>
+                    setBookingNote(event.target.value.slice(0, 1000))
+                  }
+                  placeholder="Add pickup details or instructions for this request"
+                  rows={4}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    resize: "vertical",
+                    minHeight: 92,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "1.5px solid #e8edf0",
+                    background: "#f8f9fa",
+                    color: "#0B1E3D",
+                    fontSize: 13,
+                    fontFamily: "inherit",
+                    lineHeight: 1.45,
+                    outline: "none",
+                  }}
+                />
+                <p
+                  style={{ fontSize: 11, color: "#5A6A7A", margin: "5px 0 0" }}
+                >
+                  {bookingNote.length}/1000
+                </p>
+              </div>
 
               {/* ── Terms & conditions ── */}
               <div

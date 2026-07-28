@@ -5,6 +5,11 @@ import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { verifyAndSettleTopup } from "@/lib/payments/kashier";
+import {
+  completeWithdrawal,
+  refundWithdrawal,
+} from "@/lib/wallet/wallet";
+import { queryKashierPayoutStatus } from "@/lib/payments/kashierPayout";
 import { Types } from "mongoose";
 
 function verifySignature(p: Record<string, string>, sig: string): boolean {
@@ -55,6 +60,23 @@ export async function POST(req: NextRequest) {
     if (topup) {
       // Re-query Kashier (source of truth) and credit once if paid.
       await verifyAndSettleTopup(orderId);
+      return NextResponse.json({ received: true });
+    }
+
+    const withdrawal = await WalletTransaction.findOne({
+      _id: orderId,
+      type: "withdrawal",
+    });
+    if (withdrawal) {
+      const payoutId = withdrawal.kashierPayoutId;
+      if (payoutId) {
+        const outcome = await queryKashierPayoutStatus(payoutId);
+        if (outcome === "completed") {
+          await completeWithdrawal(orderId, payoutId);
+        } else if (outcome === "failed") {
+          await refundWithdrawal(orderId);
+        }
+      }
       return NextResponse.json({ received: true });
     }
   }

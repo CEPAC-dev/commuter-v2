@@ -76,8 +76,22 @@ export interface TripData {
   numberOfPassengers: number;
   stops: StopPoint[];
   returnTrip?: boolean; // UI flag — reverse of source trip
-  pickupStation: { id: number; lat: number; lng: number; name: string } | null;
-  dropoffStation: { id: number; lat: number; lng: number; name: string } | null;
+  pickupStation: {
+    id: number;
+    lat: number;
+    lng: number;
+    name: string;
+    direction?: string;
+    stationType: string;
+  } | null;
+  dropoffStation: {
+    id: number;
+    lat: number;
+    lng: number;
+    name: string;
+    direction?: string;
+    stationType: string;
+  } | null;
   pickupStationOptions: StationOption[];
   dropoffStationOptions: StationOption[];
   walkingMinToStation: number | null; // walk from pickup → pickup station
@@ -311,7 +325,10 @@ function StationOptions({
               onChange={() => onSelect(option.id)}
               style={{ accentColor: "#00C2A8" }}
             />
-            <strong style={{ fontSize: 13 }}>{option.name}</strong>
+            <strong style={{ fontSize: 13 }}>
+              {option.name}
+              {option.direction ? ` (${option.direction})` : ""}
+            </strong>
             <span style={{ marginLeft: "auto", color: "#5A6A7A" }}>
               {option.distanceKm.toFixed(2)} km · ~{option.walkingMin} min walk
             </span>
@@ -375,6 +392,8 @@ export default function TripCycle({
   vehicleList,
 }: Props) {
   const [routeLoading, setRouteLoading] = useState(false);
+  const [stopError, setStopError] = useState("");
+  const [locating, setLocating] = useState<"pickup" | "dropoff" | null>(null);
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
 
@@ -477,11 +496,13 @@ export default function TripCycle({
         data.pickup.lat,
         data.pickup.lng,
         stations,
+        vehicleType,
       );
       dropoffStationOptions = findNearestStations(
         data.dropoff.lat,
         data.dropoff.lng,
         stations,
+        vehicleType,
       );
       const pickupOption =
         pickupStationOptions.find(
@@ -498,6 +519,8 @@ export default function TripCycle({
           lat: pickupOption.lat,
           lng: pickupOption.lng,
           name: pickupOption.name,
+          direction: pickupOption.direction,
+          stationType: pickupOption.stationType,
         };
         walkMinToStation = pickupOption.walkingMin;
         routeFrom = {
@@ -512,6 +535,8 @@ export default function TripCycle({
           lat: dropoffOption.lat,
           lng: dropoffOption.lng,
           name: dropoffOption.name,
+          direction: dropoffOption.direction,
+          stationType: dropoffOption.stationType,
         };
         walkMinFromStation = dropoffOption.walkingMin;
         routeTo = {
@@ -523,6 +548,7 @@ export default function TripCycle({
     }
 
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRouteLoading(true);
     fetchRoute([routeFrom, routeTo])
       .then((routes) => {
@@ -650,9 +676,10 @@ export default function TripCycle({
         routeLegs.forEach((leg, legIndex) => {
           leg.priceEgp = legPrices[legIndex];
         });
-        const price =
+        const price = Math.round(
           legPrices.reduce((sum, legPrice) => sum + legPrice, 0) +
-          waitingCostEgp(totalWaitingMinutes, vehicleType, vMap);
+            waitingCostEgp(totalWaitingMinutes, vehicleType, vMap),
+        );
         onChange({
           ...data,
           distanceKm: distance_km,
@@ -830,6 +857,29 @@ export default function TripCycle({
     [data, onChange],
   );
 
+  function handleCurrentLocation(field: "pickup" | "dropoff") {
+    if (!navigator.geolocation) return;
+    setLocating(field);
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        const lat = coords.latitude;
+        const lng = coords.longitude;
+        let address = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        try {
+          const res = await fetch(`/api/geocode/reverse?lat=${lat}&lng=${lng}`);
+          if (res.ok) {
+            const result = await res.json();
+            if (result.address) address = result.address;
+          }
+        } catch {}
+        onChange({ ...data, [field]: { address, lat, lng } });
+        setLocating(null);
+      },
+      () => setLocating(null),
+      { timeout: 8000 },
+    );
+  }
+
   // Pickup window end = start + 10 min margin
   const pickupWindowEnd = data.pickupTime
     ? toHHMM(toMinutes(data.pickupTime) + 10)
@@ -881,12 +931,44 @@ export default function TripCycle({
   }
 
   function updateStop(id: string, patch: Partial<StopPoint>) {
+    if (patch.point) setStopError("");
     onChange({
       ...data,
       stops: data.stops.map((stop) =>
         stop.id === id ? { ...stop, ...patch } : stop,
       ),
     });
+  }
+
+  function updateNumberOfPassengers(numberOfPassengers: number) {
+    setStopError("");
+    onChange({
+      ...data,
+      numberOfPassengers,
+      stops: data.stops.map((stop) => ({
+        ...stop,
+        alighting: 0,
+        boarding: 0,
+      })),
+    });
+  }
+
+  function addStopPoint() {
+    if (data.stops.some((stop) => !stop.point)) {
+      setStopError("Enter stop address location for the active stop first.");
+      return;
+    }
+    setStopError("");
+    set("stops", [
+      ...data.stops,
+      {
+        id: Math.random().toString(36).slice(2, 9),
+        point: null,
+        alighting: 0,
+        boarding: 0,
+        waitingMinutes: 0,
+      },
+    ]);
   }
 
   function selectStation(field: "pickup" | "dropoff", stationId: number) {
@@ -902,6 +984,8 @@ export default function TripCycle({
       lat: station.lat,
       lng: station.lng,
       name: station.name,
+      direction: station.direction,
+      stationType: station.stationType,
     };
     onChange({
       ...data,
@@ -1184,22 +1268,39 @@ export default function TripCycle({
                 iconColor="#0B1E3D"
                 savedAddresses={savedAddresses}
               />
-              {data.pickup && !isAlreadySaved(data.pickup, savedAddresses) && (
-                <SaveAddressButton
-                  point={data.pickup}
-                  onSaved={(s) => onAddressSaved?.(s)}
-                />
-              )}
-              {onPickFromMap && (
+              <div className="flex flex-row gap-2 mt-2">
                 <button
                   type="button"
-                  onClick={() => onPickFromMap("pickup")}
-                  style={pickBtnStyle(picking === "pickup")}
+                  onClick={() => handleCurrentLocation("pickup")}
+                  disabled={locating === "pickup"}
+                  style={pickBtnStyle(false)}
                 >
-                  <MapPin size={13} aria-hidden="true" />
-                  {picking === "pickup" ? "Click the map…" : "Pick from map"}
+                  {locating === "pickup" ? (
+                    <Loader2 size={13} className="spin" aria-hidden="true" />
+                  ) : (
+                    <Navigation size={13} aria-hidden="true" />
+                  )}
+                  Use my current location
                 </button>
-              )}
+                {data.pickup &&
+                  !isAlreadySaved(data.pickup, savedAddresses) && (
+                    <SaveAddressButton
+                      point={data.pickup}
+                      onSaved={(s) => onAddressSaved?.(s)}
+                    />
+                  )}
+                {onPickFromMap && (
+                  <button
+                    type="button"
+                    onClick={() => onPickFromMap("pickup")}
+                    style={pickBtnStyle(picking === "pickup")}
+                  >
+                    <MapPin size={13} aria-hidden="true" />
+                    {picking === "pickup" ? "Click the map…" : "Pick from map"}
+                  </button>
+                )}
+              </div>
+
               {isSharedVehicle(data.vehicleType) &&
                 data.pickup &&
                 data.pickupStation && (
@@ -1257,6 +1358,19 @@ export default function TripCycle({
                 iconColor="#00C2A8"
                 savedAddresses={savedAddresses}
               />
+              <button
+                type="button"
+                onClick={() => handleCurrentLocation("dropoff")}
+                disabled={locating === "dropoff"}
+                style={pickBtnStyle(false)}
+              >
+                {locating === "dropoff" ? (
+                  <Loader2 size={13} className="spin" aria-hidden="true" />
+                ) : (
+                  <Navigation size={13} aria-hidden="true" />
+                )}
+                Use my current location
+              </button>
               {data.dropoff &&
                 !isAlreadySaved(data.dropoff, savedAddresses) && (
                   <SaveAddressButton
@@ -1508,7 +1622,7 @@ export default function TripCycle({
                   </span>
                 </div>
               )}
-              {isSharedVehicle(data.vehicleType) &&
+              {/* {isSharedVehicle(data.vehicleType) &&
                 data.pickupTime &&
                 data.walkingMinToStation != null &&
                 data.walkingMinToStation > 0 && (
@@ -1529,7 +1643,7 @@ export default function TripCycle({
                     </strong>{" "}
                     (~{data.walkingMinToStation} min walk to station)
                   </p>
-                )}
+                )} */}
             </div>
 
             {/* Extra passengers */}
@@ -1790,8 +1904,7 @@ export default function TripCycle({
                 <button
                   type="button"
                   onClick={() =>
-                    set(
-                      "numberOfPassengers",
+                    updateNumberOfPassengers(
                       Math.max(1, data.numberOfPassengers - 1),
                     )
                   }
@@ -1815,8 +1928,7 @@ export default function TripCycle({
                 <button
                   type="button"
                   onClick={() =>
-                    set(
-                      "numberOfPassengers",
+                    updateNumberOfPassengers(
                       Math.min(
                         vMap[data.vehicleType as VehicleKey].occupancy,
                         data.numberOfPassengers + 1,
@@ -1852,6 +1964,19 @@ export default function TripCycle({
                 iconColor="#0B1E3D"
                 savedAddresses={savedAddresses}
               />
+              <button
+                type="button"
+                onClick={() => handleCurrentLocation("pickup")}
+                disabled={locating === "pickup"}
+                style={pickBtnStyle(false)}
+              >
+                {locating === "pickup" ? (
+                  <Loader2 size={13} className="spin" aria-hidden="true" />
+                ) : (
+                  <Navigation size={13} aria-hidden="true" />
+                )}
+                Use my current location
+              </button>
               {data.pickup && !isAlreadySaved(data.pickup, savedAddresses) && (
                 <SaveAddressButton
                   point={data.pickup}
@@ -1979,22 +2104,16 @@ export default function TripCycle({
               {data.stops.length < 4 && (
                 <button
                   type="button"
-                  onClick={() =>
-                    set("stops", [
-                      ...data.stops,
-                      {
-                        id: Math.random().toString(36).slice(2, 9),
-                        point: null,
-                        alighting: 0,
-                        boarding: 0,
-                        waitingMinutes: 0,
-                      },
-                    ])
-                  }
+                  onClick={addStopPoint}
                   style={{ ...pickBtnStyle(false), marginTop: 0 }}
                 >
                   + Add stop point
                 </button>
+              )}
+              {stopError && (
+                <p role="alert" style={{ ...locationErrorStyle, marginTop: 0 }}>
+                  {stopError}
+                </p>
               )}
             </div>
 
@@ -2008,6 +2127,19 @@ export default function TripCycle({
                 iconColor="#00C2A8"
                 savedAddresses={savedAddresses}
               />
+              <button
+                type="button"
+                onClick={() => handleCurrentLocation("dropoff")}
+                disabled={locating === "dropoff"}
+                style={pickBtnStyle(false)}
+              >
+                {locating === "dropoff" ? (
+                  <Loader2 size={13} className="spin" aria-hidden="true" />
+                ) : (
+                  <Navigation size={13} aria-hidden="true" />
+                )}
+                Use my current location
+              </button>
               {data.dropoff &&
                 !isAlreadySaved(data.dropoff, savedAddresses) && (
                   <SaveAddressButton

@@ -3,7 +3,9 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
 import { nextSequence } from "@/models/Counter";
 import { Driver } from "@/models/Driver";
+import { Station } from "@/models/Station";
 import { getSession } from "@/lib/auth/session";
+import { findNearestStation } from "@/lib/geo/stations";
 import type { GeoPoint as Point } from "@/types/geo";
 import { listDriverAvailability } from "@/lib/services/availability";
 
@@ -38,13 +40,14 @@ export async function POST(req: NextRequest) {
 
   await connectDB();
   const driver = await Driver.findOne({ userId: session.userId })
-    .select("verificationStatus")
-    .lean<{ verificationStatus?: string }>();
+    .select("verificationStatus carCapacity")
+    .lean<{ verificationStatus?: string; carCapacity?: number }>();
   if (driver?.verificationStatus !== "verified")
     return NextResponse.json(
       { error: "Your profile must be verified before adding availability." },
       { status: 403 },
     );
+  const seats = driver?.carCapacity ?? 4;
 
   try {
     const { dates, startLocation, endLocation, startTime, endTime } =
@@ -80,6 +83,29 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
 
+    const stationDocs = await Station.find({ active: true }).lean();
+    const canonicalStations = stationDocs.map((station) => ({
+      id: station.objectId,
+      name: station.name || station.direction || "",
+      direction: station.direction,
+      stationType: station.stationType,
+      lat: station.lat,
+      lng: station.lng,
+      popupInfo: [station.direction, station.landmark, station.stationType]
+        .filter(Boolean)
+        .join("\n"),
+    }));
+    const startNearestStation = findNearestStation(
+      startLocation.lat,
+      startLocation.lng,
+      canonicalStations,
+    );
+    const endNearestStation = findNearestStation(
+      endLocation.lat,
+      endLocation.lng,
+      canonicalStations,
+    );
+
     const docs = await Promise.all(
       dates.map(async (date: string) => ({
         availabilityNumber: await nextSequence("availabilityNumber"),
@@ -95,6 +121,27 @@ export async function POST(req: NextRequest) {
           lat: endLocation.lat,
           lng: endLocation.lng,
         },
+        // seatsRemaining: seats,
+        ...(startNearestStation && {
+          startNearestStation: {
+            id: startNearestStation.id,
+            name: startNearestStation.name,
+            direction: startNearestStation.direction,
+            stationType: startNearestStation.stationType,
+            lat: startNearestStation.lat,
+            lng: startNearestStation.lng,
+          },
+        }),
+        ...(endNearestStation && {
+          endNearestStation: {
+            id: endNearestStation.id,
+            name: endNearestStation.name,
+            direction: endNearestStation.direction,
+            stationType: endNearestStation.stationType,
+            lat: endNearestStation.lat,
+            lng: endNearestStation.lng,
+          },
+        }),
         startTime,
         endTime,
       })),

@@ -1,13 +1,5 @@
 import { Schema, model, models, Types, type InferSchemaType } from "mongoose";
-
-const PointSchema = new Schema(
-  {
-    address: { type: String, required: true },
-    lat: { type: Number, required: true },
-    lng: { type: Number, required: true },
-  },
-  { _id: false },
-);
+import { PointSchema, StationSchema } from "./Trip"; // extract these from Trip.ts
 
 const AvailabilitySchema = new Schema(
   {
@@ -27,8 +19,24 @@ const AvailabilitySchema = new Schema(
     date: { type: String, required: true }, // "YYYY-MM-DD"
     startLocation: { type: PointSchema, required: true },
     endLocation: { type: PointSchema, required: true },
+    startNearestStation: { type: StationSchema, required: false },
+    endNearestStation: { type: StationSchema, required: false },
     startTime: { type: String, required: true }, // "HH:MM"
     endTime: { type: String, required: true }, // "HH:MM"
+    // seatsRemaining: { type: Number, required: true, min: 0 },
+    status: {
+      type: String,
+      required: true,
+      default: "open",
+      enum: ["open", "matched", "full", "closed", "cancelled"],
+    },
+    rideId: {
+      type: Types.ObjectId,
+      ref: "Ride",
+      required: false,
+      index: true,
+      default: null,
+    },
   },
   { timestamps: true },
 );

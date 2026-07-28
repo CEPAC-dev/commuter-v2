@@ -3,6 +3,20 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
 import type { GeoPoint } from "@/types/geo";
 
+function getTodayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+async function purgeExpiredAvailability() {
+  await connectDB();
+  const today = getTodayDateString();
+  await Availability.deleteMany({ date: { $lt: today } });
+}
+
 export interface AvailabilityRecord {
   _id: string;
   availabilityNumber: number;
@@ -16,6 +30,7 @@ export interface AvailabilityRecord {
 export async function listDriverAvailability(
   driverId: string,
 ): Promise<AvailabilityRecord[]> {
+  await purgeExpiredAvailability();
   await connectDB();
   const records = await Availability.find({ driverId }).sort({ date: 1 }).lean<
     {

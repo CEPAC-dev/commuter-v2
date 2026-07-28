@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function WalletPage() {
   const session = await getSession();
   if (!session) redirect("/login?redirect=/wallet");
+  if (session.role === "admin") redirect("/admin/dashboard");
 
   return (
     <div style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
@@ -22,7 +23,7 @@ export default async function WalletPage() {
       />
 
       <Suspense fallback={null}>
-        <WalletClient />
+        <WalletClient role={session.role} />
       </Suspense>
     </div>
   );

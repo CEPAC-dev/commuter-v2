@@ -1,15 +1,12 @@
-// @ts-nocheck
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useTranslations } from "next-intl";
 import { getTripMessages, sendMessage, type ChatMessage } from "@/lib/api/chat";
 
 interface TripChatProps {
-  tripInstanceId: number;
+  tripId: string;
   /** 'user' view shows "chat with driver", 'driver' view shows "chat with passenger" */
   role: "user" | "driver";
-  _currentUserId?: number;
 }
 
 function formatTime(raw: string) {
@@ -52,12 +49,7 @@ function MessageIcon() {
   );
 }
 
-export default function TripChat({
-  tripInstanceId,
-  role,
-  _currentUserId,
-}: TripChatProps) {
-  const t = useTranslations("trip_chat");
+export default function TripChat({ tripId, role }: TripChatProps) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
@@ -69,14 +61,14 @@ export default function TripChat({
 
   const fetchMessages = useCallback(async () => {
     try {
-      const res = await getTripMessages(tripInstanceId);
+      const res = await getTripMessages(tripId);
       const list = res.data ?? [];
       setMessages(list);
       setLoadError(null);
     } catch {
-      setLoadError(t("load_error"));
+      setLoadError("Couldn't load messages. Try again.");
     }
-  }, [tripInstanceId, t]);
+  }, [tripId]);
 
   useEffect(() => {
     if (!open) return;
@@ -105,7 +97,7 @@ export default function TripChat({
     if (!msg || sending) return;
     setSending(true);
     try {
-      await sendMessage(tripInstanceId, msg);
+      await sendMessage(tripId, msg);
       setText("");
       await fetchMessages();
     } catch {
@@ -122,8 +114,7 @@ export default function TripChat({
     }
   }
 
-  const btnLabel =
-    role === "user" ? t("chat_with_driver") : t("chat_with_passenger");
+  const btnLabel = role === "user" ? "Chat with driver" : "Chat with passenger";
 
   return (
     <>
@@ -225,7 +216,7 @@ export default function TripChat({
                   {btnLabel}
                 </p>
                 <p style={{ margin: 0, fontSize: 11, color: "#9AA0A6" }}>
-                  {t("trip_ref", { id: tripInstanceId })}
+                  Trip #{tripId.slice(-6)}
                 </p>
               </div>
             </div>
@@ -279,7 +270,7 @@ export default function TripChat({
                 }}
               >
                 <p style={{ fontSize: 32, margin: "0 0 8px" }}>💬</p>
-                <p style={{ fontSize: 13 }}>{t("no_messages")}</p>
+                <p style={{ fontSize: 13 }}>No messages yet. Say hello!</p>
               </div>
             )}
             {messages.map((msg) => {
@@ -356,7 +347,7 @@ export default function TripChat({
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={handleKey}
-              placeholder={t("type_message")}
+              placeholder="Type a message…"
               style={{
                 flex: 1,
                 padding: "10px 14px",

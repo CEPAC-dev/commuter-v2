@@ -14,7 +14,11 @@ export async function nextSequence(sequence: string): Promise<number> {
   const counter = await Counter.findByIdAndUpdate(
     sequence,
     { $inc: { value: 1 } },
-    { new: true, upsert: true, setDefaultsOnInsert: true },
+    {
+      returnDocument: "after",
+      upsert: true,
+      setDefaultsOnInsert: true,
+    },
   ).lean<{ value: number }>();
 
   if (!counter) throw new Error(`Could not increment ${sequence}`);

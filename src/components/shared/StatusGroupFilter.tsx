@@ -13,11 +13,16 @@ const GROUPS: {
   { value: "pending_payment", label: "Pending payment" },
 ];
 
-export default function StatusGroupFilter() {
+export default function StatusGroupFilter({
+  hiddenGroups = [],
+}: {
+  hiddenGroups?: Array<(typeof GROUPS)[number]["value"]>;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
   const active = sp.get("group") ?? "";
+  const visibleGroups = GROUPS.filter((g) => !hiddenGroups.includes(g.value));
 
   function select(value: string) {
     const params = new URLSearchParams(sp.toString());
@@ -30,7 +35,7 @@ export default function StatusGroupFilter() {
 
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      {GROUPS.map((g) => {
+      {visibleGroups.map((g) => {
         const isActive = active === g.value;
         return (
           <button
@@ -38,8 +43,8 @@ export default function StatusGroupFilter() {
             type="button"
             onClick={() => select(g.value)}
             style={{
-              border: isActive ? "1.5px solid #0B1E3D" : "1.5px solid #e2e8ec",
-              background: isActive ? "#0B1E3D" : "#fff",
+              border: isActive ? "1.5px solid #00C2A8" : "1.5px solid #e2e8ec",
+              background: isActive ? "#00C2A8" : "#fff",
               color: isActive ? "#fff" : "#0B1E3D",
               fontWeight: 700,
               fontSize: 13,

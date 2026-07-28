@@ -22,6 +22,10 @@ interface Props {
   rounded?: number;
   /** Enable zoom/pan/scroll (detail pages). Default false = static preview (list cards). */
   interactive?: boolean;
+  /** Intermediate stop points (private ride stops) drawn between pickup and dropoff. */
+  stops?: LatLng[];
+  /** Shared-ride pickup/dropoff stations, drawn with a distinct station icon and routed through. */
+  stations?: LatLng[];
 }
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
@@ -41,6 +45,19 @@ const DROPOFF_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
     <path d="M18 0C8.06 0 0 8.06 0 18c0 13.05 18 32.4 18 32.4S36 31.05 36 18C36 8.06 27.94 0 18 0z" fill="#00C2A8"/>
     <circle cx="18" cy="18" r="8" fill="white"/>
     <circle cx="18" cy="18" r="4.5" fill="#0B1E3D"/>
+  </svg>`,
+)}`;
+
+const STOP_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+    <circle cx="12" cy="12" r="10" fill="#F5A623" stroke="#fff" stroke-width="3"/>
+  </svg>`,
+)}`;
+
+const STATION_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26">
+    <rect x="3" y="3" width="20" height="20" rx="6" fill="#00C2A8" stroke="#fff" stroke-width="3"/>
+    <rect x="9" y="9" width="8" height="8" rx="2" fill="#fff"/>
   </svg>`,
 )}`;
 
@@ -81,6 +98,8 @@ export default function RouteMap({
   height = 150,
   rounded = 0,
   interactive = false,
+  stops,
+  stations,
 }: Props) {
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script", // shared with the app's other maps
@@ -99,7 +118,12 @@ export default function RouteMap({
     let cancelled = false;
     const p = pickup as LatLng;
     const d = dropoff as LatLng;
-    const url = `/api/directions?origin=${p.lat},${p.lng}&dest=${d.lat},${d.lng}`;
+    const validStops = [...(stops ?? []), ...(stations ?? [])].filter(valid);
+    let url = `/api/directions?origin=${p.lat},${p.lng}&dest=${d.lat},${d.lng}`;
+    if (validStops.length > 0) {
+      const wp = validStops.map((s) => `${s.lat},${s.lng}`).join("|");
+      url += `&waypoints=${encodeURIComponent(wp)}`;
+    }
     fetch(url)
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
@@ -118,7 +142,15 @@ export default function RouteMap({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ok, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng]);
+  }, [
+    ok,
+    pickup?.lat,
+    pickup?.lng,
+    dropoff?.lat,
+    dropoff?.lng,
+    JSON.stringify(stops ?? []),
+    JSON.stringify(stations ?? []),
+  ]);
 
   const mapRef = useRef<google.maps.Map | null>(null);
 
@@ -132,9 +164,15 @@ export default function RouteMap({
         bounds.extend(pickup);
         bounds.extend(dropoff);
       }
+      stops?.forEach((s) => {
+        if (valid(s)) bounds.extend(s);
+      });
+      stations?.forEach((s) => {
+        if (valid(s)) bounds.extend(s);
+      });
       map.fitBounds(bounds, 36);
     },
-    [pickup, dropoff, pathCoords],
+    [pickup, dropoff, pathCoords, stops, stations],
   );
 
   const onLoad = useCallback(
@@ -213,6 +251,32 @@ export default function RouteMap({
             anchor: new google.maps.Point(18, 48),
           }}
         />
+        {stops
+          ?.filter(valid)
+          .map((s, i) => (
+            <Marker
+              key={i}
+              position={s}
+              icon={{
+                url: STOP_ICON,
+                scaledSize: new google.maps.Size(24, 24),
+                anchor: new google.maps.Point(12, 12),
+              }}
+            />
+          ))}
+        {stations
+          ?.filter(valid)
+          .map((s, i) => (
+            <Marker
+              key={`station-${i}`}
+              position={s}
+              icon={{
+                url: STATION_ICON,
+                scaledSize: new google.maps.Size(26, 26),
+                anchor: new google.maps.Point(13, 13),
+              }}
+            />
+          ))}
       </GoogleMap>
     </div>
   );

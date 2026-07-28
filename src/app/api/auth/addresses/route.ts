@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
           },
         },
       },
-      { new: true, select: "savedAddresses" },
+      { returnDocument: "after", select: "savedAddresses" },
     ).lean<{
       savedAddresses: {
         _id: unknown;

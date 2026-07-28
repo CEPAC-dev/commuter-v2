@@ -16,6 +16,8 @@ export interface GeoPoint {
 export interface StationSelection {
   id: number;
   name: string;
+  direction?: string;
+  stationType: string;
   lat: number;
   lng: number;
 }

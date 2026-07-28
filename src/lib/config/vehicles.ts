@@ -176,7 +176,8 @@ export function privateRouteLegPrices(
 
   const baseRoutePrice = priceFor(totalDistanceKm, key, vehiclesMap);
   return legs.map((leg) => {
-    const legBasePrice = (baseRoutePrice * Math.max(0, leg.distanceKm)) / totalDistanceKm;
+    const legBasePrice =
+      (baseRoutePrice * Math.max(0, leg.distanceKm)) / totalDistanceKm;
     return finalPrice(
       legBasePrice,
       Math.max(0, Math.round(leg.passengers) - 1),
@@ -191,7 +192,7 @@ export function privateRoutePrice(
   vehiclesMap: Record<VehicleKey, VehicleConfig> = VEHICLES,
 ): number {
   return privateRouteLegPrices(legs, key, vehiclesMap).reduce(
-    (sum, price) => sum + price,
+    (sum, price) => Math.round(sum + price),
     0,
   );
 }

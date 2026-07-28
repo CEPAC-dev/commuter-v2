@@ -6,26 +6,23 @@ const STATUS_CONFIG: Record<
 > = {
   available: { label: "Available", bg: "#EFF7F6", color: "#00C2A8" },
   submitted: { label: "Submitted", bg: "#E2E8F0", color: "#5A6A7A" },
-  matching: {
-    label: "Matching…",
-    bg: "#FFF3E0",
-    color: "#E65100",
-  },
   finding_driver: {
     label: "Finding driver…",
     bg: "#FFF3E0",
     color: "#E65100",
   },
+ 
   driver_offered: {
-    label: "Matched",
-    bg: "#EFF7F6",
-    color: "#00C2A8",
+    label: "Driver offered",
+    bg: "#FFF3E0",
+    color: "#E65100",
   },
   price_raised: {
     label: "⚠ Price updated",
     bg: "#FFF8E1",
     color: "#F57F17",
   },
+  matched: { label: "Matched", bg: "#EFF7F6", color: "#00C2A8" },
   confirmed: { label: "Confirmed", bg: "#E8F5E9", color: "#27AE60" },
   active: { label: "● Active", bg: "#00C2A8", color: "#fff", dot: true },
   completed: { label: "Completed", bg: "#0B1E3D", color: "#fff" },

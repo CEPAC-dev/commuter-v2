@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import AppHeader from "@/components/layout/AppHeader";
 import Section from "@/components/shared/Section";
+import ChangePasswordSection from "@/components/shared/ChangePasswordSection";
 import SavedAddressesSection from "@/components/shared/SavedAddressesSection";
 import { CAR_TYPE_LIST, type CarType } from "@/lib/config/driver";
 import type { SavedAddress } from "@/types/shared";
@@ -373,7 +374,10 @@ export default function DriverProfileClient({
         body: formData,
       });
       const uploadData = await uploadRes.json();
-      if (!uploadRes.ok) return;
+      if (!uploadRes.ok) {
+        console.error(uploadData.error ?? "Upload failed.");
+        return;
+      }
 
       const res = await fetch("/api/auth/me", {
         method: "PATCH",
@@ -384,11 +388,15 @@ export default function DriverProfileClient({
           documents: { [key]: uploadData.path },
         }),
       });
+      const data = await res.json();
       if (res.ok) {
         setDocuments((d) => ({ ...d, [key]: uploadData.path }));
+      } else {
+        console.error(data.error ?? "Failed to save document.");
       }
     } finally {
       setUploading((u) => ({ ...u, [key]: false }));
+      if (fileInputs.current[key]) fileInputs.current[key]!.value = "";
     }
   }
 
@@ -437,7 +445,7 @@ export default function DriverProfileClient({
         email={email}
         role="driver"
         variant="app"
-        backHref="/"
+        backHref="/my-trips"
       />
 
       <main
@@ -1031,6 +1039,10 @@ export default function DriverProfileClient({
             </button>
           </div>
         )}
+
+        <Section title="Security">
+          <ChangePasswordSection />
+        </Section>
 
         <SavedAddressesSection initialAddresses={initialSavedAddresses} />
       </main>

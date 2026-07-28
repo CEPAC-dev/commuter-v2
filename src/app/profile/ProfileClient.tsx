@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { User, Phone, Mail, Check, Loader2, Camera } from "lucide-react";
 import AppHeader from "@/components/layout/AppHeader";
+import ChangePasswordSection from "@/components/shared/ChangePasswordSection";
 import SavedAddressesSection from "@/components/shared/SavedAddressesSection";
 import type { SavedAddress } from "@/types/shared";
 
@@ -360,43 +361,65 @@ export default function ProfileClient({
             >
               Phone number
             </label>
-            <div style={{ position: "relative" }}>
-              <Phone
-                size={15}
-                aria-hidden="true"
+            <div
+              style={{
+                width: "100%",
+                height: 48,
+                padding: 0,
+                display: "flex",
+                alignItems: "stretch",
+                overflow: "hidden",
+                border: "1.5px solid #d0d8e0",
+                borderRadius: 10,
+                background: "#fff",
+                boxSizing: "border-box",
+                transition: "border-color 0.15s",
+              }}
+              className="phone-field"
+            >
+              <span
                 style={{
-                  position: "absolute",
-                  left: 14,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: "#9aa8b5",
-                  pointerEvents: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "0 12px",
+                  fontWeight: 600,
+                  color: "#0B1E3D",
+                  background: "#eef1f3",
+                  borderRight: "1.5px solid #d0d8e0",
+                  flexShrink: 0,
                 }}
-              />
+              >
+                <Phone size={15} color="#9aa8b5" aria-hidden="true" />
+                +20
+              </span>
               <input
                 id="p-phone"
                 type="tel"
-                value={phone}
+                inputMode="numeric"
+                maxLength={10}
                 autoComplete="tel"
-                placeholder="+20 10X XXX XXXX"
-                onChange={(e) => setPhone(e.target.value)}
-                style={{
-                  width: "100%",
-                  height: 48,
-                  paddingLeft: 38,
-                  paddingRight: 14,
-                  border: "1.5px solid #d0d8e0",
-                  borderRadius: 10,
-                  fontSize: 15,
-                  color: "#0B1E3D",
-                  fontFamily: "inherit",
-                  background: "#fff",
-                  outline: "none",
-                  boxSizing: "border-box",
-                  transition: "border-color 0.15s",
+                placeholder="1XXXXXXXXX"
+                value={phone.replace(/^\+?20/, "")}
+                onChange={(e) => {
+                  const digits = e.target.value
+                    .replace(/\D/g, "")
+                    .slice(0, 10);
+                  setPhone(digits ? `+20${digits}` : "");
                 }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#00C2A8")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "#d0d8e0")}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: "100%",
+                  padding: "0 14px",
+                  border: "none",
+                  outline: "none",
+                  background: "transparent",
+                  fontSize: 15,
+                  fontFamily: "inherit",
+                  color: "#0B1E3D",
+                  boxSizing: "border-box",
+                }}
               />
             </div>
           </div>
@@ -516,6 +539,10 @@ export default function ProfileClient({
           >
             Book a ride →
           </Link>
+        </div>
+
+        <div style={{ marginTop: 20 }}>
+          <ChangePasswordSection />
         </div>
 
         <SavedAddressesSection initialAddresses={initialSavedAddresses} />

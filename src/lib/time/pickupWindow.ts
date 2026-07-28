@@ -31,8 +31,6 @@ export function computeArrivalTime(
   waitingMinutes: number,
   bufferMinutes = 10,
 ): string {
-  console.log({ pickupTime, driveMinutes, waitingMinutes, bufferMinutes });
-
   return toHHMM(
     toMinutes(pickupTime) +
       Math.max(0, driveMinutes) +
