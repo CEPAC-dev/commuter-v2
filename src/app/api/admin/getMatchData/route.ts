@@ -451,7 +451,7 @@ export async function GET() {
   const syntheticStationMap = new Map(
     syntheticStations.map((station) => [station.objectId, station]),
   );
-  const orderedStations = stationIds
+  const stationsSheetRows = stationIds
     .map((id) => stationMap.get(id) ?? syntheticStationMap.get(id))
     .filter((station): station is StationInfo => Boolean(station));
 
@@ -487,7 +487,7 @@ export async function GET() {
 
   const stationsSheet = wb.addWorksheet("Stations");
   stationsSheet.addRow(["District Id", "lat", "lng", "District Name"]);
-  for (const station of orderedStations) {
+  for (const station of stationsSheetRows) {
     stationsSheet.addRow([
       station.objectId,
       station.lat,
@@ -506,7 +506,7 @@ export async function GET() {
   matrixDuration.getCell("A1").value = "District Name";
   matrixDuration.getCell("B2").value = "District Id";
 
-  orderedStations.forEach((station, index) => {
+  stationsSheetRows.forEach((station, index) => {
     const column = index + 3;
     const label = station.name || String(station.objectId);
 
@@ -521,11 +521,14 @@ export async function GET() {
     matrixDuration.getRow(index + 3).getCell(2).value = station.objectId;
   });
 
-  for (let rowIndex = 0; rowIndex < orderedStations.length; rowIndex++) {
-    for (let colIndex = 0; colIndex < orderedStations.length; colIndex++) {
-      const originStation = orderedStations[rowIndex];
-      const destStation = orderedStations[colIndex];
-      const metrics = await fetchRouteMetrics(originStation, destStation);
+  for (let rowIndex = 0; rowIndex < stationsSheetRows.length; rowIndex++) {
+    for (let colIndex = 0; colIndex < stationsSheetRows.length; colIndex++) {
+      const originStation = stationsSheetRows[rowIndex];
+      const destStation = stationsSheetRows[colIndex];
+      const metrics = await fetchRouteMetrics(
+        { lat: originStation.lat, lng: originStation.lng },
+        { lat: destStation.lat, lng: destStation.lng },
+      );
       matrixDistance.getRow(rowIndex + 3).getCell(colIndex + 3).value =
         metrics.distance_km;
       matrixDuration.getRow(rowIndex + 3).getCell(colIndex + 3).value =
@@ -565,15 +568,15 @@ export async function GET() {
     privateRideRequests: privateRows,
     sharedRideRequests: sharedRows,
     availability: availabilityRows,
-    stations: orderedStations,
-    stationMatrixDistance: orderedStations.map((origin) =>
-      orderedStations.map((dest) => {
+    stations: stationsSheetRows,
+    stationMatrixDistance: stationsSheetRows.map((origin) =>
+      stationsSheetRows.map((dest) => {
         const key = `${origin.lat},${origin.lng}->${dest.lat},${dest.lng}`;
         return routeCache.get(key)?.distance_km ?? 0;
       }),
     ),
-    stationMatrixDuration: orderedStations.map((origin) =>
-      orderedStations.map((dest) => {
+    stationMatrixDuration: stationsSheetRows.map((origin) =>
+      stationsSheetRows.map((dest) => {
         const key = `${origin.lat},${origin.lng}->${dest.lat},${dest.lng}`;
         return routeCache.get(key)?.duration_minutes ?? 0;
       }),

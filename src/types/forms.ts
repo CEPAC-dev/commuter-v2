@@ -25,6 +25,7 @@ export interface TripInput {
   pickupTime?: string;
   distanceKm: number;
   durationMinutes: number;
+  priceEgp: number;
   extraPassengers?: number;
   passengers?: PassengerInput[];
   numberOfPassengers?: number;

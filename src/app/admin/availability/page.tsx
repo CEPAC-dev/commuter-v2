@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
+import { Driver } from "@/models/Driver";
 import AdminAvailabilityTable from "@/components/admin/AdminAvailabilityTable";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import { CalendarClock, ArrowLeft } from "lucide-react";
@@ -16,6 +17,22 @@ export default async function AdminAvailabilityPage() {
     .sort({ createdAt: -1 })
     .populate("driverId", "name phone")
     .lean();
+
+  const driverUserIds = records
+    .map((record) => {
+      if (!record.driverId) return null;
+      const id = (record.driverId as { _id?: unknown })._id ?? record.driverId;
+      return String(id);
+    })
+    .filter(Boolean) as string[];
+
+  const driverDetails = driverUserIds.length
+    ? await Driver.find({ userId: { $in: driverUserIds } }).select("userId carType").lean()
+    : [];
+
+  const carTypeByUserId = new Map<string, string>(
+    driverDetails.map((driver) => [String(driver.userId), String(driver.carType ?? "")]),
+  );
 
   return (
     <main className="admin-board">
@@ -105,19 +122,26 @@ export default async function AdminAvailabilityPage() {
           </div>
 
           <div style={{ padding: 20 }}>
-            <AdminAvailabilityTable initialRecords={records.map((record) => ({
-              _id: String(record._id),
-              driver: record.driverId
-                ? {
-                    _id: String((record.driverId as { _id?: unknown })._id ?? record.driverId),
-                    name: String((record.driverId as { name?: unknown }).name ?? ""),
-                    phone: String((record.driverId as { phone?: unknown }).phone ?? ""),
-                  }
-                : null,
-              date: String(record.date ?? ""),
-              startTime: String(record.startTime ?? ""),
-              endTime: String(record.endTime ?? ""),
-            }))} />
+            <AdminAvailabilityTable initialRecords={records.map((record) => {
+              const driverId = record.driverId
+                ? String(((record.driverId as { _id?: unknown })._id ?? record.driverId))
+                : null;
+
+              return {
+                _id: String(record._id),
+                driver: record.driverId
+                  ? {
+                      _id: driverId ?? undefined,
+                      name: String((record.driverId as { name?: unknown }).name ?? ""),
+                      phone: String((record.driverId as { phone?: unknown }).phone ?? ""),
+                      carType: driverId ? carTypeByUserId.get(driverId) ?? "" : "",
+                    }
+                  : null,
+                date: String(record.date ?? ""),
+                startTime: String(record.startTime ?? ""),
+                endTime: String(record.endTime ?? ""),
+              };
+            })} />
           </div>
         </div>
       </div>

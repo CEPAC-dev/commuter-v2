@@ -12,6 +12,7 @@ import TripChat from "@/components/shared/TripChat";
 import PrivateRideDetails from "@/components/trips/PrivateRideDetails";
 import SharedRideDetails from "@/components/trips/SharedRideDetails";
 import RateTripModal from "@/components/trips/RateTripModal";
+import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import type {
   PaymentStatus,
   RideDetailView,
@@ -62,33 +63,74 @@ const RIDE_STATUS_PILL: Record<
   cancelled: { label: "Previous", bg: "#0B1E3D", color: "#fff" },
 };
 
-function rideMapPoints(ride: RideDetailView) {
+function rideMapPoints(ride: RideDetailView, isDriver: boolean) {
   if (ride.rideType === "shared") {
+    const stationByKey = new Map<string, StationSelection>();
     const firstPassenger = ride.passengers[0];
     const lastPassenger =
       ride.passengers[ride.passengers.length - 1] ?? firstPassenger;
-    const stationById = new Map<number, StationSelection>();
 
     for (const passenger of ride.passengers) {
       if (passenger.pickupStation) {
-        stationById.set(passenger.pickupStation.id, passenger.pickupStation);
+        stationByKey.set(
+          `${passenger.pickupStation.id}:${passenger.pickupStation.lat}:${passenger.pickupStation.lng}`,
+          passenger.pickupStation,
+        );
       }
       if (passenger.dropoffStation) {
-        stationById.set(passenger.dropoffStation.id, passenger.dropoffStation);
+        stationByKey.set(
+          `${passenger.dropoffStation.id}:${passenger.dropoffStation.lat}:${passenger.dropoffStation.lng}`,
+          passenger.dropoffStation,
+        );
       }
     }
     if (ride.pickupStation) {
-      stationById.set(ride.pickupStation.id, ride.pickupStation);
+      stationByKey.set(
+        `${ride.pickupStation.id}:${ride.pickupStation.lat}:${ride.pickupStation.lng}`,
+        ride.pickupStation,
+      );
     }
     if (ride.dropoffStation) {
-      stationById.set(ride.dropoffStation.id, ride.dropoffStation);
+      stationByKey.set(
+        `${ride.dropoffStation.id}:${ride.dropoffStation.lat}:${ride.dropoffStation.lng}`,
+        ride.dropoffStation,
+      );
     }
+
+    if (isDriver) {
+      const allStations = Array.from(stationByKey.values());
+      const routePickup =
+        ride.pickupStation ??
+        firstPassenger?.pickupStation ??
+        allStations[0] ??
+        null;
+      const routeDropoff =
+        ride.dropoffStation ??
+        lastPassenger?.dropoffStation ??
+        allStations[allStations.length - 1] ??
+        null;
+
+      const intermediateStations = allStations.filter(
+        (s) =>
+          `${s.lat},${s.lng}` !== `${routePickup?.lat},${routePickup?.lng}` &&
+          `${s.lat},${s.lng}` !== `${routeDropoff?.lat},${routeDropoff?.lng}`,
+      );
+
+      return {
+        pickup: routePickup,
+        dropoff: routeDropoff,
+        stops: undefined,
+        stations: intermediateStations.length > 0 ? intermediateStations : undefined,
+      };
+    }
+
+    const stations = Array.from(stationByKey.values());
 
     return {
       pickup: firstPassenger?.pickup ?? null,
       dropoff: lastPassenger?.dropoff ?? null,
       stops: undefined,
-      stations: Array.from(stationById.values()),
+      stations,
     };
   }
 
@@ -224,7 +266,7 @@ function DriverRideDetailView({
   const status = ride.status;
   const isOngoing =
     status === "active" || status === "matched" || status === "confirmed";
-  const mapPoints = rideMapPoints(ride);
+  const mapPoints = rideMapPoints(ride, true);
 
   return (
     <div style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
@@ -349,119 +391,13 @@ function DriverRideDetailView({
           </div>
         </div>
 
-        <div
-          style={{
-            background: "#fff",
-            borderRadius: 14,
-            border: "1px solid #eef0f3",
-            padding: "16px 18px",
-            marginBottom: 16,
-          }}
-        >
-          <p
-            style={{
-              margin: "0 0 12px",
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#0B1E3D",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-            }}
-          >
-            Passengers
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {ride.passengers.map((passenger) => (
-              <div
-                key={passenger.tripId}
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 10,
-                  background: "#F8FAFB",
-                  border: "1px solid #eef0f3",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    marginBottom: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "#00806E",
-                    }}
-                  >
-                    Pickup #{passenger.pickupOrder}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "#E74C3C",
-                    }}
-                  >
-                    Dropoff #{passenger.dropoffOrder}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: "#9aa7b4",
-                      fontWeight: 600,
-                    }}
-                  >
-                    · {passenger.numberOfPassengers} pax · {passenger.tripCost}{" "}
-                    EGP
-                  </span>
-                </div>
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 4 }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: 8,
-                    }}
-                  >
-                    <MapPin
-                      size={12}
-                      color="#00C2A8"
-                      style={{ marginTop: 2, flexShrink: 0 }}
-                      aria-hidden="true"
-                    />
-                    <span style={{ fontSize: 13, color: "#0B1E3D" }}>
-                      {passenger.pickupAddress}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: 8,
-                    }}
-                  >
-                    <MapPin
-                      size={12}
-                      color="#E74C3C"
-                      style={{ marginTop: 2, flexShrink: 0 }}
-                      aria-hidden="true"
-                    />
-                    <span style={{ fontSize: 13, color: "#0B1E3D" }}>
-                      {passenger.dropoffAddress}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Visual 2D Seating Map */}
+        <VehicleSeatMap ride={ride} isDriver />
 
-        {ride.route.length > 0 && (
+        {/* Stations Overview (Shared Rides) */}
+        {(ride.rideType === "shared" ||
+          ride.pickupStation ||
+          ride.dropoffStation) && (
           <div
             style={{
               background: "#fff",
@@ -481,51 +417,300 @@ function DriverRideDetailView({
                 letterSpacing: "0.04em",
               }}
             >
-              Route order
+              Stations Overview
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {ride.route.map((stop, index) => (
-                <div
-                  key={`${ride.id}-stop-${index}`}
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 8,
-                  }}
-                >
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 10,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background: "#E8F8F5",
+                  border: "1px solid #C3F0E8",
+                }}
+              >
+                <MapPin
+                  size={16}
+                  color="#00C2A8"
+                  style={{ marginTop: 2, flexShrink: 0 }}
+                  aria-hidden="true"
+                />
+                <div>
                   <span
                     style={{
-                      minWidth: 18,
                       fontSize: 11,
                       fontWeight: 800,
-                      color: "#9aa7b4",
+                      color: "#00806E",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                      display: "block",
                     }}
                   >
-                    {index + 1}.
+                    Pickup Station
                   </span>
-                  <div style={{ minWidth: 0 }}>
-                    <span style={{ fontSize: 13, color: "#0B1E3D" }}>
-                      {truncateAddress(stop.address)}
-                    </span>
-                    <span
-                      style={{
-                        display: "block",
-                        fontSize: 11,
-                        color: "#9aa7b4",
-                        marginTop: 2,
-                      }}
-                    >
-                      +{stop.boarding} / -{stop.alighting}
-                      {stop.waitingMinutes
-                        ? ` · ${stop.waitingMinutes} min wait`
-                        : ""}
-                    </span>
-                  </div>
+                  <span
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: "#0B1E3D",
+                    }}
+                  >
+                    {ride.pickupStation?.name ??
+                      ride.passengers[0]?.pickupStation?.name ??
+                      "Pickup station"}
+                  </span>
                 </div>
-              ))}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 10,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background: "#FFEBEE",
+                  border: "1px solid #FFCDD2",
+                }}
+              >
+                <MapPin
+                  size={16}
+                  color="#E74C3C"
+                  style={{ marginTop: 2, flexShrink: 0 }}
+                  aria-hidden="true"
+                />
+                <div>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: "#C0392B",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                      display: "block",
+                    }}
+                  >
+                    Dropoff Station
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: "#0B1E3D",
+                    }}
+                  >
+                    {ride.dropoffStation?.name ??
+                      ride.passengers[ride.passengers.length - 1]?.dropoffStation
+                        ?.name ??
+                      "Dropoff station"}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )}
+
+        {/* Route Details Section (First Station -> Final Station) */}
+        {(() => {
+          let routeStops = ride.route ?? [];
+          if (routeStops.length === 0 && ride.passengers.length > 0) {
+            routeStops = ride.passengers.flatMap((p) => [
+              {
+                address: p.pickupStation?.name ?? p.pickupAddress ?? "Pickup station",
+                boarding: p.numberOfPassengers || 1,
+                alighting: 0,
+                waitingMinutes: 0,
+                point: null,
+              },
+              {
+                address: p.dropoffStation?.name ?? p.dropoffAddress ?? "Dropoff station",
+                boarding: 0,
+                alighting: p.numberOfPassengers || 1,
+                waitingMinutes: 0,
+                point: null,
+              },
+            ]);
+          }
+
+          return (
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: 16,
+                border: "1px solid #eef0f3",
+                padding: "20px 20px",
+                marginBottom: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 14,
+                }}
+              >
+                <div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 14,
+                      fontWeight: 800,
+                      color: "#0B1E3D",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    Route Details
+                  </p>
+                  <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                    First station to final destination
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#00806E",
+                    background: "#E8F8F5",
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                  }}
+                >
+                  {routeStops.length} Stations/Stops
+                </span>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                {routeStops.map((stop, index) => {
+                  const isFirst = index === 0;
+                  const isLast = index === routeStops.length - 1;
+                  const badgeBg = isFirst ? "#00C2A8" : isLast ? "#0B1E3D" : "#5A6A7A";
+                  const stationTitle = isFirst
+                    ? "First Station (Start Point)"
+                    : isLast
+                    ? "Final Station (Destination)"
+                    : `Station / Stop ${index + 1}`;
+
+                  return (
+                    <div
+                      key={`route-step-${index}`}
+                      style={{
+                        display: "flex",
+                        gap: 14,
+                        position: "relative",
+                        paddingBottom: isLast ? 0 : 20,
+                      }}
+                    >
+                      {!isLast && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            left: 13,
+                            top: 26,
+                            bottom: 0,
+                            width: 2,
+                            background: "linear-gradient(to bottom, #00C2A8, #E6EAEC)",
+                          }}
+                        />
+                      )}
+
+                      <span
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: "50%",
+                          background: badgeBg,
+                          color: "#fff",
+                          fontSize: 12,
+                          fontWeight: 800,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          zIndex: 1,
+                        }}
+                      >
+                        {index + 1}
+                      </span>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            color: isFirst ? "#00806E" : isLast ? "#0B1E3D" : "#5A6A7A",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.04em",
+                            display: "block",
+                          }}
+                        >
+                          {stationTitle}
+                        </span>
+                        <p
+                          style={{
+                            margin: "2px 0 0",
+                            fontSize: 14,
+                            fontWeight: 700,
+                            color: "#0B1E3D",
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {stop.address}
+                        </p>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            alignItems: "center",
+                            marginTop: 4,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          {stop.boarding > 0 && (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "#00806E",
+                                background: "#E8F8F5",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                              }}
+                            >
+                              +{stop.boarding} pickup
+                            </span>
+                          )}
+                          {stop.alighting > 0 && (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "#C0392B",
+                                background: "#FFEBEE",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                              }}
+                            >
+                              -{stop.alighting} dropoff
+                            </span>
+                          )}
+                          {stop.waitingMinutes > 0 && (
+                            <span style={{ fontSize: 11, color: "#5A6A7A" }}>
+                              ⏱ {stop.waitingMinutes} min wait
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {isOngoing && ride.chatTripId && (
           <div style={{ marginBottom: 16 }}>
@@ -655,11 +840,19 @@ export default async function TripDetailPage({
           }}
         >
           <RouteMap
-            pickup={trip.pickup}
-            dropoff={trip.dropoff}
+            pickup={
+              isDriver && trip.rideType === "shared"
+                ? (trip.pickupStation ?? trip.pickup)
+                : trip.pickup
+            }
+            dropoff={
+              isDriver && trip.rideType === "shared"
+                ? (trip.dropoffStation ?? trip.dropoff)
+                : trip.dropoff
+            }
             stops={trip.stops?.map((s) => s.point)}
             stations={
-              trip.rideType === "shared"
+              trip.rideType === "shared" && !isDriver
                 ? [trip.pickupStation, trip.dropoffStation].filter(
                     (s): s is NonNullable<typeof s> => Boolean(s),
                   )
@@ -724,8 +917,31 @@ export default async function TripDetailPage({
             distanceKm={trip.distanceKm}
             durationMinutes={trip.durationMinutes}
             to12h={to12h}
+            isDriver={isDriver}
           />
         )}
+
+        {/* Visual 2D Seating Map for Passenger / Driver */}
+        {isOngoing && (() => {
+          const passengerInRide = trip.rideDetails?.passengers?.find(
+            (p) => String(p.tripId) === String(trip.id),
+          );
+          const mySeats =
+            passengerInRide?.seatNumbers && passengerInRide.seatNumbers.length > 0
+              ? passengerInRide.seatNumbers
+              : trip.seatNumbers && trip.seatNumbers.length > 0
+              ? trip.seatNumbers
+              : [1];
+
+          return (
+            <VehicleSeatMap
+              ride={trip.rideDetails}
+              vehicleType={trip.vehicleType}
+              assignedSeatNumbers={mySeats}
+              isDriver={isDriver}
+            />
+          );
+        })()}
 
         {/* Ongoing trip: driver card + chat (passenger) / chat only (driver) */}
         {isOngoing && (

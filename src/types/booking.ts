@@ -42,6 +42,8 @@ export interface RidePassengerRow {
   status: string;
   pickupStation?: StationSelection | null;
   dropoffStation?: StationSelection | null;
+  seatNumbers?: number[];
+  passengerName?: string;
 }
 
 export interface RideRouteStopRow {

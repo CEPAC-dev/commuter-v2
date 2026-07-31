@@ -328,8 +328,8 @@ function LoginForm() {
                     <input
                       id="name"
                       type="text"
-                      autoComplete="name"
-                      placeholder="Ahmed Mohamed"
+                      autoComplete="name" 
+                      placeholder="Mohamed Ahmed"
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}

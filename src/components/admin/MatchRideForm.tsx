@@ -49,6 +49,7 @@ type PassengerInput = {
   dropoffOrder: number;
   numberOfPassengers: number;
   priceEgp: number;
+  seatNumbers?: number[];
 };
 
 const VEHICLE_OPTIONS = [
@@ -77,6 +78,15 @@ export default function MatchRideForm({
   const [passengerInputs, setPassengerInputs] = useState<Record<string, PassengerInput>>({});
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  const [orderedPoints, setOrderedPoints] = useState<Array<{
+    id: string;
+    type: "pickup" | "dropoff";
+    tripId: string;
+    tripNumber?: number;
+    address: string;
+    point: PointLike;
+  }>>([]);
 
   useEffect(() => {
     if (!availabilityId && availabilities[0]) {
@@ -113,6 +123,65 @@ export default function MatchRideForm({
     });
   }, [rideType, selectedTripIds, trips]);
 
+  useEffect(() => {
+    const currentIds = new Set(orderedPoints.map((p) => p.id));
+    const newPoints: Array<{
+      id: string;
+      type: "pickup" | "dropoff";
+      tripId: string;
+      tripNumber?: number;
+      address: string;
+      point: PointLike;
+    }> = [];
+
+    selectedTripIds.forEach((tripId) => {
+      const trip = trips.find((t) => String(t._id) === tripId);
+      if (!trip) return;
+
+      const pickupId = `pickup-${tripId}`;
+      const dropoffId = `dropoff-${tripId}`;
+
+      if (!currentIds.has(pickupId)) {
+        newPoints.push({
+          id: pickupId,
+          type: "pickup",
+          tripId,
+          tripNumber: trip.tripNumber,
+          address: trip.pickup?.address ?? "Pickup location",
+          point: trip.pickup,
+        });
+      }
+
+      if (!currentIds.has(dropoffId)) {
+        newPoints.push({
+          id: dropoffId,
+          type: "dropoff",
+          tripId,
+          tripNumber: trip.tripNumber,
+          address: trip.dropoff?.address ?? "Dropoff location",
+          point: trip.dropoff,
+        });
+      }
+    });
+
+    const validTripIds = new Set(selectedTripIds);
+    const updated = orderedPoints
+      .filter((p) => validTripIds.has(p.tripId))
+      .concat(newPoints);
+
+    setOrderedPoints(updated);
+  }, [selectedTripIds, trips]);
+
+  function movePoint(index: number, direction: "up" | "down") {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= orderedPoints.length) return;
+    const next = [...orderedPoints];
+    const temp = next[index];
+    next[index] = next[targetIndex];
+    next[targetIndex] = temp;
+    setOrderedPoints(next);
+  }
+
   function toggleTrip(tripId: string) {
     setSelectedTripIds((current) => {
       if (current.includes(tripId)) {
@@ -122,12 +191,14 @@ export default function MatchRideForm({
     });
   }
 
-  function updatePassengerInput(tripId: string, field: keyof PassengerInput, value: string | number) {
+  function updatePassengerInput(tripId: string, field: keyof PassengerInput, value: any) {
     setPassengerInputs((current) => ({
       ...current,
       [tripId]: {
         ...current[tripId],
-        [field]: field === "numberOfPassengers" || field === "priceEgp" || field === "pickupOrder" || field === "dropoffOrder"
+        [field]: Array.isArray(value)
+          ? value
+          : field === "numberOfPassengers" || field === "priceEgp" || field === "pickupOrder" || field === "dropoffOrder"
           ? Number(value)
           : value,
       },
@@ -148,18 +219,32 @@ export default function MatchRideForm({
       return;
     }
 
+    const route = orderedPoints.map((pt) => {
+      const input = passengerInputs[pt.tripId] ?? { numberOfPassengers: 1 };
+      const paxCount = input.numberOfPassengers || 1;
+      return {
+        point: pt.point,
+        boarding: pt.type === "pickup" ? paxCount : 0,
+        alighting: pt.type === "dropoff" ? paxCount : 0,
+        waitingMinutes: 0,
+      };
+    });
+
     const passengers = selectedTripIds.map((tripId) => {
       const trip = trips.find((item) => String(item._id) === tripId);
       const input = passengerInputs[tripId] ?? { pickupOrder: 1, dropoffOrder: 1, numberOfPassengers: 1, priceEgp: 0 };
+      const pIdx = orderedPoints.findIndex((p) => p.id === `pickup-${tripId}`);
+      const dIdx = orderedPoints.findIndex((p) => p.id === `dropoff-${tripId}`);
       return {
         tripId,
         userId: trip?.userId,
         pickup: trip?.pickup,
         dropoff: trip?.dropoff,
-        pickupOrder: input.pickupOrder,
-        dropoffOrder: input.dropoffOrder,
+        pickupOrder: pIdx >= 0 ? pIdx + 1 : input.pickupOrder,
+        dropoffOrder: dIdx >= 0 ? dIdx + 1 : input.dropoffOrder,
         numberOfPassengers: input.numberOfPassengers,
         priceEgp: input.priceEgp,
+        seatNumbers: input.seatNumbers ?? [],
       };
     });
 
@@ -178,6 +263,7 @@ export default function MatchRideForm({
           startTime,
           endTime,
           passengers,
+          route,
         }),
       });
 
@@ -189,6 +275,7 @@ export default function MatchRideForm({
       setFeedback({ type: "success", message: `Ride created successfully with ${passengers.length} trip${passengers.length > 1 ? "s" : ""}.` });
       setSelectedTripIds([]);
       setPassengerInputs({});
+      setOrderedPoints([]);
     } catch (error) {
       setFeedback({ type: "error", message: error instanceof Error ? error.message : "Unexpected error" });
     } finally {
@@ -454,7 +541,30 @@ export default function MatchRideForm({
                           <span className="order-track" aria-hidden="true" />
                           <span className="order-badge drop" title="Dropoff order">{input.dropoffOrder}</span>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginTop: 10 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginTop: 10 }}>
+                          <label style={{ display: "grid", gap: 5 }}>
+                            <span className="field-label" style={{ fontSize: 11 }}>Assign Chair</span>
+                            <select
+                              value={input.seatNumbers?.[0] ?? ""}
+                              onChange={(e) => {
+                                const startSeat = Number(e.target.value);
+                                const count = input.numberOfPassengers || 1;
+                                const seats = startSeat ? Array.from({ length: count }, (_, i) => startSeat + i) : [];
+                                updatePassengerInput(tripId, "seatNumbers" as any, seats);
+                              }}
+                              className="field"
+                            >
+                              <option value="">Auto Seat</option>
+                              {Array.from(
+                                { length: vehicleType.includes("microbus") ? 9 : vehicleType.includes("van") ? 5 : 3 },
+                                (_, i) => i + 1,
+                              ).map((sNo) => (
+                                <option key={sNo} value={sNo}>
+                                  Chair #{sNo}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
                           <label style={{ display: "grid", gap: 5 }}>
                             <span className="field-label" style={{ fontSize: 11 }}>Pickup order</span>
                             <input type="number" min={1} value={input.pickupOrder} onChange={(e) => updatePassengerInput(tripId, "pickupOrder", e.target.value)} className="field" />
@@ -480,6 +590,105 @@ export default function MatchRideForm({
             )}
           </div>
         </div>
+
+        {orderedPoints.length > 0 && (
+          <div style={{ marginTop: 14, padding: 16, background: "#F8FAFB", border: "1px solid #E6EAEC", borderRadius: 14 }}>
+            <h3 className="display" style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: "#0B1E3D" }}>
+              Route Points Sequence (First Station → Final Destination)
+            </h3>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "#5A6A7A" }}>
+              Reorder the sequence of pickup and dropoff points from 1st (Start Station) to Nth (Final Destination).
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {orderedPoints.map((pt, idx) => {
+                const isFirst = idx === 0;
+                const isLast = idx === orderedPoints.length - 1;
+                return (
+                  <div
+                    key={pt.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "10px 14px",
+                      background: "#ffffff",
+                      border: "1px solid #E6EAEC",
+                      borderRadius: 10,
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                      <span
+                        className="mono"
+                        style={{
+                          minWidth: 26,
+                          height: 26,
+                          borderRadius: "50%",
+                          background: isFirst ? "#00C2A8" : isLast ? "#0B1E3D" : "#5A6A7A",
+                          color: "#ffffff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {idx + 1}
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D", display: "block" }}>
+                          {isFirst ? "1st (Start Station): " : isLast ? `${idx + 1}th (Final Station): ` : `${idx + 1}th Station: `}
+                          {pt.type === "pickup" ? "Pickup" : "Dropoff"} · Trip #{pt.tripNumber ?? "—"}
+                        </span>
+                        <span style={{ fontSize: 12, color: "#5A6A7A", display: "block", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                          {pt.address}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        onClick={() => movePoint(idx, "up")}
+                        disabled={isFirst}
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: "1px solid #DDE4E7",
+                          background: "#ffffff",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: isFirst ? "default" : "pointer",
+                          opacity: isFirst ? 0.4 : 1,
+                        }}
+                      >
+                        ↑ Up
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => movePoint(idx, "down")}
+                        disabled={isLast}
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: "1px solid #DDE4E7",
+                          background: "#ffffff",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: isLast ? "default" : "pointer",
+                          opacity: isLast ? 0.4 : 1,
+                        }}
+                      >
+                        ↓ Down
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {feedback && (
           <div style={{ padding: "12px 14px", borderRadius: 12, background: feedback.type === "success" ? "rgba(0,194,168,0.12)" : "rgba(232,163,61,0.16)", color: feedback.type === "success" ? "var(--teal-deep)" : "var(--amber-deep)", fontWeight: 600, fontSize: 14 }}>

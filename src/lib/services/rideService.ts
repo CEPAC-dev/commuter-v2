@@ -24,6 +24,7 @@ type MatchResult = {
     numberOfPassengers: number;
     tripCost: number;
     priceEgp?: number;
+    seatNumbers?: number[];
   }>;
   totalCost?: number;
   status?: string;
@@ -53,8 +54,17 @@ async function createRide(matchResult: MatchResult) {
       >();
     const tripById = new Map(trips.map((trip) => [String(trip._id), trip]));
 
+    let currentSeatCounter = 1;
     const passengersForRide = matchResult.passengers.map((p) => {
       const trip = tripById.get(String(p.tripId));
+      let seats = p.seatNumbers;
+      const count = p.numberOfPassengers || 1;
+      if (!Array.isArray(seats) || seats.length === 0) {
+        seats = Array.from({ length: count }, (_, i) => currentSeatCounter + i);
+        currentSeatCounter += count;
+      } else {
+        currentSeatCounter = Math.max(currentSeatCounter, Math.max(...seats) + 1);
+      }
       return {
         tripId: p.tripId,
         userId: p.userId || null,
@@ -63,9 +73,10 @@ async function createRide(matchResult: MatchResult) {
         pickupOrder: p.pickupOrder,
         dropoffOrder: p.dropoffOrder,
         tripCost: p.priceEgp || 0,
-        numberOfPassengers: p.numberOfPassengers || 1,
+        numberOfPassengers: count,
         pickupStation: trip?.pickupStation ?? undefined,
         dropoffStation: trip?.dropoffStation ?? undefined,
+        seatNumbers: seats,
         status: "waiting",
       };
     });
@@ -82,6 +93,7 @@ async function createRide(matchResult: MatchResult) {
       startTime: matchResult.startTime,
       endTime: matchResult.endTime,
       passengers: passengersForRide,
+      status: matchResult.status || "matched",
       totalCost: passengersForRide.reduce(
         (sum, p) => sum + (p.tripCost || 0),
         0,
@@ -107,8 +119,11 @@ async function createRide(matchResult: MatchResult) {
     availability.status = "matched";
     await availability.save({ session });
 
-    // update trips
+    // update trips with seatNumbers and driver assignment
     for (const p of matchResult.passengers) {
+      const assigned = passengersForRide.find(
+        (pr) => String(pr.tripId) === String(p.tripId),
+      );
       await Trip.findByIdAndUpdate(
         p.tripId,
         {
@@ -116,6 +131,7 @@ async function createRide(matchResult: MatchResult) {
             rideId: rideDoc._id,
             status: "matched",
             driverId: matchResult.driverId,
+            seatNumbers: assigned?.seatNumbers ?? [],
           },
         },
         { session },
@@ -134,12 +150,25 @@ async function createRide(matchResult: MatchResult) {
 
 async function getNextSequence(name: string, session: mongoose.ClientSession) {
   const coll: any = mongoose.connection.collection("counters");
+  const maxRide = await Ride.findOne({}, { rideNumber: 1 })
+    .sort({ rideNumber: -1 })
+    .session(session)
+    .lean<{ rideNumber?: number }>();
+  const maxSeq = maxRide?.rideNumber ?? 0;
+
   const res: any = await coll.findOneAndUpdate(
     { _id: name },
     { $inc: { seq: 1 } },
     { returnDocument: "after", upsert: true, session },
   );
-  return (res.value && (res.value.seq as number)) || 1;
+
+  const doc = res?.value ?? res;
+  let nextSeq = doc?.seq ?? 1;
+  if (nextSeq <= maxSeq) {
+    nextSeq = maxSeq + 1;
+    await coll.updateOne({ _id: name }, { $set: { seq: nextSeq } }, { session });
+  }
+  return nextSeq;
 }
 
 function recalculateRouteFromPassengers(passengers: any[]) {
@@ -150,16 +179,33 @@ function recalculateRouteFromPassengers(passengers: any[]) {
     const b = p.pickupOrder;
     const a = p.dropoffOrder;
     maxIndex = Math.max(maxIndex, b, a);
+
+    const pickupPoint = p.pickupStation
+      ? {
+          lat: p.pickupStation.lat,
+          lng: p.pickupStation.lng,
+          address: p.pickupStation.name ?? p.pickupStation.address ?? "Pickup station",
+        }
+      : p.pickup;
+
+    const dropoffPoint = p.dropoffStation
+      ? {
+          lat: p.dropoffStation.lat,
+          lng: p.dropoffStation.lng,
+          address: p.dropoffStation.name ?? p.dropoffStation.address ?? "Dropoff station",
+        }
+      : p.dropoff;
+
     if (!indexMap[b])
       indexMap[b] = {
-        point: p.pickup,
+        point: pickupPoint,
         boarding: 0,
         alighting: 0,
         waitingMinutes: 0,
       };
     if (!indexMap[a])
       indexMap[a] = {
-        point: p.dropoff,
+        point: dropoffPoint,
         boarding: 0,
         alighting: 0,
         waitingMinutes: 0,
@@ -181,10 +227,7 @@ function recalculateRouteFromPassengers(passengers: any[]) {
   return stops;
 }
 
-async function getRideById(id: string | Types.ObjectId) {
-  await connectDB();
-  return Ride.findById(id).lean();
-}
+
 
 function toGeoPoint(
   raw: Record<string, unknown> | null | undefined,
@@ -229,7 +272,17 @@ function toStation(
   };
 }
 
-function mapPassengerRow(p: Record<string, any>) {
+function mapPassengerRow(p: Record<string, any>, index = 0, array: Record<string, any>[] = []) {
+  let seatNumbers: number[] = Array.isArray(p.seatNumbers) && p.seatNumbers.length > 0 ? p.seatNumbers : [];
+  if (seatNumbers.length === 0) {
+    let startSeat = 1;
+    for (let i = 0; i < index; i++) {
+      startSeat += array[i]?.numberOfPassengers || 1;
+    }
+    const count = p.numberOfPassengers || 1;
+    seatNumbers = Array.from({ length: count }, (_, i) => startSeat + i);
+  }
+
   return {
     tripId: String(p.tripId),
     pickupAddress: p.pickup?.address ?? "—",
@@ -241,12 +294,14 @@ function mapPassengerRow(p: Record<string, any>) {
     status: p.status ?? "waiting",
     pickupStation: toStation(p.pickupStation),
     dropoffStation: toStation(p.dropoffStation),
+    seatNumbers,
+    passengerName: p.passengerName ?? `Passenger #${p.pickupOrder ?? index + 1}`,
   };
 }
 
 function mapRideToDetailView(ride: Record<string, any>): RideDetailView {
-  const passengers = (ride.passengers ?? []).map((p: Record<string, any>) => ({
-    ...mapPassengerRow(p),
+  const passengers = (ride.passengers ?? []).map((p: Record<string, any>, i: number, arr: Record<string, any>[]) => ({
+    ...mapPassengerRow(p, i, arr),
     pickup: toGeoPoint(p.pickup),
     dropoff: toGeoPoint(p.dropoff),
   }));
@@ -303,6 +358,32 @@ async function getDriverRide(
   }
 
   if (!ride) return null;
+
+  const { User } = await import("@/models/User");
+  const userIds = (ride.passengers ?? [])
+    .map((p: any) => p.userId)
+    .filter(Boolean);
+  const users = await User.find({ _id: { $in: userIds } })
+    .select("name phone")
+    .lean<{ _id: unknown; name?: string; phone?: string }[]>();
+  const userById = new Map(users.map((u) => [String(u._id), u]));
+
+  const rideWithUserNames = {
+    ...ride,
+    passengers: (ride.passengers ?? []).map((p: any) => ({
+      ...p,
+      passengerName: userById.get(String(p.userId))?.name ?? `Passenger #${p.pickupOrder}`,
+    })),
+  };
+
+  return mapRideToDetailView(rideWithUserNames as Record<string, any>);
+}
+
+async function getRideById(rideId: string): Promise<RideDetailView | null> {
+  if (!Types.ObjectId.isValid(rideId)) return null;
+  await connectDB();
+  const ride = await Ride.findById(rideId).lean();
+  if (!ride) return null;
   return mapRideToDetailView(ride as Record<string, any>);
 }
 
@@ -311,6 +392,7 @@ async function getRideByNumber(rideNumber: number) {
 }
 
 const RIDE_STATUS_GROUPS: Record<string, RideStatus[]> = {
+  pending_payment: ["pending_payment" as RideStatus],
   ongoing: ["matched", "confirmed", "active"],
   previous: ["completed", "cancelled"],
 };
@@ -318,7 +400,7 @@ const RIDE_STATUS_GROUPS: Record<string, RideStatus[]> = {
 export interface ListDriverRidesOptions {
   page?: number;
   pageSize?: number;
-  statusGroup?: "ongoing" | "previous";
+  statusGroup?: "pending_payment" | "ongoing" | "previous";
   date?: string;
   dateFrom?: string;
   dateTo?: string;
