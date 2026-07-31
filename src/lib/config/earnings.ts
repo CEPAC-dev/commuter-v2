@@ -1,6 +1,6 @@
 /** Fraction of trip price credited to the driver (platform keeps the rest). */
 export const DRIVER_EARNINGS_RATE = Number(
-  process.env.DRIVER_EARNINGS_RATE ?? "0.85",
+  process.env.DRIVER_EARNINGS_RATE ?? "0.90",
 );
 
 export const MIN_WITHDRAWAL_EGP = 50;

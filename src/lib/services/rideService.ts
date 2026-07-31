@@ -392,6 +392,7 @@ async function getRideByNumber(rideNumber: number) {
 }
 
 const RIDE_STATUS_GROUPS: Record<string, RideStatus[]> = {
+  pending_payment: ["pending_payment" as RideStatus],
   ongoing: ["matched", "confirmed", "active"],
   previous: ["completed", "cancelled"],
 };
@@ -399,7 +400,7 @@ const RIDE_STATUS_GROUPS: Record<string, RideStatus[]> = {
 export interface ListDriverRidesOptions {
   page?: number;
   pageSize?: number;
-  statusGroup?: "ongoing" | "previous";
+  statusGroup?: "pending_payment" | "ongoing" | "previous";
   date?: string;
   dateFrom?: string;
   dateTo?: string;

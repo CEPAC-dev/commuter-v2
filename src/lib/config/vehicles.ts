@@ -83,6 +83,12 @@ export function priceFor(
   key: VehicleKey,
   vehiclesMap: Record<VehicleKey, VehicleConfig> = VEHICLES,
 ): number {
+  console.log(
+    "priceFor",
+    { distanceKm, key, vehiclesMap },
+    "is: ",
+    Math.round(vehiclesMap[key].rate * Math.pow(distanceKm, 0.8)),
+  );
   return Math.round(vehiclesMap[key].rate * Math.pow(distanceKm, 0.8));
 }
 
@@ -115,42 +121,47 @@ export function finalPrice(
   basePrice: number,
   extraPassengers: number,
   vehicleType: VehicleKey | "",
+  vehiclesMap: Partial<Record<VehicleKey, VehicleConfig>> = VEHICLES,
 ): number {
-  const n = extraPassengers;
-  // const r = (factor: number) => Math.round(basePrice * (n + 1) * factor);
+  const n = Math.max(0, extraPassengers);
+  const vehicle = vehicleType ? vehiclesMap[vehicleType] : undefined;
   const r = (factor: number) => Math.round(basePrice + basePrice * factor);
+
+  if (vehicle?.ride === "shared") {
+    if (vehicleType === "taxi_shared") {
+      if (n === 1) return r(0.5);
+      if (n === 2) return r(1);
+      return basePrice;
+    }
+
+    if (vehicleType === "van_shared") {
+      if (n === 1) return r(0.5);
+      if (n === 2) return r(1);
+      if (n === 3) return r(1.5);
+      if (n === 4) return r(2);
+      return basePrice;
+    }
+
+    if (vehicleType === "microbus_shared") {
+      if (n === 1) return r(0.5);
+      if (n === 2) return r(1);
+      if (n === 3) return r(1.5);
+      if (n === 4) return r(2);
+      if (n === 5) return r(2.5);
+      if (n === 6) return r(3);
+      if (n === 7) return r(3.5);
+      if (n === 8) return r(4);
+      if (n === 9) return r(4.5);
+      return basePrice;
+    }
+
+    return basePrice;
+  }
 
   if (vehicleType === "private_car" || vehicleType === "taxi_private") {
     if (n === 1) return r(0.1);
     if (n === 2) return r(0.2);
     if (n === 3) return r(0.3);
-    return basePrice;
-  }
-
-  if (vehicleType === "taxi_shared") {
-    if (n === 1) return r(0.5);
-    if (n === 2) return r(1);
-    return basePrice;
-  }
-
-  if (vehicleType === "van_shared") {
-    if (n === 1) return r(0.5);
-    if (n === 2) return r(1);
-    if (n === 3) return r(1.5);
-    if (n === 4) return r(2);
-    return basePrice;
-  }
-
-  if (vehicleType === "microbus_shared") {
-    if (n === 1) return r(0.5);
-    if (n === 2) return r(1);
-    if (n === 3) return r(1.5);
-    if (n === 4) return r(2);
-    if (n === 5) return r(2.5);
-    if (n === 6) return r(3);
-    if (n === 7) return r(3.5);
-    if (n === 8) return r(4);
-    if (n === 9) return r(4.5);
     return basePrice;
   }
 
@@ -160,6 +171,57 @@ export function finalPrice(
 export interface PrivateFareLeg {
   distanceKm: number;
   passengers: number;
+}
+
+export function computeTripPriceEgp({
+  basePrice,
+  distanceKm,
+  vehicleType,
+  extraPassengers = 0,
+  numberOfPassengers,
+  vehiclesMap = VEHICLES,
+}: {
+  basePrice?: number;
+  distanceKm?: number;
+  vehicleType: VehicleKey | "";
+  extraPassengers?: number;
+  numberOfPassengers?: number;
+  vehiclesMap?: Partial<Record<VehicleKey, VehicleConfig>>;
+}): number {
+  if (!vehicleType) return 0;
+
+  const vehicle = vehiclesMap[vehicleType as VehicleKey];
+  const normalizedBasePrice =
+    typeof basePrice === "number" && Number.isFinite(basePrice)
+      ? basePrice
+      : typeof distanceKm === "number" && Number.isFinite(distanceKm)
+        ? priceFor(
+            distanceKm,
+            vehicleType as VehicleKey,
+            vehiclesMap as Record<VehicleKey, VehicleConfig>,
+          )
+        : 0;
+
+  const normalizedExtraPassengers = Math.max(
+    0,
+    Math.round(extraPassengers ?? 0),
+  );
+  const normalizedNumberOfPassengers =
+    typeof numberOfPassengers === "number" &&
+    Number.isFinite(numberOfPassengers)
+      ? Math.max(1, Math.round(numberOfPassengers))
+      : 1;
+  const effectiveExtraPassengers =
+    vehicle?.ride === "private"
+      ? Math.max(0, normalizedNumberOfPassengers - 1)
+      : normalizedExtraPassengers;
+
+  return finalPrice(
+    normalizedBasePrice,
+    effectiveExtraPassengers,
+    vehicleType,
+    vehiclesMap,
+  );
 }
 
 /** Split route base fare by distance, then apply private passenger pricing per leg. */

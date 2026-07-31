@@ -148,7 +148,10 @@ export default async function MyTripsPage({
   const listOptions = {
     page,
     pageSize: PAGE_SIZE,
-    statusGroup: groupFilter,
+    statusGroup:
+      groupFilter && groupFilter !== "upcoming"
+        ? groupFilter
+        : undefined,
     dateFrom,
     dateTo,
   };

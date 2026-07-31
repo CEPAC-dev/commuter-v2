@@ -522,12 +522,14 @@ function DriverRideDetailView({
                 boarding: p.numberOfPassengers || 1,
                 alighting: 0,
                 waitingMinutes: 0,
+                point: null,
               },
               {
                 address: p.dropoffStation?.name ?? p.dropoffAddress ?? "Dropoff station",
                 boarding: 0,
                 alighting: p.numberOfPassengers || 1,
                 waitingMinutes: 0,
+                point: null,
               },
             ]);
           }

@@ -20,7 +20,9 @@ import TripCycle, { type TripData } from "./TripCycle";
 import CreateMap from "./CreateMap";
 import { earliestBookingDate } from "@/lib/time/bookingDates";
 import type { SavedAddress } from "@/types/shared";
+import { haversineKm } from "@/lib/geo/stations";
 import type { Station } from "@/lib/geo/stations";
+import { computeTripPriceEgp } from "@/lib/config/vehicles";
 
 interface Props {
   userEmail: string;
@@ -83,6 +85,9 @@ export default function CreateClient({ userEmail }: Props) {
     string,
     (typeof VEHICLES)[keyof typeof VEHICLES]
   > | null>(null);
+  const [tripErrors, setTripErrors] = useState<Record<string, string | null>>(
+    {},
+  );
   const [picking, setPicking] = useState<{
     tripId: string;
     field: "pickup" | "dropoff";
@@ -161,6 +166,30 @@ export default function CreateClient({ userEmail }: Props) {
     [picking],
   );
 
+  const handleTripStopErrorChange = useCallback(
+    (tripId: string, error: string | null) => {
+      setTripErrors((prev) => {
+        if (prev[tripId] === error) return prev;
+        return { ...prev, [tripId]: error };
+      });
+    },
+    [],
+  );
+
+  const getTripPriceForSubmission = useCallback(
+    (trip: TripData) => {
+      if (!trip.vehicleType) return 0;
+      return computeTripPriceEgp({
+        basePrice: trip.priceEgp ?? 0,
+        vehicleType: trip.vehicleType,
+        extraPassengers: trip.extraPassengers ?? 0,
+        numberOfPassengers: trip.numberOfPassengers ?? 1,
+        vehiclesMap: vehiclesMap ?? undefined,
+      });
+    },
+    [vehiclesMap],
+  );
+
   async function handleSubmit() {
     setSubmitting(true);
     setSubmitError("");
@@ -183,6 +212,7 @@ export default function CreateClient({ userEmail }: Props) {
             extraPassengers: t.extraPassengers,
             passengers: t.passengers,
             numberOfPassengers: t.numberOfPassengers,
+            priceEgp: getTripPriceForSubmission(t),
             stops: t.stops.map((stop) => ({
               point: stop.point,
               alighting: stop.alighting,
@@ -401,18 +431,29 @@ export default function CreateClient({ userEmail }: Props) {
     setShowPreview(true);
   }
 
-  const totalEgp = trips.reduce((sum, t) => {
-    const isPrivate =
-      t.vehicleType !== "" &&
-      (vehiclesMap?.[t.vehicleType] ?? VEHICLES[t.vehicleType]).ride ===
-        "private";
-    return (
-      sum +
-      (isPrivate
-        ? (t.priceEgp ?? 0)
-        : finalPrice(t.priceEgp ?? 0, t.extraPassengers ?? 0, t.vehicleType))
+  const validationWarning = validate();
+  const hasStopErrors = Object.values(tripErrors).some(Boolean);
+  const hasInvalidLocations = trips.some((t) => {
+    if (!t.pickup || !t.dropoff) return false;
+    if (t.pickup.lat === t.dropoff.lat && t.pickup.lng === t.dropoff.lng) {
+      return true;
+    }
+    if (t.distanceKm != null) return t.distanceKm < 0.5;
+    const straightLine = haversineKm(
+      t.pickup.lat,
+      t.pickup.lng,
+      t.dropoff.lat,
+      t.dropoff.lng,
     );
-  }, 0);
+    return straightLine < 0.5;
+  });
+  const previewDisabled =
+    !!validationWarning || hasStopErrors || hasInvalidLocations;
+
+  const totalEgp = trips.reduce(
+    (sum, t) => sum + getTripPriceForSubmission(t),
+    0,
+  );
   const grandTotalEgp = totalEgp * Math.max(1, selectedDates.length);
 
   if (!mounted) {
@@ -542,6 +583,9 @@ export default function CreateClient({ userEmail }: Props) {
                     vehicleList={
                       vehiclesMap ? Object.values(vehiclesMap) : undefined
                     }
+                    onStopErrorChange={(error) =>
+                      handleTripStopErrorChange(trip.id, error)
+                    }
                   />
                 );
               })}
@@ -640,29 +684,39 @@ export default function CreateClient({ userEmail }: Props) {
               <button
                 type="button"
                 onClick={handlePreview}
+                disabled={previewDisabled}
                 style={{
                   width: "100%",
                   height: 52,
-                  background: "#0B1E3D",
+                  background: previewDisabled ? "#7b8a9a" : "#0B1E3D",
                   color: "#ffffff",
                   fontWeight: 700,
                   fontSize: 15,
                   border: "none",
                   borderRadius: 12,
-                  cursor: "pointer",
+                  cursor: previewDisabled ? "not-allowed" : "pointer",
+                  opacity: previewDisabled ? 0.55 : 1,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 8,
                   fontFamily: "inherit",
-                  transition: "background 0.2s",
+                  transition: "background 0.2s, opacity 0.2s",
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "#00C2A8";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "#0B1E3D";
-                }}
+                onMouseEnter={
+                  previewDisabled
+                    ? undefined
+                    : (e) => {
+                        e.currentTarget.style.background = "#00C2A8";
+                      }
+                }
+                onMouseLeave={
+                  previewDisabled
+                    ? undefined
+                    : (e) => {
+                        e.currentTarget.style.background = "#0B1E3D";
+                      }
+                }
               >
                 <Eye size={17} aria-hidden="true" />
                 Preview booking
@@ -826,18 +880,7 @@ export default function CreateClient({ userEmail }: Props) {
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
-                        {t.vehicleType !== "" &&
-                        (
-                          vehiclesMap?.[t.vehicleType] ??
-                          VEHICLES[t.vehicleType]
-                        ).ride === "private"
-                          ? (t.priceEgp ?? 0)
-                          : finalPrice(
-                              t.priceEgp ?? 0,
-                              t.extraPassengers ?? 0,
-                              t.vehicleType,
-                            )}{" "}
-                        EGP
+                        {getTripPriceForSubmission(t)} EGP
                       </span>
                     </div>
                     <div
@@ -1668,7 +1711,7 @@ export default function CreateClient({ userEmail }: Props) {
 }
 
 /* ── Helpers local to this file ── */
-import { VEHICLE_LIST, finalPrice, VEHICLES } from "@/lib/config/vehicles";
+import { VEHICLE_LIST, VEHICLES } from "@/lib/config/vehicles";
 import { formatDisplayName } from "@/lib/nominatim";
 import { toMinutes, toHHMM } from "@/lib/time/pickupWindow";
 

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Loader2,
   X,
@@ -15,8 +15,8 @@ import {
   VEHICLE_LIST,
   priceFor,
   maxExtraPassengers,
-  finalPrice,
   privateRouteLegPrices,
+  computeTripPriceEgp,
   waitingCostEgp,
   type VehicleKey,
   type VehicleConfig,
@@ -116,6 +116,7 @@ interface Props {
   onAddressSaved?: (saved: SavedAddress) => void;
   vehiclesMap?: Record<VehicleKey, VehicleConfig>; // DB-hydrated vehicle config (falls back to static seed)
   vehicleList?: VehicleConfig[]; // DB-hydrated vehicle list for the select options
+  onStopErrorChange?: (error: string | null) => void;
 }
 
 function pickBtnStyle(active: boolean): React.CSSProperties {
@@ -390,12 +391,21 @@ export default function TripCycle({
   onAddressSaved,
   vehiclesMap,
   vehicleList,
+  onStopErrorChange,
 }: Props) {
   const [routeLoading, setRouteLoading] = useState(false);
   const [stopError, setStopError] = useState("");
   const [locating, setLocating] = useState<"pickup" | "dropoff" | null>(null);
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
+  const previousStopErrorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const nextError = stopError || null;
+    if (previousStopErrorRef.current === nextError) return;
+    previousStopErrorRef.current = nextError;
+    onStopErrorChange?.(nextError);
+  }, [stopError, onStopErrorChange]);
 
   function handleReturnToggle(checked: boolean) {
     if (checked && sourceTripData) {
@@ -1004,11 +1014,15 @@ export default function TripCycle({
   }
 
   const isPrivate = !!data.vehicleType && !isSharedVehicle(data.vehicleType);
-  const displayedPrice = isPrivate
+  const displayedPrice = !data.vehicleType
     ? data.priceEgp
-    : data.priceEgp == null
-      ? null
-      : finalPrice(data.priceEgp, data.extraPassengers ?? 0, data.vehicleType);
+    : computeTripPriceEgp({
+        basePrice: data.priceEgp ?? 0,
+        vehicleType: data.vehicleType,
+        extraPassengers: data.extraPassengers ?? 0,
+        numberOfPassengers: data.numberOfPassengers ?? 1,
+        vehiclesMap: vMap,
+      });
 
   return (
     <div
