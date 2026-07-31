@@ -13,13 +13,12 @@ import { fetchDirections } from "@/app/api/directions/route";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function getTomorrowDate() {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
+function getTodayDate() {
+  const today = new Date();
 
-  const year = tomorrow.getFullYear();
-  const month = String(tomorrow.getMonth() + 1).padStart(2, "0");
-  const day = String(tomorrow.getDate()).padStart(2, "0");
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
@@ -206,10 +205,10 @@ export async function GET() {
 
   await connectDB();
 
-  const tomorrow = getTomorrowDate();
+  const today = getTodayDate();
 
   const privateTrips = await Trip.find({
-    date: tomorrow,
+    date: today,
     status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["private_car", "taxi_private"] },
@@ -235,7 +234,7 @@ export async function GET() {
   >();
 
   const sharedTrips = await Trip.find({
-    date: tomorrow,
+    date: today,
     status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["taxi_shared", "van_shared", "microbus_shared"] },
@@ -253,7 +252,7 @@ export async function GET() {
   >();
 
   const availabilities = await Availability.find({
-    date: tomorrow,
+    date: today,
   }).lean<
     {
       availabilityNumber: number;
