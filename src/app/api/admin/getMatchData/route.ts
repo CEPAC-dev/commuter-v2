@@ -224,9 +224,9 @@ function formatWaitingMinutes(value: number | null | undefined): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-function getDisplayValueForColumn(
-  row: PrivateRow | SharedRow,
-  column: keyof PrivateRow | keyof SharedRow,
+function getDisplayValueForColumn<T extends PrivateRow | SharedRow>(
+  row: T,
+  column: keyof T,
 ): string | number | null {
   if (
     (column === "readyFrom" || column === "shouldArrivebefore") &&
@@ -238,9 +238,11 @@ function getDisplayValueForColumn(
   if (
     typeof column === "string" &&
     /^(stop\d+WaitingTime)$/.test(column) &&
-    (row as PrivateRow)[column] != null
+    (row as PrivateRow)[column as keyof PrivateRow] != null
   ) {
-    return formatWaitingMinutes((row as PrivateRow)[column] as number | null);
+    return formatWaitingMinutes(
+      (row as PrivateRow)[column as keyof PrivateRow] as number | null,
+    );
   }
 
   return row[column] as string | number | null;
