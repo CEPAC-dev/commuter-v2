@@ -101,6 +101,10 @@ const PRIVATE_COLUMNS: (keyof PrivateRow)[] = [
   "passId",
   "originNearestStationNo",
   "destinationNearestStationNo",
+  "readyFrom",
+  "shouldArrivebefore",
+  "rideType",
+  "totalStartedPassengers",
   "stop1Number",
   "stop1Alighting",
   "stop1Boarding",
@@ -117,10 +121,6 @@ const PRIVATE_COLUMNS: (keyof PrivateRow)[] = [
   "stop4Alighting",
   "stop4Boarding",
   "stop4WaitingTime",
-  "readyFrom",
-  "shouldArrivebefore",
-  "rideType",
-  "totalStartedPassengers",
 ];
 
 const SHARED_COLUMNS: (keyof SharedRow)[] = [
@@ -198,6 +198,54 @@ function adjustWorksheetSizing(sheet: ExcelJS.Worksheet) {
     }, 10);
     column.width = maxLength + 2;
   });
+}
+
+function formatTime12Hour(value: string | null | undefined): string {
+  if (!value) return "";
+  const trimmed = String(value).trim();
+  if (!trimmed) return "";
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return trimmed;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return trimmed;
+
+  const period = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
+}
+
+function formatWaitingMinutes(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "";
+  const totalMinutes = Math.max(0, Math.floor(Number(value)));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function getDisplayValueForColumn<T extends PrivateRow | SharedRow>(
+  row: T,
+  column: keyof T,
+): string | number | null {
+  if (
+    (column === "readyFrom" || column === "shouldArrivebefore") &&
+    typeof row[column] === "string"
+  ) {
+    return formatTime12Hour(row[column] as string | null | undefined);
+  }
+
+  if (
+    typeof column === "string" &&
+    /^(stop\d+WaitingTime)$/.test(column) &&
+    (row as PrivateRow)[column as keyof PrivateRow] != null
+  ) {
+    return formatWaitingMinutes(
+      (row as PrivateRow)[column as keyof PrivateRow] as number | null,
+    );
+  }
+
+  return row[column] as string | number | null;
 }
 
 export async function GET() {
@@ -557,7 +605,9 @@ export async function GET() {
   const privateSheet = wb.addWorksheet("PrivateRideRequests");
   privateSheet.addRow(PRIVATE_COLUMNS.map((column) => column));
   for (const row of privateRows) {
-    privateSheet.addRow(PRIVATE_COLUMNS.map((column) => row[column]));
+    privateSheet.addRow(
+      PRIVATE_COLUMNS.map((column) => getDisplayValueForColumn(row, column)),
+    );
   }
   styleWorksheet(privateSheet);
   adjustWorksheetSizing(privateSheet);
@@ -565,7 +615,9 @@ export async function GET() {
   const sharedSheet = wb.addWorksheet("SharedRideRequests");
   sharedSheet.addRow(SHARED_COLUMNS);
   for (const row of sharedRows) {
-    sharedSheet.addRow(SHARED_COLUMNS.map((column) => row[column]));
+    sharedSheet.addRow(
+      SHARED_COLUMNS.map((column) => getDisplayValueForColumn(row, column)),
+    );
   }
   styleWorksheet(sharedSheet);
   adjustWorksheetSizing(sharedSheet);
