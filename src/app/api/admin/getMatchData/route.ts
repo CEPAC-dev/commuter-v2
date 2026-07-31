@@ -9,6 +9,7 @@ import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { Station } from "@/models/Station";
 import { fetchDirections } from "@/app/api/directions/route";
+import { haversineKm } from "@/lib/geo/stations";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -471,13 +472,27 @@ export async function GET() {
       routeCache.set(key, same);
       return same;
     }
+
     const origin = `${from.lat},${from.lng}`;
     const dest = `${to.lat},${to.lng}`;
     const result = await fetchDirections(origin, dest);
+    const directDistanceKm = haversineKm(from.lat, from.lng, to.lat, to.lng);
+    const estimatedDurationMinutes = Math.max(
+      1,
+      Math.round((directDistanceKm / 35) * 60),
+    );
+
     const metrics = {
-      distance_km: result[0]?.distance_km ?? 0,
-      duration_minutes: result[0]?.duration_minutes ?? 0,
+      distance_km:
+        result[0] && Number.isFinite(result[0].distance_km) && result[0].distance_km > 0
+          ? Math.round(result[0].distance_km * 10) / 10
+          : Math.round(directDistanceKm * 10) / 10,
+      duration_minutes:
+        result[0] && Number.isFinite(result[0].duration_minutes) && result[0].duration_minutes > 0
+          ? result[0].duration_minutes
+          : estimatedDurationMinutes,
     };
+
     routeCache.set(key, metrics);
     return metrics;
   }
