@@ -79,6 +79,8 @@ const RideSchema = new Schema(
     route: { type: [StopSchema], default: [] },
     pickupStation: { type: StationSchema, required: false },
     dropoffStation: { type: StationSchema, required: false },
+    driverOrigin: { type: PointSchema, required: false },
+    driverDestination: { type: PointSchema, required: false },
     startTime: { type: String, required: true },
     endTime: { type: String, required: true },
     passengers: { type: [RidePassengerSchema], default: [] },

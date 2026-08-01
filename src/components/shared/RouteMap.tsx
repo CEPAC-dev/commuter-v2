@@ -26,6 +26,8 @@ interface Props {
   stops?: LatLng[];
   /** Shared-ride pickup/dropoff stations, drawn with a distinct station icon and routed through. */
   stations?: LatLng[];
+  /** Force station icons for all markers, removing origin circle and pin icons. */
+  stationIconsOnly?: boolean;
 }
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
@@ -100,6 +102,7 @@ export default function RouteMap({
   interactive = false,
   stops,
   stations,
+  stationIconsOnly = false,
 }: Props) {
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script", // shared with the app's other maps
@@ -235,22 +238,34 @@ export default function RouteMap({
             />
           </>
         )}
-        <Marker
-          position={pickup as LatLng}
-          icon={{
-            url: PICKUP_ICON,
-            scaledSize: new google.maps.Size(36, 36),
-            anchor: new google.maps.Point(18, 18),
-          }}
-        />
-        <Marker
-          position={dropoff as LatLng}
-          icon={{
-            url: DROPOFF_ICON,
-            scaledSize: new google.maps.Size(36, 48),
-            anchor: new google.maps.Point(18, 48),
-          }}
-        />
+        {valid(pickup) && (
+          <Marker
+            position={pickup as LatLng}
+            icon={{
+              url: (stationIconsOnly || (stations && stations.length > 0)) ? STATION_ICON : PICKUP_ICON,
+              scaledSize: (stationIconsOnly || (stations && stations.length > 0))
+                ? new google.maps.Size(28, 28)
+                : new google.maps.Size(36, 36),
+              anchor: (stationIconsOnly || (stations && stations.length > 0))
+                ? new google.maps.Point(14, 14)
+                : new google.maps.Point(18, 18),
+            }}
+          />
+        )}
+        {valid(dropoff) && (
+          <Marker
+            position={dropoff as LatLng}
+            icon={{
+              url: (stationIconsOnly || (stations && stations.length > 0)) ? STATION_ICON : DROPOFF_ICON,
+              scaledSize: (stationIconsOnly || (stations && stations.length > 0))
+                ? new google.maps.Size(28, 28)
+                : new google.maps.Size(36, 48),
+              anchor: (stationIconsOnly || (stations && stations.length > 0))
+                ? new google.maps.Point(14, 14)
+                : new google.maps.Point(18, 48),
+            }}
+          />
+        )}
         {stops
           ?.filter(valid)
           .map((s, i) => (

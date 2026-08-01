@@ -346,7 +346,9 @@ export default function AdminRidesPage() {
                               type="button"
                               className="action-btn delete"
                               onClick={() => deleteRide(ride._id)}
-                              title="Delete / cancel ride"
+                              title={ride.status === "completed" ? "Cannot delete a completed ride" : "Delete / cancel ride"}
+                              disabled={ride.status === "completed"}
+                              style={ride.status === "completed" ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
                             >
                               <Trash2 size={14} /> Cancel
                             </button>

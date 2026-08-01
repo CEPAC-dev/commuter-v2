@@ -124,12 +124,8 @@ export default function SharedRideDetails({
             <RideDetailRow
               icon={<MapPin size={15} />}
               color="#00C2A8"
-              headline="Pickup station"
-              value={
-                walkToMin && !isDriver
-                  ? `${pickupStation?.name ?? "Pickup station"} · ${walkToMin} min walk`
-                  : (pickupStation?.name ?? "Pickup station")
-              }
+              headline="Station"
+              value={pickupStation?.name ?? "Pickup station"}
             />
           </div>
         )}
@@ -156,12 +152,8 @@ export default function SharedRideDetails({
             <RideDetailRow
               icon={<MapPin size={15} />}
               color="#E74C3C"
-              headline="Dropoff station"
-              value={
-                walkFromMin && !isDriver
-                  ? `${dropoffStation?.name ?? "Dropoff station"} · ${walkFromMin} min walk`
-                  : (dropoffStation?.name ?? "Dropoff station")
-              }
+              headline="Station"
+              value={dropoffStation?.name ?? "Dropoff station"}
             />
           </div>
         )}

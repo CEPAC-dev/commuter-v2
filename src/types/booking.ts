@@ -87,6 +87,8 @@ export interface RideDetailView
   passengers: RidePassengerDetail[];
   route: RideRouteStopDetail[];
   chatTripId: string | null;
+  driverOrigin?: GeoPoint | null;
+  driverDestination?: GeoPoint | null;
 }
 
 /** Flat trip row for the /my-trips history list and GET /api/trips. */
