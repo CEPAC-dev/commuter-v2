@@ -1,29 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const KEY =
-  process.env.GOOGLE_MAPS_API_KEY ??
-  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!;
-
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id")?.trim();
-  if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
+  if (!id || !/^[NWR]\d+$/.test(id))
+    return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
-  const url = new URL(
-    "https://maps.googleapis.com/maps/api/place/details/json",
-  );
-  url.searchParams.set("place_id", id);
-  url.searchParams.set("fields", "geometry");
-  url.searchParams.set("key", KEY);
+  const url = new URL("https://nominatim.openstreetmap.org/lookup");
+  url.searchParams.set("osm_ids", id);
+  url.searchParams.set("format", "jsonv2");
 
-  const res = await fetch(url.toString());
-  if (!res.ok) return NextResponse.json({ error: "upstream" }, { status: 502 });
-
-  const data = await res.json();
-  if (data.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-    console.error("[places/autocomplete]", data.status, data.error_message);
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Commuter/0.1 (local development)" },
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) {
+    console.error("[places/details] Nominatim", res.status);
+    return NextResponse.json({ error: "upstream" }, { status: 502 });
   }
-  const loc = data.result?.geometry?.location;
-  if (!loc) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  return NextResponse.json({ lat: loc.lat, lng: loc.lng });
+  const data = (await res.json()) as Array<{ lat: string; lon: string }>;
+  const place = data[0];
+  if (!place) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  return NextResponse.json({ lat: Number(place.lat), lng: Number(place.lon) });
 }

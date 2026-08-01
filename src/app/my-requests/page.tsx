@@ -8,7 +8,7 @@ import { VEHICLES } from "@/lib/config/vehicles";
 import EmptyState from "@/components/shared/EmptyState";
 import FilterBar, { type FilterDef } from "@/components/shared/FilterBar";
 import Pagination from "@/components/shared/Pagination";
-import RouteMap from "@/components/shared/RouteMap";
+import RouteMap from "@/components/shared/RouteMapOsmLoader";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import type { VehicleKey } from "@/lib/config/vehicles";

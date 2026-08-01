@@ -4,7 +4,7 @@ import { Availability } from "@/models/Availability";
 import { getSession } from "@/lib/auth/session";
 
 function isLocked(dateISO: string): boolean {
-  const cutoff = new Date(`${dateISO}T20:00:00`);
+  const cutoff = new Date(`${dateISO}T17:00:00`);
   cutoff.setDate(cutoff.getDate() - 1);
   return new Date() >= cutoff;
 }
@@ -23,14 +23,19 @@ export async function DELETE(
   const record = await Availability.findOne({
     _id: id,
     driverId: session.userId,
-  }).select("date").lean<{ date: string }>();
+  })
+    .select("date")
+    .lean<{ date: string }>();
 
   if (!record)
     return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   if (isLocked(record.date))
     return NextResponse.json(
-      { error: "Cannot delete availability after 8:00 PM the day before. Contact support to change." },
+      {
+        error:
+          "Cannot delete availability after 8:00 PM the day before. Contact support to change.",
+      },
       { status: 403 },
     );
 

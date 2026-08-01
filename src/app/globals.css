@@ -1,5 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Cairo:wght@400;500;600;700;800;900&display=swap");
 
+@import "leaflet/dist/leaflet.css";
+
 @import "tailwindcss";
 
 :root {
@@ -61,7 +63,10 @@ html[dir="rtl"] * {
 
 /* Booking / activity card hover */
 .request-card {
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 }
 
 .request-card:hover {

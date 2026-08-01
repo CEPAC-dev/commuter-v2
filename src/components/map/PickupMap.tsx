@@ -4,7 +4,7 @@
 import dynamic from "next/dynamic";
 import type { PickupPoint } from "@/types/driver";
 
-const PickupMapInner = dynamic(() => import("./PickupMapInner"), {
+const PickupMapInner = dynamic(() => import("./PickupMapInnerOsm"), {
   ssr: false,
   loading: () => (
     <div

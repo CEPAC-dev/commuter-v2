@@ -1,33 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const KEY =
-  process.env.GOOGLE_MAPS_API_KEY ??
-  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!;
-
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim();
   if (!q || q.length < 3) return NextResponse.json([]);
 
-  const url = new URL(
-    "https://maps.googleapis.com/maps/api/place/autocomplete/json",
-  );
-  url.searchParams.set("input", q);
-  url.searchParams.set("key", KEY);
-  url.searchParams.set("components", "country:eg");
-  url.searchParams.set("language", "en");
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("q", `${q}, Egypt`);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("countrycodes", "eg");
+  url.searchParams.set("limit", "5");
+  url.searchParams.set("addressdetails", "1");
 
-  const res = await fetch(url.toString());
-  if (!res.ok) return NextResponse.json([], { status: 502 });
-
-  const data = await res.json();
-  if (data.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-    console.error("[places/autocomplete]", data.status, data.error_message);
+  const res = await fetch(url, {
+    headers: {
+      "Accept-Language": "en",
+      "User-Agent": "Commuter/0.1 (local development)",
+    },
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) {
+    console.error("[places/autocomplete] Nominatim", res.status);
+    return NextResponse.json([], { status: 502 });
   }
-  const results = (data.predictions ?? []).map(
-    (p: { place_id: string; description: string }) => ({
-      place_id: p.place_id,
-      display_name: p.description,
-    }),
-  );
+
+  const data = (await res.json()) as Array<{
+    osm_type: "node" | "way" | "relation";
+    osm_id: number;
+    display_name: string;
+  }>;
+  const results = data.map((place) => ({
+    place_id: `${place.osm_type[0].toUpperCase()}${place.osm_id}`,
+    display_name: place.display_name,
+  }));
   return NextResponse.json(results);
 }

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   Plus,
@@ -17,7 +18,7 @@ import type { TripPoint } from "@/lib/store/useTripStore";
 import AppHeader from "@/components/layout/AppHeader";
 import DatePicker from "./DatePicker";
 import TripCycle, { type TripData } from "./TripCycle";
-import CreateMap from "./CreateMap";
+const CreateMap = dynamic(() => import("./CreateMapOsm"), { ssr: false });
 import { earliestBookingDate } from "@/lib/time/bookingDates";
 import type { SavedAddress } from "@/types/shared";
 import { haversineKm } from "@/lib/geo/stations";

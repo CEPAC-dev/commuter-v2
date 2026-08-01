@@ -13,7 +13,7 @@ import { expireStaleRequest, getUserRequest } from "@/lib/services/requests";
 import { VEHICLES } from "@/lib/config/vehicles";
 import type { VehicleKey } from "@/lib/config/vehicles";
 import AppHeader from "@/components/layout/AppHeader";
-import RouteMap from "@/components/shared/RouteMap";
+import RouteMap from "@/components/shared/RouteMapOsmLoader";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import type { GeoPoint as Pt, StationSelection } from "@/types/geo";
 import type { PaymentStatus, BookingStatus } from "@/types/booking";
