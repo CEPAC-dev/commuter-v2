@@ -63,7 +63,7 @@ export default function PickupMapInnerOsm({
     pickupPoints.forEach((point, index) =>
       L.marker([point.lat, point.lng], { icon: pickupIcon(index) })
         .bindPopup(
-          `<strong>${point.passenger_name}</strong><br/>${point.pickup_label}`,
+          `<strong>${point.passenger_name}</strong><br/>${point.address}<br/>Pickup: +${point.pickup_time_offset} min from start`,
         )
         .addTo(layers),
     );
@@ -71,7 +71,9 @@ export default function PickupMapInnerOsm({
       .bindPopup(destination.label)
       .addTo(layers);
     fitPoints(map, path, 40);
-    return () => layers.remove();
+    return () => {
+      layers.remove();
+    };
   }, [map, route, error, pickupPoints, destination, waypoints]);
 
   return (

@@ -148,7 +148,9 @@ export default function RouteMapOsm({
       ...(stops ?? []).filter(valid),
       ...(stations ?? []).filter(valid),
     ]);
-    return () => layers.remove();
+    return () => {
+      layers.remove();
+    };
   }, [map, ok, pickup, dropoff, path, stops, stations]);
 
   if (!ok) return <Placeholder height={height} rounded={rounded} />;

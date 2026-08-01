@@ -140,7 +140,9 @@ export default function CreateMapOsm({
       }
     });
     fitPoints(map, allPoints, 40);
-    return () => layers.remove();
+    return () => {
+      layers.remove();
+    };
   }, [map, trips]);
 
   const handleClick = useCallback(

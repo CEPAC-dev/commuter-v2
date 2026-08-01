@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { format, addDays, startOfDay } from "date-fns";
 import {
   Plus,
@@ -17,7 +18,10 @@ import AppHeader from "@/components/layout/AppHeader";
 import BottomSheet from "@/components/shared/BottomSheet";
 import EmptyState from "@/components/shared/EmptyState";
 import AddressInput from "@/components/landing/AddressInput";
-import AvailabilityMap from "@/components/availability/AvailabilityMapOsm";
+const AvailabilityMap = dynamic(
+  () => import("@/components/availability/AvailabilityMapOsm"),
+  { ssr: false },
+);
 import type { TripPoint } from "@/lib/store/useTripStore";
 import type { SavedAddress } from "@/types/shared";
 import type { GeoPoint as Point } from "@/types/geo";

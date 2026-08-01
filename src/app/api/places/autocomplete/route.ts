@@ -12,10 +12,16 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("addressdetails", "1");
 
   const res = await fetch(url, {
-    headers: { "Accept-Language": "en" },
+    headers: {
+      "Accept-Language": "en",
+      "User-Agent": "Commuter/0.1 (local development)",
+    },
     next: { revalidate: 60 },
   });
-  if (!res.ok) return NextResponse.json([], { status: 502 });
+  if (!res.ok) {
+    console.error("[places/autocomplete] Nominatim", res.status);
+    return NextResponse.json([], { status: 502 });
+  }
 
   const data = (await res.json()) as Array<{
     osm_type: "node" | "way" | "relation";

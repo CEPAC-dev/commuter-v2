@@ -13,10 +13,16 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("zoom", "18");
 
   const res = await fetch(url, {
-    headers: { "Accept-Language": "en" },
+    headers: {
+      "Accept-Language": "en",
+      "User-Agent": "Commuter/0.1 (local development)",
+    },
     next: { revalidate: 3600 },
   });
-  if (!res.ok) return NextResponse.json({ error: "upstream" }, { status: 502 });
+  if (!res.ok) {
+    console.error("[geocode/reverse] Nominatim", res.status);
+    return NextResponse.json({ error: "upstream" }, { status: 502 });
+  }
 
   const data = (await res.json()) as { display_name?: string };
   const address = data.display_name ?? `${lat}, ${lng}`;

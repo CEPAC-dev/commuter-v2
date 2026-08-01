@@ -9,8 +9,14 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("osm_ids", id);
   url.searchParams.set("format", "jsonv2");
 
-  const res = await fetch(url, { next: { revalidate: 3600 } });
-  if (!res.ok) return NextResponse.json({ error: "upstream" }, { status: 502 });
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Commuter/0.1 (local development)" },
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) {
+    console.error("[places/details] Nominatim", res.status);
+    return NextResponse.json({ error: "upstream" }, { status: 502 });
+  }
 
   const data = (await res.json()) as Array<{ lat: string; lon: string }>;
   const place = data[0];

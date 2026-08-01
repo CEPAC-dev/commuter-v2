@@ -6,7 +6,7 @@ import { getUserTrip, getDriverTrip } from "@/lib/services/trips";
 import { VEHICLES } from "@/lib/config/vehicles";
 import type { VehicleKey } from "@/lib/config/vehicles";
 import AppHeader from "@/components/layout/AppHeader";
-import RouteMap from "@/components/shared/RouteMapOsm";
+import RouteMap from "@/components/shared/RouteMapOsmLoader";
 import DriverCard from "@/components/trips/DriverCard";
 import TripChat from "@/components/shared/TripChat";
 import PrivateRideDetails from "@/components/trips/PrivateRideDetails";
