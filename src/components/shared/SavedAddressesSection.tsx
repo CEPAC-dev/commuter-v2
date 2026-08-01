@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Bookmark, Plus, Pencil, Trash2, X, Loader2 } from "lucide-react";
-import LocationPickerMap from "@/components/map/LocationPickerMap";
+import LocationPickerMap from "@/components/map/LocationPickerMapOsm";
 import type { SavedAddress } from "@/types/shared";
 import type { TripPoint } from "@/lib/store/useTripStore";
 

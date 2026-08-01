@@ -17,7 +17,7 @@ import AppHeader from "@/components/layout/AppHeader";
 import BottomSheet from "@/components/shared/BottomSheet";
 import EmptyState from "@/components/shared/EmptyState";
 import AddressInput from "@/components/landing/AddressInput";
-import AvailabilityMap from "@/components/availability/AvailabilityMap";
+import AvailabilityMap from "@/components/availability/AvailabilityMapOsm";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import type { SavedAddress } from "@/types/shared";
 import type { GeoPoint as Point } from "@/types/geo";
@@ -44,9 +44,9 @@ function to12h(hhmm: string): string {
   const ampm = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
-// Removal locks at 8:00 PM the day before the availability date.
+// Removal locks at 5:00 PM the day before the availability date.
 function isLocked(dateISO: string): boolean {
-  const cutoff = new Date(`${dateISO}T20:00:00`);
+  const cutoff = new Date(`${dateISO}T17:00:00`);
   cutoff.setDate(cutoff.getDate() - 1);
   return new Date() >= cutoff;
 }
