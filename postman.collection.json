@@ -1,0 +1,90 @@
+{
+  "info": {
+    "name": "Commuter Admin Trips",
+    "description": "Temporary public admin trip APIs. Add auth before production use.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "tripId", "value": "REPLACE_WITH_TRIP_OBJECT_ID" },
+    { "key": "userId", "value": "REPLACE_WITH_USER_OBJECT_ID" },
+    { "key": "tripNumber", "value": "1001" }
+  ],
+  "item": [
+    {
+      "name": "List trips - populated",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/admin/trips?page=1&limit=20"
+      }
+    },
+    {
+      "name": "Filter trips by user",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/admin/trips?userId={{userId}}"
+      }
+    },
+    {
+      "name": "Filter trips by trip number",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/admin/trips?tripNumber={{tripNumber}}"
+      }
+    },
+    {
+      "name": "Filter trips by fields",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/admin/trips?driverId=REPLACE_WITH_DRIVER_OBJECT_ID&requestId=REPLACE_WITH_REQUEST_OBJECT_ID&rideId=REPLACE_WITH_RIDE_OBJECT_ID&date=2026-08-01&vehicleType=private_car&rideType=private&paymentStatus=paid&status=completed&createdAtFrom=2026-08-01T00:00:00.000Z&createdAtTo=2026-08-01T23:59:59.999Z"
+      }
+    },
+    {
+      "name": "Get trip by ID - populated",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/admin/trips/{{tripId}}"
+      }
+    },
+    {
+      "name": "Delete trip by ID",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/admin/trips/{{tripId}}",
+        "description": "No request body."
+      }
+    },
+    {
+      "name": "Delete trips by user",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/admin/trips?action=by-user&userId={{userId}}",
+        "description": "No request body. Deletes every trip owned by userId."
+      }
+    },
+    {
+      "name": "Delete trip by trip number",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/admin/trips?action=by-trip-number&tripNumber={{tripNumber}}",
+        "description": "No request body."
+      }
+    },
+    {
+      "name": "Delete today's trips",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/admin/trips?action=today",
+        "description": "No request body. Uses server local day from createdAt."
+      }
+    },
+    {
+      "name": "Delete trips not created today",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/admin/trips?action=not-today",
+        "description": "No request body. Keeps only trips created today by server local day."
+      }
+    }
+  ]
+}
