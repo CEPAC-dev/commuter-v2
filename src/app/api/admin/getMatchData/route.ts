@@ -16,7 +16,7 @@ export const runtime = "nodejs";
 
 function getTomorrowDate() {
   const today = new Date();
-  today.setDate(today.getDate() + 1);
+  today.setDate(today.getDate());
 
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, "0");
@@ -355,7 +355,10 @@ export async function GET() {
 
   const privateRows: PrivateRow[] = privateTrips.map((trip) => {
     const s = trip.stops ?? [];
-    const originStationNo = addSyntheticStation(nextPrivateStationNumber, trip.pickup)
+    const originStationNo = addSyntheticStation(
+      nextPrivateStationNumber,
+      trip.pickup,
+    )
       ? nextPrivateStationNumber++
       : null;
     const destinationStationNo = addSyntheticStation(
@@ -497,10 +500,7 @@ export async function GET() {
     new Set(
       [
         ...privateRows
-          .map((row) => [
-            row.originStationNo,
-            row.destinationStationNo,
-          ])
+          .map((row) => [row.originStationNo, row.destinationStationNo])
           .flat(),
         ...sharedRows
           .map((row) => [
@@ -561,11 +561,15 @@ export async function GET() {
 
     const metrics = {
       distance_km:
-        result[0] && Number.isFinite(result[0].distance_km) && result[0].distance_km > 0
+        result[0] &&
+        Number.isFinite(result[0].distance_km) &&
+        result[0].distance_km > 0
           ? Math.round(result[0].distance_km * 10) / 10
           : Math.round(directDistanceKm * 10) / 10,
       duration_minutes:
-        result[0] && Number.isFinite(result[0].duration_minutes) && result[0].duration_minutes > 0
+        result[0] &&
+        Number.isFinite(result[0].duration_minutes) &&
+        result[0].duration_minutes > 0
           ? result[0].duration_minutes
           : estimatedDurationMinutes,
     };
