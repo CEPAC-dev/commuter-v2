@@ -5,7 +5,7 @@ Kashier REST, motion, lucide, date-fns. Brand: primary #0B1E3D, secondary #00C2A
 
 ## Locked decisions
 
-- 5PM cutoff: now >= 17:00 → earliest = day-after-tomorrow; else earliest = tomorrow.
+- 5PM cutoff: now >= 20:00 → earliest = day-after-tomorrow; else earliest = tomorrow.
 - Date field: interactive calendar, MULTI-select, only [earliest .. earliest+6] (7 days) selectable.
 - Multiple selected dates → each date becomes its OWN Booking, all sharing a `groupId`. One payment charges group total; webhook marks every booking in group paid.
 - Detour (extra passenger with own points): route = mainPickup → all distinct passenger pickups → all distinct passenger dropoffs → mainDropoff. Reject if combined > 1.25 × base(mainPickup→mainDropoff). distanceKm + price recomputed from COMBINED distance (server authoritative).

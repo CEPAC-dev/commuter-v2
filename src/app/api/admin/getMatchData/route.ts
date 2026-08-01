@@ -14,8 +14,9 @@ import { haversineKm } from "@/lib/geo/stations";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function getTodayDate() {
+function getTomorrowDate() {
   const today = new Date();
+  today.setDate(today.getDate() + 1);
 
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, "0");
@@ -246,7 +247,7 @@ export async function GET() {
 
   await connectDB();
 
-  const today = getTodayDate();
+  const today = getTomorrowDate();
 
   const privateTrips = await Trip.find({
     date: today,
