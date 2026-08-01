@@ -27,8 +27,8 @@ function getTodayDate() {
 interface PrivateRow {
   rideId: number;
   passId: number | null;
-  originNearestStationNo: number | null;
-  destinationNearestStationNo: number | null;
+  originStationNo: number | null;
+  destinationStationNo: number | null;
   stop1Number: number | null;
   stop1Lat: number | null;
   stop1Long: number | null;
@@ -78,12 +78,8 @@ interface AvailabilityRow {
   availabilityId: number;
   driverId: number | null;
   date: string;
-  startLat: number;
-  startLong: number;
-  startNearestStationNo: number | null;
-  endLat: number;
-  endLong: number;
-  endNearestStationNo: number | null;
+  startStationNo: number | null;
+  endStationNo: number | null;
   startTime: string;
   endTime: string;
   vehicleType: number;
@@ -99,8 +95,8 @@ interface StationInfo {
 const PRIVATE_COLUMNS: (keyof PrivateRow)[] = [
   "rideId",
   "passId",
-  "originNearestStationNo",
-  "destinationNearestStationNo",
+  "originStationNo",
+  "destinationStationNo",
   "readyFrom",
   "shouldArrivebefore",
   "rideType",
@@ -138,12 +134,8 @@ const AVAILABILITY_COLUMNS: (keyof AvailabilityRow)[] = [
   "availabilityId",
   "driverId",
   "date",
-  "startLat",
-  "startLong",
-  "startNearestStationNo",
-  "endLat",
-  "endLong",
-  "endNearestStationNo",
+  "startStationNo",
+  "endStationNo",
   "startTime",
   "endTime",
   "vehicleType",
@@ -339,15 +331,43 @@ export async function GET() {
   );
 
   let nextStopNumber = 5000;
+  let nextPrivateStationNumber = 7000;
+  let nextAvailabilityStationNumber = 8000;
   const syntheticStations: StationInfo[] = [];
+
+  function addSyntheticStation(
+    objectId: number,
+    point:
+      | { lat: number; lng: number; address?: string | null }
+      | null
+      | undefined,
+  ): number | null {
+    if (point?.lat == null || point?.lng == null) return null;
+    syntheticStations.push({
+      objectId,
+      name: point.address ?? "",
+      lat: point.lat,
+      lng: point.lng,
+    });
+    return objectId;
+  }
 
   const privateRows: PrivateRow[] = privateTrips.map((trip) => {
     const s = trip.stops ?? [];
+    const originStationNo = addSyntheticStation(nextPrivateStationNumber, trip.pickup)
+      ? nextPrivateStationNumber++
+      : null;
+    const destinationStationNo = addSyntheticStation(
+      nextPrivateStationNumber,
+      trip.dropoff,
+    )
+      ? nextPrivateStationNumber++
+      : null;
     const row: PrivateRow = {
       rideId: trip.tripNumber,
       passId: userNumberMap.get(String(trip.userId)) ?? null,
-      originNearestStationNo: trip.pickupStation?.id ?? null,
-      destinationNearestStationNo: trip.dropoffStation?.id ?? null,
+      originStationNo,
+      destinationStationNo,
       stop1Number: null,
       stop1Lat: null,
       stop1Long: null,
@@ -447,16 +467,24 @@ export async function GET() {
   const availabilityRows: AvailabilityRow[] = availabilities.map(
     (availability) => {
       const carType = carTypeMap.get(String(availability.driverId));
+      const startStationNo = addSyntheticStation(
+        nextAvailabilityStationNumber,
+        availability.startLocation,
+      )
+        ? nextAvailabilityStationNumber++
+        : null;
+      const endStationNo = addSyntheticStation(
+        nextAvailabilityStationNumber,
+        availability.endLocation,
+      )
+        ? nextAvailabilityStationNumber++
+        : null;
       return {
         availabilityId: availability.availabilityNumber,
         driverId: userNumberMap.get(String(availability.driverId)) ?? null,
         date: availability.date,
-        startLat: availability.startLocation.lat,
-        startLong: availability.startLocation.lng,
-        startNearestStationNo: availability.startNearestStation?.id ?? null,
-        endLat: availability.endLocation.lat,
-        endLong: availability.endLocation.lng,
-        endNearestStationNo: availability.endNearestStation?.id ?? null,
+        startStationNo,
+        endStationNo,
         startTime: availability.startTime,
         endTime: availability.endTime,
         vehicleType: carType ? (CAR_TYPE_TO_VEHICLE_TYPE[carType] ?? 0) : 0,
@@ -469,8 +497,8 @@ export async function GET() {
       [
         ...privateRows
           .map((row) => [
-            row.originNearestStationNo,
-            row.destinationNearestStationNo,
+            row.originStationNo,
+            row.destinationStationNo,
           ])
           .flat(),
         ...sharedRows
@@ -480,7 +508,7 @@ export async function GET() {
           ])
           .flat(),
         ...availabilityRows
-          .map((row) => [row.startNearestStationNo, row.endNearestStationNo])
+          .map((row) => [row.startStationNo, row.endStationNo])
           .flat(),
         ...syntheticStations.map((station) => station.objectId),
       ].filter(
