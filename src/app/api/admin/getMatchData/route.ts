@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 // import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
@@ -16,7 +16,7 @@ export const runtime = "nodejs";
 
 function getTomorrowDate() {
   const today = new Date();
-  today.setDate(today.getDate() - 1);
+  today.setDate(today.getDate() + 1);
 
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, "0");
@@ -241,16 +241,17 @@ function getDisplayValueForColumn<T extends PrivateRow | SharedRow>(
   return row[column] as string | number | null;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   //   const auth = await adminAuth(req);
   //   if (!auth.authorized) return auth.response;
 
   await connectDB();
 
-  const today = getTomorrowDate();
+  const requestedDate = req.nextUrl.searchParams.get("date")?.trim();
+  const targetDate = requestedDate || getTomorrowDate();
 
   const privateTrips = await Trip.find({
-    date: today,
+    date: targetDate,
     status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["private_car", "taxi_private"] },
@@ -276,7 +277,7 @@ export async function GET() {
   >();
 
   const sharedTrips = await Trip.find({
-    date: today,
+    date: targetDate,
     status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["taxi_shared", "van_shared", "microbus_shared"] },
@@ -294,7 +295,7 @@ export async function GET() {
   >();
 
   const availabilities = await Availability.find({
-    date: today,
+    date: targetDate,
   }).lean<
     {
       availabilityNumber: number;
