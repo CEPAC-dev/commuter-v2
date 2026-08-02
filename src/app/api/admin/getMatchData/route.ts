@@ -26,8 +26,8 @@ function getTomorrowDate() {
 }
 
 interface PrivateRow {
-  rideId: number;
-  passId: number | null;
+  Ride_ID: number;
+  Pass_ID: number | null;
   originStationNo: number | null;
   destinationStationNo: number | null;
   stop1Number: number | null;
@@ -60,19 +60,19 @@ interface PrivateRow {
   stop4WaitingTime: number | null;
   readyFrom: string;
   shouldArrivebefore: string;
-  rideType: number;
-  totalStartedPassengers: number;
+  Ride_Type: number;
+  Origin_Boarding: number;
 }
 
 interface SharedRow {
-  rideId: number;
-  passId: number | null;
-  originNearestStationNo: number | null;
-  destinationNearestStationNo: number | null;
+  Ride_ID: number;
+  Pass_ID: number | null;
+  Origin_Reg_ID: number | null;
+  Dest_Reg_ID: number | null;
   readyFrom: string;
   shouldArrivebefore: string;
-  rideType: number;
-  totalStartedPassengers: number;
+  Ride_Type: number;
+  Origin_Boarding: number;
 }
 
 interface AvailabilityRow {
@@ -93,14 +93,14 @@ interface StationInfo {
 }
 
 const PRIVATE_COLUMNS: (keyof PrivateRow)[] = [
-  "rideId",
-  "passId",
+  "Ride_ID",
+  "Pass_ID",
   "originStationNo",
   "destinationStationNo",
   "readyFrom",
   "shouldArrivebefore",
-  "rideType",
-  "totalStartedPassengers",
+  "Ride_Type",
+  "Origin_Boarding",
   "stop1Number",
   "stop1Alighting",
   "stop1Boarding",
@@ -120,14 +120,14 @@ const PRIVATE_COLUMNS: (keyof PrivateRow)[] = [
 ];
 
 const SHARED_COLUMNS: (keyof SharedRow)[] = [
-  "rideId",
-  "passId",
-  "originNearestStationNo",
-  "destinationNearestStationNo",
+  "Ride_ID",
+  "Pass_ID",
+  "Origin_Reg_ID",
+  "Dest_Reg_ID",
   "readyFrom",
   "shouldArrivebefore",
-  "rideType",
-  "totalStartedPassengers",
+  "Ride_Type",
+  "Origin_Boarding",
 ];
 
 const AVAILABILITY_COLUMNS: (keyof AvailabilityRow)[] = [
@@ -139,6 +139,48 @@ const AVAILABILITY_COLUMNS: (keyof AvailabilityRow)[] = [
   "endTime",
   "vehicleType",
 ];
+
+const SHARED_HEADER_LABELS: Record<string, string> = {
+  readyFrom: "Ready From",
+  shouldArrivebefore: "Should arrive before",
+};
+
+const AVAILABILITY_HEADER_LABELS: Record<string, string> = {
+  availabilityId: "Trip_ID",
+  driverId: "Driver_ID",
+  startStationNo: "Origin_Reg_ID",
+  endStationNo: "Dest_Reg_ID",
+  startTime: "Ready work From",
+  endTime: "Ready Work To",
+  vehicleType: "Vehicle_Type",
+};
+
+const PRIVATE_HEADER_LABELS: Record<string, string> = {
+  Ride_ID: "Ride_ID",
+  Pass_ID: "Pass_ID",
+  originStationNo: "Origin_Req_ID",
+  destinationStationNo: "Dest_Req_ID",
+  readyFrom: "Ready From",
+  shouldArrivebefore: "Should arrive before",
+  Ride_Type: "Ride_Type",
+  Origin_Boarding: "Origin_Boarding",
+  stop1Number: "ID_Stop_1",
+  stop1Alighting: "Alighting_Stop_1",
+  stop1Boarding: "Boarding_Stop_1",
+  stop1WaitingTime: "Waiting_Stop_1",
+  stop2Number: "ID_Stop_2",
+  stop2Alighting: "Alighting_Stop_2",
+  stop2Boarding: "Boarding_Stop_2",
+  stop2WaitingTime: "Waiting_Stop_2",
+  stop3Number: "ID_Stop_3",
+  stop3Alighting: "Alighting_Stop_3",
+  stop3Boarding: "Boarding_Stop_3",
+  stop3WaitingTime: "Waiting_Stop_3",
+  stop4Number: "ID_Stop_4",
+  stop4Alighting: "Alighting_Stop_4",
+  stop4Boarding: "Boarding_Stop_4",
+  stop4WaitingTime: "Waiting_Stop_4",
+};
 
 const CAR_TYPE_TO_VEHICLE_TYPE: Record<string, number> = {
   private: 1,
@@ -431,8 +473,8 @@ export async function GET(req: NextRequest) {
       ? nextPrivateStationNumber++
       : null;
     const row: PrivateRow = {
-      rideId: trip.tripNumber,
-      passId: userNumberMap.get(String(trip.userId)) ?? null,
+      Ride_ID: trip.tripNumber,
+      Pass_ID: userNumberMap.get(String(trip.userId)) ?? null,
       originStationNo,
       destinationStationNo,
       stop1Number: null,
@@ -465,8 +507,8 @@ export async function GET(req: NextRequest) {
       stop4WaitingTime: null,
       readyFrom: trip.pickupTime,
       shouldArrivebefore: trip.arrivalTime,
-      rideType: trip.vehicleType === "private_car" ? 1 : 2,
-      totalStartedPassengers: trip.numberOfPassengers,
+      Ride_Type: trip.vehicleType === "private_car" ? 1 : 2,
+      Origin_Boarding: trip.numberOfPassengers,
     };
 
     const assignStop = (
@@ -520,28 +562,25 @@ export async function GET(req: NextRequest) {
   });
 
   const sharedRows: SharedRow[] = sharedTrips.map((trip) => ({
-    rideId: trip.tripNumber,
-    passId: userNumberMap.get(String(trip.userId)) ?? null,
-    originNearestStationNo: trip.pickupStation?.id ?? null,
-    destinationNearestStationNo: trip.dropoffStation?.id ?? null,
+    Ride_ID: trip.tripNumber,
+    Pass_ID: userNumberMap.get(String(trip.userId)) ?? null,
+    Origin_Reg_ID: trip.pickupStation?.id ?? null,
+    Dest_Reg_ID: trip.dropoffStation?.id ?? null,
     readyFrom: trip.pickupTime,
     shouldArrivebefore: trip.arrivalTime,
-    rideType:
+    Ride_Type:
       trip.vehicleType === "taxi_shared"
         ? 3
         : trip.vehicleType === "van_shared"
           ? 4
           : 5,
-    totalStartedPassengers: trip.extraPassengers + 1,
+    Origin_Boarding: trip.extraPassengers + 1,
   }));
 
   const existingStationIds = Array.from(
     new Set(
       sharedRows
-        .flatMap((row) => [
-          row.originNearestStationNo,
-          row.destinationNearestStationNo,
-        ])
+        .flatMap((row) => [row.Origin_Reg_ID, row.Dest_Reg_ID])
         .filter(
           (id): id is number => typeof id === "number" && Number.isFinite(id),
         ),
@@ -615,12 +654,7 @@ export async function GET(req: NextRequest) {
         ...privateRows
           .map((row) => [row.originStationNo, row.destinationStationNo])
           .flat(),
-        ...sharedRows
-          .map((row) => [
-            row.originNearestStationNo,
-            row.destinationNearestStationNo,
-          ])
-          .flat(),
+        ...sharedRows.map((row) => [row.Origin_Reg_ID, row.Dest_Reg_ID]).flat(),
         ...availabilityRows
           .map((row) => [row.startStationNo, row.endStationNo])
           .flat(),
@@ -745,7 +779,9 @@ export async function GET(req: NextRequest) {
   adjustWorksheetSizing(matrixDuration);
 
   const privateSheet = wb.addWorksheet("Private_Requests");
-  privateSheet.addRow(PRIVATE_COLUMNS.map((column) => column));
+  privateSheet.addRow(
+    PRIVATE_COLUMNS.map((column) => PRIVATE_HEADER_LABELS[column] ?? column),
+  );
   for (const row of privateRows) {
     const sheetRow = privateSheet.addRow(
       PRIVATE_COLUMNS.map((column) => getExcelValueForColumn(row, column)),
@@ -761,7 +797,9 @@ export async function GET(req: NextRequest) {
   adjustWorksheetSizing(privateSheet);
 
   const sharedSheet = wb.addWorksheet("Shared_Requests");
-  sharedSheet.addRow(SHARED_COLUMNS);
+  sharedSheet.addRow(
+    SHARED_COLUMNS.map((column) => SHARED_HEADER_LABELS[column] ?? column),
+  );
   for (const row of sharedRows) {
     const sheetRow = sharedSheet.addRow(
       SHARED_COLUMNS.map((column) => getExcelValueForColumn(row, column)),
@@ -776,8 +814,12 @@ export async function GET(req: NextRequest) {
   styleWorksheet(sharedSheet);
   adjustWorksheetSizing(sharedSheet);
 
-  const availabilitySheet = wb.addWorksheet("Availability");
-  availabilitySheet.addRow(AVAILABILITY_COLUMNS);
+  const availabilitySheet = wb.addWorksheet("Trip_Requests");
+  availabilitySheet.addRow(
+    AVAILABILITY_COLUMNS.map(
+      (column) => AVAILABILITY_HEADER_LABELS[column] ?? column,
+    ),
+  );
   for (const row of availabilityRows) {
     const sheetRow = availabilitySheet.addRow(
       AVAILABILITY_COLUMNS.map((column) => {
