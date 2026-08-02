@@ -5,6 +5,12 @@ export async function GET(req: NextRequest) {
   if (!id || !/^[NWR]\d+$/.test(id))
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
+  const [latText, lngText] = id.split(",");
+  const lat = Number(latText);
+  const lng = Number(lngText);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  }
   const url = new URL("https://nominatim.openstreetmap.org/lookup");
   url.searchParams.set("osm_ids", id);
   url.searchParams.set("format", "jsonv2");

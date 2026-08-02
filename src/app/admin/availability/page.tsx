@@ -15,7 +15,7 @@ export default async function AdminAvailabilityPage() {
   await connectDB();
   const records = await Availability.find()
     .sort({ createdAt: -1 })
-    .populate("driverId", "name phone")
+    .populate("driverId", "name phone userNumber")
     .lean();
 
   const driverUserIds = records
@@ -27,7 +27,9 @@ export default async function AdminAvailabilityPage() {
     .filter(Boolean) as string[];
 
   const driverDetails = driverUserIds.length
-    ? await Driver.find({ userId: { $in: driverUserIds } }).select("userId carType").lean()
+    ? await Driver.find({ userId: { $in: driverUserIds } })
+        .select("userId carType")
+        .lean() 
     : [];
 
   const carTypeByUserId = new Map<string, string>(
@@ -123,7 +125,7 @@ export default async function AdminAvailabilityPage() {
 
           <div style={{ padding: 20 }}>
             <AdminAvailabilityTable initialRecords={records.map((record) => {
-              const driverId = record.driverId
+              const userId = record.driverId
                 ? String(((record.driverId as { _id?: unknown })._id ?? record.driverId))
                 : null;
 
@@ -131,10 +133,10 @@ export default async function AdminAvailabilityPage() {
                 _id: String(record._id),
                 driver: record.driverId
                   ? {
-                      _id: driverId ?? undefined,
+                      userNumber: Number((record.driverId as { userNumber?: unknown }).userNumber ?? 0),
                       name: String((record.driverId as { name?: unknown }).name ?? ""),
                       phone: String((record.driverId as { phone?: unknown }).phone ?? ""),
-                      carType: driverId ? carTypeByUserId.get(driverId) ?? "" : "",
+                      carType: userId ? carTypeByUserId.get(userId) ?? "" : "",
                     }
                   : null,
                 date: String(record.date ?? ""),

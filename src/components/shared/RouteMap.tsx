@@ -1,14 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  GoogleMap,
-  useJsApiLoader,
-  Marker,
-  Polyline,
-} from "@react-google-maps/api";
-import { MAP_STYLE } from "@/lib/googleMapsStyle";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { LayerGroup, Map as LeafletMap } from "leaflet";
 import { MapPin } from "lucide-react";
+import { loadLeaflet, svgDataUrl, MAP_COLORS } from "@/lib/leaflet";
 
 interface LatLng {
   lat: number;
@@ -20,54 +15,49 @@ interface Props {
   dropoff?: LatLng | null;
   height?: number;
   rounded?: number;
-  /** Enable zoom/pan/scroll (detail pages). Default false = static preview (list cards). */
   interactive?: boolean;
-  /** Intermediate stop points (private ride stops) drawn between pickup and dropoff. */
   stops?: LatLng[];
-  /** Shared-ride pickup/dropoff stations, drawn with a distinct station icon and routed through. */
   stations?: LatLng[];
+  stationIconsOnly?: boolean;
 }
 
-const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+const ROUTE_COLOR = MAP_COLORS.route;
 
-// Route colour — matches book-a-trip map (ROUTE_COLORS[0])
-const ROUTE_COLOR = "#4361EE";
-
-const PICKUP_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+const PICKUP_ICON = svgDataUrl(
   `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36">
     <circle cx="18" cy="18" r="16" fill="#0B1E3D" stroke="#00C2A8" stroke-width="3"/>
     <circle cx="18" cy="18" r="6" fill="#ffffff"/>
   </svg>`,
-)}`;
+);
 
-const DROPOFF_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+const DROPOFF_ICON = svgDataUrl(
   `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="48">
     <path d="M18 0C8.06 0 0 8.06 0 18c0 13.05 18 32.4 18 32.4S36 31.05 36 18C36 8.06 27.94 0 18 0z" fill="#00C2A8"/>
     <circle cx="18" cy="18" r="8" fill="white"/>
     <circle cx="18" cy="18" r="4.5" fill="#0B1E3D"/>
   </svg>`,
-)}`;
+);
 
-const STOP_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+const STOP_ICON = svgDataUrl(
   `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
     <circle cx="12" cy="12" r="10" fill="#F5A623" stroke="#fff" stroke-width="3"/>
   </svg>`,
-)}`;
+);
 
-const STATION_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+const STATION_ICON = svgDataUrl(
   `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26">
     <rect x="3" y="3" width="20" height="20" rx="6" fill="#00C2A8" stroke="#fff" stroke-width="3"/>
     <rect x="9" y="9" width="8" height="8" rx="2" fill="#fff"/>
   </svg>`,
-)}`;
+);
 
-function valid(p?: LatLng | null): p is LatLng {
+function valid(point?: LatLng | null): point is LatLng {
   return (
-    !!p &&
-    typeof p.lat === "number" &&
-    typeof p.lng === "number" &&
-    !Number.isNaN(p.lat) &&
-    !Number.isNaN(p.lng)
+    !!point &&
+    typeof point.lat === "number" &&
+    typeof point.lng === "number" &&
+    !Number.isNaN(point.lat) &&
+    !Number.isNaN(point.lng)
   );
 }
 
@@ -100,15 +90,17 @@ export default function RouteMap({
   interactive = false,
   stops,
   stations,
+  stationIconsOnly = false,
 }: Props) {
-  const { isLoaded } = useJsApiLoader({
-    id: "google-map-script", // shared with the app's other maps
-    googleMapsApiKey: API_KEY,
-  });
-
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const layersRef = useRef<LayerGroup | null>(null);
+  const [leafletReady, setLeafletReady] = useState(false);
+  const [pathCoords, setPathCoords] = useState<LatLng[] | null>(null);
   const ok = valid(pickup) && valid(dropoff);
 
-  const [pathCoords, setPathCoords] = useState<LatLng[] | null>(null);
+  const normalizedStops = useMemo(() => (stops ?? []).filter(valid), [stops]);
+  const normalizedStations = useMemo(() => (stations ?? []).filter(valid), [stations]);
 
   useEffect(() => {
     if (!ok) {
@@ -116,13 +108,13 @@ export default function RouteMap({
       return;
     }
     let cancelled = false;
-    const p = pickup as LatLng;
-    const d = dropoff as LatLng;
-    const validStops = [...(stops ?? []), ...(stations ?? [])].filter(valid);
-    let url = `/api/directions?origin=${p.lat},${p.lng}&dest=${d.lat},${d.lng}`;
-    if (validStops.length > 0) {
-      const wp = validStops.map((s) => `${s.lat},${s.lng}`).join("|");
-      url += `&waypoints=${encodeURIComponent(wp)}`;
+    const start = pickup as LatLng;
+    const end = dropoff as LatLng;
+    const viaPoints = [...normalizedStops, ...normalizedStations];
+    let url = `/api/directions?origin=${start.lat},${start.lng}&dest=${end.lat},${end.lng}`;
+    if (viaPoints.length > 0) {
+      const waypoints = viaPoints.map((point) => `${point.lat},${point.lng}`).join("|");
+      url += `&waypoints=${encodeURIComponent(waypoints)}`;
     }
     fetch(url)
       .then((res) => (res.ok ? res.json() : []))
@@ -141,143 +133,155 @@ export default function RouteMap({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    ok,
-    pickup?.lat,
-    pickup?.lng,
-    dropoff?.lat,
-    dropoff?.lng,
-    JSON.stringify(stops ?? []),
-    JSON.stringify(stations ?? []),
-  ]);
+  }, [dropoff, normalizedStations, normalizedStops, ok, pickup]);
 
-  const mapRef = useRef<google.maps.Map | null>(null);
-
-  const fit = useCallback(
-    (map: google.maps.Map) => {
-      if (!valid(pickup) || !valid(dropoff)) return;
-      const bounds = new google.maps.LatLngBounds();
-      if (pathCoords?.length) {
-        pathCoords.forEach((c) => bounds.extend(c));
-      } else {
-        bounds.extend(pickup);
-        bounds.extend(dropoff);
-      }
-      stops?.forEach((s) => {
-        if (valid(s)) bounds.extend(s);
-      });
-      stations?.forEach((s) => {
-        if (valid(s)) bounds.extend(s);
-      });
-      map.fitBounds(bounds, 36);
-    },
-    [pickup, dropoff, pathCoords, stops, stations],
-  );
-
-  const onLoad = useCallback(
-    (map: google.maps.Map) => {
-      mapRef.current = map;
-      fit(map);
-    },
-    [fit],
-  );
-
-  // Refit once the real road path arrives
   useEffect(() => {
-    if (mapRef.current) fit(mapRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathCoords]);
+    if (!mapContainerRef.current || mapRef.current || !ok) return;
+    let disposed = false;
 
-  if (!ok || !API_KEY || !isLoaded) {
+    loadLeaflet().then((L) => {
+      if (disposed || !mapContainerRef.current) return;
+      const map = L.map(mapContainerRef.current, {
+        zoomControl: interactive,
+        attributionControl: interactive,
+        dragging: interactive,
+        scrollWheelZoom: interactive,
+        doubleClickZoom: interactive,
+        boxZoom: interactive,
+        keyboard: interactive,
+        touchZoom: interactive,
+      });
+
+      L.tileLayer(MAP_COLORS.tileUrl, {
+        attribution: MAP_COLORS.tileAttribution,
+        maxZoom: 19,
+      }).addTo(map);
+
+      mapRef.current = map;
+      layersRef.current = L.layerGroup().addTo(map);
+      setLeafletReady(true);
+    });
+
+    return () => {
+      disposed = true;
+      layersRef.current?.clearLayers();
+      layersRef.current = null;
+      mapRef.current?.remove();
+      mapRef.current = null;
+      setLeafletReady(false);
+    };
+  }, [interactive, ok]);
+
+  useEffect(() => {
+    if (!ok || !mapRef.current || !layersRef.current) return;
+    let disposed = false;
+
+    loadLeaflet().then((L) => {
+      if (disposed || !mapRef.current || !layersRef.current) return;
+      const map = mapRef.current;
+      const layers = layersRef.current;
+      layers.clearLayers();
+
+      const routePoints = pathCoords?.length
+        ? pathCoords.map((point) => [point.lat, point.lng] as [number, number])
+        : [
+            [pickup!.lat, pickup!.lng] as [number, number],
+            ...normalizedStops.map((point) => [point.lat, point.lng] as [number, number]),
+            ...normalizedStations.map((point) => [point.lat, point.lng] as [number, number]),
+            [dropoff!.lat, dropoff!.lng] as [number, number],
+          ];
+
+      if (routePoints.length > 1) {
+        L.polyline(routePoints, {
+          color: ROUTE_COLOR,
+          opacity: 0.15,
+          weight: 14,
+        }).addTo(layers);
+        L.polyline(routePoints, {
+          color: ROUTE_COLOR,
+          opacity: 0.9,
+          weight: 5,
+        }).addTo(layers);
+      }
+
+      const stationMode = stationIconsOnly || normalizedStations.length > 0;
+      const pickupIcon = L.icon({
+        iconUrl: stationMode ? STATION_ICON : PICKUP_ICON,
+        iconSize: stationMode ? [28, 28] : [36, 36],
+        iconAnchor: stationMode ? [14, 14] : [18, 18],
+      });
+      const dropoffIcon = L.icon({
+        iconUrl: stationMode ? STATION_ICON : DROPOFF_ICON,
+        iconSize: stationMode ? [28, 28] : [36, 48],
+        iconAnchor: stationMode ? [14, 14] : [18, 48],
+      });
+      const stopIcon = L.icon({
+        iconUrl: STOP_ICON,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+      const stationIcon = L.icon({
+        iconUrl: STATION_ICON,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+
+      L.marker([pickup!.lat, pickup!.lng], { icon: pickupIcon }).addTo(layers);
+      L.marker([dropoff!.lat, dropoff!.lng], { icon: dropoffIcon }).addTo(layers);
+      normalizedStops.forEach((point) => {
+        L.marker([point.lat, point.lng], { icon: stopIcon }).addTo(layers);
+      });
+      normalizedStations.forEach((point) => {
+        L.marker([point.lat, point.lng], { icon: stationIcon }).addTo(layers);
+      });
+
+      const bounds = L.latLngBounds([
+        [pickup!.lat, pickup!.lng],
+        [dropoff!.lat, dropoff!.lng],
+      ]);
+      normalizedStops.forEach((point) => bounds.extend([point.lat, point.lng]));
+      normalizedStations.forEach((point) => bounds.extend([point.lat, point.lng]));
+      routePoints.forEach((point) => bounds.extend(point));
+      map.fitBounds(bounds, { padding: [36, 36] });
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [dropoff, normalizedStations, normalizedStops, ok, pathCoords, pickup, stationIconsOnly]);
+
+  if (!ok) {
     return <Placeholder height={height} rounded={rounded} />;
   }
 
   return (
-    <div style={{ height, borderRadius: rounded, overflow: "hidden" }}>
-      <GoogleMap
-        mapContainerStyle={{ width: "100%", height: "100%" }}
-        center={pickup as LatLng}
-        zoom={13}
-        onLoad={onLoad}
-        options={{
-          styles: MAP_STYLE,
-          disableDefaultUI: !interactive,
-          zoomControl: interactive,
-          streetViewControl: false,
-          mapTypeControl: false,
-          fullscreenControl: false,
-          gestureHandling: interactive ? "greedy" : "none",
-          keyboardShortcuts: interactive,
-          clickableIcons: false,
-          draggable: interactive,
-        }}
-      >
-        {pathCoords && (
-          <>
-            <Polyline
-              path={pathCoords}
-              options={{
-                strokeColor: ROUTE_COLOR,
-                strokeOpacity: 0.15,
-                strokeWeight: 14,
-                zIndex: 1,
-              }}
-            />
-            <Polyline
-              path={pathCoords}
-              options={{
-                strokeColor: ROUTE_COLOR,
-                strokeOpacity: 0.9,
-                strokeWeight: 5,
-                zIndex: 2,
-              }}
-            />
-          </>
-        )}
-        <Marker
-          position={pickup as LatLng}
-          icon={{
-            url: PICKUP_ICON,
-            scaledSize: new google.maps.Size(36, 36),
-            anchor: new google.maps.Point(18, 18),
+    <div
+      style={{
+        height,
+        borderRadius: rounded,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
+      {!leafletReady && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(135deg, #eef2f6 0%, #dfe7ee 50%, #eef2f6 100%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#5A6A7A",
+            fontSize: 12,
+            fontWeight: 600,
           }}
-        />
-        <Marker
-          position={dropoff as LatLng}
-          icon={{
-            url: DROPOFF_ICON,
-            scaledSize: new google.maps.Size(36, 48),
-            anchor: new google.maps.Point(18, 48),
-          }}
-        />
-        {stops
-          ?.filter(valid)
-          .map((s, i) => (
-            <Marker
-              key={i}
-              position={s}
-              icon={{
-                url: STOP_ICON,
-                scaledSize: new google.maps.Size(24, 24),
-                anchor: new google.maps.Point(12, 12),
-              }}
-            />
-          ))}
-        {stations
-          ?.filter(valid)
-          .map((s, i) => (
-            <Marker
-              key={`station-${i}`}
-              position={s}
-              icon={{
-                url: STATION_ICON,
-                scaledSize: new google.maps.Size(26, 26),
-                anchor: new google.maps.Point(13, 13),
-              }}
-            />
-          ))}
-      </GoogleMap>
+        >
+          Loading map...
+        </div>
+      )}
     </div>
   );
 }

@@ -114,7 +114,7 @@ export default function PrivateRideDetails({
             <RideDetailRow
               icon={<MapPin size={15} />}
               color="#F5A623"
-              headline={`Stop ${i + 1}`}
+              headline="Station"
               value={s.point.address}
             />
             <div

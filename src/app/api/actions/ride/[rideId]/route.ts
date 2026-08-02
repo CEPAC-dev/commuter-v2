@@ -21,7 +21,7 @@ interface RideRouteStop {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ rideId: string }> },
+  context: { params: Promise<{ rideId: string }> },
 ) {
   try {
     const session = await getSession();
@@ -34,7 +34,7 @@ export async function GET(
 
     await connectDB();
 
-    const { rideId } = await params;
+    const { rideId } = await context.params;
 
     // Fetch ride
     const ride = await Ride.findById(rideId)
@@ -249,7 +249,7 @@ function getNextPrivateRideAction(ride: any, logs: any[], lastLog: any) {
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ rideId: string }> },
+  context: { params: Promise<{ rideId: string }> },
 ) {
   try {
     const session = await getSession();
@@ -262,7 +262,7 @@ export async function POST(
 
     await connectDB();
 
-    const { rideId } = await params;
+    const { rideId } = await context.params;
     const body = await request.json();
 
     // Fetch ride
@@ -295,7 +295,7 @@ export async function POST(
     } = body;
 
     const driverId = ride.driverId;
-    const tripIds = ride.passengers.map((p: { tripId: unknown }) => p.tripId);
+    const tripIds = ride.passengers.map((p: any) => p.tripId);
 
     let result: any = { success: false };
 
@@ -304,8 +304,12 @@ export async function POST(
         // Log ride start for all trips
         await rideActions.logRideStarted(rideId, tripIds, driverId, metadata);
 
-        // Update ride status
-        await Ride.findByIdAndUpdate(rideId, { status: "active" });
+        // Update ride status and driverOrigin
+        const originLoc = metadata?.currentLocation ?? null;
+        await Ride.findByIdAndUpdate(rideId, {
+          status: "active",
+          ...(originLoc ? { driverOrigin: originLoc } : {}),
+        });
         result = {
           success: true,
           message: "Ride started",
@@ -314,7 +318,11 @@ export async function POST(
         break;
 
       case "station_arrived":
-        if (!stationIndex || !stationName) {
+        if (
+          stationIndex === undefined ||
+          stationIndex === null ||
+          !stationName
+        ) {
           return NextResponse.json(
             { success: false, error: "Missing stationIndex or stationName" },
             { status: 400 },
@@ -331,9 +339,39 @@ export async function POST(
           metadata,
         );
 
+        // Update statuses for passengers boarding or alighting at this station
+        const currentRideDoc = await Ride.findById(rideId);
+        if (currentRideDoc && currentRideDoc.passengers) {
+          let updatedPassengers = false;
+          for (const p of currentRideDoc.passengers) {
+            const pPickupIdx = p.pickupOrder ?? 0;
+            const pDropoffIdx = p.dropoffOrder ?? 0;
+            const pPickupName = (p.pickupStation as any)?.name;
+            const pDropoffName = (p.dropoffStation as any)?.name;
+
+            const isPickup =
+              pPickupIdx === stationIndex || pPickupName === stationName;
+            const isDropoff =
+              pDropoffIdx === stationIndex || pDropoffName === stationName;
+
+            if (isPickup) {
+              p.status = "picked_up";
+              updatedPassengers = true;
+              await Trip.findByIdAndUpdate(p.tripId, { status: "active" });
+            } else if (isDropoff) {
+              p.status = "dropped_off";
+              updatedPassengers = true;
+              await Trip.findByIdAndUpdate(p.tripId, { status: "completed" });
+            }
+          }
+          if (updatedPassengers) {
+            await currentRideDoc.save();
+          }
+        }
+
         result = {
           success: true,
-          message: `Arrived at ${stationName}`,
+          message: `Arrived and confirmed passenger rides at ${stationName}`,
           action: "station_arrived",
           nextAction: "boarding_alighting",
         };
@@ -352,7 +390,8 @@ export async function POST(
           boardingCount === null ||
           alightingCount === undefined ||
           alightingCount === null ||
-          !stationIndex ||
+          stationIndex === undefined ||
+          stationIndex === null ||
           !stationName
         ) {
           return NextResponse.json(
@@ -476,7 +515,11 @@ export async function POST(
           );
         }
 
-        if (!stationIndex || !stationName) {
+        if (
+          stationIndex === undefined ||
+          stationIndex === null ||
+          !stationName
+        ) {
           return NextResponse.json(
             { success: false, error: "Missing stationIndex or stationName" },
             { status: 400 },
@@ -504,8 +547,12 @@ export async function POST(
         // Log ride completion for all trips
         await rideActions.logRideCompleted(rideId, tripIds, driverId, metadata);
 
-        // Update ride status
-        await Ride.findByIdAndUpdate(rideId, { status: "completed" });
+        // Update ride status and driverDestination
+        const destLoc = metadata?.currentLocation ?? null;
+        await Ride.findByIdAndUpdate(rideId, {
+          status: "completed",
+          ...(destLoc ? { driverDestination: destLoc } : {}),
+        });
 
         // Update all trip statuses to completed
         await Trip.updateMany({ rideId }, { status: "completed" });

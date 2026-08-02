@@ -59,4 +59,4 @@
 
 ## Source File
 
-All map layer styles are defined in [`src/lib/googleMapsStyle.ts`](src/lib/googleMapsStyle.ts).
+All map colors are defined in [`src/lib/leaflet.ts`](src/lib/leaflet.ts) as `MAP_COLORS`, and map tiles are rendered via Leaflet/OpenStreetMap.

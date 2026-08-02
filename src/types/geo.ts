@@ -17,6 +17,7 @@ export interface StationSelection {
   id: number;
   name: string;
   direction?: string;
+  landmark?: string;
   stationType: string;
   lat: number;
   lng: number;

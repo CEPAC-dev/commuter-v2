@@ -10,19 +10,16 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("lat", lat);
   url.searchParams.set("lon", lng);
   url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("zoom", "18");
+  url.searchParams.set("accept-language", "en");
 
-  const res = await fetch(url, {
+  const res = await fetch(url.toString(), {
     headers: {
-      "Accept-Language": "en",
-      "User-Agent": "Commuter/0.1 (local development)",
+      "User-Agent": "Commuter/1.0 (OpenStreetMap reverse geocode)",
+      Referer: process.env.APP_URL ?? "http://localhost:3000",
     },
-    next: { revalidate: 3600 },
+    next: { revalidate: 60 },
   });
-  if (!res.ok) {
-    console.error("[geocode/reverse] Nominatim", res.status);
-    return NextResponse.json({ error: "upstream" }, { status: 502 });
-  }
+  if (!res.ok) return NextResponse.json({ error: "upstream" }, { status: 502 });
 
   const data = (await res.json()) as { display_name?: string };
   const address = data.display_name ?? `${lat}, ${lng}`;

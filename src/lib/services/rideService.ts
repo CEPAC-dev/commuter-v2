@@ -269,6 +269,7 @@ function toStation(
     stationType:
       typeof raw.stationType === "string" ? raw.stationType : "station",
     direction: typeof raw.direction === "string" ? raw.direction : undefined,
+    landmark: typeof raw.landmark === "string" ? raw.landmark : undefined,
   };
 }
 
@@ -331,6 +332,8 @@ function mapRideToDetailView(ride: Record<string, any>): RideDetailView {
     })),
     pickupStation: toStation(ride.pickupStation),
     dropoffStation: toStation(ride.dropoffStation),
+    driverOrigin: toGeoPoint(ride.driverOrigin),
+    driverDestination: toGeoPoint(ride.driverDestination),
     chatTripId: passengers[0]?.tripId ?? null,
     createdAt:
       ride.createdAt instanceof Date
@@ -360,6 +363,8 @@ async function getDriverRide(
   if (!ride) return null;
 
   const { User } = await import("@/models/User");
+  const { Station } = await import("@/models/Station");
+
   const userIds = (ride.passengers ?? [])
     .map((p: any) => p.userId)
     .filter(Boolean);
@@ -368,10 +373,41 @@ async function getDriverRide(
     .lean<{ _id: unknown; name?: string; phone?: string }[]>();
   const userById = new Map(users.map((u) => [String(u._id), u]));
 
+  // Look up station details from Station collection
+  const stationIds: number[] = [];
+  if (ride.pickupStation?.id) stationIds.push(ride.pickupStation.id);
+  if (ride.dropoffStation?.id) stationIds.push(ride.dropoffStation.id);
+  for (const p of ride.passengers ?? []) {
+    if (p.pickupStation?.id) stationIds.push(p.pickupStation.id);
+    if (p.dropoffStation?.id) stationIds.push(p.dropoffStation.id);
+  }
+
+  const stationDocs = stationIds.length > 0
+    ? await Station.find({ objectId: { $in: stationIds } }).lean<any[]>()
+    : [];
+  const stationById = new Map(stationDocs.map((s) => [s.objectId, s]));
+
+  const enrichStation = (st: any) => {
+    if (!st) return st;
+    const doc = stationById.get(st.id);
+    if (!doc) return st;
+    return {
+      ...st,
+      direction: st.direction || doc.direction,
+      landmark: st.landmark || doc.landmark,
+      stationType: st.stationType || doc.stationType,
+      name: st.name || doc.name,
+    };
+  };
+
   const rideWithUserNames = {
     ...ride,
+    pickupStation: enrichStation(ride.pickupStation),
+    dropoffStation: enrichStation(ride.dropoffStation),
     passengers: (ride.passengers ?? []).map((p: any) => ({
       ...p,
+      pickupStation: enrichStation(p.pickupStation),
+      dropoffStation: enrichStation(p.dropoffStation),
       passengerName: userById.get(String(p.userId))?.name ?? `Passenger #${p.pickupOrder}`,
     })),
   };
@@ -615,7 +651,15 @@ async function removePassengerFromRide(
 
     await Trip.findByIdAndUpdate(
       tripId,
-      { $set: { rideId: null, status: "submitted" } },
+      {
+        $set: {
+          rideId: null,
+          status: "submitted",
+          driverId: null,
+          assignedDriver: null,
+          seatNumbers: [],
+        },
+      },
       { session },
     );
     await ride.save({ session });
@@ -658,6 +702,9 @@ async function cancelRide(rideId: string | Types.ObjectId, reason?: string) {
   try {
     const ride = await Ride.findById(rideId).session(session);
     if (!ride) throw new Error("Ride not found");
+    if (ride.status === "completed") {
+      throw new Error("Completed rides cannot be deleted");
+    }
 
     // set status
     ride.status = "cancelled" as any;
@@ -672,7 +719,15 @@ async function cancelRide(rideId: string | Types.ObjectId, reason?: string) {
 
     await Trip.updateMany(
       { _id: { $in: tripIds } },
-      { $set: { rideId: null, status: "submitted" } },
+      {
+        $set: {
+          rideId: null,
+          status: "submitted",
+          driverId: null,
+          assignedDriver: null,
+          seatNumbers: [],
+        },
+      },
       { session },
     );
 

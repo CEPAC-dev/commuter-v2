@@ -8,6 +8,13 @@ type PointLike = {
   lng?: number;
 };
 
+type StationLike = {
+  id?: number;
+  name?: string;
+  lat: number;
+  lng: number;
+};
+
 type TripOption = {
   _id: string;
   tripNumber?: number;
@@ -16,6 +23,8 @@ type TripOption = {
   arrivalTime: string;
   pickup: PointLike;
   dropoff: PointLike;
+  pickupStation?: StationLike;
+  dropoffStation?: StationLike;
   vehicleType: string;
   rideType: string;
   priceEgp: number;
@@ -141,14 +150,22 @@ export default function MatchRideForm({
       const pickupId = `pickup-${tripId}`;
       const dropoffId = `dropoff-${tripId}`;
 
+      // Shared rides route via stations, not raw origin/destination
+      const pickupPoint = trip.pickupStation
+        ? { lat: trip.pickupStation.lat, lng: trip.pickupStation.lng, address: trip.pickupStation.name ?? "Pickup station" }
+        : trip.pickup;
+      const dropoffPoint = trip.dropoffStation
+        ? { lat: trip.dropoffStation.lat, lng: trip.dropoffStation.lng, address: trip.dropoffStation.name ?? "Dropoff station" }
+        : trip.dropoff;
+
       if (!currentIds.has(pickupId)) {
         newPoints.push({
           id: pickupId,
           type: "pickup",
           tripId,
           tripNumber: trip.tripNumber,
-          address: trip.pickup?.address ?? "Pickup location",
-          point: trip.pickup,
+          address: trip.pickupStation?.name ?? trip.pickup?.address ?? "Pickup location",
+          point: pickupPoint,
         });
       }
 
@@ -158,8 +175,8 @@ export default function MatchRideForm({
           type: "dropoff",
           tripId,
           tripNumber: trip.tripNumber,
-          address: trip.dropoff?.address ?? "Dropoff location",
-          point: trip.dropoff,
+          address: trip.dropoffStation?.name ?? trip.dropoff?.address ?? "Dropoff location",
+          point: dropoffPoint,
         });
       }
     });

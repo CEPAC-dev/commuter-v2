@@ -27,8 +27,8 @@ function setCached(key: string, value: string): void {
   }
 }
 
-// ── Fallback: Google Directions API via /api/directions ───────────────────
-async function fetchRouteViaGoogle(
+// ── Fallback: internal directions proxy via /api/directions ───────────────
+async function fetchRouteViaProxy(
   waypoints: { lat: number; lng: number }[],
 ): Promise<ORSRoute[]> {
   const origin = `${waypoints[0].lat},${waypoints[0].lng}`;
@@ -99,14 +99,14 @@ export async function fetchRoute(
 
   const apiKey = process.env.NEXT_PUBLIC_ORS_API_KEY;
 
-  // ── No ORS key — fall back to Google Directions ──────────────────────────
+  // ── No ORS key — fall back to the internal OSM directions proxy ─────────
   if (!apiKey) {
     try {
-      const routes = await fetchRouteViaGoogle(valid);
+      const routes = await fetchRouteViaProxy(valid);
       setCached(`ors:${cacheKey}`, JSON.stringify(routes));
       return routes;
     } catch (err) {
-      console.error("[Route] Google fallback failed:", err);
+      console.error("[Route] Directions proxy fallback failed:", err);
       return [];
     }
   }
@@ -127,7 +127,7 @@ export async function fetchRoute(
     if (!res.ok) {
       const text = await res.text();
       console.error(`[ORS] HTTP ${res.status}:`, text);
-      return fetchRouteViaGoogle(valid)
+      return fetchRouteViaProxy(valid)
         .then((r) => {
           setCached(`ors:${cacheKey}`, JSON.stringify(r));
           return r;
@@ -157,13 +157,13 @@ export async function fetchRoute(
     return routes;
   } catch (err) {
     console.error("[ORS] Fetch error:", err);
-    // Network error (no connectivity, timeout, CORS, etc.) — fall back to Google
+    // Network error (no connectivity, timeout, CORS, etc.) — fall back to /api/directions
     try {
-      const routes = await fetchRouteViaGoogle(valid);
+      const routes = await fetchRouteViaProxy(valid);
       if (routes.length) setCached(`ors:${cacheKey}`, JSON.stringify(routes));
       return routes;
     } catch (fallbackErr) {
-      console.error("[Route] Google fallback also failed:", fallbackErr);
+      console.error("[Route] Directions proxy fallback also failed:", fallbackErr);
       return [];
     }
   }

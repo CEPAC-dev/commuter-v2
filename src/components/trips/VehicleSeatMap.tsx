@@ -9,6 +9,8 @@ interface Props {
   vehicleType?: string;
   isDriver?: boolean;
   assignedSeatNumbers?: number[];
+  activeStationIndex?: number | null;
+  rideStarted?: boolean;
 }
 
 export interface SeatGridCell {
@@ -30,7 +32,6 @@ export function getVehicleSeatGrid(vType: string): {
   const isVan = vType === "van_shared";
 
   if (isCarOrTaxi) {
-    // Front: Driver + Seat 1. Back: Seat 2 + Seat 3 (Total 3 seats)
     return {
       label: "Private Car / Taxi",
       totalSeats: 3,
@@ -48,7 +49,6 @@ export function getVehicleSeatGrid(vType: string): {
   }
 
   if (isVan) {
-    // Front: Driver + Seat 1. Row 1: Seat 2 + Seat 3. Row 2: Seat 4 + Seat 5 (Total 5 seats)
     return {
       label: "Van",
       totalSeats: 5,
@@ -69,7 +69,6 @@ export function getVehicleSeatGrid(vType: string): {
     };
   }
 
-  // Microbus: 2, 2, 2, 2 and 1 (Total 9 seats)
   return {
     label: "Microbus",
     totalSeats: 9,
@@ -103,6 +102,8 @@ export default function VehicleSeatMap({
   vehicleType = "taxi_shared",
   isDriver = false,
   assignedSeatNumbers = [],
+  activeStationIndex = null,
+  rideStarted = false,
 }: Props) {
   const vType = ride?.vehicleType ?? vehicleType;
   const grid = getVehicleSeatGrid(vType);
@@ -172,7 +173,9 @@ export default function VehicleSeatMap({
             }}
           >
             {isDriver
-              ? "Tap any chair to view passenger & trip details"
+              ? rideStarted
+                ? "Live chair status: Empty, Boarding, Alighting, Onboard"
+                : "All chairs empty until ride starts"
               : "Your assigned seat position on board"}
           </p>
         </div>
@@ -280,18 +283,64 @@ export default function VehicleSeatMap({
                 const isSelected = selectedSeat === seatNo;
                 const isMySeat = !isDriver && assignedSeatNumbers.includes(seatNo);
 
-                let bg = "#fff";
+                let bg = "#F8FAFC";
                 let borderColor = "#CBD5E1";
-                let color = "#5A6A7A";
+                let color = "#64748B";
+                let labelText = "Empty";
 
                 if (isMySeat) {
                   bg = "#E8F8F5";
                   borderColor = "#00C2A8";
                   color = "#00806E";
-                } else if (isDriver && isOccupied) {
-                  bg = "#EFF6FF";
-                  borderColor = "#3B82F6";
-                  color = "#1E40AF";
+                  labelText = "YOUR SEAT";
+                } else if (isDriver) {
+                  if (!rideStarted || !isOccupied) {
+                    // Before ride start or empty seat: neutral empty state
+                    bg = "#F8FAFC";
+                    borderColor = "#CBD5E1";
+                    color = "#64748B";
+                    labelText = "Empty";
+                  } else {
+                    const stIdx = activeStationIndex ?? 0;
+                    const pIdx = passenger?.pickupOrder ?? 1;
+                    const dIdx = passenger?.dropoffOrder ?? 99;
+
+                    if (activeStationIndex === null) {
+                      bg = "#F8FAFC";
+                      borderColor = "#CBD5E1";
+                      color = "#64748B";
+                      labelText = "Empty";
+                    } else if (pIdx === stIdx) {
+                      // Green: Boarding at this station
+                      bg = "#E8F8F5";
+                      borderColor = "#27AE60";
+                      color = "#196F3D";
+                      labelText = "Boarding";
+                    } else if (dIdx === stIdx) {
+                      // Red: Alighting at this station
+                      bg = "#FFEBEE";
+                      borderColor = "#E74C3C";
+                      color = "#C0392B";
+                      labelText = "Alighting";
+                    } else if (pIdx < stIdx && dIdx > stIdx) {
+                      // Blue: Onboard (picked up earlier, continuing)
+                      bg = "#EFF6FF";
+                      borderColor = "#2F80ED";
+                      color = "#1D4ED8";
+                      labelText = "Onboard";
+                    } else if (pIdx > stIdx) {
+                      bg = "#F8FAFC";
+                      borderColor = "#CBD5E1";
+                      color = "#64748B";
+                      labelText = "Empty";
+                    } else {
+                      // Neutral empty state
+                      bg = "#F8FAFC";
+                      borderColor = "#CBD5E1";
+                      color = "#64748B";
+                      labelText = "Empty";
+                    }
+                  }
                 }
 
                 if (isSelected) {
@@ -352,9 +401,7 @@ export default function VehicleSeatMap({
                       {isMySeat
                         ? "YOUR SEAT"
                         : isDriver
-                        ? isOccupied
-                          ? passenger?.passengerName ?? "Occupied"
-                          : "Empty"
+                        ? labelText
                         : ""}
                     </span>
                   </button>
@@ -394,7 +441,7 @@ export default function VehicleSeatMap({
                   width: 10,
                   height: 10,
                   borderRadius: 3,
-                  background: "#fff",
+                  background: "#F8FAFC",
                   border: "1px solid #CBD5E1",
                 }}
               />
@@ -408,12 +455,40 @@ export default function VehicleSeatMap({
                   width: 10,
                   height: 10,
                   borderRadius: 3,
-                  background: "#EFF6FF",
-                  border: "1px solid #3B82F6",
+                  background: "#E8F8F5",
+                  border: "1px solid #27AE60",
                 }}
               />
-              <span style={{ fontSize: 11, color: "#5A6A7A", fontWeight: 600 }}>
-                Occupied
+              <span style={{ fontSize: 11, color: "#196F3D", fontWeight: 700 }}>
+                Boarding
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 3,
+                  background: "#FFEBEE",
+                  border: "1px solid #E74C3C",
+                }}
+              />
+              <span style={{ fontSize: 11, color: "#C0392B", fontWeight: 700 }}>
+                Alighting
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 3,
+                  background: "#EFF6FF",
+                  border: "1px solid #2F80ED",
+                }}
+              />
+              <span style={{ fontSize: 11, color: "#1D4ED8", fontWeight: 700 }}>
+                Onboard
               </span>
             </div>
           </>
