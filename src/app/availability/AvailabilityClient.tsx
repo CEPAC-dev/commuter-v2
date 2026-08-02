@@ -56,6 +56,12 @@ function isLocked(dateISO: string): boolean {
 }
 
 const ADMIN_CONTACT = "support@commuter.app";
+const MORNING_TIME_MIN = "06:00";
+const MORNING_TIME_MAX = "23:59";
+
+function isOutsideMorningWindow(value: string): boolean {
+  return value < MORNING_TIME_MIN || value > MORNING_TIME_MAX;
+}
 const labelStyle: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 600,
@@ -94,7 +100,7 @@ export default function AvailabilityClient({
   const [startLocation, setStartLocation] = useState<TripPoint | null>(null);
   const [endLocation, setEndLocation] = useState<TripPoint | null>(null);
   const [startTime, setStartTime] = useState("07:00");
-  const [endTime, setEndTime] = useState("17:00");
+  const [endTime, setEndTime] = useState("12:00");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -153,6 +159,38 @@ export default function AvailabilityClient({
     setPicking(null);
   }
 
+  function handleStartTimeChange(nextStartTime: string) {
+    if (!nextStartTime) {
+      setStartTime("");
+      return;
+    }
+    if (isOutsideMorningWindow(nextStartTime)) {
+      setStartTime("");
+      setError(
+        "Start time must be between 06:00 AM and 12:00 AM (next day). Please reselect a valid time.",
+      );
+      return;
+    }
+    setStartTime(nextStartTime);
+    if (error.includes("Please reselect a valid time.")) setError("");
+  }
+
+  function handleEndTimeChange(nextEndTime: string) {
+    if (!nextEndTime) {
+      setEndTime("");
+      return;
+    }
+    if (isOutsideMorningWindow(nextEndTime)) {
+      setEndTime("");
+      setError(
+        "End time must be between 06:00 AM and 12:00 AM (next day). Please reselect a valid time.",
+      );
+      return;
+    }
+    setEndTime(nextEndTime);
+    if (error.includes("Please reselect a valid time.")) setError("");
+  }
+
   async function handleSubmit() {
     if (!selectedDates.length) {
       setError("Select at least one date.");
@@ -164,6 +202,17 @@ export default function AvailabilityClient({
     }
     if (!startTime || !endTime) {
       setError("Start and end time are required.");
+      return;
+    }
+    if (
+      startTime < MORNING_TIME_MIN ||
+      startTime > MORNING_TIME_MAX ||
+      endTime < MORNING_TIME_MIN ||
+      endTime > MORNING_TIME_MAX
+    ) {
+      setError(
+        "Start and end time must be between 06:00 AM and 12:00 AM (next day).",
+      );
       return;
     }
     if (startTime >= endTime) {
@@ -686,7 +735,9 @@ export default function AvailabilityClient({
                 id="a-start-time"
                 type="time"
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                min={MORNING_TIME_MIN}
+                max={MORNING_TIME_MAX}
+                onChange={(e) => handleStartTimeChange(e.target.value)}
                 style={inputStyle}
               />
             </div>
@@ -701,7 +752,9 @@ export default function AvailabilityClient({
                 id="a-end-time"
                 type="time"
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                min={MORNING_TIME_MIN}
+                max={MORNING_TIME_MAX}
+                onChange={(e) => handleEndTimeChange(e.target.value)}
                 style={inputStyle}
               />
             </div>

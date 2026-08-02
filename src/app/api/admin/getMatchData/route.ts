@@ -336,6 +336,17 @@ export async function GET(req: NextRequest) {
   let nextPrivateStationNumber = 7000;
   let nextAvailabilityStationNumber = 8000;
   const syntheticStations: StationInfo[] = [];
+  const syntheticStationKeyToId = new Map<string, number>();
+
+  function buildSyntheticStationKey(
+    point: { lat: number; lng: number; address?: string | null },
+  ) {
+    return [
+      point.lat.toFixed(6),
+      point.lng.toFixed(6),
+      (point.address ?? "").trim().replace(/\s+/g, " "),
+    ].join("|");
+  }
 
   function addSyntheticStation(
     objectId: number,
@@ -345,12 +356,17 @@ export async function GET(req: NextRequest) {
       | undefined,
   ): number | null {
     if (point?.lat == null || point?.lng == null) return null;
+    const key = buildSyntheticStationKey(point);
+    const existingId = syntheticStationKeyToId.get(key);
+    if (existingId != null) return existingId;
+
     syntheticStations.push({
       objectId,
       name: point.address ?? "",
       lat: point.lat,
       lng: point.lng,
     });
+    syntheticStationKeyToId.set(key, objectId);
     return objectId;
   }
 

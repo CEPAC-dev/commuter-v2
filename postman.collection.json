@@ -1,90 +1,324 @@
 {
-  "info": {
-    "name": "Commuter Admin Trips",
-    "description": "Temporary public admin trip APIs. Add auth before production use.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3000" },
-    { "key": "tripId", "value": "REPLACE_WITH_TRIP_OBJECT_ID" },
-    { "key": "userId", "value": "REPLACE_WITH_USER_OBJECT_ID" },
-    { "key": "tripNumber", "value": "1001" }
-  ],
-  "item": [
-    {
-      "name": "List trips - populated",
-      "request": {
-        "method": "GET",
-        "url": "{{baseUrl}}/api/admin/trips?page=1&limit=20"
-      }
+    "info": {
+        "name": "Commuter Admin APIs",
+        "description": "All /api/admin endpoints. Run Admin Login first; Postman retains auth cookie. Replace ObjectId variables with real MongoDB IDs.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
-    {
-      "name": "Filter trips by user",
-      "request": {
-        "method": "GET",
-        "url": "{{baseUrl}}/api/admin/trips?userId={{userId}}"
-      }
-    },
-    {
-      "name": "Filter trips by trip number",
-      "request": {
-        "method": "GET",
-        "url": "{{baseUrl}}/api/admin/trips?tripNumber={{tripNumber}}"
-      }
-    },
-    {
-      "name": "Filter trips by fields",
-      "request": {
-        "method": "GET",
-        "url": "{{baseUrl}}/api/admin/trips?driverId=REPLACE_WITH_DRIVER_OBJECT_ID&requestId=REPLACE_WITH_REQUEST_OBJECT_ID&rideId=REPLACE_WITH_RIDE_OBJECT_ID&date=2026-08-01&vehicleType=private_car&rideType=private&paymentStatus=paid&status=completed&createdAtFrom=2026-08-01T00:00:00.000Z&createdAtTo=2026-08-01T23:59:59.999Z"
-      }
-    },
-    {
-      "name": "Get trip by ID - populated",
-      "request": {
-        "method": "GET",
-        "url": "{{baseUrl}}/api/admin/trips/{{tripId}}"
-      }
-    },
-    {
-      "name": "Delete trip by ID",
-      "request": {
-        "method": "DELETE",
-        "url": "{{baseUrl}}/api/admin/trips/{{tripId}}",
-        "description": "No request body."
-      }
-    },
-    {
-      "name": "Delete trips by user",
-      "request": {
-        "method": "DELETE",
-        "url": "{{baseUrl}}/api/admin/trips?action=by-user&userId={{userId}}",
-        "description": "No request body. Deletes every trip owned by userId."
-      }
-    },
-    {
-      "name": "Delete trip by trip number",
-      "request": {
-        "method": "DELETE",
-        "url": "{{baseUrl}}/api/admin/trips?action=by-trip-number&tripNumber={{tripNumber}}",
-        "description": "No request body."
-      }
-    },
-    {
-      "name": "Delete today's trips",
-      "request": {
-        "method": "DELETE",
-        "url": "{{baseUrl}}/api/admin/trips?action=today",
-        "description": "No request body. Uses server local day from createdAt."
-      }
-    },
-    {
-      "name": "Delete trips not created today",
-      "request": {
-        "method": "DELETE",
-        "url": "{{baseUrl}}/api/admin/trips?action=not-today",
-        "description": "No request body. Keeps only trips created today by server local day."
-      }
-    }
-  ]
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:3000"
+        },
+        {
+            "key": "adminPhone",
+            "value": "01000000000"
+        },
+        {
+            "key": "adminPassword",
+            "value": "AdminPass123"
+        },
+        {
+            "key": "adminInviteCode",
+            "value": "REPLACE_WITH_ADMIN_INVITE_CODE"
+        },
+        {
+            "key": "userId",
+            "value": "REPLACE_WITH_USER_OBJECT_ID"
+        },
+        {
+            "key": "driverId",
+            "value": "REPLACE_WITH_DRIVER_USER_OBJECT_ID"
+        },
+        {
+            "key": "tripId",
+            "value": "REPLACE_WITH_TRIP_OBJECT_ID"
+        },
+        {
+            "key": "tripNumber",
+            "value": "1001"
+        },
+        {
+            "key": "rideId",
+            "value": "REPLACE_WITH_RIDE_OBJECT_ID"
+        },
+        {
+            "key": "availabilityId",
+            "value": "REPLACE_WITH_AVAILABILITY_OBJECT_ID"
+        },
+        {
+            "key": "requestId",
+            "value": "REPLACE_WITH_REQUEST_OBJECT_ID"
+        }
+    ],
+    "item": [
+        {
+            "name": "Auth",
+            "item": [
+                {
+                    "name": "Admin Signup",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Admin User\",\n  \"email\": \"admin@example.com\",\n  \"phone\": \"{{adminPhone}}\",\n  \"password\": \"{{adminPassword}}\",\n  \"inviteCode\": \"{{adminInviteCode}}\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/admin/signup"
+                    }
+                },
+                {
+                    "name": "Admin Login",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"phone\": \"{{adminPhone}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/admin/login"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Users",
+            "item": [
+                {
+                    "name": "List Users",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/api/admin/users?page=1&limit=20"
+                    }
+                },
+                {
+                    "name": "Update User",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"role\": \"driver\",\n  \"verificationStatus\": \"verified\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/admin/users/{{userId}}"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Availability",
+            "item": [
+                {
+                    "name": "List Availability",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/api/admin/availability?page=1&limit=20&driverId={{driverId}}&date=2026-08-03&status=open"
+                    }
+                },
+                {
+                    "name": "Create Availability",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"driverId\": \"{{driverId}}\",\n  \"dates\": [\"2026-08-03\", \"2026-08-04\"],\n  \"startLocation\": { \"address\": \"Nasr City, Cairo\", \"lat\": 30.0626, \"lng\": 31.3261 },\n  \"endLocation\": { \"address\": \"Maadi, Cairo\", \"lat\": 29.9602, \"lng\": 31.2569 },\n  \"startTime\": \"08:00\",\n  \"endTime\": \"17:00\",\n  \"status\": \"open\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/admin/availability"
+                    }
+                },
+                {
+                    "name": "Get Availability",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/api/admin/availability/{{availabilityId}}"
+                    }
+                },
+                {
+                    "name": "Update Availability",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"date\": \"2026-08-03\",\n  \"startLocation\": { \"address\": \"Nasr City, Cairo\", \"lat\": 30.0626, \"lng\": 31.3261 },\n  \"endLocation\": { \"address\": \"Maadi, Cairo\", \"lat\": 29.9602, \"lng\": 31.2569 },\n  \"startTime\": \"09:00\",\n  \"endTime\": \"18:00\",\n  \"status\": \"matched\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/admin/availability/{{availabilityId}}"
+                    }
+                },
+                {
+                    "name": "Delete Availability",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/api/admin/availability/{{availabilityId}}"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Trips",
+            "item": [
+                {
+                    "name": "List Trips - All Filters",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/api/admin/trips?page=1&limit=20&userId={{userId}}&driverId={{driverId}}&requestId={{requestId}}&rideId={{rideId}}&tripNumber={{tripNumber}}&date=2026-08-03&vehicleType=private_car&rideType=private&paymentStatus=paid&status=submitted&createdAtFrom=2026-08-01T00:00:00.000Z&createdAtTo=2026-08-03T23:59:59.999Z"
+                    }
+                },
+                {
+                    "name": "Get Trip - Populated",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/api/admin/trips/{{tripId}}"
+                    }
+                },
+                {
+                    "name": "Get Available Drivers for Trip",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/api/admin/trips/{{tripId}}/available-drivers"
+                    }
+                },
+                {
+                    "name": "Assign Driver to Trip",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"driverId\": \"{{driverId}}\"\n}"
+                        },
+                        "url": "{{baseUrl}}/api/admin/trips/{{tripId}}/assign"
+                    }
+                },
+                {
+                    "name": "Delete Trip by ID",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/api/admin/trips/{{tripId}}"
+                    }
+                },
+                {
+                    "name": "Delete Trips by User",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/api/admin/trips?action=by-user&userId={{userId}}"
+                    }
+                },
+                {
+                    "name": "Delete Trip by Trip Number",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/api/admin/trips?action=by-trip-number&tripNumber={{tripNumber}}"
+                    }
+                },
+                {
+                    "name": "Delete Today's Trips",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/api/admin/trips?action=today"
+                    }
+                },
+                {
+                    "name": "Delete Trips Not Created Today",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/api/admin/trips?action=not-today"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Rides and Matching",
+            "item": [
+                {
+                    "name": "List Rides",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/api/admin/rides?page=1&limit=20"
+                    }
+                },
+                {
+                    "name": "Cancel Ride",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/api/admin/rides/{{rideId}}"
+                    }
+                },
+                {
+                    "name": "Get Match Options",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/api/admin/match-ride"
+                    }
+                },
+                {
+                    "name": "Download Match Data",
+                    "request": {
+                        "method": "GET",
+                        "description": "Returns ZIP export.",
+                        "url": "{{baseUrl}}/api/admin/getMatchData?date=2026-08-03"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Exports",
+            "item": [
+                {
+                    "name": "Download Driver Requests",
+                    "request": {
+                        "method": "GET",
+                        "description": "Returns tomorrow's ZIP export.",
+                        "url": "{{baseUrl}}/api/admin/getDriverRequests"
+                    }
+                },
+                {
+                    "name": "Download Private Ride Requests",
+                    "request": {
+                        "method": "GET",
+                        "description": "Returns tomorrow's ZIP export.",
+                        "url": "{{baseUrl}}/api/admin/getPrivateRideRequests"
+                    }
+                },
+                {
+                    "name": "Download Shared Ride Requests",
+                    "request": {
+                        "method": "GET",
+                        "description": "Returns tomorrow's ZIP export.",
+                        "url": "{{baseUrl}}/api/admin/getSharedRideRequests"
+                    }
+                }
+            ]
+        }
+    ]
 }

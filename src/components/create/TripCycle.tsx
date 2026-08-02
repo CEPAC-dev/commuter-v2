@@ -24,7 +24,6 @@ import {
 import {
   computeArrivalTime,
   computePickupTime,
-  toHHMM,
   toMinutes,
 } from "@/lib/time/pickupWindow";
 import { fetchRoute } from "@/lib/openrouteservice";
@@ -154,6 +153,13 @@ function formatWaitDuration(minutes: number): string {
 function parseWaitDuration(value: string): number | null {
   const match = /^(\d{2,}):([0-5]\d)$/.exec(value);
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+const MORNING_TIME_MIN = "06:00";
+const MORNING_TIME_MAX = "23:59";
+
+function isOutsideMorningWindow(value: string): boolean {
+  return value < MORNING_TIME_MIN || value > MORNING_TIME_MAX;
 }
 
 // Helper — check if a point is already saved
@@ -395,6 +401,7 @@ export default function TripCycle({
 }: Props) {
   const [routeLoading, setRouteLoading] = useState(false);
   const [stopError, setStopError] = useState("");
+  const [timeError, setTimeError] = useState<string | null>(null);
   const [locating, setLocating] = useState<"pickup" | "dropoff" | null>(null);
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
@@ -867,6 +874,40 @@ export default function TripCycle({
     [data, onChange],
   );
 
+  function handleArrivalTimeChange(nextArrivalTime: string) {
+    if (!nextArrivalTime) {
+      setTimeError(null);
+      set("arrivalTime", "");
+      return;
+    }
+    if (isOutsideMorningWindow(nextArrivalTime)) {
+      setTimeError(
+        "Arrival time must be between 06:00 AM and 12:00 AM (next day). Please reselect a valid time.",
+      );
+      onChange({ ...data, arrivalTime: "", pickupTime: "" });
+      return;
+    }
+    setTimeError(null);
+    set("arrivalTime", nextArrivalTime);
+  }
+
+  function handlePrivatePickupTimeChange(nextPickupTime: string) {
+    if (!nextPickupTime) {
+      setTimeError(null);
+      set("pickupTime", "");
+      return;
+    }
+    if (isOutsideMorningWindow(nextPickupTime)) {
+      setTimeError(
+        "Pickup time must be between 06:00 AM and 12:00 AM (next day). Please reselect a valid time.",
+      );
+      set("pickupTime", "");
+      return;
+    }
+    setTimeError(null);
+    set("pickupTime", nextPickupTime);
+  }
+
   function handleCurrentLocation(field: "pickup" | "dropoff") {
     if (!navigator.geolocation) return;
     setLocating(field);
@@ -890,10 +931,13 @@ export default function TripCycle({
     );
   }
 
-  // Pickup window end = start + 10 min margin
-  const pickupWindowEnd = data.pickupTime
-    ? toHHMM(toMinutes(data.pickupTime) + 10)
-    : "";
+  const arrivalInputMin =
+    minArrivalTime && toMinutes(minArrivalTime) > toMinutes(MORNING_TIME_MIN)
+      ? minArrivalTime
+      : MORNING_TIME_MIN;
+
+  const enforcePrivatePickupWindow =
+    data.vehicleType === "private_car" || data.vehicleType === "taxi_private";
 
   // Arrival time constraint check
   const arrivalTooEarly = !!(
@@ -902,7 +946,6 @@ export default function TripCycle({
     toMinutes(data.arrivalTime) <= toMinutes(minArrivalTime)
   );
 
-  // After pickupWindowEnd line
   const locationError: string | null = (() => {
     if (!data.pickup || !data.dropoff) return null;
     if (
@@ -1518,8 +1561,9 @@ export default function TripCycle({
                 id={`arrival-${data.id}`}
                 type="time"
                 value={data.arrivalTime}
-                min={minArrivalTime ?? undefined}
-                onChange={(e) => set("arrivalTime", e.target.value)}
+                min={arrivalInputMin}
+                max={MORNING_TIME_MAX}
+                onChange={(e) => handleArrivalTimeChange(e.target.value)}
                 required
                 style={{
                   width: "100%",
@@ -1550,6 +1594,18 @@ export default function TripCycle({
                   e.currentTarget.style.boxShadow = "none";
                 }}
               />
+              {timeError && (
+                <p
+                  role="alert"
+                  style={{
+                    fontSize: 12,
+                    color: "#e74c3c",
+                    margin: "5px 0 0",
+                  }}
+                >
+                  ⚠ {timeError}
+                </p>
+              )}
               {arrivalTooEarly && minArrivalTime ? (
                 <p
                   role="alert"
@@ -2214,10 +2270,22 @@ export default function TripCycle({
                 id={`pickup-time-${data.id}`}
                 type="time"
                 value={data.pickupTime}
-                onChange={(event) => set("pickupTime", event.target.value)}
+                min={enforcePrivatePickupWindow ? MORNING_TIME_MIN : undefined}
+                max={enforcePrivatePickupWindow ? MORNING_TIME_MAX : undefined}
+                onChange={(event) =>
+                  handlePrivatePickupTimeChange(event.target.value)
+                }
                 required
                 style={timeInputStyle}
               />
+              {timeError && (
+                <p
+                  role="alert"
+                  style={{ fontSize: 12, color: "#e74c3c", margin: "5px 0 0" }}
+                >
+                  ⚠ {timeError}
+                </p>
+              )}
             </div>
 
             <div>
