@@ -78,7 +78,6 @@ interface SharedRow {
 interface AvailabilityRow {
   availabilityId: number;
   driverId: number | null;
-  date: string;
   startStationNo: number | null;
   endStationNo: number | null;
   startTime: string;
@@ -134,7 +133,6 @@ const SHARED_COLUMNS: (keyof SharedRow)[] = [
 const AVAILABILITY_COLUMNS: (keyof AvailabilityRow)[] = [
   "availabilityId",
   "driverId",
-  "date",
   "startStationNo",
   "endStationNo",
   "startTime",
@@ -337,13 +335,17 @@ export async function GET(req: NextRequest) {
   let nextAvailabilityStationNumber = 8000;
   const syntheticStations: StationInfo[] = [];
   const syntheticStationKeyToId = new Map<string, number>();
+  const syntheticStationCoordinateToId = new Map<string, number>();
+
+  function buildCoordinateKey(lat: number, lng: number) {
+    return `${lat.toFixed(6)}|${lng.toFixed(6)}`;
+  }
 
   function buildSyntheticStationKey(
     point: { lat: number; lng: number; address?: string | null },
   ) {
     return [
-      point.lat.toFixed(6),
-      point.lng.toFixed(6),
+      buildCoordinateKey(point.lat, point.lng),
       (point.address ?? "").trim().replace(/\s+/g, " "),
     ].join("|");
   }
@@ -367,6 +369,7 @@ export async function GET(req: NextRequest) {
       lng: point.lng,
     });
     syntheticStationKeyToId.set(key, objectId);
+    syntheticStationCoordinateToId.set(buildCoordinateKey(point.lat, point.lng), objectId);
     return objectId;
   }
 
@@ -448,6 +451,10 @@ export async function GET(req: NextRequest) {
           lat: point.lat,
           lng: point.lng,
         });
+        syntheticStationCoordinateToId.set(
+          buildCoordinateKey(point.lat, point.lng),
+          nextStopNumber,
+        );
         nextStopNumber += 1;
       } else {
         row[numberKey] = 0 as never;
@@ -485,25 +492,61 @@ export async function GET(req: NextRequest) {
     totalStartedPassengers: trip.extraPassengers + 1,
   }));
 
+  const existingStationIds = Array.from(
+    new Set(
+      sharedRows
+        .flatMap((row) => [
+          row.originNearestStationNo,
+          row.destinationNearestStationNo,
+        ])
+        .filter(
+          (id): id is number => typeof id === "number" && Number.isFinite(id),
+        ),
+    ),
+  );
+
+  const existingStations = await Station.find({ objectId: { $in: existingStationIds } })
+    .select("objectId name lat lng")
+    .lean<StationInfo[]>();
+  const existingStationCoordinateToId = new Map(
+    existingStations.map((station) => [
+      buildCoordinateKey(station.lat, station.lng),
+      station.objectId,
+    ]),
+  );
+
+  function resolveAvailabilityStationNo(
+    point:
+      | { lat: number; lng: number; address?: string | null }
+      | null
+      | undefined,
+  ) {
+    if (point?.lat == null || point?.lng == null) return null;
+
+    const coordinateKey = buildCoordinateKey(point.lat, point.lng);
+    const existingStationId =
+      existingStationCoordinateToId.get(coordinateKey) ??
+      syntheticStationCoordinateToId.get(coordinateKey);
+
+    if (existingStationId != null) return existingStationId;
+
+    const newStationId = addSyntheticStation(nextAvailabilityStationNumber, point);
+    if (newStationId != null && newStationId === nextAvailabilityStationNumber) {
+      nextAvailabilityStationNumber += 1;
+    }
+    return newStationId;
+  }
+
   const availabilityRows: AvailabilityRow[] = availabilities.map(
     (availability) => {
       const carType = carTypeMap.get(String(availability.driverId));
-      const startStationNo = addSyntheticStation(
-        nextAvailabilityStationNumber,
+      const startStationNo = resolveAvailabilityStationNo(
         availability.startLocation,
-      )
-        ? nextAvailabilityStationNumber++
-        : null;
-      const endStationNo = addSyntheticStation(
-        nextAvailabilityStationNumber,
-        availability.endLocation,
-      )
-        ? nextAvailabilityStationNumber++
-        : null;
+      );
+      const endStationNo = resolveAvailabilityStationNo(availability.endLocation);
       return {
         availabilityId: availability.availabilityNumber,
         driverId: userNumberMap.get(String(availability.driverId)) ?? null,
-        date: availability.date,
         startStationNo,
         endStationNo,
         startTime: availability.startTime,
@@ -701,7 +744,10 @@ export async function GET(req: NextRequest) {
 
   const zip = new JSZip();
   zip.file("match-data.json", JSON.stringify(outputJson, null, 2));
-  zip.file("match-data.xlsx", Buffer.from(await wb.xlsx.writeBuffer()));
+  zip.file(
+    `match-data-${targetDate}.xlsx`,
+    Buffer.from(await wb.xlsx.writeBuffer()),
+  );
 
   const body = await zip.generateAsync({ type: "blob" });
   return new NextResponse(body, {
