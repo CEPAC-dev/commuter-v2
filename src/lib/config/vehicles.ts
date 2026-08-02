@@ -16,23 +16,13 @@ export interface VehicleConfig {
   capacity: number; // max seats (integer, placeholder until user edits)
   occupancy: number; // current occupancy (integer, placeholder)
   min_occupancy: number; // minimum occupancy required (integer, placeholder)
+  minimum_charge: number; // EGP minimum charge for this vehicle type
 }
 
 export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   private_car: {
     key: "private_car",
     label: "Private car",
-    rate: 15,
-    ride: "private",
-    buffer: 20,
-    window: 10,
-    capacity: 4,
-    occupancy: 4,
-    min_occupancy: 1,
-  },
-  taxi_private: {
-    key: "taxi_private",
-    label: "Private Taxi",
     rate: 12,
     ride: "private",
     buffer: 20,
@@ -40,17 +30,31 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     capacity: 4,
     occupancy: 4,
     min_occupancy: 1,
+    minimum_charge: 100, // EGP minimum charge for private car rides
+  },
+  taxi_private: {
+    key: "taxi_private",
+    label: "Private Taxi",
+    rate: 10,
+    ride: "private",
+    buffer: 20,
+    window: 10,
+    capacity: 4,
+    occupancy: 4,
+    min_occupancy: 1,
+    minimum_charge: 75, // EGP minimum charge for private taxi rides
   },
   taxi_shared: {
     key: "taxi_shared",
     label: "Shared Taxi",
-    rate: 10,
+    rate: 8,
     ride: "shared",
     buffer: 30,
     window: 20,
-    capacity: 4,
+    capacity: 3,
     occupancy: 3,
     min_occupancy: 2,
+    minimum_charge: 50, // EGP minimum charge for shared taxi rides
   },
   van_shared: {
     key: "van_shared",
@@ -59,9 +63,10 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     ride: "shared",
     buffer: 45,
     window: 25,
-    capacity: 7,
-    occupancy: 6,
+    capacity: 5,
+    occupancy: 5,
     min_occupancy: 4,
+    minimum_charge: 50, // EGP minimum charge for van rides
   },
   microbus_shared: {
     key: "microbus_shared",
@@ -70,9 +75,10 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     ride: "shared",
     buffer: 45,
     window: 30,
-    capacity: 14,
-    occupancy: 10,
+    capacity: 9,
+    occupancy: 9,
     min_occupancy: 8,
+    minimum_charge: 50, // EGP minimum charge for microbus rides
   },
 };
 

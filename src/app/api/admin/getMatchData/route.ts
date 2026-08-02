@@ -191,10 +191,20 @@ function adjustWorksheetSizing(sheet: ExcelJS.Worksheet) {
   });
 }
 
-function formatTime12Hour(value: string | null | undefined): string {
+function formatTime24Hour(value: string | null | undefined): string {
   if (!value) return "";
   const trimmed = String(value).trim();
   if (!trimmed) return "";
+
+  const meridiemMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (meridiemMatch) {
+    const hour = Number(meridiemMatch[1]);
+    const minute = Number(meridiemMatch[2]);
+    const isPm = meridiemMatch[3].toUpperCase() === "PM";
+    const normalizedHour = ((hour % 12) + (isPm ? 12 : 0)) % 24;
+    return `${String(normalizedHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
   const match = trimmed.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return trimmed;
 
@@ -202,9 +212,23 @@ function formatTime12Hour(value: string | null | undefined): string {
   const minute = Number(match[2]);
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return trimmed;
 
-  const period = hour >= 12 ? "PM" : "AM";
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function toExcelTimeValue(value: string | null | undefined): number | string {
+  const formatted = formatTime24Hour(value);
+  if (!formatted) return "";
+
+  const match = formatted.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return formatted;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return formatted;
+
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return formatted;
+
+  return (hour * 60 + minute) / (24 * 60);
 }
 
 function formatWaitingMinutes(value: number | null | undefined): string {
@@ -223,7 +247,7 @@ function getDisplayValueForColumn<T extends PrivateRow | SharedRow>(
     (column === "readyFrom" || column === "shouldArrivebefore") &&
     typeof row[column] === "string"
   ) {
-    return formatTime12Hour(row[column] as string | null | undefined);
+    return formatTime24Hour(row[column] as string | null | undefined);
   }
 
   if (
@@ -237,6 +261,20 @@ function getDisplayValueForColumn<T extends PrivateRow | SharedRow>(
   }
 
   return row[column] as string | number | null;
+}
+
+function getExcelValueForColumn<T extends PrivateRow | SharedRow>(
+  row: T,
+  column: keyof T,
+): string | number | null {
+  if (
+    (column === "readyFrom" || column === "shouldArrivebefore") &&
+    typeof row[column] === "string"
+  ) {
+    return toExcelTimeValue(row[column] as string | null | undefined);
+  }
+
+  return getDisplayValueForColumn(row, column);
 }
 
 export async function GET(req: NextRequest) {
@@ -698,9 +736,15 @@ export async function GET(req: NextRequest) {
   const privateSheet = wb.addWorksheet("PrivateRideRequests");
   privateSheet.addRow(PRIVATE_COLUMNS.map((column) => column));
   for (const row of privateRows) {
-    privateSheet.addRow(
-      PRIVATE_COLUMNS.map((column) => getDisplayValueForColumn(row, column)),
+    const sheetRow = privateSheet.addRow(
+      PRIVATE_COLUMNS.map((column) => getExcelValueForColumn(row, column)),
     );
+    sheetRow.eachCell((cell, cellIndex) => {
+      const column = PRIVATE_COLUMNS[cellIndex - 1];
+      if (column === "readyFrom" || column === "shouldArrivebefore") {
+        cell.numFmt = "HH:mm";
+      }
+    });
   }
   styleWorksheet(privateSheet);
   adjustWorksheetSizing(privateSheet);
@@ -708,9 +752,15 @@ export async function GET(req: NextRequest) {
   const sharedSheet = wb.addWorksheet("SharedRideRequests");
   sharedSheet.addRow(SHARED_COLUMNS);
   for (const row of sharedRows) {
-    sharedSheet.addRow(
-      SHARED_COLUMNS.map((column) => getDisplayValueForColumn(row, column)),
+    const sheetRow = sharedSheet.addRow(
+      SHARED_COLUMNS.map((column) => getExcelValueForColumn(row, column)),
     );
+    sheetRow.eachCell((cell, cellIndex) => {
+      const column = SHARED_COLUMNS[cellIndex - 1];
+      if (column === "readyFrom" || column === "shouldArrivebefore") {
+        cell.numFmt = "HH:mm";
+      }
+    });
   }
   styleWorksheet(sharedSheet);
   adjustWorksheetSizing(sharedSheet);
