@@ -741,10 +741,10 @@ export async function GET(req: NextRequest) {
   adjustWorksheetSizing(stationsSheet);
 
   const matrixDistance = wb.addWorksheet("Dist_Skim");
-  matrixDistance.getCell("A1").value = "Stop";
+  matrixDistance.getCell("A1").value = "District Id";
 
   const matrixDuration = wb.addWorksheet("Time_Skim");
-  matrixDuration.getCell("A1").value = "Stop";
+  matrixDuration.getCell("A1").value = "District Id";
 
   stationsSheetRows.forEach((station, index) => {
     const column = index + 2;
