@@ -379,9 +379,11 @@ export async function GET(req: NextRequest) {
     return `${lat.toFixed(6)}|${lng.toFixed(6)}`;
   }
 
-  function buildSyntheticStationKey(
-    point: { lat: number; lng: number; address?: string | null },
-  ) {
+  function buildSyntheticStationKey(point: {
+    lat: number;
+    lng: number;
+    address?: string | null;
+  }) {
     return [
       buildCoordinateKey(point.lat, point.lng),
       (point.address ?? "").trim().replace(/\s+/g, " "),
@@ -407,7 +409,10 @@ export async function GET(req: NextRequest) {
       lng: point.lng,
     });
     syntheticStationKeyToId.set(key, objectId);
-    syntheticStationCoordinateToId.set(buildCoordinateKey(point.lat, point.lng), objectId);
+    syntheticStationCoordinateToId.set(
+      buildCoordinateKey(point.lat, point.lng),
+      objectId,
+    );
     return objectId;
   }
 
@@ -543,7 +548,9 @@ export async function GET(req: NextRequest) {
     ),
   );
 
-  const existingStations = await Station.find({ objectId: { $in: existingStationIds } })
+  const existingStations = await Station.find({
+    objectId: { $in: existingStationIds },
+  })
     .select("objectId name lat lng")
     .lean<StationInfo[]>();
   const existingStationCoordinateToId = new Map(
@@ -568,8 +575,14 @@ export async function GET(req: NextRequest) {
 
     if (existingStationId != null) return existingStationId;
 
-    const newStationId = addSyntheticStation(nextAvailabilityStationNumber, point);
-    if (newStationId != null && newStationId === nextAvailabilityStationNumber) {
+    const newStationId = addSyntheticStation(
+      nextAvailabilityStationNumber,
+      point,
+    );
+    if (
+      newStationId != null &&
+      newStationId === nextAvailabilityStationNumber
+    ) {
       nextAvailabilityStationNumber += 1;
     }
     return newStationId;
@@ -581,7 +594,9 @@ export async function GET(req: NextRequest) {
       const startStationNo = resolveAvailabilityStationNo(
         availability.startLocation,
       );
-      const endStationNo = resolveAvailabilityStationNo(availability.endLocation);
+      const endStationNo = resolveAvailabilityStationNo(
+        availability.endLocation,
+      );
       return {
         availabilityId: availability.availabilityNumber,
         driverId: userNumberMap.get(String(availability.driverId)) ?? null,
@@ -678,8 +693,8 @@ export async function GET(req: NextRequest) {
 
   const wb = new ExcelJS.Workbook();
 
-  const stationsSheet = wb.addWorksheet("Stations");
-  stationsSheet.addRow(["District Id", "lat", "lng", "District Name"]);
+  const stationsSheet = wb.addWorksheet("Stops");
+  stationsSheet.addRow(["Stop", "Lat", "Long", "Stop_Name"]);
   for (const station of stationsSheetRows) {
     stationsSheet.addRow([
       station.objectId,
@@ -691,27 +706,23 @@ export async function GET(req: NextRequest) {
   styleWorksheet(stationsSheet);
   adjustWorksheetSizing(stationsSheet);
 
-  const matrixDistance = wb.addWorksheet("StationMatrixDistance");
-  matrixDistance.getCell("A1").value = "District Name";
-  matrixDistance.getCell("B2").value = "District Id";
+  const matrixDistance = wb.addWorksheet("Dist_Skim");
+  matrixDistance.getCell("A1").value = "Stop";
 
-  const matrixDuration = wb.addWorksheet("StationMatrixDuration");
-  matrixDuration.getCell("A1").value = "District Name";
-  matrixDuration.getCell("B2").value = "District Id";
+  const matrixDuration = wb.addWorksheet("Time_Skim");
+  matrixDuration.getCell("A1").value = "Stop";
 
   stationsSheetRows.forEach((station, index) => {
-    const column = index + 3;
+    const column = index + 2;
     const label = station.name || String(station.objectId);
 
-    matrixDistance.getRow(1).getCell(column).value = label;
-    matrixDistance.getRow(2).getCell(column).value = station.objectId;
-    matrixDistance.getRow(index + 3).getCell(1).value = label;
-    matrixDistance.getRow(index + 3).getCell(2).value = station.objectId;
+    matrixDistance.getRow(1).getCell(column).value = station.objectId;
+    matrixDistance.getRow(index + 2).getCell(1).value = station.objectId;
+    matrixDistance.getRow(index + 2).getCell(2).value = label;
 
-    matrixDuration.getRow(1).getCell(column).value = label;
-    matrixDuration.getRow(2).getCell(column).value = station.objectId;
-    matrixDuration.getRow(index + 3).getCell(1).value = label;
-    matrixDuration.getRow(index + 3).getCell(2).value = station.objectId;
+    matrixDuration.getRow(1).getCell(column).value = station.objectId;
+    matrixDuration.getRow(index + 2).getCell(1).value = station.objectId;
+    matrixDuration.getRow(index + 2).getCell(2).value = label;
   });
 
   for (let rowIndex = 0; rowIndex < stationsSheetRows.length; rowIndex++) {
@@ -722,9 +733,9 @@ export async function GET(req: NextRequest) {
         { lat: originStation.lat, lng: originStation.lng },
         { lat: destStation.lat, lng: destStation.lng },
       );
-      matrixDistance.getRow(rowIndex + 3).getCell(colIndex + 3).value =
+      matrixDistance.getRow(rowIndex + 2).getCell(colIndex + 2).value =
         metrics.distance_km;
-      matrixDuration.getRow(rowIndex + 3).getCell(colIndex + 3).value =
+      matrixDuration.getRow(rowIndex + 2).getCell(colIndex + 2).value =
         metrics.duration_minutes;
     }
   }
@@ -733,7 +744,7 @@ export async function GET(req: NextRequest) {
   styleWorksheet(matrixDuration);
   adjustWorksheetSizing(matrixDuration);
 
-  const privateSheet = wb.addWorksheet("PrivateRideRequests");
+  const privateSheet = wb.addWorksheet("Private_Requests");
   privateSheet.addRow(PRIVATE_COLUMNS.map((column) => column));
   for (const row of privateRows) {
     const sheetRow = privateSheet.addRow(
@@ -749,7 +760,7 @@ export async function GET(req: NextRequest) {
   styleWorksheet(privateSheet);
   adjustWorksheetSizing(privateSheet);
 
-  const sharedSheet = wb.addWorksheet("SharedRideRequests");
+  const sharedSheet = wb.addWorksheet("Shared_Requests");
   sharedSheet.addRow(SHARED_COLUMNS);
   for (const row of sharedRows) {
     const sheetRow = sharedSheet.addRow(
@@ -768,7 +779,20 @@ export async function GET(req: NextRequest) {
   const availabilitySheet = wb.addWorksheet("Availability");
   availabilitySheet.addRow(AVAILABILITY_COLUMNS);
   for (const row of availabilityRows) {
-    availabilitySheet.addRow(AVAILABILITY_COLUMNS.map((column) => row[column]));
+    const sheetRow = availabilitySheet.addRow(
+      AVAILABILITY_COLUMNS.map((column) => {
+        if (column === "startTime" || column === "endTime") {
+          return toExcelTimeValue(row[column]);
+        }
+        return row[column];
+      }),
+    );
+    sheetRow.eachCell((cell, cellIndex) => {
+      const column = AVAILABILITY_COLUMNS[cellIndex - 1];
+      if (column === "startTime" || column === "endTime") {
+        cell.numFmt = "HH:mm";
+      }
+    });
   }
   styleWorksheet(availabilitySheet);
   adjustWorksheetSizing(availabilitySheet);
