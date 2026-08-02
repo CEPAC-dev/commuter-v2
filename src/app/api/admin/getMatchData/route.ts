@@ -410,12 +410,12 @@ export async function GET(req: NextRequest) {
     drivers.map((driver) => [String(driver.userId), driver.carType]),
   );
 
-  let nextStopNumber = 5000;
-  let nextPrivateStationNumber = 7000;
-  let nextAvailabilityStationNumber = 8000;
   const syntheticStations: StationInfo[] = [];
   const syntheticStationKeyToId = new Map<string, number>();
   const syntheticStationCoordinateToId = new Map<string, number>();
+  const stopStationIdRef = { current: 5000 };
+  const privateStationIdRef = { current: 7000 };
+  const availabilityStationIdRef = { current: 8000 };
 
   function buildCoordinateKey(lat: number, lng: number) {
     return `${lat.toFixed(6)}|${lng.toFixed(6)}`;
@@ -433,16 +433,19 @@ export async function GET(req: NextRequest) {
   }
 
   function addSyntheticStation(
-    objectId: number,
     point:
       | { lat: number; lng: number; address?: string | null }
       | null
       | undefined,
+    nextIdRef: { current: number },
   ): number | null {
     if (point?.lat == null || point?.lng == null) return null;
     const key = buildSyntheticStationKey(point);
     const existingId = syntheticStationKeyToId.get(key);
     if (existingId != null) return existingId;
+
+    const objectId = nextIdRef.current;
+    nextIdRef.current += 1;
 
     syntheticStations.push({
       objectId,
@@ -460,18 +463,11 @@ export async function GET(req: NextRequest) {
 
   const privateRows: PrivateRow[] = privateTrips.map((trip) => {
     const s = trip.stops ?? [];
-    const originStationNo = addSyntheticStation(
-      nextPrivateStationNumber,
-      trip.pickup,
-    )
-      ? nextPrivateStationNumber++
-      : null;
+    const originStationNo = addSyntheticStation(trip.pickup, privateStationIdRef);
     const destinationStationNo = addSyntheticStation(
-      nextPrivateStationNumber,
       trip.dropoff,
-    )
-      ? nextPrivateStationNumber++
-      : null;
+      privateStationIdRef,
+    );
     const row: PrivateRow = {
       Ride_ID: trip.tripNumber,
       Pass_ID: userNumberMap.get(String(trip.userId)) ?? null,
@@ -526,21 +522,11 @@ export async function GET(req: NextRequest) {
       const waitingKey = `${stopKey}WaitingTime` as keyof PrivateRow;
 
       if (point?.lat != null && point?.lng != null) {
-        row[numberKey] = nextStopNumber as never;
+        const stopId = addSyntheticStation(point, stopStationIdRef);
+        row[numberKey] = (stopId ?? 0) as never;
         row[latKey] = point.lat as never;
         row[longKey] = point.lng as never;
         row[addressKey] = (point.address ?? null) as never;
-        syntheticStations.push({
-          objectId: nextStopNumber,
-          name: point.address ?? "",
-          lat: point.lat,
-          lng: point.lng,
-        });
-        syntheticStationCoordinateToId.set(
-          buildCoordinateKey(point.lat, point.lng),
-          nextStopNumber,
-        );
-        nextStopNumber += 1;
       } else {
         row[numberKey] = 0 as never;
         row[latKey] = 0 as never;
@@ -614,17 +600,7 @@ export async function GET(req: NextRequest) {
 
     if (existingStationId != null) return existingStationId;
 
-    const newStationId = addSyntheticStation(
-      nextAvailabilityStationNumber,
-      point,
-    );
-    if (
-      newStationId != null &&
-      newStationId === nextAvailabilityStationNumber
-    ) {
-      nextAvailabilityStationNumber += 1;
-    }
-    return newStationId;
+    return addSyntheticStation(point, availabilityStationIdRef);
   }
 
   const availabilityRows: AvailabilityRow[] = availabilities.map(
