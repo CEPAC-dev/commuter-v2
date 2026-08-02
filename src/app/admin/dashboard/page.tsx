@@ -39,7 +39,7 @@ export default async function AdminDashboardPage() {
       .sort({ name: 1 })
       .lean(),
     Trip.find({ status: { $in: ["submitted", "pending_payment", "matched"] }, paymentStatus: "paid" })
-      .select("_id tripNumber date pickupTime arrivalTime pickup dropoff vehicleType rideType priceEgp numberOfPassengers userId")
+      .select("_id tripNumber date pickupTime arrivalTime pickup dropoff pickupStation dropoffStation vehicleType rideType priceEgp numberOfPassengers userId")
       .sort({ date: 1, pickupTime: 1 })
       .lean(),
   ]);
@@ -278,6 +278,8 @@ export default async function AdminDashboardPage() {
             arrivalTime: trip.arrivalTime,
             pickup: trip.pickup,
             dropoff: trip.dropoff,
+            pickupStation: trip.pickupStation,
+            dropoffStation: trip.dropoffStation,
             vehicleType: trip.vehicleType,
             rideType: trip.rideType,
             priceEgp: trip.priceEgp,

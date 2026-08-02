@@ -1,4 +1,4 @@
-// Routing powered by Google Directions API (via /api/directions)
+// Routing powered by the internal OSM directions proxy (via /api/directions)
 
 export interface Waypoint {
   lat: number;

@@ -1,17 +1,16 @@
 ﻿"use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
-import { MAP_STYLE } from "@/lib/googleMapsStyle";
+import type { LayerGroup, Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import {
   searchAddress,
   getPlaceDetails,
   reverseGeocode,
   formatDisplayName,
 } from "@/lib/nominatim";
+import { loadLeaflet, svgDataUrl, MAP_COLORS } from "@/lib/leaflet";
 import { Search, Loader2, Crosshair, X, MapPin } from "lucide-react";
 
-const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 const CAIRO = { lat: 30.0444, lng: 31.2357 };
 
 // Greater Cairo bounding box (Cairo + Giza + New Cairo + 6th of October + Qalyubia)
@@ -27,13 +26,13 @@ function isInCairo(lat: number, lng: number) {
 }
 
 // Same teardrop pin icon as UserMap
-const PIN_ICON_URL = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+const PIN_ICON_URL = svgDataUrl(
   `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="52">` +
     `<path d="M20 0C8.95 0 0 8.95 0 20c0 14.5 20 36 20 36S40 34.5 40 20C40 8.95 31.05 0 20 0z" fill="#00C2A8"/>` +
     `<circle cx="20" cy="20" r="9" fill="white"/>` +
     `<circle cx="20" cy="20" r="5" fill="#0B1E3D"/>` +
     `</svg>`,
-)}`;
+);
 
 interface LocationPickerMapProps {
   lat: string;
@@ -50,12 +49,10 @@ export default function LocationPickerMap({
   onChange,
   error,
 }: LocationPickerMapProps) {
-  const { isLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: API_KEY,
-  });
-
-  const mapRef = useRef<google.maps.Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const layersRef = useRef<LayerGroup | null>(null);
+  const markerRef = useRef<LeafletMarker | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [query, setQuery] = useState(name);
@@ -65,7 +62,7 @@ export default function LocationPickerMap({
   const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
   const [showDrop, setShowDrop] = useState(false);
-  const [zoom, setZoom] = useState(11);
+  const [leafletReady, setLeafletReady] = useState(false);
   const [outOfBounds, setOutOfBounds] = useState(false);
 
   const markerPos =
@@ -107,10 +104,7 @@ export default function LocationPickerMap({
     }
   }
 
-  async function onMapClick(e: google.maps.MapMouseEvent) {
-    if (!e.latLng) return;
-    const newLat = e.latLng.lat();
-    const newLng = e.latLng.lng();
+  async function commitLocation(newLat: number, newLng: number) {
     if (!isInCairo(newLat, newLng)) {
       setOutOfBounds(true);
       return;
@@ -121,26 +115,6 @@ export default function LocationPickerMap({
       formatDisplayName(addr) || `${newLat.toFixed(5)}, ${newLng.toFixed(5)}`;
     setQuery(label);
     setShowDrop(false);
-    onChange(newLat.toFixed(6), newLng.toFixed(6), label);
-  }
-
-  async function onDragEnd(e: google.maps.MapMouseEvent) {
-    if (!e.latLng) return;
-    const newLat = e.latLng.lat();
-    const newLng = e.latLng.lng();
-    if (!isInCairo(newLat, newLng)) {
-      setOutOfBounds(true);
-      return;
-    }
-    setOutOfBounds(false);
-    const addr = await reverseGeocode(newLat, newLng);
-    const formatted = formatDisplayName(addr);
-    const COORD_RE = /^-?\d+\.\d{5,}/;
-    const label =
-      formatted && !COORD_RE.test(formatted)
-        ? formatted
-        : `${newLat.toFixed(5)}, ${newLng.toFixed(5)}`;
-    setQuery(label);
     onChange(newLat.toFixed(6), newLng.toFixed(6), label);
   }
 
@@ -162,8 +136,7 @@ export default function LocationPickerMap({
         setQuery(label);
         setShowDrop(false);
         onChange(newLat.toFixed(6), newLng.toFixed(6), label);
-        mapRef.current?.panTo({ lat: newLat, lng: newLng });
-        mapRef.current?.setZoom(15);
+        mapRef.current?.setView([newLat, newLng], 15);
         setLocating(false);
       },
       () => setLocating(false),
@@ -171,10 +144,99 @@ export default function LocationPickerMap({
     );
   }
 
-  const onMapLoad = useCallback((map: google.maps.Map) => {
-    mapRef.current = map;
-    map.addListener("zoom_changed", () => setZoom(map.getZoom() ?? 11));
+  const onMapLoad = useCallback(() => {
+    // no-op: kept to mirror previous structure
   }, []);
+
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+    let disposed = false;
+
+    loadLeaflet().then((L) => {
+      if (disposed || !mapContainerRef.current) return;
+      const map = L.map(mapContainerRef.current, {
+        zoomControl: true,
+        attributionControl: true,
+        minZoom: 9,
+      }).setView([markerPos?.lat ?? CAIRO.lat, markerPos?.lng ?? CAIRO.lng], markerPos ? 15 : 11);
+
+      L.tileLayer(MAP_COLORS.tileUrl, {
+        attribution: MAP_COLORS.tileAttribution,
+        maxZoom: 19,
+      }).addTo(map);
+
+      map.setMaxBounds([
+        [CAIRO_BOUNDS.south, CAIRO_BOUNDS.west],
+        [CAIRO_BOUNDS.north, CAIRO_BOUNDS.east],
+      ]);
+
+      mapRef.current = map;
+      layersRef.current = L.layerGroup().addTo(map);
+      setLeafletReady(true);
+      onMapLoad();
+    });
+
+    return () => {
+      disposed = true;
+      markerRef.current = null;
+      layersRef.current?.clearLayers();
+      layersRef.current = null;
+      mapRef.current?.remove();
+      mapRef.current = null;
+      setLeafletReady(false);
+    };
+  }, [markerPos, onMapLoad]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const handleMapClick = (event: { latlng: { lat: number; lng: number } }) => {
+      void commitLocation(event.latlng.lat, event.latlng.lng);
+    };
+
+    const map = mapRef.current;
+    map.on("click", handleMapClick);
+
+    return () => {
+      map.off("click", handleMapClick);
+    };
+  }, [onChange]);
+
+  useEffect(() => {
+    if (!mapRef.current || !layersRef.current) return;
+    let disposed = false;
+
+    loadLeaflet().then((L) => {
+      if (disposed || !layersRef.current || !mapRef.current) return;
+
+      const layers = layersRef.current;
+      layers.clearLayers();
+      markerRef.current = null;
+
+      if (!markerPos) return;
+
+      const marker = L.marker([markerPos.lat, markerPos.lng], {
+        draggable: true,
+        icon: L.icon({
+          iconUrl: PIN_ICON_URL,
+          iconSize: [30, 38],
+          iconAnchor: [15, 38],
+        }),
+      }).addTo(layers);
+
+      marker.on("dragend", () => {
+        const next = marker.getLatLng();
+        void commitLocation(next.lat, next.lng);
+      });
+
+      markerRef.current = marker;
+      mapRef.current.setView([markerPos.lat, markerPos.lng], 15);
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [markerPos?.lat, markerPos?.lng]);
 
   return (
     <div>
@@ -339,7 +401,7 @@ export default function LocationPickerMap({
           )}") 16 44, crosshair`,
         }}
       >
-        {!isLoaded ? (
+        {!leafletReady ? (
           <div
             style={{
               height: 280,
@@ -357,58 +419,14 @@ export default function LocationPickerMap({
               className="animate-spin"
               style={{ color: "#00C2A8" }}
             />
-            Loading map…
+            Loading map...
           </div>
         ) : (
-          <GoogleMap
-            mapContainerStyle={{ width: "100%", height: 280 }}
-            center={markerPos ?? CAIRO}
-            zoom={markerPos ? 15 : 11}
-            onLoad={onMapLoad}
-            onClick={onMapClick}
-            options={{
-              styles: MAP_STYLE,
-              mapTypeControl: false,
-              streetViewControl: false,
-              fullscreenControl: false,
-              zoomControl: true,
-              scrollwheel: true,
-              gestureHandling: "greedy",
-              clickableIcons: false,
-              restriction: {
-                latLngBounds: CAIRO_BOUNDS,
-                strictBounds: false,
-              },
-              minZoom: 9,
-            }}
-          >
-            {markerPos &&
-              (() => {
-                // Stays ~28–34 px wide across all zoom levels; shrinks only when very far out
-                const zf = Math.max(
-                  0.5,
-                  Math.min(1.2, Math.pow(2, (zoom - 14) / 5)),
-                );
-                const pinW = Math.round(28 * zf);
-                const pinH = Math.round(36 * zf);
-                return (
-                  <Marker
-                    position={markerPos}
-                    draggable
-                    onDragEnd={onDragEnd}
-                    icon={{
-                      url: PIN_ICON_URL,
-                      scaledSize: new google.maps.Size(pinW, pinH),
-                      anchor: new google.maps.Point(pinW / 2, pinH),
-                    }}
-                  />
-                );
-              })()}
-          </GoogleMap>
+          <div ref={mapContainerRef} style={{ width: "100%", height: 280 }} />
         )}
 
         {/* Locate-me button — floating on map bottom-left */}
-        {isLoaded && (
+        {leafletReady && (
           <button
             type="button"
             onClick={handleCurrentLocation}
@@ -478,7 +496,7 @@ export default function LocationPickerMap({
         )}
 
         {/* Tap-hint pill — shown before pin is placed */}
-        {!markerPos && isLoaded && (
+        {!markerPos && leafletReady && (
           <div
             style={{
               position: "absolute",

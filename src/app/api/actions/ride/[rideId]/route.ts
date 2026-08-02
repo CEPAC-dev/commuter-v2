@@ -318,7 +318,11 @@ export async function POST(
         break;
 
       case "station_arrived":
-        if (!stationIndex || !stationName) {
+        if (
+          stationIndex === undefined ||
+          stationIndex === null ||
+          !stationName
+        ) {
           return NextResponse.json(
             { success: false, error: "Missing stationIndex or stationName" },
             { status: 400 },
@@ -384,7 +388,8 @@ export async function POST(
           boardingCount === null ||
           alightingCount === undefined ||
           alightingCount === null ||
-          !stationIndex ||
+          stationIndex === undefined ||
+          stationIndex === null ||
           !stationName
         ) {
           return NextResponse.json(
@@ -508,7 +513,11 @@ export async function POST(
           );
         }
 
-        if (!stationIndex || !stationName) {
+        if (
+          stationIndex === undefined ||
+          stationIndex === null ||
+          !stationName
+        ) {
           return NextResponse.json(
             { success: false, error: "Missing stationIndex or stationName" },
             { status: 400 },

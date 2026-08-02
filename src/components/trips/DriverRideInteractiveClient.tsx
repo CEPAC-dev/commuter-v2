@@ -105,8 +105,12 @@ export default function DriverRideInteractiveClient({
     }
     return max;
   }, 0);
+  const hasConfirmedPassengerEvent = ride.passengers.some(
+    (passenger) =>
+      passenger.status === "picked_up" || passenger.status === "dropped_off",
+  );
   const [activeStationIndex, setActiveStationIndex] = useState<number | null>(
-    initialConfirmedStationIndex > 0 ? initialConfirmedStationIndex : null,
+    hasConfirmedPassengerEvent ? initialConfirmedStationIndex + 1 : null,
   );
   const [driverOrigin, setDriverOrigin] = useState<GeoPoint | null>(
     ride.driverOrigin ?? null,
@@ -144,6 +148,10 @@ export default function DriverRideInteractiveClient({
       },
     ]);
   }
+  const stationCount = routeStops.length;
+  const stationPoints = routeStops
+    .map((r) => r.point)
+    .filter((pt): pt is NonNullable<typeof pt> => Boolean(pt));
 
   const stationMetaMap = new Map<string, { direction?: string; landmark?: string }>();
   if (ride.pickupStation?.name) {
@@ -173,38 +181,31 @@ export default function DriverRideInteractiveClient({
     }
   }
 
-  type StepItem =
-    | { type: "driver_origin" }
-    | { type: "driver_destination" }
-    | {
-        type: "station";
-        stationIndex: number;
-        name: string;
-        zone: string;
-        landmark?: string;
-        boarding: number;
-        alighting: number;
-        waitingMinutes: number;
-      };
+  type StepItem = {
+    type: "station";
+    stationIndex: number;
+    name: string;
+    zone: string;
+    landmark?: string;
+    boarding: number;
+    alighting: number;
+    waitingMinutes: number;
+  };
 
-  const steps: StepItem[] = [
-    { type: "driver_origin" },
-    ...routeStops.map((stop, i) => {
-      const stationName = (stop as any).name ?? stop.address ?? `Station ${i + 1}`;
-      const meta = stationMetaMap.get(stationName);
-      return {
-        type: "station" as const,
-        stationIndex: i + 1,
-        name: stationName,
-        zone: (stop as any).direction ?? meta?.direction ?? "",
-        landmark: (stop as any).landmark ?? meta?.landmark ?? "",
-        boarding: stop.boarding || 0,
-        alighting: stop.alighting || 0,
-        waitingMinutes: stop.waitingMinutes || 0,
-      };
-    }),
-    { type: "driver_destination" },
-  ];
+  const steps: StepItem[] = routeStops.map((stop, i) => {
+    const stationName = (stop as any).name ?? stop.address ?? `Station ${i + 1}`;
+    const meta = stationMetaMap.get(stationName);
+    return {
+      type: "station" as const,
+      stationIndex: i + 1,
+      name: stationName,
+      zone: (stop as any).direction ?? meta?.direction ?? "",
+      landmark: (stop as any).landmark ?? meta?.landmark ?? "",
+      boarding: stop.boarding || 0,
+      alighting: stop.alighting || 0,
+      waitingMinutes: stop.waitingMinutes || 0,
+    };
+  });
 
   // Helper for reverse geocoding location name
   const fetchLocationName = async (lat: number, lng: number, fallback: string): Promise<string> => {
@@ -263,7 +264,7 @@ export default function DriverRideInteractiveClient({
   const handleConfirmStation = async (stationIndex: number, stationName: string) => {
     setLoadingAction(`confirm-${stationIndex}`);
     try {
-      await fetch(`/api/actions/ride/${ride.id}`, {
+      const res = await fetch(`/api/actions/ride/${ride.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -272,11 +273,19 @@ export default function DriverRideInteractiveClient({
           stationName,
         }),
       });
+
+      if (!res.ok) {
+        throw new Error(`Failed to confirm station ${stationIndex}`);
+      }
+
+      setActiveStationIndex(
+        stationIndex < stationCount ? stationIndex + 1 : stationIndex,
+      );
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoadingAction(null);
     }
-    setActiveStationIndex(stationIndex);
-    setLoadingAction(null);
   };
 
   const handleCloseRide = async () => {
@@ -458,11 +467,10 @@ export default function DriverRideInteractiveClient({
           }}
         >
           <RouteMap
-            pickup={driverOrigin ?? ride.pickupStation}
-            dropoff={driverDestination ?? ride.dropoffStation}
-            stations={routeStops
-              .map((r) => r.point)
-              .filter((pt): pt is NonNullable<typeof pt> => Boolean(pt))}
+            pickup={stationPoints[0] ?? null}
+            dropoff={stationPoints[stationPoints.length - 1] ?? null}
+            stations={stationPoints.slice(1, -1)}
+            stationIconsOnly
             height={220}
             interactive
           />
@@ -551,167 +559,8 @@ export default function DriverRideInteractiveClient({
 
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             {steps.map((step, index) => {
-              const isFirst = index === 0;
               const isLast = index === steps.length - 1;
-              const badgeBg = isFirst ? "#00C2A8" : isLast ? "#0B1E3D" : "#5A6A7A";
-
-              if (step.type === "driver_origin") {
-                return (
-                  <div
-                    key="driver-origin-step"
-                    style={{
-                      display: "flex",
-                      gap: 14,
-                      position: "relative",
-                      paddingBottom: 20,
-                    }}
-                  >
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: 13,
-                        top: 26,
-                        bottom: 0,
-                        width: 2,
-                        background: "linear-gradient(to bottom, #00C2A8, #E6EAEC)",
-                      }}
-                    />
-                    <span
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: "50%",
-                        background: badgeBg,
-                        color: "#fff",
-                        fontSize: 12,
-                        fontWeight: 800,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                        zIndex: 1,
-                      }}
-                    >
-                      1
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 800,
-                          color: "#00806E",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.04em",
-                          display: "block",
-                        }}
-                      >
-                        Driver origin
-                      </span>
-                      {driverOrigin ? (
-                        <p style={{ margin: "2px 0 0", fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
-                          📍 {driverOrigin.address}
-                        </p>
-                      ) : (
-                        <p style={{ margin: "2px 0 0", fontSize: 13, color: "#9aa7b4", fontStyle: "italic" }}>
-                          {rideStarted ? "Starting location logged" : "Press Start Ride to record current location"}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              }
-
-              if (step.type === "driver_destination") {
-                return (
-                  <div
-                    key="driver-dest-step"
-                    style={{
-                      display: "flex",
-                      gap: 14,
-                      position: "relative",
-                      paddingBottom: 0,
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: "50%",
-                        background: badgeBg,
-                        color: "#fff",
-                        fontSize: 12,
-                        fontWeight: 800,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                        zIndex: 1,
-                      }}
-                    >
-                      {steps.length}
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 10,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <div>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 800,
-                              color: "#0B1E3D",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.04em",
-                              display: "block",
-                            }}
-                          >
-                            Driver final destination
-                          </span>
-                          {driverDestination ? (
-                            <p style={{ margin: "2px 0 0", fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
-                              🏁 {driverDestination.address}
-                            </p>
-                          ) : (
-                            <p style={{ margin: "2px 0 0", fontSize: 13, color: "#9aa7b4", fontStyle: "italic" }}>
-                              {isCompleted ? "Destination logged" : "Press Close Ride to finish route"}
-                            </p>
-                          )}
-                        </div>
-
-                        {rideStarted && !isCompleted && (
-                          <button
-                            type="button"
-                            onClick={handleCloseRide}
-                            disabled={loadingAction === "close"}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                              padding: "8px 14px",
-                              background: "#0B1E3D",
-                              color: "#fff",
-                              border: "none",
-                              borderRadius: 8,
-                              fontSize: 13,
-                              fontWeight: 700,
-                              cursor: "pointer",
-                            }}
-                          >
-                            <Flag size={14} />
-                            {loadingAction === "close" ? "Closing..." : "Close ride"}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
+              const badgeBg = index === 0 ? "#00C2A8" : isLast ? "#0B1E3D" : "#5A6A7A";
 
               const isActiveStation = activeStationIndex === step.stationIndex;
 
@@ -875,6 +724,31 @@ export default function DriverRideInteractiveClient({
               );
             })}
           </div>
+
+          {rideStarted && !isCompleted && (
+            <button
+              type="button"
+              onClick={handleCloseRide}
+              disabled={loadingAction === "close"}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 16,
+                padding: "10px 16px",
+                background: "#0B1E3D",
+                color: "#fff",
+                border: "none",
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              <Flag size={14} />
+              {loadingAction === "close" ? "Closing..." : "Close ride"}
+            </button>
+          )}
         </div>
       </main>
     </div>

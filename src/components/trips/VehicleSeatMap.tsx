@@ -174,7 +174,7 @@ export default function VehicleSeatMap({
           >
             {isDriver
               ? rideStarted
-                ? "Live chair status: Empty, Waiting, Boarding, Alighting, Onboard"
+                ? "Live chair status: Empty, Boarding, Alighting, Onboard"
                 : "All chairs empty until ride starts"
               : "Your assigned seat position on board"}
           </p>
@@ -309,7 +309,7 @@ export default function VehicleSeatMap({
                       bg = "#F8FAFC";
                       borderColor = "#CBD5E1";
                       color = "#64748B";
-                      labelText = "Waiting";
+                      labelText = "Empty";
                     } else if (pIdx === stIdx) {
                       // Green: Boarding at this station
                       bg = "#E8F8F5";
@@ -332,7 +332,7 @@ export default function VehicleSeatMap({
                       bg = "#F8FAFC";
                       borderColor = "#CBD5E1";
                       color = "#64748B";
-                      labelText = "Waiting";
+                      labelText = "Empty";
                     } else {
                       // Neutral empty state
                       bg = "#F8FAFC";
@@ -447,20 +447,6 @@ export default function VehicleSeatMap({
               />
               <span style={{ fontSize: 11, color: "#5A6A7A", fontWeight: 600 }}>
                 Empty
-              </span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 3,
-                  background: "#F8FAFC",
-                  border: "1px solid #64748B",
-                }}
-              />
-              <span style={{ fontSize: 11, color: "#5A6A7A", fontWeight: 600 }}>
-                Waiting
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
