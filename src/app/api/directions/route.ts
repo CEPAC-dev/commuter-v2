@@ -17,28 +17,15 @@ export async function fetchDirections(
     .map((point) => point.trim())
     .filter(Boolean)
     .map((point) => {
-      const [lat, lng] = point.split(",").map(Number);
-      return `${lng},${lat}`;
-    });
+      const [lat, lng] = point.split(",").map((value) => Number(value.trim()));
+      return { lat, lng };
+    })
+    .filter(({ lat, lng }) => Number.isFinite(lat) && Number.isFinite(lng))
+    .map(({ lat, lng }) => `${lng},${lat}`);
 
-  if (
-    coordinates.length < 2 ||
-    coordinates.some((point) => point.includes("NaN"))
-  ) {
+  if (coordinates.length < 2) {
     return [];
   }
-
-  const url = new URL(
-    `https://router.project-osrm.org/route/v1/driving/${coordinates.join(";")}`,
-  );
-  url.searchParams.set("overview", "full");
-  url.searchParams.set("geometries", "geojson");
-  url.searchParams.set("steps", "false");
-  const coordinates = [origin, ...(waypoints?.split("|") ?? []), dest]
-    .map((point) => point.split(",").map(Number))
-    .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
-    .map(([lat, lng]) => `${lng},${lat}`);
-  if (coordinates.length < 2) return [];
 
   const url = new URL(
     `https://router.project-osrm.org/route/v1/driving/${coordinates.join(";")}`,
@@ -50,34 +37,32 @@ export async function fetchDirections(
   const res = await fetch(url, { next: { revalidate: 60 } });
   if (!res.ok) return [];
 
-  const data = await res.json();
+  const data = (await res.json()) as {
+    code?: string;
+    message?: string;
+    routes?: Array<{
+      distance: number;
+      duration: number;
+      geometry?: { coordinates: [number, number][] };
+    }>;
+  };
+
   if (data.code && data.code !== "Ok") {
     console.error("[api/directions]", data.code, data.message);
   }
+
   const route = data.routes?.[0];
   if (!route) return [];
 
   const coords = (route.geometry?.coordinates ?? []).map(
     ([lng, lat]: [number, number]) => [lat, lng] as [number, number],
   );
-  const data = (await res.json()) as {
-    routes?: Array<{
-      distance: number;
-      duration: number;
-      geometry: { coordinates: [number, number][] };
-    }>;
-  };
-  const route = data.routes?.[0];
-  if (!route) return [];
 
   return [
     {
       coordinates: coords,
       distance_km: Math.round(((route.distance ?? 0) / 1000) * 10) / 10,
       duration_minutes: Math.round((route.duration ?? 0) / 60),
-      coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
-      distance_km: Math.round((route.distance / 1000) * 10) / 10,
-      duration_minutes: Math.round(route.duration / 60),
     },
   ];
 }

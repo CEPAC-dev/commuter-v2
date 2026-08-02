@@ -22,6 +22,7 @@ const VehicleSchema = new Schema(
     capacity: { type: Number, required: true },
     occupancy: { type: Number, required: true, default: 0 },
     min_occupancy: { type: Number, required: true },
+    minimum_charge: { type: Number, required: true, default: 0 },
     sortOrder: { type: Number, required: true, default: 0 },
     active: { type: Boolean, required: true, default: true },
   },
