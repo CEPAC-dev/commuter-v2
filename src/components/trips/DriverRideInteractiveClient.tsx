@@ -7,7 +7,6 @@ import {
   Route,
   Car,
   Clock,
-  MapPin,
   Play,
   CheckCircle2,
   Flag,
@@ -19,7 +18,7 @@ import RouteMap from "@/components/shared/RouteMap";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import { VEHICLES, type VehicleKey } from "@/lib/config/vehicles";
 import type { GeoPoint } from "@/types/geo";
-import type { RideDetailView, RideStatus } from "@/types/booking";
+import type { RideDetailView } from "@/types/booking";
 
 function to12h(hhmm: string): string {
   if (!hhmm) return "—";
@@ -112,6 +111,13 @@ export default function DriverRideInteractiveClient({
   const [activeStationIndex, setActiveStationIndex] = useState<number | null>(
     hasConfirmedPassengerEvent ? initialConfirmedStationIndex + 1 : null,
   );
+  const [activeStepIndex, setActiveStepIndex] = useState<number | null>(
+    ride.status === "active" || ride.status === "completed" ? 1 : null,
+  );
+  const [confirmedStationIndices, setConfirmedStationIndices] = useState<number[]>([]);
+  const [stationSelections, setStationSelections] = useState<
+    Record<string, Record<string, "arrived" | "no_show">>
+  >({});
   const [driverOrigin, setDriverOrigin] = useState<GeoPoint | null>(
     ride.driverOrigin ?? null,
   );
@@ -119,7 +125,6 @@ export default function DriverRideInteractiveClient({
     ride.driverDestination ?? null,
   );
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
-  const currentStationIndex = rideStarted ? (activeStationIndex ?? 1) : null;
 
   const vLabel =
     VEHICLES[ride.vehicleType as VehicleKey]?.label ?? ride.vehicleType;
@@ -148,7 +153,6 @@ export default function DriverRideInteractiveClient({
       },
     ]);
   }
-  const stationCount = routeStops.length;
   const stationPoints = routeStops
     .map((r) => r.point)
     .filter((pt): pt is NonNullable<typeof pt> => Boolean(pt));
@@ -182,7 +186,7 @@ export default function DriverRideInteractiveClient({
   }
 
   type StepItem = {
-    type: "station";
+    type: "origin" | "station" | "destination";
     stationIndex: number;
     name: string;
     zone: string;
@@ -192,20 +196,59 @@ export default function DriverRideInteractiveClient({
     waitingMinutes: number;
   };
 
-  const steps: StepItem[] = routeStops.map((stop, i) => {
-    const stationName = (stop as any).name ?? stop.address ?? `Station ${i + 1}`;
-    const meta = stationMetaMap.get(stationName);
-    return {
-      type: "station" as const,
-      stationIndex: i + 1,
-      name: stationName,
-      zone: (stop as any).direction ?? meta?.direction ?? "",
-      landmark: (stop as any).landmark ?? meta?.landmark ?? "",
-      boarding: stop.boarding || 0,
-      alighting: stop.alighting || 0,
-      waitingMinutes: stop.waitingMinutes || 0,
-    };
-  });
+  type RouteStopLike = {
+    name?: string;
+    address?: string;
+    direction?: string;
+    landmark?: string;
+    boarding?: number;
+    alighting?: number;
+    waitingMinutes?: number;
+  };
+
+  const steps: StepItem[] = [
+    {
+      type: "origin",
+      stationIndex: 0,
+      name: driverOrigin?.address ?? "Driver current location",
+      zone: "",
+      landmark: "",
+      boarding: 0,
+      alighting: 0,
+      waitingMinutes: 0,
+    },
+    ...routeStops.map((stop, i) => {
+      const stopLike = stop as RouteStopLike;
+      const stationName = stopLike.name ?? stop.address ?? `Station ${i + 1}`;
+      const meta = stationMetaMap.get(stationName);
+      return {
+        type: "station" as const,
+        stationIndex: i + 1,
+        name: stationName,
+        zone: stopLike.direction ?? meta?.direction ?? "",
+        landmark: stopLike.landmark ?? meta?.landmark ?? "",
+        boarding: stop.boarding || 0,
+        alighting: stop.alighting || 0,
+        waitingMinutes: stop.waitingMinutes || 0,
+      };
+    }),
+    {
+      type: "destination",
+      stationIndex: routeStops.length + 1,
+      name: driverDestination?.address ?? "Driver final destination",
+      zone: "",
+      landmark: "",
+      boarding: 0,
+      alighting: 0,
+      waitingMinutes: 0,
+    },
+  ];
+
+  const stationSteps = steps.filter((step) => step.type === "station");
+  const allStationsConfirmed =
+    stationSteps.length === 0
+      ? true
+      : confirmedStationIndices.length === stationSteps.length;
 
   // Helper for reverse geocoding location name
   const fetchLocationName = async (lat: number, lng: number, fallback: string): Promise<string> => {
@@ -257,13 +300,41 @@ export default function DriverRideInteractiveClient({
 
     if (loc) setDriverOrigin(loc);
     setRideStarted(true);
-    setActiveStationIndex(null); // Starting ride does NOT automatically confirm first station boarding
+    setActiveStationIndex(null);
+    const firstStationIndex = steps.findIndex((step) => step.type === "station");
+    setActiveStepIndex(firstStationIndex >= 0 ? firstStationIndex : null);
+    setConfirmedStationIndices([]);
+    setStationSelections({});
     setLoadingAction(null);
   };
 
-  const handleConfirmStation = async (stationIndex: number, stationName: string) => {
+  const handleConfirmStation = async (
+    stationIndex: number,
+    stationName: string,
+    stationStepIndex: number,
+    boardingCount: number,
+  ) => {
+    const stationKey = String(stationIndex);
+    const selections = stationSelections[stationKey] ?? {};
+    const passengersForStation = ride.passengers.filter(
+      (passenger) =>
+        (passenger.pickupOrder ?? 0) === stationIndex ||
+        (passenger.dropoffOrder ?? 0) === stationIndex,
+    );
+
+    const requiresPassengerSelections = boardingCount > 0;
+    const missingSelection =
+      requiresPassengerSelections &&
+      passengersForStation.some((passenger) => !selections[passenger.tripId]);
+    if (missingSelection) return;
+
     setLoadingAction(`confirm-${stationIndex}`);
     try {
+      const confirmations = passengersForStation.map((passenger) => ({
+        tripId: passenger.tripId,
+        status: selections[passenger.tripId],
+      }));
+
       const res = await fetch(`/api/actions/ride/${ride.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -271,6 +342,7 @@ export default function DriverRideInteractiveClient({
           action: "station_arrived",
           stationIndex,
           stationName,
+          metadata: { confirmations },
         }),
       });
 
@@ -278,9 +350,15 @@ export default function DriverRideInteractiveClient({
         throw new Error(`Failed to confirm station ${stationIndex}`);
       }
 
-      setActiveStationIndex(
-        stationIndex < stationCount ? stationIndex + 1 : stationIndex,
+      setConfirmedStationIndices((prev) =>
+        prev.includes(stationIndex) ? prev : [...prev, stationIndex],
       );
+      setActiveStationIndex(stationIndex);
+
+      const nextStationIndex = steps.findIndex(
+        (step, index) => index > stationStepIndex && step.type === "station",
+      );
+      setActiveStepIndex(nextStationIndex >= 0 ? nextStationIndex : null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -560,9 +638,29 @@ export default function DriverRideInteractiveClient({
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             {steps.map((step, index) => {
               const isLast = index === steps.length - 1;
-              const badgeBg = index === 0 ? "#00C2A8" : isLast ? "#0B1E3D" : "#5A6A7A";
+              const badgeBg =
+                step.type === "origin"
+                  ? "#00C2A8"
+                  : step.type === "destination"
+                    ? "#0B1E3D"
+                    : "#5A6A7A";
 
               const isActiveStation = activeStationIndex === step.stationIndex;
+              const isCurrentStep = rideStarted && !isCompleted && activeStepIndex === index;
+              const isConfirmedStep =
+                step.type === "station" && confirmedStationIndices.includes(step.stationIndex);
+              const passengersForStation =
+                step.type === "station"
+                  ? ride.passengers.filter(
+                      (passenger) =>
+                        (passenger.pickupOrder ?? 0) === step.stationIndex ||
+                        (passenger.dropoffOrder ?? 0) === step.stationIndex,
+                    )
+                  : [];
+              const stationSelectionsForStep = stationSelections[String(step.stationIndex)] ?? {};
+              const isDecisionComplete =
+                passengersForStation.length === 0 ||
+                passengersForStation.every((passenger) => Boolean(stationSelectionsForStep[passenger.tripId]));
 
               return (
                 <div
@@ -627,7 +725,11 @@ export default function DriverRideInteractiveClient({
                             display: "block",
                           }}
                         >
-                          Station
+                          {step.type === "origin"
+                            ? "Driver origin"
+                            : step.type === "destination"
+                              ? "Driver destination"
+                              : "Station"}
                         </span>
                         <p
                           style={{
@@ -643,11 +745,16 @@ export default function DriverRideInteractiveClient({
                       </div>
 
                       {/* Confirm passenger rides button */}
-                      {!isCompleted && currentStationIndex === step.stationIndex && (
+                      {!isCompleted && step.type === "station" && isCurrentStep && (
                         <button
                           type="button"
-                          onClick={() => handleConfirmStation(step.stationIndex, step.name)}
-                          disabled={loadingAction === `confirm-${step.stationIndex}`}
+                          onClick={() =>
+                            handleConfirmStation(step.stationIndex, step.name, index, step.boarding)
+                          }
+                          disabled={
+                            loadingAction === `confirm-${step.stationIndex}` ||
+                            (step.boarding > 0 && !isDecisionComplete)
+                          }
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -659,14 +766,21 @@ export default function DriverRideInteractiveClient({
                             border: isActiveStation ? "1px solid #27AE60" : "1px solid #00C2A8",
                             background: isActiveStation ? "#E8F8F5" : "#fff",
                             color: isActiveStation ? "#196F3D" : "#00806E",
-                            cursor: "pointer",
+                            cursor:
+                              loadingAction === `confirm-${step.stationIndex}` ||
+                              (step.boarding > 0 && !isDecisionComplete)
+                                ? "not-allowed"
+                                : "pointer",
                             boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                            opacity: step.boarding > 0 && !isDecisionComplete ? 0.7 : 1,
                           }}
                         >
                           <CheckCircle2 size={13} color={isActiveStation ? "#27AE60" : "#00C2A8"} />
-                          {isActiveStation
-                            ? "Active station"
-                            : "Confirm passenger rides"}
+                          {loadingAction === `confirm-${step.stationIndex}`
+                            ? "Confirming..."
+                            : step.boarding > 0
+                              ? "Confirm arrivals"
+                              : "Confirm stop"}
                         </button>
                       )}
                     </div>
@@ -680,30 +794,40 @@ export default function DriverRideInteractiveClient({
                         flexWrap: "wrap",
                       }}
                     >
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 5,
-                          fontSize: 12,
-                          color: "#5A6A7A",
-                        }}
-                      >
-                        <LogOut size={12} aria-hidden="true" />
-                        Alighting: <strong style={{ color: "#0B1E3D" }}>{step.alighting}</strong>
-                      </span>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 5,
-                          fontSize: 12,
-                          color: "#5A6A7A",
-                        }}
-                      >
-                        <LogIn size={12} aria-hidden="true" />
-                        Boarding: <strong style={{ color: "#0B1E3D" }}>{step.boarding}</strong>
-                      </span>
+                      {step.type === "station" ? (
+                        <>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 5,
+                              fontSize: 12,
+                              color: "#5A6A7A",
+                            }}
+                          >
+                            <LogOut size={12} aria-hidden="true" />
+                            Alighting: <strong style={{ color: "#0B1E3D" }}>{step.alighting}</strong>
+                          </span>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 5,
+                              fontSize: 12,
+                              color: "#5A6A7A",
+                            }}
+                          >
+                            <LogIn size={12} aria-hidden="true" />
+                            Boarding: <strong style={{ color: "#0B1E3D" }}>{step.boarding}</strong>
+                          </span>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                          {step.type === "origin"
+                            ? "This is the driver’s starting point."
+                            : "This is the driver’s finish point."}
+                        </span>
+                      )}
                       {step.waitingMinutes > 0 && (
                         <span
                           style={{
@@ -719,13 +843,114 @@ export default function DriverRideInteractiveClient({
                         </span>
                       )}
                     </div>
+
+                    {step.type === "station" && isCurrentStep && step.boarding > 0 && (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          paddingTop: 12,
+                          borderTop: "1px solid #eef0f3",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
+                        }}
+                      >
+                        <p style={{ margin: 0, fontSize: 12, color: "#5A6A7A", fontWeight: 600 }}>
+                          Confirm who arrived and who did not at this stop.
+                        </p>
+                        {passengersForStation.length === 0 ? (
+                          <p style={{ margin: 0, fontSize: 12, color: "#5A6A7A" }}>
+                            No passenger is assigned to this stop yet.
+                          </p>
+                        ) : (
+                          passengersForStation.map((passenger) => {
+                            const selectedStatus = stationSelectionsForStep[passenger.tripId];
+                            return (
+                              <div
+                                key={passenger.tripId}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: 10,
+                                  padding: "10px 12px",
+                                  borderRadius: 10,
+                                  background: "#f8f9fa",
+                                  border: "1px solid #eef0f3",
+                                }}
+                              >
+                                <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
+                                  {passenger.passengerName ?? `Passenger ${passenger.pickupOrder ?? 1}`}
+                                </span>
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setStationSelections((prev) => ({
+                                        ...prev,
+                                        [String(step.stationIndex)]: {
+                                          ...(prev[String(step.stationIndex)] ?? {}),
+                                          [passenger.tripId]: "arrived",
+                                        },
+                                      }))
+                                    }
+                                    style={{
+                                      padding: "6px 10px",
+                                      borderRadius: 8,
+                                      border: selectedStatus === "arrived" ? "1px solid #27AE60" : "1px solid #dbe2e8",
+                                      background: selectedStatus === "arrived" ? "#E8F8F5" : "#fff",
+                                      color: selectedStatus === "arrived" ? "#196F3D" : "#5A6A7A",
+                                      fontWeight: 700,
+                                      fontSize: 12,
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    Arrived
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setStationSelections((prev) => ({
+                                        ...prev,
+                                        [String(step.stationIndex)]: {
+                                          ...(prev[String(step.stationIndex)] ?? {}),
+                                          [passenger.tripId]: "no_show",
+                                        },
+                                      }))
+                                    }
+                                    style={{
+                                      padding: "6px 10px",
+                                      borderRadius: 8,
+                                      border: selectedStatus === "no_show" ? "1px solid #E74C3C" : "1px solid #dbe2e8",
+                                      background: selectedStatus === "no_show" ? "#FFEBEE" : "#fff",
+                                      color: selectedStatus === "no_show" ? "#C0392B" : "#5A6A7A",
+                                      fontWeight: 700,
+                                      fontSize: 12,
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    No show
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+
+                    {step.type === "station" && isConfirmedStep && !isCurrentStep && (
+                      <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: "#27AE60" }}>
+                        Confirmed for this station.
+                      </div>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
 
-          {rideStarted && !isCompleted && (
+          {rideStarted && !isCompleted && allStationsConfirmed && (
             <button
               type="button"
               onClick={handleCloseRide}

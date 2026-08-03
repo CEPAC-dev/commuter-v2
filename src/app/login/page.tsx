@@ -293,6 +293,22 @@ function LoginForm() {
         ) : (
           <form onSubmit={handleSubmit} noValidate>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {mode === "login" ? (
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <Link
+                    href="/forgot-password"
+                    style={{
+                      fontSize: 13,
+                      color: "#00C2A8",
+                      textDecoration: "none",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+              ) : null}
+
               {/* Name (register only) */}
               {mode === "register" && (
                 <div>

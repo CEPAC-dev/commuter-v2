@@ -342,17 +342,40 @@ export async function POST(
         // Update statuses for passengers boarding or alighting at this station
         const currentRideDoc = await Ride.findById(rideId);
         if (currentRideDoc && currentRideDoc.passengers) {
+          const confirmations = Array.isArray(metadata?.confirmations)
+            ? metadata.confirmations.filter(
+                (entry: { tripId?: unknown; status?: string }) =>
+                  Boolean(entry?.tripId) && (entry.status === "arrived" || entry.status === "no_show"),
+              )
+            : [];
+          const confirmationMap = new Map<string, string>();
+          for (const entry of confirmations) {
+            const tripId = entry.tripId?.toString?.() ?? "";
+            if (tripId) {
+              confirmationMap.set(tripId, entry.status);
+            }
+          }
+
           let updatedPassengers = false;
           for (const p of currentRideDoc.passengers) {
             const pPickupIdx = p.pickupOrder ?? 0;
             const pDropoffIdx = p.dropoffOrder ?? 0;
-            const pPickupName = (p.pickupStation as any)?.name;
-            const pDropoffName = (p.dropoffStation as any)?.name;
+            const pPickupName = (p.pickupStation as { name?: string } | undefined)?.name;
+            const pDropoffName = (p.dropoffStation as { name?: string } | undefined)?.name;
+            const confirmationStatus = confirmationMap.get(p.tripId?.toString?.() ?? "");
 
             const isPickup = pPickupIdx === stationIndex || pPickupName === stationName;
             const isDropoff = pDropoffIdx === stationIndex || pDropoffName === stationName;
 
-            if (isPickup) {
+            if (confirmationStatus === "arrived") {
+              p.status = "picked_up";
+              updatedPassengers = true;
+              await Trip.findByIdAndUpdate(p.tripId, { status: "active" });
+            } else if (confirmationStatus === "no_show") {
+              p.status = "no_show";
+              updatedPassengers = true;
+              await Trip.findByIdAndUpdate(p.tripId, { status: "cancelled" });
+            } else if (isPickup) {
               p.status = "picked_up";
               updatedPassengers = true;
               await Trip.findByIdAndUpdate(p.tripId, { status: "active" });

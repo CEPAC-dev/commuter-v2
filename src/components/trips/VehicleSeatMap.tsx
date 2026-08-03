@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { User, X, MapPin, DollarSign, Calendar, Clock } from "lucide-react";
+import { User, X, MapPin } from "lucide-react";
 import type { RideDetailView, RidePassengerDetail } from "@/types/booking";
 
 interface Props {
@@ -295,7 +295,6 @@ export default function VehicleSeatMap({
                   labelText = "YOUR SEAT";
                 } else if (isDriver) {
                   if (!rideStarted || !isOccupied) {
-                    // Before ride start or empty seat: neutral empty state
                     bg = "#F8FAFC";
                     borderColor = "#CBD5E1";
                     color = "#64748B";
@@ -305,25 +304,22 @@ export default function VehicleSeatMap({
                     const pIdx = passenger?.pickupOrder ?? 1;
                     const dIdx = passenger?.dropoffOrder ?? 99;
 
-                    if (activeStationIndex === null) {
+                    if (activeStationIndex === null || !rideStarted) {
                       bg = "#F8FAFC";
                       borderColor = "#CBD5E1";
                       color = "#64748B";
                       labelText = "Empty";
                     } else if (pIdx === stIdx) {
-                      // Green: Boarding at this station
                       bg = "#E8F8F5";
                       borderColor = "#27AE60";
                       color = "#196F3D";
                       labelText = "Boarding";
                     } else if (dIdx === stIdx) {
-                      // Red: Alighting at this station
                       bg = "#FFEBEE";
                       borderColor = "#E74C3C";
                       color = "#C0392B";
                       labelText = "Alighting";
                     } else if (pIdx < stIdx && dIdx > stIdx) {
-                      // Blue: Onboard (picked up earlier, continuing)
                       bg = "#EFF6FF";
                       borderColor = "#2F80ED";
                       color = "#1D4ED8";
@@ -334,7 +330,6 @@ export default function VehicleSeatMap({
                       color = "#64748B";
                       labelText = "Empty";
                     } else {
-                      // Neutral empty state
                       bg = "#F8FAFC";
                       borderColor = "#CBD5E1";
                       color = "#64748B";
