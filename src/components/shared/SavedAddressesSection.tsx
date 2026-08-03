@@ -1,7 +1,11 @@
 "use client";
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Bookmark, Plus, Pencil, Trash2, X, Loader2 } from "lucide-react";
-import LocationPickerMap from "@/components/map/LocationPickerMap";
+const LocationPickerMap = dynamic(
+  () => import("@/components/map/LocationPickerMapOsm"),
+  { ssr: false },
+);
 import type { SavedAddress } from "@/types/shared";
 import type { TripPoint } from "@/lib/store/useTripStore";
 
@@ -245,7 +249,11 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
               id="addr-label"
               value={addrForm.label}
               onChange={(e) =>
-                setAddrForm((prev) => ({ ...prev, label: e.target.value, otherLabel: e.target.value !== "Other" ? "" : prev.otherLabel }))
+                setAddrForm((prev) => ({
+                  ...prev,
+                  label: e.target.value,
+                  otherLabel: e.target.value !== "Other" ? "" : prev.otherLabel,
+                }))
               }
               style={{
                 width: "100%",
@@ -274,7 +282,10 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
                 type="text"
                 value={addrForm.otherLabel}
                 onChange={(e) =>
-                  setAddrForm((prev) => ({ ...prev, otherLabel: e.target.value }))
+                  setAddrForm((prev) => ({
+                    ...prev,
+                    otherLabel: e.target.value,
+                  }))
                 }
                 style={{
                   marginTop: 8,
@@ -315,7 +326,14 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
               onChange={(lat, lng, name) =>
                 setAddrForm((prev) => ({
                   ...prev,
-                  point: lat && lng ? { address: name, lat: parseFloat(lat), lng: parseFloat(lng) } : null,
+                  point:
+                    lat && lng
+                      ? {
+                          address: name,
+                          lat: parseFloat(lat),
+                          lng: parseFloat(lng),
+                        }
+                      : null,
                 }))
               }
             />

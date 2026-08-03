@@ -364,8 +364,10 @@ export async function POST(
             const pDropoffName = (p.dropoffStation as { name?: string } | undefined)?.name;
             const confirmationStatus = confirmationMap.get(p.tripId?.toString?.() ?? "");
 
-            const isPickup = pPickupIdx === stationIndex || pPickupName === stationName;
-            const isDropoff = pDropoffIdx === stationIndex || pDropoffName === stationName;
+            const isPickup =
+              pPickupIdx === stationIndex || pPickupName === stationName;
+            const isDropoff =
+              pDropoffIdx === stationIndex || pDropoffName === stationName;
 
             if (confirmationStatus === "arrived") {
               p.status = "picked_up";

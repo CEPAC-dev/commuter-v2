@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   Plus,
@@ -17,10 +18,12 @@ import type { TripPoint } from "@/lib/store/useTripStore";
 import AppHeader from "@/components/layout/AppHeader";
 import DatePicker from "./DatePicker";
 import TripCycle, { type TripData } from "./TripCycle";
-import CreateMap from "./CreateMap";
+const CreateMap = dynamic(() => import("./CreateMapOsm"), { ssr: false });
 import { earliestBookingDate } from "@/lib/time/bookingDates";
 import type { SavedAddress } from "@/types/shared";
+import { haversineKm } from "@/lib/geo/stations";
 import type { Station } from "@/lib/geo/stations";
+import { computeTripPriceEgp } from "@/lib/config/vehicles";
 
 interface Props {
   userEmail: string;
@@ -62,6 +65,14 @@ function defaultTrip(
   };
 }
 
+const MOBILE_DRAWER_MIN_VH = 42;
+const MOBILE_DRAWER_MAX_VH = 100;
+const MOBILE_DRAWER_DEFAULT_VH = 74;
+
+function clampDrawerHeight(vh: number): number {
+  return Math.max(MOBILE_DRAWER_MIN_VH, Math.min(MOBILE_DRAWER_MAX_VH, vh));
+}
+
 export default function CreateClient({ userEmail }: Props) {
   const { pickup, dropoff } = useTripStore();
   const [mounted, setMounted] = useState(false);
@@ -83,10 +94,23 @@ export default function CreateClient({ userEmail }: Props) {
     string,
     (typeof VEHICLES)[keyof typeof VEHICLES]
   > | null>(null);
+  const [tripErrors, setTripErrors] = useState<Record<string, string | null>>(
+    {},
+  );
   const [picking, setPicking] = useState<{
     tripId: string;
     field: "pickup" | "dropoff";
   } | null>(null);
+  const [drawerHeightVh, setDrawerHeightVh] = useState(
+    MOBILE_DRAWER_DEFAULT_VH,
+  );
+  const [draggingDrawer, setDraggingDrawer] = useState(false);
+  const drawerDragRef = useRef({
+    active: false,
+    pointerId: -1,
+    startY: 0,
+    startHeightVh: MOBILE_DRAWER_DEFAULT_VH,
+  });
 
   // Hydrate from store after mount (avoid SSR mismatch)
   useEffect(() => {
@@ -161,6 +185,30 @@ export default function CreateClient({ userEmail }: Props) {
     [picking],
   );
 
+  const handleTripStopErrorChange = useCallback(
+    (tripId: string, error: string | null) => {
+      setTripErrors((prev) => {
+        if (prev[tripId] === error) return prev;
+        return { ...prev, [tripId]: error };
+      });
+    },
+    [],
+  );
+
+  const getTripPriceForSubmission = useCallback(
+    (trip: TripData) => {
+      if (!trip.vehicleType) return 0;
+      return computeTripPriceEgp({
+        basePrice: trip.priceEgp ?? 0,
+        vehicleType: trip.vehicleType,
+        extraPassengers: trip.extraPassengers ?? 0,
+        numberOfPassengers: trip.numberOfPassengers ?? 1,
+        vehiclesMap: vehiclesMap ?? undefined,
+      });
+    },
+    [vehiclesMap],
+  );
+
   async function handleSubmit() {
     setSubmitting(true);
     setSubmitError("");
@@ -183,6 +231,7 @@ export default function CreateClient({ userEmail }: Props) {
             extraPassengers: t.extraPassengers,
             passengers: t.passengers,
             numberOfPassengers: t.numberOfPassengers,
+            priceEgp: getTripPriceForSubmission(t),
             stops: t.stops.map((stop) => ({
               point: stop.point,
               alighting: stop.alighting,
@@ -318,6 +367,39 @@ export default function CreateClient({ userEmail }: Props) {
     setTrips((prev) => [...prev, defaultTrip(null, null)]);
   }
 
+  function handleDrawerPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (window.innerWidth > 767) return;
+    drawerDragRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeightVh: drawerHeightVh,
+    };
+    setDraggingDrawer(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+
+  function handleDrawerPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = drawerDragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    const deltaY = event.clientY - drag.startY;
+    const deltaVh = (deltaY / window.innerHeight) * 100;
+    setDrawerHeightVh(clampDrawerHeight(drag.startHeightVh - deltaVh));
+  }
+
+  function handleDrawerPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = drawerDragRef.current;
+    if (drag.pointerId !== event.pointerId) return;
+    drawerDragRef.current.active = false;
+    setDraggingDrawer(false);
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  const drawerStyleVars = {
+    ["--drawer-height-vh" as string]: String(drawerHeightVh),
+  } as React.CSSProperties;
+
   // Validate all trips before preview
   function validate(): string | null {
     if (selectedDates.length === 0) return "Select at least one date.";
@@ -401,18 +483,29 @@ export default function CreateClient({ userEmail }: Props) {
     setShowPreview(true);
   }
 
-  const totalEgp = trips.reduce((sum, t) => {
-    const isPrivate =
-      t.vehicleType !== "" &&
-      (vehiclesMap?.[t.vehicleType] ?? VEHICLES[t.vehicleType]).ride ===
-        "private";
-    return (
-      sum +
-      (isPrivate
-        ? (t.priceEgp ?? 0)
-        : finalPrice(t.priceEgp ?? 0, t.extraPassengers ?? 0, t.vehicleType))
+  const validationWarning = validate();
+  const hasStopErrors = Object.values(tripErrors).some(Boolean);
+  const hasInvalidLocations = trips.some((t) => {
+    if (!t.pickup || !t.dropoff) return false;
+    if (t.pickup.lat === t.dropoff.lat && t.pickup.lng === t.dropoff.lng) {
+      return true;
+    }
+    if (t.distanceKm != null) return t.distanceKm < 0.5;
+    const straightLine = haversineKm(
+      t.pickup.lat,
+      t.pickup.lng,
+      t.dropoff.lat,
+      t.dropoff.lng,
     );
-  }, 0);
+    return straightLine < 0.5;
+  });
+  const previewDisabled =
+    !!validationWarning || hasStopErrors || hasInvalidLocations;
+
+  const totalEgp = trips.reduce(
+    (sum, t) => sum + getTripPriceForSubmission(t),
+    0,
+  );
   const grandTotalEgp = totalEgp * Math.max(1, selectedDates.length);
 
   if (!mounted) {
@@ -453,11 +546,12 @@ export default function CreateClient({ userEmail }: Props) {
         {/* ── Left: form panel ── */}
         <aside
           style={{
+            ...drawerStyleVars,
             width: 520,
             flexShrink: 0,
             background: "#ffffff",
             borderRight: "1px solid #eef0f3",
-            overflowY: "auto",
+            overflowY: draggingDrawer ? "hidden" : "auto",
             display: "flex",
             flexDirection: "column",
             margin: "40px 0 40px 40px",
@@ -466,6 +560,16 @@ export default function CreateClient({ userEmail }: Props) {
           }}
           className="create-left"
         >
+          <div
+            className="mobile-drawer-handle-wrap"
+            aria-hidden="true"
+            onPointerDown={handleDrawerPointerDown}
+            onPointerMove={handleDrawerPointerMove}
+            onPointerUp={handleDrawerPointerUp}
+            onPointerCancel={handleDrawerPointerUp}
+          >
+            <span className="mobile-drawer-handle" />
+          </div>
           <div
             style={{
               padding: "32px 20px",
@@ -541,6 +645,9 @@ export default function CreateClient({ userEmail }: Props) {
                     vehiclesMap={vehiclesMap ?? undefined}
                     vehicleList={
                       vehiclesMap ? Object.values(vehiclesMap) : undefined
+                    }
+                    onStopErrorChange={(error) =>
+                      handleTripStopErrorChange(trip.id, error)
                     }
                   />
                 );
@@ -640,29 +747,39 @@ export default function CreateClient({ userEmail }: Props) {
               <button
                 type="button"
                 onClick={handlePreview}
+                disabled={previewDisabled}
                 style={{
                   width: "100%",
                   height: 52,
-                  background: "#0B1E3D",
+                  background: previewDisabled ? "#7b8a9a" : "#0B1E3D",
                   color: "#ffffff",
                   fontWeight: 700,
                   fontSize: 15,
                   border: "none",
                   borderRadius: 12,
-                  cursor: "pointer",
+                  cursor: previewDisabled ? "not-allowed" : "pointer",
+                  opacity: previewDisabled ? 0.55 : 1,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 8,
                   fontFamily: "inherit",
-                  transition: "background 0.2s",
+                  transition: "background 0.2s, opacity 0.2s",
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "#00C2A8";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "#0B1E3D";
-                }}
+                onMouseEnter={
+                  previewDisabled
+                    ? undefined
+                    : (e) => {
+                        e.currentTarget.style.background = "#00C2A8";
+                      }
+                }
+                onMouseLeave={
+                  previewDisabled
+                    ? undefined
+                    : (e) => {
+                        e.currentTarget.style.background = "#0B1E3D";
+                      }
+                }
               >
                 <Eye size={17} aria-hidden="true" />
                 Preview booking
@@ -826,18 +943,7 @@ export default function CreateClient({ userEmail }: Props) {
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
-                        {t.vehicleType !== "" &&
-                        (
-                          vehiclesMap?.[t.vehicleType] ??
-                          VEHICLES[t.vehicleType]
-                        ).ride === "private"
-                          ? (t.priceEgp ?? 0)
-                          : finalPrice(
-                              t.priceEgp ?? 0,
-                              t.extraPassengers ?? 0,
-                              t.vehicleType,
-                            )}{" "}
-                        EGP
+                        {getTripPriceForSubmission(t)} EGP
                       </span>
                     </div>
                     <div
@@ -1648,18 +1754,60 @@ export default function CreateClient({ userEmail }: Props) {
       <style>{`
         .email-desktop { display: block; }
         @media (max-width: 767px) {
-          .create-layout { flex-direction: column !important; overflow-y: auto !important; overflow-x: hidden !important; }
-          .create-left { 
-            width: 100% !important; 
-            margin: 0 !important; 
-            border: none !important; 
-            border-radius: 0 !important; 
-            border-bottom: 1px solid #eef0f3 !important; 
-            // overflow-y: visible !important; 
-            flex-shrink: 0 !important;
+          .create-layout {
+            position: relative !important;
+            display: block !important;
+            overflow: hidden !important;
+            height: 100% !important;
           }
-          .create-right { flex: 1 1 100% !important; height: 45vh !important; flex-shrink: 0 !important; }
+          .create-left { 
+            position: absolute !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            z-index: 20 !important;
+            width: auto !important;
+            max-height: min(100dvh, calc(var(--drawer-height-vh, 74) * 1dvh)) !important;
+            margin: 0 !important; 
+            border: 1px solid #dfe5eb !important;
+            border-bottom: none !important;
+            border-radius: 20px 20px 0 0 !important;
+            background: #ffffff !important;
+            box-shadow: 0 -12px 30px rgba(11, 30, 61, 0.14) !important;
+            overflow-y: auto !important;
+          }
+          .create-right {
+            position: relative !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            height: 100% !important;
+          }
+          .mobile-drawer-handle-wrap {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            display: flex;
+            justify-content: center;
+            padding: 10px 0 6px;
+            background: linear-gradient(180deg, #ffffff 70%, rgba(255,255,255,0.92) 100%);
+            touch-action: none;
+            cursor: ns-resize;
+            user-select: none;
+          }
+          .mobile-drawer-handle {
+            width: 44px;
+            height: 5px;
+            border-radius: 999px;
+            background: #cfd8e2;
+            display: inline-block;
+          }
+          .create-left > div:last-child {
+            padding-top: 12px !important;
+          }
           .email-desktop { display: none !important; }
+        }
+        @media (min-width: 768px) {
+          .mobile-drawer-handle-wrap { display: none; }
         }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
@@ -1668,7 +1816,7 @@ export default function CreateClient({ userEmail }: Props) {
 }
 
 /* ── Helpers local to this file ── */
-import { VEHICLE_LIST, finalPrice, VEHICLES } from "@/lib/config/vehicles";
+import { VEHICLE_LIST, VEHICLES } from "@/lib/config/vehicles";
 import { formatDisplayName } from "@/lib/nominatim";
 import { toMinutes, toHHMM } from "@/lib/time/pickupWindow";
 

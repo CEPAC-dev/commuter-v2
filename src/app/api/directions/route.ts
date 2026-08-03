@@ -6,6 +6,7 @@ export interface DirectionsResult {
   duration_minutes: number;
 }
 
+/** Fetch driving directions from OSRM without exposing provider credentials. */
 /** Fetch driving directions from OSRM in the given waypoint order. */
 export async function fetchDirections(
   origin: string,
@@ -16,11 +17,13 @@ export async function fetchDirections(
     .map((point) => point.trim())
     .filter(Boolean)
     .map((point) => {
-      const [lat, lng] = point.split(",").map(Number);
-      return `${lng},${lat}`;
-    });
+      const [lat, lng] = point.split(",").map((value) => Number(value.trim()));
+      return { lat, lng };
+    })
+    .filter(({ lat, lng }) => Number.isFinite(lat) && Number.isFinite(lng))
+    .map(({ lat, lng }) => `${lng},${lat}`);
 
-  if (coordinates.length < 2 || coordinates.some((point) => point.includes("NaN"))) {
+  if (coordinates.length < 2) {
     return [];
   }
 
@@ -31,13 +34,23 @@ export async function fetchDirections(
   url.searchParams.set("geometries", "geojson");
   url.searchParams.set("steps", "false");
 
-  const res = await fetch(url.toString());
+  const res = await fetch(url, { next: { revalidate: 60 } });
   if (!res.ok) return [];
 
-  const data = await res.json();
+  const data = (await res.json()) as {
+    code?: string;
+    message?: string;
+    routes?: Array<{
+      distance: number;
+      duration: number;
+      geometry?: { coordinates: [number, number][] };
+    }>;
+  };
+
   if (data.code && data.code !== "Ok") {
     console.error("[api/directions]", data.code, data.message);
   }
+
   const route = data.routes?.[0];
   if (!route) return [];
 

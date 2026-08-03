@@ -48,11 +48,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     await connectDB();
-    const user = await User.findByIdAndUpdate(
-      session.userId,
-      userUpdate,
-      { new: true, select: "name email phone role profilePic" },
-    ).lean();
+    const user = await User.findByIdAndUpdate(session.userId, userUpdate, {
+      returnDocument: "after",
+      select: "name email phone role profilePic",
+    }).lean();
 
     if (!user)
       return NextResponse.json({ error: "User not found." }, { status: 404 });
@@ -118,7 +117,7 @@ export async function PATCH(req: NextRequest) {
     const driver = await Driver.findOneAndUpdate(
       { userId: session.userId },
       driverUpdate,
-      { new: true },
+      { returnDocument: "after" },
     ).lean();
 
     return NextResponse.json({ ...user, driver });

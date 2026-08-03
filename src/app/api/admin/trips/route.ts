@@ -1,29 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
 
-export async function GET(req: NextRequest) {
-  const auth = await adminAuth(req);
-  if (!auth.authorized) return auth.response;
+const POPULATE_TRIP_REFERENCES = [
+  { path: "requestId" },
+  { path: "userId", select: "name email phone role" },
+  { path: "driverId", select: "name email phone role" },
+  { path: "rideId" },
+];
 
+export async function GET(req: NextRequest) {
   await connectDB();
 
   const { searchParams } = new URL(req.url);
   const page = Number.parseInt(searchParams.get("page") ?? "1", 10);
   const limit = Number.parseInt(searchParams.get("limit") ?? "20", 10);
   const safePage = Number.isFinite(page) && page > 0 ? page : 1;
-  const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 20;
+  const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 20;
   const skip = (safePage - 1) * safeLimit;
+  const query: Record<string, unknown> = {};
+
+  for (const field of ["userId", "driverId", "requestId", "rideId", "date", "vehicleType", "rideType", "paymentStatus", "status"]) {
+    const value = searchParams.get(field);
+    if (value) query[field] = value;
+  }
+
+  const tripNumber = searchParams.get("tripNumber");
+  if (tripNumber) {
+    const parsedTripNumber = Number.parseInt(tripNumber, 10);
+    if (!Number.isFinite(parsedTripNumber)) {
+      return NextResponse.json({ error: "tripNumber must be a number" }, { status: 400 });
+    }
+    query.tripNumber = parsedTripNumber;
+  }
+
+  const createdAtFrom = searchParams.get("createdAtFrom");
+  const createdAtTo = searchParams.get("createdAtTo");
+  if (createdAtFrom || createdAtTo) {
+    query.createdAt = {
+      ...(createdAtFrom ? { $gte: new Date(createdAtFrom) } : {}),
+      ...(createdAtTo ? { $lte: new Date(createdAtTo) } : {}),
+    };
+  }
 
   const [trips, totalCount] = await Promise.all([
     Trip.find()
+      .find(query)
       .sort({ date: -1, pickupTime: -1 })
       .skip(skip)
       .limit(safeLimit)
-      .populate("driverId", "name phone")
+      .populate(POPULATE_TRIP_REFERENCES)
       .lean(),
-    Trip.countDocuments(),
+    Trip.countDocuments(query),
   ]);
 
   return NextResponse.json({
@@ -32,4 +60,41 @@ export async function GET(req: NextRequest) {
     page: safePage,
     limit: safeLimit,
   });
+}
+
+export async function DELETE(req: NextRequest) {
+  await connectDB();
+
+  const { searchParams } = new URL(req.url);
+  const action = searchParams.get("action");
+  let filter: Record<string, unknown>;
+
+  if (action === "by-user") {
+    const userId = searchParams.get("userId");
+    if (!userId) return NextResponse.json({ error: "userId is required" }, { status: 400 });
+    filter = { userId };
+  } else if (action === "by-trip-number") {
+    const tripNumber = Number.parseInt(searchParams.get("tripNumber") ?? "", 10);
+    if (!Number.isFinite(tripNumber)) {
+      return NextResponse.json({ error: "tripNumber must be a number" }, { status: 400 });
+    }
+    filter = { tripNumber };
+  } else if (action === "today" || action === "not-today") {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const todayFilter = { $gte: todayStart, $lt: tomorrowStart };
+    filter = action === "today"
+      ? { createdAt: todayFilter }
+      : { $or: [{ createdAt: { $lt: todayStart } }, { createdAt: { $gte: tomorrowStart } }] };
+  } else {
+    return NextResponse.json(
+      { error: "action must be by-user, by-trip-number, today, or not-today" },
+      { status: 400 },
+    );
+  }
+
+  const result = await Trip.deleteMany(filter);
+  return NextResponse.json({ ok: true, deletedCount: result.deletedCount });
 }

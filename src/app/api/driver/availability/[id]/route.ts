@@ -23,14 +23,19 @@ export async function DELETE(
   const record = await Availability.findOne({
     _id: id,
     driverId: session.userId,
-  }).select("date").lean<{ date: string }>();
+  })
+    .select("date")
+    .lean<{ date: string }>();
 
   if (!record)
     return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   if (isLocked(record.date))
     return NextResponse.json(
-      { error: "Cannot delete availability after 8:00 PM the day before. Contact support to change." },
+      {
+        error:
+          "Cannot delete availability after 8:00 PM the day before. Contact support to change.",
+      },
       { status: 403 },
     );
 

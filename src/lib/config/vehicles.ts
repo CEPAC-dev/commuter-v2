@@ -16,23 +16,13 @@ export interface VehicleConfig {
   capacity: number; // max seats (integer, placeholder until user edits)
   occupancy: number; // current occupancy (integer, placeholder)
   min_occupancy: number; // minimum occupancy required (integer, placeholder)
+  minimum_charge: number; // EGP minimum charge for this vehicle type
 }
 
 export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   private_car: {
     key: "private_car",
     label: "Private car",
-    rate: 15,
-    ride: "private",
-    buffer: 20,
-    window: 10,
-    capacity: 4,
-    occupancy: 4,
-    min_occupancy: 1,
-  },
-  taxi_private: {
-    key: "taxi_private",
-    label: "Private Taxi",
     rate: 12,
     ride: "private",
     buffer: 20,
@@ -40,17 +30,31 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     capacity: 4,
     occupancy: 4,
     min_occupancy: 1,
+    minimum_charge: 100, // EGP minimum charge for private car rides
+  },
+  taxi_private: {
+    key: "taxi_private",
+    label: "Private Taxi",
+    rate: 10,
+    ride: "private",
+    buffer: 20,
+    window: 10,
+    capacity: 4,
+    occupancy: 4,
+    min_occupancy: 1,
+    minimum_charge: 75, // EGP minimum charge for private taxi rides
   },
   taxi_shared: {
     key: "taxi_shared",
     label: "Shared Taxi",
-    rate: 10,
+    rate: 8,
     ride: "shared",
     buffer: 30,
     window: 20,
-    capacity: 4,
+    capacity: 3,
     occupancy: 3,
     min_occupancy: 2,
+    minimum_charge: 50, // EGP minimum charge for shared taxi rides
   },
   van_shared: {
     key: "van_shared",
@@ -59,9 +63,10 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     ride: "shared",
     buffer: 45,
     window: 25,
-    capacity: 7,
-    occupancy: 6,
+    capacity: 5,
+    occupancy: 5,
     min_occupancy: 4,
+    minimum_charge: 50, // EGP minimum charge for van rides
   },
   microbus_shared: {
     key: "microbus_shared",
@@ -70,9 +75,10 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     ride: "shared",
     buffer: 45,
     window: 30,
-    capacity: 14,
-    occupancy: 10,
+    capacity: 9,
+    occupancy: 9,
     min_occupancy: 8,
+    minimum_charge: 50, // EGP minimum charge for microbus rides
   },
 };
 
@@ -83,6 +89,12 @@ export function priceFor(
   key: VehicleKey,
   vehiclesMap: Record<VehicleKey, VehicleConfig> = VEHICLES,
 ): number {
+  console.log(
+    "priceFor",
+    { distanceKm, key, vehiclesMap },
+    "is: ",
+    Math.round(vehiclesMap[key].rate * Math.pow(distanceKm, 0.8)),
+  );
   return Math.round(vehiclesMap[key].rate * Math.pow(distanceKm, 0.8));
 }
 
@@ -115,42 +127,47 @@ export function finalPrice(
   basePrice: number,
   extraPassengers: number,
   vehicleType: VehicleKey | "",
+  vehiclesMap: Partial<Record<VehicleKey, VehicleConfig>> = VEHICLES,
 ): number {
-  const n = extraPassengers;
-  // const r = (factor: number) => Math.round(basePrice * (n + 1) * factor);
+  const n = Math.max(0, extraPassengers);
+  const vehicle = vehicleType ? vehiclesMap[vehicleType] : undefined;
   const r = (factor: number) => Math.round(basePrice + basePrice * factor);
+
+  if (vehicle?.ride === "shared") {
+    if (vehicleType === "taxi_shared") {
+      if (n === 1) return r(0.5);
+      if (n === 2) return r(1);
+      return basePrice;
+    }
+
+    if (vehicleType === "van_shared") {
+      if (n === 1) return r(0.5);
+      if (n === 2) return r(1);
+      if (n === 3) return r(1.5);
+      if (n === 4) return r(2);
+      return basePrice;
+    }
+
+    if (vehicleType === "microbus_shared") {
+      if (n === 1) return r(0.5);
+      if (n === 2) return r(1);
+      if (n === 3) return r(1.5);
+      if (n === 4) return r(2);
+      if (n === 5) return r(2.5);
+      if (n === 6) return r(3);
+      if (n === 7) return r(3.5);
+      if (n === 8) return r(4);
+      if (n === 9) return r(4.5);
+      return basePrice;
+    }
+
+    return basePrice;
+  }
 
   if (vehicleType === "private_car" || vehicleType === "taxi_private") {
     if (n === 1) return r(0.1);
     if (n === 2) return r(0.2);
     if (n === 3) return r(0.3);
-    return basePrice;
-  }
-
-  if (vehicleType === "taxi_shared") {
-    if (n === 1) return r(0.5);
-    if (n === 2) return r(1);
-    return basePrice;
-  }
-
-  if (vehicleType === "van_shared") {
-    if (n === 1) return r(0.5);
-    if (n === 2) return r(1);
-    if (n === 3) return r(1.5);
-    if (n === 4) return r(2);
-    return basePrice;
-  }
-
-  if (vehicleType === "microbus_shared") {
-    if (n === 1) return r(0.5);
-    if (n === 2) return r(1);
-    if (n === 3) return r(1.5);
-    if (n === 4) return r(2);
-    if (n === 5) return r(2.5);
-    if (n === 6) return r(3);
-    if (n === 7) return r(3.5);
-    if (n === 8) return r(4);
-    if (n === 9) return r(4.5);
     return basePrice;
   }
 
@@ -160,6 +177,57 @@ export function finalPrice(
 export interface PrivateFareLeg {
   distanceKm: number;
   passengers: number;
+}
+
+export function computeTripPriceEgp({
+  basePrice,
+  distanceKm,
+  vehicleType,
+  extraPassengers = 0,
+  numberOfPassengers,
+  vehiclesMap = VEHICLES,
+}: {
+  basePrice?: number;
+  distanceKm?: number;
+  vehicleType: VehicleKey | "";
+  extraPassengers?: number;
+  numberOfPassengers?: number;
+  vehiclesMap?: Partial<Record<VehicleKey, VehicleConfig>>;
+}): number {
+  if (!vehicleType) return 0;
+
+  const vehicle = vehiclesMap[vehicleType as VehicleKey];
+  const normalizedBasePrice =
+    typeof basePrice === "number" && Number.isFinite(basePrice)
+      ? basePrice
+      : typeof distanceKm === "number" && Number.isFinite(distanceKm)
+        ? priceFor(
+            distanceKm,
+            vehicleType as VehicleKey,
+            vehiclesMap as Record<VehicleKey, VehicleConfig>,
+          )
+        : 0;
+
+  const normalizedExtraPassengers = Math.max(
+    0,
+    Math.round(extraPassengers ?? 0),
+  );
+  const normalizedNumberOfPassengers =
+    typeof numberOfPassengers === "number" &&
+    Number.isFinite(numberOfPassengers)
+      ? Math.max(1, Math.round(numberOfPassengers))
+      : 1;
+  const effectiveExtraPassengers =
+    vehicle?.ride === "private"
+      ? Math.max(0, normalizedNumberOfPassengers - 1)
+      : normalizedExtraPassengers;
+
+  return finalPrice(
+    normalizedBasePrice,
+    effectiveExtraPassengers,
+    vehicleType,
+    vehiclesMap,
+  );
 }
 
 /** Split route base fare by distance, then apply private passenger pricing per leg. */

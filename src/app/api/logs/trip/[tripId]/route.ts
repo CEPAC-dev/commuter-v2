@@ -11,12 +11,12 @@ import { Log } from "@/models/Log";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { tripId: string } },
+  { params }: { params: Promise<{ tripId: string }> },
 ) {
   try {
     await connectDB();
 
-    const { tripId } = params;
+    const { tripId } = await params;
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get("limit") || "100");
     const skip = parseInt(searchParams.get("skip") || "0");

@@ -1,12 +1,21 @@
 import { redirect, notFound } from "next/navigation";
-import { Car, MapPin, Route, CalendarDays, Clock, Users, LogIn, LogOut } from "lucide-react";
+import {
+  Car,
+  MapPin,
+  Route,
+  CalendarDays,
+  Clock,
+  Users,
+  LogIn,
+  LogOut,
+} from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getDriverRide } from "@/lib/services/rideService";
 import { getUserTrip, getDriverTrip } from "@/lib/services/trips";
 import { VEHICLES } from "@/lib/config/vehicles";
 import type { VehicleKey } from "@/lib/config/vehicles";
 import AppHeader from "@/components/layout/AppHeader";
-import RouteMap from "@/components/shared/RouteMap";
+import RouteMap from "@/components/shared/RouteMapOsmLoader";
 import DriverCard from "@/components/trips/DriverCard";
 import TripChat from "@/components/shared/TripChat";
 import PrivateRideDetails from "@/components/trips/PrivateRideDetails";
@@ -120,7 +129,8 @@ function rideMapPoints(ride: RideDetailView, isDriver: boolean) {
         pickup: routePickup,
         dropoff: routeDropoff,
         stops: undefined,
-        stations: intermediateStations.length > 0 ? intermediateStations : undefined,
+        stations:
+          intermediateStations.length > 0 ? intermediateStations : undefined,
       };
     }
 
@@ -455,33 +465,45 @@ export default async function TripDetailPage({
         )}
 
         {/* Visual 2D Seating Map for Passenger / Driver */}
-        {isOngoing && (() => {
-          const passengerInRide = trip.rideDetails?.passengers?.find(
-            (p) => String(p.tripId) === String(trip.id),
-          );
-          const mySeats =
-            passengerInRide?.seatNumbers && passengerInRide.seatNumbers.length > 0
-              ? passengerInRide.seatNumbers
-              : trip.seatNumbers && trip.seatNumbers.length > 0
-              ? trip.seatNumbers
-              : [1];
+        {isOngoing &&
+          (() => {
+            const passengerInRide = trip.rideDetails?.passengers?.find(
+              (p) => String(p.tripId) === String(trip.id),
+            );
+            const mySeats =
+              passengerInRide?.seatNumbers &&
+              passengerInRide.seatNumbers.length > 0
+                ? passengerInRide.seatNumbers
+                : trip.seatNumbers && trip.seatNumbers.length > 0
+                  ? trip.seatNumbers
+                  : [1];
 
-          return (
-            <VehicleSeatMap
-              ride={trip.rideDetails}
-              vehicleType={trip.vehicleType}
-              assignedSeatNumbers={mySeats}
-              isDriver={isDriver}
-            />
-          );
-        })()}
+            return (
+              <VehicleSeatMap
+                ride={trip.rideDetails}
+                vehicleType={trip.vehicleType}
+                assignedSeatNumbers={mySeats}
+                isDriver={isDriver}
+              />
+            );
+          })()}
 
         {/* Ongoing trip: driver card + chat (passenger) / chat only (driver) */}
         {isOngoing && (
           <>
             {!isDriver && (
               <DriverCard
-                driver={trip.assignedDriver ?? { name: "", phone: "", profilePic: null, carBrand: "", carModel: "", modelYear: "", plate: "" }}
+                driver={
+                  trip.assignedDriver ?? {
+                    name: "",
+                    phone: "",
+                    profilePic: null,
+                    carBrand: "",
+                    carModel: "",
+                    modelYear: "",
+                    plate: "",
+                  }
+                }
                 showCall={trip.rideType !== "shared"}
               />
             )}

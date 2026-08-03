@@ -3,11 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Ride, type RideDoc } from "../../models/Ride";
 import { Trip, type TripDoc } from "../../models/Trip";
 import { Availability, type AvailabilityDoc } from "../../models/Availability";
-import type {
-  RideDetailView,
-  RideListRow,
-  RideStatus,
-} from "@/types/booking";
+import type { RideDetailView, RideListRow, RideStatus } from "@/types/booking";
 import type { GeoPoint, StationSelection } from "@/types/geo";
 
 type MatchResult = {
@@ -233,7 +229,9 @@ function recalculateRouteFromPassengers(passengers: any[]) {
 
 
 
-function toGeoPoint(raw: Record<string, unknown> | null | undefined): GeoPoint | null {
+function toGeoPoint(
+  raw: Record<string, unknown> | null | undefined,
+): GeoPoint | null {
   if (
     !raw ||
     typeof raw.lat !== "number" ||
@@ -430,6 +428,7 @@ async function getRideByNumber(rideNumber: number) {
 }
 
 const RIDE_STATUS_GROUPS: Record<string, RideStatus[]> = {
+  pending_payment: ["pending_payment" as RideStatus],
   ongoing: ["matched", "confirmed", "active"],
   previous: ["completed", "cancelled"],
 };
@@ -437,7 +436,7 @@ const RIDE_STATUS_GROUPS: Record<string, RideStatus[]> = {
 export interface ListDriverRidesOptions {
   page?: number;
   pageSize?: number;
-  statusGroup?: "ongoing" | "previous";
+  statusGroup?: "pending_payment" | "ongoing" | "previous";
   date?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -482,20 +481,15 @@ function mapRideToListRow(ride: Record<string, any>): RideListRow {
 async function getRidesByDriver(
   driverId: string | Types.ObjectId,
   options?: string | ListDriverRidesOptions,
-): Promise<RideListRow[] | { rows: RideListRow[]; total: number; page: number }> {
+): Promise<
+  RideListRow[] | { rows: RideListRow[]; total: number; page: number }
+> {
   await connectDB();
 
   const opts: ListDriverRidesOptions =
     typeof options === "string" ? { date: options } : (options ?? {});
 
-  const {
-    page,
-    pageSize = 12,
-    statusGroup,
-    date,
-    dateFrom,
-    dateTo,
-  } = opts;
+  const { page, pageSize = 12, statusGroup, date, dateFrom, dateTo } = opts;
 
   const q: Record<string, unknown> = {
     driverId: new Types.ObjectId(String(driverId)),
@@ -550,7 +544,11 @@ async function updateRideStatus(
   rideId: string | Types.ObjectId,
   status: string,
 ) {
-  return Ride.findByIdAndUpdate(rideId, { $set: { status } }, { new: true });
+  return Ride.findByIdAndUpdate(
+    rideId,
+    { $set: { status } },
+    { returnDocument: "after" },
+  );
 }
 
 async function updatePassengerStatusInRide(
@@ -561,7 +559,7 @@ async function updatePassengerStatusInRide(
   const res = await Ride.findOneAndUpdate(
     { _id: rideId, "passengers.tripId": tripId },
     { $set: { "passengers.$.status": status } },
-    { new: true },
+    { returnDocument: "after" },
   );
   return res;
 }

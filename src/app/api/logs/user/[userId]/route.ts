@@ -12,7 +12,7 @@ import { getSession } from "@/lib/auth/session";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } },
+  { params }: { params: Promise<{ userId: string }> },
 ) {
   try {
     const session = await getSession();
@@ -25,7 +25,7 @@ export async function GET(
 
     await connectDB();
 
-    const { userId } = params;
+    const { userId } = await params;
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get("limit") || "100");
     const skip = parseInt(searchParams.get("skip") || "0");

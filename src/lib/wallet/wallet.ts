@@ -196,7 +196,9 @@ export async function completeWithdrawal(
   return Boolean(tx);
 }
 
-export async function refundWithdrawal(transactionId: string): Promise<boolean> {
+export async function refundWithdrawal(
+  transactionId: string,
+): Promise<boolean> {
   await connectDB();
 
   const tx = await WalletTransaction.findOne({
@@ -212,7 +214,7 @@ export async function refundWithdrawal(transactionId: string): Promise<boolean> 
       $inc: { balanceEgp: tx.amountEgp, totalDebitedEgp: -tx.amountEgp },
       $set: { lastTransactionAt: new Date() },
     },
-    { new: true },
+    { returnDocument: "after" },
   );
   if (!wallet) return false;
 

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   });
   if (!res.ok) return NextResponse.json({ error: "upstream" }, { status: 502 });
 
-  const data = await res.json();
+  const data = (await res.json()) as { display_name?: string };
   const address = data.display_name ?? `${lat}, ${lng}`;
   return NextResponse.json({ address });
 }

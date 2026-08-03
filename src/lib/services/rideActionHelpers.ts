@@ -19,7 +19,6 @@ export async function logRideStarted(
   const promises = tripIds.map((tripId) =>
     createLog({
       tripId,
-      rideId,
       userId: null,
       driverId,
       status: "active",
@@ -29,7 +28,6 @@ export async function logRideStarted(
       metadata,
       actorType: "driver",
       actorId: driverId,
-      actionTimestamp: new Date(),
     }),
   );
 
@@ -51,7 +49,6 @@ export async function logStationArrived(
   const promises = tripIds.map((tripId) =>
     createLog({
       tripId,
-      rideId,
       userId: null,
       driverId,
       status: "active",
@@ -63,7 +60,6 @@ export async function logStationArrived(
       metadata,
       actorType: "driver",
       actorId: driverId,
-      actionTimestamp: new Date(),
     }),
   );
 
@@ -85,7 +81,6 @@ export async function logBoardingAlighting(
 ) {
   return await createLog({
     tripId,
-    rideId,
     userId: null,
     driverId,
     status: "active",
@@ -99,7 +94,6 @@ export async function logBoardingAlighting(
     metadata,
     actorType: "driver",
     actorId: driverId,
-    actionTimestamp: new Date(),
   });
 }
 
@@ -115,7 +109,6 @@ export async function logPickupArrived(
 ) {
   return await createLog({
     tripId,
-    rideId,
     userId: null,
     driverId,
     status: "active",
@@ -126,7 +119,6 @@ export async function logPickupArrived(
     metadata,
     actorType: "driver",
     actorId: driverId,
-    actionTimestamp: new Date(),
   });
 }
 
@@ -142,7 +134,6 @@ export async function logPassengerPickedUp(
 ) {
   return await createLog({
     tripId,
-    rideId,
     userId: null,
     driverId,
     status: "active",
@@ -153,7 +144,6 @@ export async function logPassengerPickedUp(
     metadata,
     actorType: "driver",
     actorId: driverId,
-    actionTimestamp: new Date(),
   });
 }
 
@@ -169,7 +159,6 @@ export async function logNoShow(
 ) {
   return await createLog({
     tripId,
-    rideId,
     userId: null,
     driverId,
     status: "cancelled",
@@ -179,7 +168,6 @@ export async function logNoShow(
     metadata,
     actorType: "driver",
     actorId: driverId,
-    actionTimestamp: new Date(),
   });
 }
 
@@ -196,7 +184,6 @@ export async function logStopPointArrived(
 ) {
   return await createLog({
     tripId,
-    rideId,
     userId: null,
     driverId,
     status: "active",
@@ -208,7 +195,6 @@ export async function logStopPointArrived(
     metadata,
     actorType: "driver",
     actorId: driverId,
-    actionTimestamp: new Date(),
   });
 }
 
@@ -225,7 +211,6 @@ export async function logRideCompleted(
   const promises = tripIds.map((tripId) =>
     createLog({
       tripId,
-      rideId,
       userId: null,
       driverId,
       status: "completed",
@@ -235,7 +220,6 @@ export async function logRideCompleted(
       metadata,
       actorType: "driver",
       actorId: driverId,
-      actionTimestamp: new Date(),
     }),
   );
 

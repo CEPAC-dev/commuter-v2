@@ -5,12 +5,16 @@ import type { Types } from "mongoose";
 
 export interface CreateLogInput {
   tripId: Types.ObjectId | string;
-  userId: Types.ObjectId | string;
+  userId: Types.ObjectId | string | null;
   driverId?: Types.ObjectId | string | null;
   status: string;
   previousStatus?: string | null;
   action: string;
   description: string;
+  stationIndex?: number | null;
+  stationName?: string | null;
+  boardingCount?: number | null;
+  alightingCount?: number | null;
   metadata?: Record<string, any>;
   actorType?: "system" | "user" | "driver" | "admin";
   actorId?: Types.ObjectId | string | null;
