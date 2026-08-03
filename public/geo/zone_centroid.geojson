@@ -1,1 +1,425 @@
-{"type":"FeatureCollection","features":[{"type":"Feature","id":"ZONE 1","geometry":{"type":"Point","coordinates":[31.267004,30.094499]},"properties":{"NAME":"الزاوية الحمراء / الشرابية"}},{"type":"Feature","id":"ZONE 2","geometry":{"type":"Point","coordinates":[31.281294,30.089925]},"properties":{"NAME":"حدائق القبة"}},{"type":"Feature","id":"ZONE 3","geometry":{"type":"Point","coordinates":[31.314426,30.124798]},"properties":{"NAME":"المطرية / عين شمس"}},{"type":"Feature","id":"ZONE 4","geometry":{"type":"Point","coordinates":[31.33689,30.153013]},"properties":{"NAME":"المرج / الخصوص"}},{"type":"Feature","id":"ZONE 5","geometry":{"type":"Point","coordinates":[31.489753,30.21487]},"properties":{"NAME":"العبور"}},{"type":"Feature","id":"ZONE 6","geometry":{"type":"Point","coordinates":[31.473644,30.030375]},"properties":{"NAME":"القاهرة الجديدة"}},{"type":"Feature","id":"ZONE 7","geometry":{"type":"Point","coordinates":[31.362203,30.107223]},"properties":{"NAME":"مصر الجديدة"}},{"type":"Feature","id":"ZONE 8","geometry":{"type":"Point","coordinates":[31.349591,30.05699]},"properties":{"NAME":"مدينة نصر"}},{"type":"Feature","id":"ZONE 9","geometry":{"type":"Point","coordinates":[31.271136,30.136128]},"properties":{"NAME":"شبرا الخيمة"}},{"type":"Feature","id":"ZONE 10","geometry":{"type":"Point","coordinates":[31.315688,30.009224]},"properties":{"NAME":"الخليفة / الاباجية"}},{"type":"Feature","id":"ZONE 11","geometry":{"type":"Point","coordinates":[31.25867,29.959454]},"properties":{"NAME":"المعادي / طرة / زهراء المعادي"}},{"type":"Feature","id":"ZONE 12","geometry":{"type":"Point","coordinates":[31.271129,29.979768]},"properties":{"NAME":"البساتين"}},{"type":"Feature","id":"ZONE 13","geometry":{"type":"Point","coordinates":[31.204094,30.039621]},"properties":{"NAME":"الدقي / المهندسين / العجوزة"}},{"type":"Feature","id":"ZONE 14","geometry":{"type":"Point","coordinates":[30.984666,30.050811]},"properties":{"NAME":"الشيخ زايد"}},{"type":"Feature","id":"ZONE 15","geometry":{"type":"Point","coordinates":[30.939755,29.989013]},"properties":{"NAME":"السادس من أكتوبر"}},{"type":"Feature","id":"ZONE 16","geometry":{"type":"Point","coordinates":[31.029806,29.92244]},"properties":{"NAME":"حدائق أكتوبر"}},{"type":"Feature","id":"ZONE 17","geometry":{"type":"Point","coordinates":[31.330267,29.834352]},"properties":{"NAME":"حلوان"}},{"type":"Feature","id":"ZONE 18","geometry":{"type":"Point","coordinates":[31.421851,30.16778]},"properties":{"NAME":"السلام"}},{"type":"Feature","id":"ZONE 19","geometry":{"type":"Point","coordinates":[31.282162,30.072963]},"properties":{"NAME":"الوايلي"}},{"type":"Feature","id":"ZONE 20","geometry":{"type":"Point","coordinates":[31.22831,30.021994]},"properties":{"NAME":"مصر القديمة / الفسطاط"}},{"type":"Feature","id":"ZONE 21","geometry":{"type":"Point","coordinates":[31.285502,30.041563]},"properties":{"NAME":"منشية ناصر"}},{"type":"Feature","id":"ZONE 22","geometry":{"type":"Point","coordinates":[31.247597,30.049292]},"properties":{"NAME":"وسط البلد / عابدين / السيدة زينب / الجمالية"}},{"type":"Feature","id":"ZONE 23","geometry":{"type":"Point","coordinates":[31.2418,30.082114]},"properties":{"NAME":"شبرا / السابتية / بولاق / روض الفرج"}},{"type":"Feature","id":"ZONE 24","geometry":{"type":"Point","coordinates":[31.212415,30.092136]},"properties":{"NAME":"امبابة / الوراق / شمال الجيزة"}},{"type":"Feature","id":"ZONE 25","geometry":{"type":"Point","coordinates":[31.299464,30.1036]},"properties":{"NAME":"الزيتون"}},{"type":"Feature","id":"ZONE 26","geometry":{"type":"Point","coordinates":[31.105451,29.979006]},"properties":{"NAME":"حدائق الاهرام"}},{"type":"Feature","id":"ZONE 27","geometry":{"type":"Point","coordinates":[31.18032,29.995369]},"properties":{"NAME":"العمرانية / الطالبية / المنيب"}},{"type":"Feature","id":"ZONE 28","geometry":{"type":"Point","coordinates":[31.182218,30.029201]},"properties":{"NAME":"الهرم / بولاق"}},{"type":"Feature","id":"ZONE 29","geometry":{"type":"Point","coordinates":[31.222721,30.057828]},"properties":{"NAME":"الزمالك"}},{"type":"Feature","id":"ZONE 30","geometry":{"type":"Point","coordinates":[31.621898,30.142677]},"properties":{"NAME":"الشروق / بدر"}}]}
+{
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "id": "ZONE 1",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.267004,
+                    30.094499
+                ]
+            },
+            "properties": {
+                "NAME": "الزاوية الحمراء / الشرابية"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 2",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.281294,
+                    30.089925
+                ]
+            },
+            "properties": {
+                "NAME": "حدائق القبة"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 3",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.314426,
+                    30.124798
+                ]
+            },
+            "properties": {
+                "NAME": "المطرية / عين شمس"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 4",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.33689,
+                    30.153013
+                ]
+            },
+            "properties": {
+                "NAME": "المرج / الخصوص"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 5",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.489753,
+                    30.21487
+                ]
+            },
+            "properties": {
+                "NAME": "العبور"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 6",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.473644,
+                    30.030375
+                ]
+            },
+            "properties": {
+                "NAME": "القاهرة الجديدة"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 7",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.362203,
+                    30.107223
+                ]
+            },
+            "properties": {
+                "NAME": "مصر الجديدة"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 8",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.349591,
+                    30.05699
+                ]
+            },
+            "properties": {
+                "NAME": "مدينة نصر"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 9",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.271136,
+                    30.136128
+                ]
+            },
+            "properties": {
+                "NAME": "شبرا الخيمة"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 10",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.315688,
+                    30.009224
+                ]
+            },
+            "properties": {
+                "NAME": "الخليفة / الاباجية"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 11",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.25867,
+                    29.959454
+                ]
+            },
+            "properties": {
+                "NAME": "المعادي / طرة / زهراء المعادي"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 12",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.271129,
+                    29.979768
+                ]
+            },
+            "properties": {
+                "NAME": "البساتين"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 13",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.204094,
+                    30.039621
+                ]
+            },
+            "properties": {
+                "NAME": "الدقي / المهندسين / العجوزة"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 14",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    30.984666,
+                    30.050811
+                ]
+            },
+            "properties": {
+                "NAME": "الشيخ زايد"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 15",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    30.939755,
+                    29.989013
+                ]
+            },
+            "properties": {
+                "NAME": "السادس من أكتوبر"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 16",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.029806,
+                    29.92244
+                ]
+            },
+            "properties": {
+                "NAME": "حدائق أكتوبر"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 17",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.330267,
+                    29.834352
+                ]
+            },
+            "properties": {
+                "NAME": "حلوان"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 18",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.421851,
+                    30.16778
+                ]
+            },
+            "properties": {
+                "NAME": "السلام"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 19",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.282162,
+                    30.072963
+                ]
+            },
+            "properties": {
+                "NAME": "الوايلي"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 20",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.22831,
+                    30.021994
+                ]
+            },
+            "properties": {
+                "NAME": "مصر القديمة / الفسطاط"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 21",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.285502,
+                    30.041563
+                ]
+            },
+            "properties": {
+                "NAME": "منشية ناصر"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 22",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.247597,
+                    30.049292
+                ]
+            },
+            "properties": {
+                "NAME": "وسط البلد / عابدين / السيدة زينب / الجمالية"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 23",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.2418,
+                    30.082114
+                ]
+            },
+            "properties": {
+                "NAME": "شبرا / السابتية / بولاق / روض الفرج"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 24",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.212415,
+                    30.092136
+                ]
+            },
+            "properties": {
+                "NAME": "امبابة / الوراق / شمال الجيزة"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 25",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.299464,
+                    30.1036
+                ]
+            },
+            "properties": {
+                "NAME": "الزيتون"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 26",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.105451,
+                    29.979006
+                ]
+            },
+            "properties": {
+                "NAME": "حدائق الاهرام"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 27",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.18032,
+                    29.995369
+                ]
+            },
+            "properties": {
+                "NAME": "العمرانية / الطالبية / المنيب"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 28",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.182218,
+                    30.029201
+                ]
+            },
+            "properties": {
+                "NAME": "الهرم / بولاق"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 29",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.222721,
+                    30.057828
+                ]
+            },
+            "properties": {
+                "NAME": "الزمالك"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 30",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.621898,
+                    30.142677
+                ]
+            },
+            "properties": {
+                "NAME": "الشروق / بدر"
+            }
+        }
+    ]
+}

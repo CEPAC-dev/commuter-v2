@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import type { TripData } from "./TripCycle";
 import type { TripPoint } from "@/lib/store/useTripStore";
@@ -43,6 +43,73 @@ function stopIcon(index: number) {
   );
 }
 
+function zoneLabelHtml(name: string, zoom: number) {
+  const scale = Math.max(0.8, Math.min(1.4, 0.8 + (zoom - 20) * 0.12));
+  const fontSize = Math.round(11 * scale);
+  const paddingX = Math.round(8 * scale);
+  const paddingY = Math.round(3 * scale);
+  return `<div style="background:rgba(255,255,255,0.15);color:#0B1E3D;width:max-content;border:1px solid rgba(11,30,61,0.16);border-radius:999px;padding:${paddingY}px ${paddingX}px;font-size:${fontSize}px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.08)">${name}</div>`;
+}
+
+type ZoneFeature = {
+  type: "Feature";
+  id?: string | number;
+  properties?: { NAME?: string };
+  geometry?: {
+    type: "Polygon" | "MultiPolygon";
+    coordinates?:
+      | Array<Array<[number, number]>>
+      | Array<Array<Array<[number, number]>>>;
+  };
+};
+
+function pointInRing(point: [number, number], ring: Array<[number, number]>) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [x1, y1] = ring[i];
+    const [x2, y2] = ring[j];
+    const intersects =
+      y1 > point[1] !== y2 > point[1] &&
+      point[0] < ((x2 - x1) * (point[1] - y1)) / (y2 - y1) + x1;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInPolygon(
+  point: [number, number],
+  polygon: Array<Array<[number, number]>>,
+) {
+  if (!polygon.length) return false;
+  const outerRing = polygon[0] as Array<[number, number]>;
+  const holes = polygon.slice(1) as Array<Array<[number, number]>>;
+  if (!outerRing || !outerRing.length) return false;
+  const insideOuter = pointInRing(point, outerRing);
+  if (!insideOuter) return false;
+  return !holes.some((hole) => pointInRing(point, hole));
+}
+
+function isPointInZone(point: [number, number], feature?: ZoneFeature) {
+  if (!feature?.geometry?.coordinates) return false;
+  const geometry = feature.geometry;
+  if (geometry.type === "Polygon") {
+    return pointInPolygon(
+      point,
+      geometry.coordinates as Array<Array<[number, number]>>,
+    );
+  }
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates as Array<Array<Array<[number, number]>>>).some(
+      (polygon) => pointInPolygon(point, polygon),
+    );
+  }
+  return false;
+}
+
+function isPointInAnyZone(point: [number, number], features: ZoneFeature[]) {
+  return features.some((feature) => isPointInZone(point, feature));
+}
+
 interface Props {
   trips: TripData[];
   picking?: { tripId: string; field: "pickup" | "dropoff" } | null;
@@ -57,6 +124,162 @@ export default function CreateMapOsm({
   onCancelPick,
 }: Props) {
   const [map, setMap] = useState<L.Map | null>(null);
+  const zoneFeaturesRef = useRef<ZoneFeature[]>([]);
+  const zoneLabelLocationsRef = useRef<
+    Array<{ lat: number; lng: number; name: string }>
+  >([]);
+  const zoneLabelMarkersRef = useRef<L.Marker[]>([]);
+
+  useEffect(() => {
+    if (!map) return;
+
+    const maskLayer = L.layerGroup().addTo(map);
+    const zoneLayer = L.layerGroup().addTo(map);
+    let cancelled = false;
+
+    const refreshZoneLabels = () => {
+      if (cancelled || !map) return;
+      zoneLabelMarkersRef.current.forEach((marker) => marker.remove());
+      zoneLabelMarkersRef.current = [];
+
+      const zoom = map.getZoom();
+      const labelData = zoneLabelLocationsRef.current;
+
+      labelData.forEach(({ lat, lng, name }) => {
+        const scale = Math.max(0.8, Math.min(1.4, 0.8 + (zoom - 20) * 0.12));
+        const iconSize = Math.max(90, Math.round(140 * scale));
+        const iconHeight = Math.max(24, Math.round(24 * scale));
+        const marker = L.marker([lat, lng], {
+          icon: L.divIcon({
+            className: "",
+            html: zoneLabelHtml(name, zoom),
+            iconSize: [iconSize, iconHeight],
+            iconAnchor: [iconSize / 2, iconHeight / 2],
+          }),
+          interactive: false,
+        }).addTo(zoneLayer);
+        zoneLabelMarkersRef.current.push(marker);
+      });
+    };
+
+    const refreshMask = () => {
+      if (cancelled || !map) return;
+      maskLayer.clearLayers();
+
+      const bounds = map.getBounds();
+      const southWest = bounds.getSouthWest();
+      const northEast = bounds.getNorthEast();
+
+      const outZonePolygons = zoneFeaturesRef.current.flatMap((feature) => {
+        if (!feature.geometry?.coordinates) return [];
+        const geometry = feature.geometry;
+        if (geometry.type === "Polygon") {
+          return [geometry.coordinates as Array<Array<[number, number]>>];
+        }
+        if (geometry.type === "MultiPolygon") {
+          return geometry.coordinates as Array<Array<Array<[number, number]>>>;
+        }
+        return [];
+      });
+
+      if (!outZonePolygons.length) return;
+
+      const maskPolygons = outZonePolygons.map((polygon) => {
+        const ring = polygon[0] ?? [];
+        const projected = ring.map(
+          ([lng, lat]) => [lat, lng] as [number, number],
+        );
+        return projected;
+      });
+
+      const outerRing = [
+        [southWest.lat, southWest.lng],
+        [southWest.lat, northEast.lng],
+        [northEast.lat, northEast.lng],
+        [northEast.lat, southWest.lng],
+        [southWest.lat, southWest.lng],
+      ] as [number, number][];
+
+      const maskShape = L.polygon(
+        [outerRing, ...maskPolygons] as [number, number][][],
+        {
+          color: "transparent",
+          weight: 2,
+          fillColor: "#bfc3c8",
+          fillOpacity: 0.56,
+        },
+      ).addTo(maskLayer);
+
+      maskShape.bringToBack();
+    };
+
+    refreshMask();
+    refreshZoneLabels();
+    map.on("move zoom", refreshMask);
+    map.on("zoom", refreshZoneLabels);
+
+    fetch("/geo/zone_polygon.geojson")
+      .then((response) => response.json())
+      .then((geojson: { features?: ZoneFeature[] }) => {
+        if (cancelled || !map) return;
+        const features = (geojson.features ?? []).filter(
+          (feature): feature is ZoneFeature =>
+            feature.geometry?.type === "Polygon" ||
+            feature.geometry?.type === "MultiPolygon",
+        );
+        zoneFeaturesRef.current = features;
+        refreshZoneLabels();
+        L.geoJSON(features as any, {
+          style: {
+            color: "#00C2A8",
+            weight: 2,
+            fillColor: "transparent",
+            fillOpacity: 0,
+            // border: "4px solid #00C2A8",
+          },
+          interactive: false,
+        }).addTo(zoneLayer);
+      })
+      .catch(() => {});
+
+    fetch("/geo/zone_centroid.geojson")
+      .then((response) => response.json())
+      .then((geojson) => {
+        if (cancelled || !map) return;
+        const features = geojson.features ?? [];
+        zoneLabelLocationsRef.current = features
+          .map(
+            (feature: {
+              id?: string;
+              properties?: { NAME?: string };
+              geometry?: { coordinates?: [number, number] };
+            }) => {
+              const coords = feature.geometry?.coordinates;
+              if (!Array.isArray(coords) || coords.length < 2) return null;
+              const [lng, lat] = coords as [number, number];
+              const rawName = feature.properties?.NAME || feature.id || "Zone";
+              const match = String(feature.id || "").match(/(\d+)/);
+              const name = match ? `${match[1]} ${rawName}` : rawName;
+              return { lat, lng, name };
+            },
+          )
+          .filter(Boolean) as Array<{ lat: number; lng: number; name: string }>;
+        refreshZoneLabels();
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      map.off("move zoom", refreshMask);
+      map.off("zoom", refreshZoneLabels);
+      zoneLabelMarkersRef.current.forEach((marker) => marker.remove());
+      zoneLabelMarkersRef.current = [];
+      zoneLabelLocationsRef.current = [];
+      maskLayer.remove();
+      zoneLayer.remove();
+      zoneFeaturesRef.current = [];
+    };
+  }, [map]);
 
   useEffect(() => {
     if (!map) return;
@@ -148,6 +371,21 @@ export default function CreateMapOsm({
   const handleClick = useCallback(
     async ({ lat, lng }: OsmPoint) => {
       if (!picking || !onMapPick) return;
+
+      const point: [number, number] = [lng, lat];
+      if (!zoneFeaturesRef.current.length) {
+        window.alert(
+          "The service zones are still loading. Please try again in a moment.",
+        );
+        return;
+      }
+      if (!isPointInAnyZone(point, zoneFeaturesRef.current)) {
+        window.alert(
+          "This location is outside the available service zones. Please choose a point inside one of the highlighted zones.",
+        );
+        return;
+      }
+
       let address = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
       try {
         const resolved = formatDisplayName(await reverseGeocode(lat, lng));

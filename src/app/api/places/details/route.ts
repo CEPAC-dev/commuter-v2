@@ -1,16 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export async function GET(req: NextRequest) {
-  const id = req.nextUrl.searchParams.get("id")?.trim();
-  if (!id || !/^[NWR]\d+$/.test(id))
-    return NextResponse.json({ error: "invalid id" }, { status: 400 });
+function parseLatLng(input: string): { lat: number; lng: number } | null {
+  const parts = input.split(",").map((part) => part.trim());
+  if (parts.length !== 2) return null;
 
-  const [latText, lngText] = id.split(",");
+  const [latText, lngText] = parts;
   const lat = Number(latText);
   const lng = Number(lngText);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+export async function GET(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get("id")?.trim();
+  if (!id) return NextResponse.json({ error: "invalid id" }, { status: 400 });
+
+  const directCoordinates = parseLatLng(id);
+  if (directCoordinates) {
+    return NextResponse.json(directCoordinates);
+  }
+
+  if (!/^[NWR]\d+$/.test(id)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
+
   const url = new URL("https://nominatim.openstreetmap.org/lookup");
   url.searchParams.set("osm_ids", id);
   url.searchParams.set("format", "jsonv2");
