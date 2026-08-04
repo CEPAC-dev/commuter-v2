@@ -28,6 +28,81 @@ export interface AssignedDriver {
   plate?: string;
 }
 
+export interface DriverSummarySnapshot {
+  name?: string;
+  phone?: string;
+  gender?: string;
+  carBrand?: string;
+  carModel?: string;
+  carType?: string;
+  modelYear?: string;
+  vehicleColor?: string;
+  carCapacity?: number;
+  profilePicture?: string;
+  carImage?: string;
+  plateChar1?: string;
+  plateChar2?: string;
+  plateChar3?: string;
+  plateDigits?: string;
+}
+
+export async function getDriverSummaryByUserNumber(
+  userNumber: number | string,
+): Promise<DriverSummarySnapshot | null> {
+  await connectDB();
+
+  const normalizedUserNumber = Number(userNumber);
+  if (!Number.isFinite(normalizedUserNumber)) return null;
+
+  const user = await User.findOne({ userNumber: normalizedUserNumber })
+    .select("_id name phone profilePic")
+    .lean<{
+      _id?: unknown;
+      name?: string;
+      phone?: string;
+      profilePic?: string;
+    }>();
+
+  if (!user?._id) return null;
+
+  const driver = await Driver.findOne({ userId: user._id })
+    .select(
+      "gender carBrand carModel carType modelYear vehicleColor carCapacity documents plateChar1 plateChar2 plateChar3 plateDigits",
+    )
+    .lean<{
+      gender?: string;
+      carBrand?: string;
+      carModel?: string;
+      carType?: string;
+      modelYear?: number;
+      vehicleColor?: string;
+      carCapacity?: number;
+      documents?: { profilePic?: string; carImage?: string };
+      plateChar1?: string;
+      plateChar2?: string;
+      plateChar3?: string;
+      plateDigits?: string;
+    }>();
+
+  return {
+    name: user.name,
+    phone: user.phone,
+    gender: driver?.gender,
+    carBrand: driver?.carBrand,
+    carModel: driver?.carModel,
+    carType: driver?.carType,
+    modelYear: driver?.modelYear ? String(driver.modelYear) : undefined,
+    vehicleColor: driver?.vehicleColor,
+    carCapacity: driver?.carCapacity,
+    profilePicture: user.profilePic ?? driver?.documents?.profilePic,
+    carImage: driver?.documents?.carImage,
+    plateChar1: driver?.plateChar1,
+    plateChar2: driver?.plateChar2,
+    plateChar3: driver?.plateChar3,
+    plateDigits: driver?.plateDigits,
+  };
+}
+
 /**
  * Fetch assignedDriver data from User and Driver documents using driverId.
  * Combines user info (name, phone) with driver info (car details, documents).
@@ -177,10 +252,10 @@ export async function listDriverTrips(
     ),
   );
   const assignedDriverEntries = await Promise.all(
-    driverIds.map(async (driverId) => [
-      driverId,
-      await buildAssignedDriver(driverId),
-    ] as const),
+    driverIds.map(
+      async (driverId) =>
+        [driverId, await buildAssignedDriver(driverId)] as const,
+    ),
   );
   const assignedDriverById = new Map(
     assignedDriverEntries
@@ -231,7 +306,7 @@ export async function listDriverTrips(
           ? trip.createdAt.toISOString()
           : String(trip.createdAt),
       assignedDriver: trip.driverId
-        ? assignedDriverById.get(String(trip.driverId)) ?? null
+        ? (assignedDriverById.get(String(trip.driverId)) ?? null)
         : null,
     })),
   };
@@ -302,10 +377,10 @@ export async function listUserTrips(
     ),
   );
   const assignedDriverEntries = await Promise.all(
-    driverIds.map(async (driverId) => [
-      driverId,
-      await buildAssignedDriver(driverId),
-    ] as const),
+    driverIds.map(
+      async (driverId) =>
+        [driverId, await buildAssignedDriver(driverId)] as const,
+    ),
   );
   const assignedDriverById = new Map(
     assignedDriverEntries
@@ -356,7 +431,7 @@ export async function listUserTrips(
           ? trip.createdAt.toISOString()
           : String(trip.createdAt),
       assignedDriver: trip.driverId
-        ? assignedDriverById.get(String(trip.driverId)) ?? null
+        ? (assignedDriverById.get(String(trip.driverId)) ?? null)
         : null,
     })),
   };
@@ -535,7 +610,9 @@ export async function getUserTrip(
     : null;
 
   const { getRideById } = await import("./rideService");
-  const rideDetails = trip.rideId ? await getRideById(String(trip.rideId)) : null;
+  const rideDetails = trip.rideId
+    ? await getRideById(String(trip.rideId))
+    : null;
 
   return {
     ...trip,
