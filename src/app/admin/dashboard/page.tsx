@@ -218,6 +218,9 @@ export default async function AdminDashboardPage() {
             <p className="mono" style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5A6A7A" }}>{stamp}</p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <a href="/admin/operation" className="top-link">
+              Operation <ArrowUpRight size={15} />
+            </a>
             <a href="/admin/users" className="top-link">
               View users <ArrowUpRight size={15} />
             </a>
