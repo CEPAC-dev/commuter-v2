@@ -31,7 +31,7 @@ const RidePassengerSchema = new Schema(
       type: String,
       required: true,
       default: "waiting",
-      enum: ["waiting", "picked_up", "dropped_off", "no_show", "cancelled"],
+      enum: ["waiting", "boarding", "on_board", "picked_up", "dropped_off", "no_show", "cancelled"],
     },
   },
   { _id: false },

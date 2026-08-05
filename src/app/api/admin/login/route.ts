@@ -17,7 +17,14 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
-    const user = await User.findOne({ phone: phone.trim(), role: "admin" })
+    const identifier = phone.trim();
+    const isEmail = identifier.includes("@");
+
+    const user = await User.findOne(
+      isEmail
+        ? { email: identifier.toLowerCase(), role: "admin" }
+        : { phone: identifier, role: "admin" }
+    )
       .select("passwordHash email name")
       .lean<{ _id?: unknown; passwordHash?: string; email?: string; name?: string }>();
 

@@ -93,108 +93,156 @@ export default function SharedRideDetails({
         Shared ride
       </p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {!isDriver && (
-          <RideDetailRow
-            icon={<MapPin size={15} />}
-            color="#00C2A8"
-            headline="Origin"
-            value={pickup.address}
-          />
-        )}
-        <RideDetailRow
-          icon={<Clock size={15} />}
-          color="#00C2A8"
-          headline="Pickup time"
-          value={to12h(pickupTime)}
-        />
-
-        {(pickupStation || isDriver) && (
+      <div style={{ display: "grid", gap: 14 }}>
+        <div
+          style={{
+            display: "grid",
+            gap: 14,
+            padding: "16px",
+            borderRadius: 20,
+            background: "#fff",
+            boxShadow: "0 10px 30px rgba(15, 23, 42, 0.04)",
+            border: "1px solid #eef0f3",
+          }}
+        >
           <div
-            style={
-              !isDriver
-                ? {
-                    borderLeft: "2px dashed #E2E8F0",
-                    marginLeft: 7,
-                    paddingLeft: 16,
-                  }
-                : undefined
-            }
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+            }}
           >
+            <div>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  color: "#5A6A7A",
+                  letterSpacing: "0.14em",
+                }}
+              >
+                Pickup
+              </p>
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: "#0B1E3D",
+                }}
+              >
+                {pickupStation ? pickupStation.name : pickup.address}
+              </p>
+            </div>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#007A5F",
+                background: "rgba(0,194,168,0.12)",
+                borderRadius: 9999,
+                padding: "6px 12px",
+              }}
+            >
+              +{extraPassengers} passenger{extraPassengers === 1 ? "" : "s"}
+            </span>
+          </div>
+
+          <div style={{ display: "grid", gap: 10 }}>
+            {!isDriver && pickup.address && (
+              <RideDetailRow
+                icon={<MapPin size={15} />}
+                color="#00C2A8"
+                headline="Origin"
+                value={pickup.address}
+              />
+            )}
             <RideDetailRow
-              icon={<MapPin size={15} />}
+              icon={<Clock size={15} />}
               color="#00C2A8"
-              headline="Station"
-              value={pickupStation?.name ?? "Pickup station"}
+              headline="Board by"
+              value={to12h(pickupTime)}
             />
+            {(pickupStation || isDriver) && !pickupStation?.name && (
+              <RideDetailRow
+                icon={<MapPin size={15} />}
+                color="#00C2A8"
+                headline="Station"
+                value={pickupStation?.name ?? "Pickup station"}
+              />
+            )}
           </div>
-        )}
+        </div>
 
-        <RideDetailRow
-          icon={<Users size={15} />}
-          color="#0B1E3D"
-          headline="Extra passengers"
-          value={`${extraPassengers} extra passenger${extraPassengers === 1 ? "" : "s"}`}
-        />
-
-        {(dropoffStation || isDriver) && (
-          <div
-            style={
-              !isDriver
-                ? {
-                    borderLeft: "2px dashed #E2E8F0",
-                    marginLeft: 7,
-                    paddingLeft: 16,
-                  }
-                : undefined
-            }
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            padding: "16px",
+            borderRadius: 20,
+            background: "#fff",
+            boxShadow: "0 10px 30px rgba(15, 23, 42, 0.04)",
+            border: "1px solid #eef0f3",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: 12,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              color: "#5A6A7A",
+              letterSpacing: "0.14em",
+            }}
           >
+            Dropoff
+          </p>
+          <div style={{ display: "grid", gap: 10 }}>
+            {(dropoffStation || isDriver) && (
+              <RideDetailRow
+                icon={<MapPin size={15} />}
+                color="#E74C3C"
+                headline="Station"
+                value={dropoffStation?.name ?? "Dropoff station"}
+              />
+            )}
+            {!isDriver && (
+              <RideDetailRow
+                icon={<MapPin size={15} />}
+                color="#E74C3C"
+                headline="Destination"
+                value={dropoff.address}
+              />
+            )}
             <RideDetailRow
-              icon={<MapPin size={15} />}
+              icon={<Clock size={15} />}
               color="#E74C3C"
-              headline="Station"
-              value={dropoffStation?.name ?? "Dropoff station"}
+              headline="Arrive by"
+              value={to12h(arrivalTime)}
             />
           </div>
-        )}
-
-        {!isDriver && (
-          <RideDetailRow
-            icon={<MapPin size={15} />}
-            color="#E74C3C"
-            headline="Destination"
-            value={dropoff.address}
-          />
-        )}
-        <RideDetailRow
-          icon={<Clock size={15} />}
-          color="#E74C3C"
-          headline="Drop-off time"
-          value={to12h(arrivalTime)}
-        />
+        </div>
       </div>
 
       <div
         style={{
-          display: "flex",
-          gap: 12,
-          marginTop: 16,
-          paddingTop: 14,
-          borderTop: "1px solid #f4f6f8",
-          flexWrap: "wrap",
+          marginTop: 18,
+          paddingTop: 18,
+          borderTop: "1px solid #eef0f3",
         }}
       >
         <TripStatBlock
           icon={<RouteIcon size={15} color="#0B1E3D" aria-hidden="true" />}
-          headline="Total distance"
-          value={`${totalKm.toFixed(1)} km`}
-          lines={segLines}
-        />
-        <TripStatBlock
-          icon={<Clock size={15} color="#0B1E3D" aria-hidden="true" />}
-          headline="Total duration"
-          value={`${totalMin} min`}
-          lines={segLines}
+          headline="Distance & duration"
+          value={`${totalKm.toFixed(1)} km · ${totalMin} min`}
+          lines={[
+            { label: "Distance", value: `${totalKm.toFixed(1)} km` },
+            { label: "Duration", value: `${totalMin} min` },
+            ...segLines,
+          ]}
           accent="#F5A623"
         />
       </div>

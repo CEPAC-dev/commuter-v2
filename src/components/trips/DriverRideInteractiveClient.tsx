@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CalendarDays,
   Users,
@@ -18,7 +18,7 @@ import RouteMap from "@/components/shared/RouteMap";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import { VEHICLES, type VehicleKey } from "@/lib/config/vehicles";
 import type { GeoPoint } from "@/types/geo";
-import type { RideDetailView } from "@/types/booking";
+import type { RideDetailView, RideRouteStopDetail } from "@/types/booking";
 
 function to12h(hhmm: string): string {
   if (!hhmm) return "—";
@@ -34,6 +34,114 @@ function prettyDate(date: string): string {
     month: "long",
     day: "numeric",
   });
+}
+
+function normalizeStationValue(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function getPassengerStationReference(
+  passenger: RideDetailView["passengers"][number] | null | undefined,
+  direction: "pickup" | "dropoff",
+) {
+  const orderValue =
+    direction === "pickup"
+      ? Number(passenger?.pickupOrder ?? 0)
+      : Number(passenger?.dropoffOrder ?? 0);
+
+  if (orderValue > 0) {
+    return { type: "order" as const, value: orderValue };
+  }
+
+  const station =
+    direction === "pickup" ? passenger?.pickupStation : passenger?.dropoffStation;
+  const stationName = station?.name ?? (station as { name?: string; address?: string })?.address ?? null;
+
+  if (stationName) {
+    return { type: "name" as const, value: stationName };
+  }
+
+  return null;
+}
+
+function stationMatchesPassenger(
+  passenger: RideDetailView["passengers"][number] | null | undefined,
+  stationIndex: number,
+  stationName: string | null | undefined,
+  direction: "pickup" | "dropoff",
+) {
+  const stationReference = getPassengerStationReference(passenger, direction);
+  if (!stationReference) {
+    return false;
+  }
+
+  if (stationReference.type === "order") {
+    return stationIndex === stationReference.value;
+  }
+
+  const normalizedStationName = normalizeStationValue(stationName);
+  const normalizedReferenceName = normalizeStationValue(stationReference.value);
+  return Boolean(normalizedStationName) && normalizedStationName === normalizedReferenceName;
+}
+
+function getRemainingStationsForRide(ride: RideDetailView) {
+  const route = Array.isArray(ride?.route) ? ride.route : [];
+  const remainingStationKeys = new Set<number>();
+
+  for (const passenger of ride?.passengers ?? []) {
+    const status = String(passenger?.status ?? "waiting").toLowerCase();
+
+    if (status === "waiting") {
+      const pickupReference = getPassengerStationReference(passenger, "pickup");
+      if (!pickupReference) {
+        continue;
+      }
+
+      for (const [index, stop] of route.entries()) {
+        const stationIndex = index + 1;
+        const stationName = stop?.address ?? stop?.point?.address ?? null;
+        if (
+          (pickupReference.type === "order" && stationIndex === pickupReference.value) ||
+          (pickupReference.type === "name" &&
+            normalizeStationValue(stationName) === normalizeStationValue(pickupReference.value))
+        ) {
+          remainingStationKeys.add(stationIndex);
+        }
+      }
+    }
+
+    if (["picked_up", "boarding", "on_board"].includes(status)) {
+      const dropoffReference = getPassengerStationReference(passenger, "dropoff");
+      if (!dropoffReference) {
+        continue;
+      }
+
+      for (const [index, stop] of route.entries()) {
+        const stationIndex = index + 1;
+        const stationName = stop?.address ?? stop?.point?.address ?? null;
+        if (
+          (dropoffReference.type === "order" && stationIndex === dropoffReference.value) ||
+          (dropoffReference.type === "name" &&
+            normalizeStationValue(stationName) === normalizeStationValue(dropoffReference.value))
+        ) {
+          remainingStationKeys.add(stationIndex);
+        }
+      }
+    }
+  }
+
+  return route
+    .map((stop, index) => {
+      const stationIndex = index + 1;
+      if (!remainingStationKeys.has(stationIndex)) {
+        return null;
+      }
+      return {
+        stationIndex,
+        stationName: stop?.address ?? `Station ${stationIndex}`,
+      };
+    })
+    .filter(Boolean) as Array<{ stationIndex: number; stationName: string }>;
 }
 
 function Detail({
@@ -85,35 +193,17 @@ function Detail({
 }
 
 export default function DriverRideInteractiveClient({
-  ride,
+  ride: rideProp,
   email,
 }: {
   ride: RideDetailView;
   email: string;
 }) {
+  const [ride, setRide] = useState(rideProp);
   const [rideStarted, setRideStarted] = useState(
     ride.status === "active" || ride.status === "completed",
   );
   const [isCompleted, setIsCompleted] = useState(ride.status === "completed");
-  const initialConfirmedStationIndex = ride.passengers.reduce((max, passenger) => {
-    if (passenger.status === "picked_up") {
-      return Math.max(max, passenger.pickupOrder ?? 0);
-    }
-    if (passenger.status === "dropped_off") {
-      return Math.max(max, passenger.dropoffOrder ?? 0);
-    }
-    return max;
-  }, 0);
-  const hasConfirmedPassengerEvent = ride.passengers.some(
-    (passenger) =>
-      passenger.status === "picked_up" || passenger.status === "dropped_off",
-  );
-  const [activeStationIndex, setActiveStationIndex] = useState<number | null>(
-    hasConfirmedPassengerEvent ? initialConfirmedStationIndex + 1 : null,
-  );
-  const [activeStepIndex, setActiveStepIndex] = useState<number | null>(
-    ride.status === "active" || ride.status === "completed" ? 1 : null,
-  );
   const [confirmedStationIndices, setConfirmedStationIndices] = useState<number[]>([]);
   const [stationSelections, setStationSelections] = useState<
     Record<string, Record<string, "arrived" | "no_show">>
@@ -125,35 +215,116 @@ export default function DriverRideInteractiveClient({
     ride.driverDestination ?? null,
   );
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [navigationErrorByStation, setNavigationErrorByStation] = useState<Record<number, string>>({});
+
+  const handleGoToLocation = async (step: StepItem) => {
+    setNavigationErrorByStation((prev) => ({ ...prev, [step.stationIndex]: "" }));
+
+    const lat = step.point?.lat;
+    const lng = step.point?.lng;
+
+    if (typeof lat !== "number" || !Number.isFinite(lat) || typeof lng !== "number" || !Number.isFinite(lng)) {
+      setNavigationErrorByStation((prev) => ({
+        ...prev,
+        [step.stationIndex]: "Location is unavailable for this station.",
+      }));
+      return;
+    }
+
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      setNavigationErrorByStation((prev) => ({
+        ...prev,
+        [step.stationIndex]: "Unable to access your current location.",
+      }));
+      return;
+    }
+
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 });
+      });
+
+      const originLat = position.coords.latitude;
+      const originLng = position.coords.longitude;
+      const destination = `${lat},${lng}`;
+      const origin = `${originLat},${originLng}`;
+      const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
+        origin,
+      )}&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+
+      window.open(mapsUrl, "_blank");
+    } catch (error) {
+      setNavigationErrorByStation((prev) => ({
+        ...prev,
+        [step.stationIndex]:
+          "Unable to get current location. Please allow location access and try again.",
+      }));
+    }
+  };
 
   const vLabel =
     VEHICLES[ride.vehicleType as VehicleKey]?.label ?? ride.vehicleType;
 
+  type RouteStopWithIndex = {
+    stationIndex: number;
+  } & RideRouteStopDetail;
+
   // Prepare route stops (only stations)
-  let routeStops = ride.route ?? [];
+  let routeStops: RouteStopWithIndex[] = (ride.route ?? []).map((stop, index) => ({
+    ...stop,
+    stationIndex: index + 1,
+  }));
+
   if (routeStops.length === 0 && ride.passengers.length > 0) {
-    routeStops = ride.passengers.flatMap((p) => [
-      {
-        address: p.pickupStation?.name ?? "Pickup station",
-        point: p.pickupStation
-          ? { lat: p.pickupStation.lat, lng: p.pickupStation.lng, address: p.pickupStation.name }
-          : p.pickup,
-        boarding: p.numberOfPassengers || 1,
-        alighting: 0,
-        waitingMinutes: 0,
-      },
-      {
-        address: p.dropoffStation?.name ?? "Dropoff station",
-        point: p.dropoffStation
-          ? { lat: p.dropoffStation.lat, lng: p.dropoffStation.lng, address: p.dropoffStation.name }
-          : p.dropoff,
-        boarding: 0,
-        alighting: p.numberOfPassengers || 1,
-        waitingMinutes: 0,
-      },
-    ]);
+    routeStops = ride.passengers
+      .flatMap((p) => [
+        {
+          address: p.pickupStation?.name ?? "Pickup station",
+          point: p.pickupStation
+            ? { lat: p.pickupStation.lat, lng: p.pickupStation.lng, address: p.pickupStation.name }
+            : p.pickup,
+          boarding: p.numberOfPassengers || 1,
+          alighting: 0,
+          waitingMinutes: 0,
+        },
+        {
+          address: p.dropoffStation?.name ?? "Dropoff station",
+          point: p.dropoffStation
+            ? { lat: p.dropoffStation.lat, lng: p.dropoffStation.lng, address: p.dropoffStation.name }
+            : p.dropoff,
+          boarding: 0,
+          alighting: p.numberOfPassengers || 1,
+          waitingMinutes: 0,
+        },
+      ])
+      .map((stop, index) => ({ ...stop, stationIndex: index + 1 }));
   }
-  const stationPoints = routeStops
+
+  const remainingStations = getRemainingStationsForRide(ride);
+  const remainingStationIndexSet = new Set(remainingStations.map((s) => s.stationIndex));
+
+  const hasPendingStationActions = (
+    stationIndex: number,
+    stationName: string,
+  ) => {
+    return ride.passengers.some((p) => {
+      const st = (p.status ?? "").toLowerCase();
+      const isPickup = stationMatchesPassenger(p, stationIndex, stationName, "pickup");
+      const isDropoff = stationMatchesPassenger(p, stationIndex, stationName, "dropoff");
+      return (
+        (isPickup && st === "waiting") ||
+        (isDropoff && st === "picked_up")
+      );
+    });
+  };
+
+  const visibleRouteStops = routeStops.filter((stop) => {
+    if (remainingStationIndexSet.has(stop.stationIndex)) return true;
+    const stopName = stop?.address ?? stop?.point?.address ?? "";
+    return hasPendingStationActions(stop.stationIndex, stopName);
+  });
+
+  const stationPoints = visibleRouteStops
     .map((r) => r.point)
     .filter((pt): pt is NonNullable<typeof pt> => Boolean(pt));
 
@@ -194,6 +365,7 @@ export default function DriverRideInteractiveClient({
     boarding: number;
     alighting: number;
     waitingMinutes: number;
+    point?: GeoPoint | null;
   };
 
   type RouteStopLike = {
@@ -204,6 +376,26 @@ export default function DriverRideInteractiveClient({
     boarding?: number;
     alighting?: number;
     waitingMinutes?: number;
+  };
+
+  const getStationCounts = (stationIndex: number, stationName: string) => {
+    const boarding = ride.passengers.reduce((count, passenger) => {
+      const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
+      if (normalizedStatus !== "waiting") return count;
+      return stationMatchesPassenger(passenger, stationIndex, stationName, "pickup")
+        ? count + 1
+        : count;
+    }, 0);
+
+    const alighting = ride.passengers.reduce((count, passenger) => {
+      const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
+      if (!["picked_up", "on_board"].includes(normalizedStatus)) return count;
+      return stationMatchesPassenger(passenger, stationIndex, stationName, "dropoff")
+        ? count + 1
+        : count;
+    }, 0);
+
+    return { boarding, alighting };
   };
 
   const steps: StepItem[] = [
@@ -217,24 +409,30 @@ export default function DriverRideInteractiveClient({
       alighting: 0,
       waitingMinutes: 0,
     },
-    ...routeStops.map((stop, i) => {
+    ...visibleRouteStops.map((stop, i) => {
       const stopLike = stop as RouteStopLike;
-      const stationName = stopLike.name ?? stop.address ?? `Station ${i + 1}`;
+      const stationName =
+        stopLike.name ??
+        stop.address ??
+        stop.point?.address ??
+        `Step ${i + 1}`;
       const meta = stationMetaMap.get(stationName);
+      const counts = getStationCounts(stop.stationIndex, stationName);
       return {
         type: "station" as const,
-        stationIndex: i + 1,
+        stationIndex: stop.stationIndex,
         name: stationName,
         zone: stopLike.direction ?? meta?.direction ?? "",
         landmark: stopLike.landmark ?? meta?.landmark ?? "",
-        boarding: stop.boarding || 0,
-        alighting: stop.alighting || 0,
+        boarding: counts.boarding,
+        alighting: counts.alighting,
         waitingMinutes: stop.waitingMinutes || 0,
+        point: stop.point ?? null,
       };
     }),
     {
       type: "destination",
-      stationIndex: routeStops.length + 1,
+      stationIndex: visibleRouteStops.length + 1,
       name: driverDestination?.address ?? "Driver final destination",
       zone: "",
       landmark: "",
@@ -245,10 +443,29 @@ export default function DriverRideInteractiveClient({
   ];
 
   const stationSteps = steps.filter((step) => step.type === "station");
+  const activeStationIndex = rideStarted && !isCompleted
+    ? remainingStations[0]?.stationIndex ?? null
+    : null;
+  const activeStepIndex = steps.findIndex(
+    (step) => step.type === "station" && step.stationIndex === activeStationIndex,
+  );
   const allStationsConfirmed =
     stationSteps.length === 0
       ? true
       : confirmedStationIndices.length === stationSteps.length;
+
+  const [lastActiveStationIndex, setLastActiveStationIndex] = useState<number | null>(
+    activeStationIndex,
+  );
+
+  useEffect(() => {
+    if (!rideStarted) {
+      setLastActiveStationIndex(activeStationIndex);
+      return;
+    }
+
+    setLastActiveStationIndex(activeStationIndex);
+  }, [activeStationIndex, lastActiveStationIndex, rideStarted]);
 
   // Helper for reverse geocoding location name
   const fetchLocationName = async (lat: number, lng: number, fallback: string): Promise<string> => {
@@ -300,9 +517,16 @@ export default function DriverRideInteractiveClient({
 
     if (loc) setDriverOrigin(loc);
     setRideStarted(true);
-    setActiveStationIndex(null);
-    const firstStationIndex = steps.findIndex((step) => step.type === "station");
-    setActiveStepIndex(firstStationIndex >= 0 ? firstStationIndex : null);
+    setIsCompleted(false);
+    setRide((prevRide) => ({
+      ...prevRide,
+      status: "active",
+      passengers: prevRide.passengers.map((passenger) => ({
+        ...passenger,
+        status: "waiting",
+        seatNumbers: [],
+      })),
+    }));
     setConfirmedStationIndices([]);
     setStationSelections({});
     setLoadingAction(null);
@@ -316,21 +540,59 @@ export default function DriverRideInteractiveClient({
   ) => {
     const stationKey = String(stationIndex);
     const selections = stationSelections[stationKey] ?? {};
-    const passengersForStation = ride.passengers.filter(
-      (passenger) =>
-        (passenger.pickupOrder ?? 0) === stationIndex ||
-        (passenger.dropoffOrder ?? 0) === stationIndex,
-    );
+    const passengersForStation = ride.passengers.filter((passenger) => {
+      const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
+      if (["dropped_off", "no_show", "cancelled"].includes(normalizedStatus)) {
+        return false;
+      }
+      return (
+        stationMatchesPassenger(passenger, stationIndex, stationName, "pickup") ||
+        stationMatchesPassenger(passenger, stationIndex, stationName, "dropoff")
+      );
+    });
 
-    const requiresPassengerSelections = boardingCount > 0;
+    const boardingPassengersForStation = passengersForStation.filter(
+      (passenger) =>
+        passenger.status === "waiting" &&
+        (passenger.pickupOrder ?? 0) === stationIndex,
+    );
+    const requiresPassengerSelections = boardingPassengersForStation.length > 0;
     const missingSelection =
       requiresPassengerSelections &&
-      passengersForStation.some((passenger) => !selections[passenger.tripId]);
+      boardingPassengersForStation.some((passenger) => !selections[passenger.tripId]);
     if (missingSelection) return;
+
+    const assignedSeatNumbers = new Set<number>();
+    for (const passenger of ride.passengers) {
+      if (["boarding", "picked_up", "on_board"].includes(passenger.status ?? "")) {
+        for (const seat of passenger.seatNumbers ?? []) {
+          if (typeof seat === "number" && Number.isFinite(seat)) {
+            assignedSeatNumbers.add(seat);
+          }
+        }
+      }
+    }
+
+    const vehicleType = ride.vehicleType as VehicleKey;
+    const seatCapacity = Number(
+      vehicleType && VEHICLES[vehicleType]?.capacity
+        ? VEHICLES[vehicleType].capacity
+        : 4,
+    );
+
+    const getNextSeatNumber = () => {
+      for (let seat = 1; seat <= seatCapacity; seat += 1) {
+        if (!assignedSeatNumbers.has(seat)) {
+          assignedSeatNumbers.add(seat);
+          return seat;
+        }
+      }
+      return 1;
+    };
 
     setLoadingAction(`confirm-${stationIndex}`);
     try {
-      const confirmations = passengersForStation.map((passenger) => ({
+      const confirmations = boardingPassengersForStation.map((passenger) => ({
         tripId: passenger.tripId,
         status: selections[passenger.tripId],
       }));
@@ -347,18 +609,70 @@ export default function DriverRideInteractiveClient({
       });
 
       if (!res.ok) {
-        throw new Error(`Failed to confirm station ${stationIndex}`);
+        const errorData = await res.json().catch(() => null);
+        throw new Error(
+          errorData?.error || `Failed to confirm station ${stationIndex}`,
+        );
       }
 
+      const nextPassengers = ride.passengers.map((passenger) => {
+        const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
+        if (["dropped_off", "no_show", "cancelled"].includes(normalizedStatus)) {
+          return passenger;
+        }
+
+        const confirmation = confirmations.find((entry) => entry.tripId === passenger.tripId);
+        const confirmationStatus = confirmation?.status;
+        const isPickupStation = stationMatchesPassenger(passenger, stationIndex, stationName, "pickup");
+        const isDropoffStation = stationMatchesPassenger(passenger, stationIndex, stationName, "dropoff");
+
+        if (
+          (passenger.status === "boarding" || passenger.status === "picked_up") &&
+          !isPickupStation
+        ) {
+          return { ...passenger, status: "on_board" };
+        }
+
+        if (
+          passenger.status === "dropped_off" &&
+          !isDropoffStation &&
+          (passenger.seatNumbers?.length ?? 0) > 0
+        ) {
+          return { ...passenger, seatNumbers: [] };
+        }
+
+        if (isPickupStation && confirmationStatus === "no_show") {
+          return { ...passenger, status: "no_show", seatNumbers: [] };
+        }
+
+        if (isPickupStation && confirmationStatus === "arrived") {
+          return {
+            ...passenger,
+            status: "boarding",
+            seatNumbers:
+              passenger.seatNumbers && passenger.seatNumbers.length > 0
+                ? passenger.seatNumbers
+                : [getNextSeatNumber()],
+          };
+        }
+
+        if (
+          isDropoffStation &&
+          ["on_board", "picked_up"].includes(passenger.status ?? "")
+        ) {
+          return { ...passenger, status: "dropped_off" };
+        }
+
+        return passenger;
+      });
+
+      setRide((prevRide) => ({
+        ...prevRide,
+        passengers: nextPassengers,
+      }));
       setConfirmedStationIndices((prev) =>
         prev.includes(stationIndex) ? prev : [...prev, stationIndex],
       );
-      setActiveStationIndex(stationIndex);
-
-      const nextStationIndex = steps.findIndex(
-        (step, index) => index > stationStepIndex && step.type === "station",
-      );
-      setActiveStepIndex(nextStationIndex >= 0 ? nextStationIndex : null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -402,6 +716,7 @@ export default function DriverRideInteractiveClient({
     }
 
     if (loc) setDriverDestination(loc);
+    setRide((prevRide) => ({ ...prevRide, status: "completed" }));
     setIsCompleted(true);
     setLoadingAction(null);
   };
@@ -545,9 +860,9 @@ export default function DriverRideInteractiveClient({
           }}
         >
           <RouteMap
-            pickup={stationPoints[0] ?? null}
-            dropoff={stationPoints[stationPoints.length - 1] ?? null}
-            stations={stationPoints.slice(1, -1)}
+            pickup={driverOrigin ?? stationPoints[0] ?? null}
+            dropoff={driverDestination ?? stationPoints[stationPoints.length - 1] ?? null}
+            stations={driverOrigin ? stationPoints : stationPoints.slice(1, -1)}
             stationIconsOnly
             height={220}
             interactive
@@ -584,6 +899,8 @@ export default function DriverRideInteractiveClient({
           isDriver
           rideStarted={rideStarted}
           activeStationIndex={activeStationIndex}
+          confirmedStationIndices={confirmedStationIndices}
+          stationSelections={stationSelections}
         />
 
         {/* Route Details Section */}
@@ -651,16 +968,35 @@ export default function DriverRideInteractiveClient({
                 step.type === "station" && confirmedStationIndices.includes(step.stationIndex);
               const passengersForStation =
                 step.type === "station"
-                  ? ride.passengers.filter(
-                      (passenger) =>
-                        (passenger.pickupOrder ?? 0) === step.stationIndex ||
-                        (passenger.dropoffOrder ?? 0) === step.stationIndex,
-                    )
+                  ? ride.passengers.filter((passenger) => {
+                      const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
+                      if (!["waiting", "boarding", "on_board", "picked_up"].includes(normalizedStatus)) {
+                        return false;
+                      }
+                      return (
+                        stationMatchesPassenger(passenger, step.stationIndex, step.name, "pickup") ||
+                        stationMatchesPassenger(passenger, step.stationIndex, step.name, "dropoff")
+                      );
+                    })
                   : [];
               const stationSelectionsForStep = stationSelections[String(step.stationIndex)] ?? {};
+              const boardingPassengersForStation = passengersForStation.filter(
+                (passenger) =>
+                  passenger.status === "waiting" &&
+                  stationMatchesPassenger(passenger, step.stationIndex, step.name, "pickup"),
+              );
+              const alightingPassengersForStation = passengersForStation.filter(
+                (passenger) =>
+                  passenger.status === "picked_up" &&
+                  stationMatchesPassenger(passenger, step.stationIndex, step.name, "dropoff"),
+              );
+              const requiresPassengerSelections = boardingPassengersForStation.length > 0;
               const isDecisionComplete =
                 passengersForStation.length === 0 ||
-                passengersForStation.every((passenger) => Boolean(stationSelectionsForStep[passenger.tripId]));
+                !requiresPassengerSelections ||
+                boardingPassengersForStation.every((passenger) =>
+                  Boolean(stationSelectionsForStep[passenger.tripId]),
+                );
 
               return (
                 <div
@@ -744,47 +1080,103 @@ export default function DriverRideInteractiveClient({
                         </p>
                       </div>
 
-                      {/* Confirm passenger rides button */}
+                      {/* Go to location + Confirm passenger rides buttons */}
                       {!isCompleted && step.type === "station" && isCurrentStep && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleConfirmStation(step.stationIndex, step.name, index, step.boarding)
-                          }
-                          disabled={
-                            loadingAction === `confirm-${step.stationIndex}` ||
-                            (step.boarding > 0 && !isDecisionComplete)
-                          }
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 6,
-                            padding: "6px 12px",
-                            borderRadius: 8,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            border: isActiveStation ? "1px solid #27AE60" : "1px solid #00C2A8",
-                            background: isActiveStation ? "#E8F8F5" : "#fff",
-                            color: isActiveStation ? "#196F3D" : "#00806E",
-                            cursor:
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleGoToLocation(step)}
+                            disabled={
                               loadingAction === `confirm-${step.stationIndex}` ||
-                              (step.boarding > 0 && !isDecisionComplete)
-                                ? "not-allowed"
-                                : "pointer",
-                            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                            opacity: step.boarding > 0 && !isDecisionComplete ? 0.7 : 1,
-                          }}
-                        >
-                          <CheckCircle2 size={13} color={isActiveStation ? "#27AE60" : "#00C2A8"} />
-                          {loadingAction === `confirm-${step.stationIndex}`
-                            ? "Confirming..."
-                            : step.boarding > 0
-                              ? "Confirm arrivals"
-                              : "Confirm stop"}
-                        </button>
+                              !step.point ||
+                              !Number.isFinite(step.point.lat) ||
+                              !Number.isFinite(step.point.lng)
+                            }
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "6px 12px",
+                              borderRadius: 8,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              border: "1px solid #0B1E3D",
+                              background: "#0B1E3D",
+                              color: "#fff",
+                              cursor:
+                                loadingAction === `confirm-${step.stationIndex}` ||
+                                !step.point ||
+                                !Number.isFinite(step.point.lat) ||
+                                !Number.isFinite(step.point.lng)
+                                  ? "not-allowed"
+                                  : "pointer",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                              opacity:
+                                loadingAction === `confirm-${step.stationIndex}` ||
+                                !step.point ||
+                                !Number.isFinite(step.point.lat) ||
+                                !Number.isFinite(step.point.lng)
+                                  ? 0.6
+                                  : 1,
+                            }}
+                          >
+                            Go to Location
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleConfirmStation(step.stationIndex, step.name, index, step.boarding)
+                            }
+                            disabled={
+                              loadingAction === `confirm-${step.stationIndex}` ||
+                              (requiresPassengerSelections && !isDecisionComplete)
+                            }
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "6px 12px",
+                              borderRadius: 8,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              border: isActiveStation ? "1px solid #27AE60" : "1px solid #00C2A8",
+                              background: isActiveStation ? "#E8F8F5" : "#fff",
+                              color: isActiveStation ? "#196F3D" : "#00806E",
+                              cursor:
+                                loadingAction === `confirm-${step.stationIndex}` ||
+                                (requiresPassengerSelections && !isDecisionComplete)
+                                  ? "not-allowed"
+                                  : "pointer",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                              opacity: requiresPassengerSelections && !isDecisionComplete ? 0.7 : 1,
+                            }}
+                          >
+                            <CheckCircle2 size={13} color={isActiveStation ? "#27AE60" : "#00C2A8"} />
+                            {loadingAction === `confirm-${step.stationIndex}`
+                              ? "Confirming..."
+                              : requiresPassengerSelections
+                                ? "Confirm arrivals"
+                                : "Confirm stop"}
+                          </button>
+                        </>
                       )}
                     </div>
-
+                    {navigationErrorByStation[step.stationIndex] ? (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          fontSize: 12,
+                          color: "#C0392B",
+                          background: "#FFEBEE",
+                          padding: "8px 10px",
+                          borderRadius: 10,
+                          border: "1px solid #F5C6CB",
+                        }}
+                      >
+                        {navigationErrorByStation[step.stationIndex]}
+                      </div>
+                    ) : null}
                     <div
                       style={{
                         display: "flex",
@@ -844,7 +1236,7 @@ export default function DriverRideInteractiveClient({
                       )}
                     </div>
 
-                    {step.type === "station" && isCurrentStep && step.boarding > 0 && (
+                    {step.type === "station" && isCurrentStep && (boardingPassengersForStation.length > 0 || alightingPassengersForStation.length > 0) && (
                       <div
                         style={{
                           marginTop: 12,
@@ -856,7 +1248,7 @@ export default function DriverRideInteractiveClient({
                         }}
                       >
                         <p style={{ margin: 0, fontSize: 12, color: "#5A6A7A", fontWeight: 600 }}>
-                          Confirm who arrived and who did not at this stop.
+                          Boarding and alighting passengers for this stop.
                         </p>
                         {passengersForStation.length === 0 ? (
                           <p style={{ margin: 0, fontSize: 12, color: "#5A6A7A" }}>
@@ -865,6 +1257,12 @@ export default function DriverRideInteractiveClient({
                         ) : (
                           passengersForStation.map((passenger) => {
                             const selectedStatus = stationSelectionsForStep[passenger.tripId];
+                            const isBoardingPassenger =
+                              passenger.status === "waiting" &&
+                              (passenger.pickupOrder ?? 0) === step.stationIndex;
+                            const isAlightingPassenger =
+                              ["picked_up", "on_board"].includes(passenger.status ?? "") &&
+                              (passenger.dropoffOrder ?? 0) === step.stationIndex;
                             return (
                               <div
                                 key={passenger.tripId}
@@ -879,59 +1277,70 @@ export default function DriverRideInteractiveClient({
                                   border: "1px solid #eef0f3",
                                 }}
                               >
-                                <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
-                                  {passenger.passengerName ?? `Passenger ${passenger.pickupOrder ?? 1}`}
-                                </span>
-                                <div style={{ display: "flex", gap: 8 }}>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setStationSelections((prev) => ({
-                                        ...prev,
-                                        [String(step.stationIndex)]: {
-                                          ...(prev[String(step.stationIndex)] ?? {}),
-                                          [passenger.tripId]: "arrived",
-                                        },
-                                      }))
-                                    }
-                                    style={{
-                                      padding: "6px 10px",
-                                      borderRadius: 8,
-                                      border: selectedStatus === "arrived" ? "1px solid #27AE60" : "1px solid #dbe2e8",
-                                      background: selectedStatus === "arrived" ? "#E8F8F5" : "#fff",
-                                      color: selectedStatus === "arrived" ? "#196F3D" : "#5A6A7A",
-                                      fontWeight: 700,
-                                      fontSize: 12,
-                                      cursor: "pointer",
-                                    }}
-                                  >
-                                    Arrived
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setStationSelections((prev) => ({
-                                        ...prev,
-                                        [String(step.stationIndex)]: {
-                                          ...(prev[String(step.stationIndex)] ?? {}),
-                                          [passenger.tripId]: "no_show",
-                                        },
-                                      }))
-                                    }
-                                    style={{
-                                      padding: "6px 10px",
-                                      borderRadius: 8,
-                                      border: selectedStatus === "no_show" ? "1px solid #E74C3C" : "1px solid #dbe2e8",
-                                      background: selectedStatus === "no_show" ? "#FFEBEE" : "#fff",
-                                      color: selectedStatus === "no_show" ? "#C0392B" : "#5A6A7A",
-                                      fontWeight: 700,
-                                      fontSize: 12,
-                                      cursor: "pointer",
-                                    }}
-                                  >
-                                    No show
-                                  </button>
+                                <div>
+                                  <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
+                                    {passenger.passengerName ?? `Passenger ${passenger.pickupOrder ?? 1}`}
+                                  </span>
+                                  <div style={{ marginTop: 4, fontSize: 11, color: "#5A6A7A" }}>
+                                    {isBoardingPassenger ? "Boarding" : isAlightingPassenger ? "Alighting" : "Pending"}
+                                  </div>
                                 </div>
+                                {isBoardingPassenger ? (
+                                  <div style={{ display: "flex", gap: 8 }}>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setStationSelections((prev) => ({
+                                          ...prev,
+                                          [String(step.stationIndex)]: {
+                                            ...(prev[String(step.stationIndex)] ?? {}),
+                                            [passenger.tripId]: "arrived",
+                                          },
+                                        }))
+                                      }
+                                      style={{
+                                        padding: "6px 10px",
+                                        borderRadius: 8,
+                                        border: selectedStatus === "arrived" ? "1px solid #27AE60" : "1px solid #dbe2e8",
+                                        background: selectedStatus === "arrived" ? "#E8F8F5" : "#fff",
+                                        color: selectedStatus === "arrived" ? "#196F3D" : "#5A6A7A",
+                                        fontWeight: 700,
+                                        fontSize: 12,
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      Arrived
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setStationSelections((prev) => ({
+                                          ...prev,
+                                          [String(step.stationIndex)]: {
+                                            ...(prev[String(step.stationIndex)] ?? {}),
+                                            [passenger.tripId]: "no_show",
+                                          },
+                                        }))
+                                      }
+                                      style={{
+                                        padding: "6px 10px",
+                                        borderRadius: 8,
+                                        border: selectedStatus === "no_show" ? "1px solid #E74C3C" : "1px solid #dbe2e8",
+                                        background: selectedStatus === "no_show" ? "#FFEBEE" : "#fff",
+                                        color: selectedStatus === "no_show" ? "#C0392B" : "#5A6A7A",
+                                        fontWeight: 700,
+                                        fontSize: 12,
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      No show
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: "#00806E" }}>
+                                    Will alight here
+                                  </span>
+                                )}
                               </div>
                             );
                           })
