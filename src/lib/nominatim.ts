@@ -1,7 +1,7 @@
-// Address search powered by Google Places API (via /api/places/*)
+// Address search powered by Nominatim/OpenStreetMap (via /api/places/*)
 
 export interface NominatimResult {
-  place_id: string;     // Google place_id
+  place_id: string;     // Encoded lat,lng tuple for the details endpoint
   display_name: string; // Full description e.g. "Tahrir Square, Cairo, Egypt"
 }
 

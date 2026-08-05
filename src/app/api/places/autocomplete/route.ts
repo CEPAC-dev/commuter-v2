@@ -5,32 +5,28 @@ export async function GET(req: NextRequest) {
   if (!q || q.length < 3) return NextResponse.json([]);
 
   const url = new URL("https://nominatim.openstreetmap.org/search");
-  url.searchParams.set("q", `${q}, Egypt`);
+  url.searchParams.set("q", q);
   url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("limit", "6");
   url.searchParams.set("countrycodes", "eg");
-  url.searchParams.set("limit", "5");
-  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("addressdetails", "0");
+  url.searchParams.set("accept-language", "en");
 
-  const res = await fetch(url, {
+  const res = await fetch(url.toString(), {
     headers: {
-      "Accept-Language": "en",
-      "User-Agent": "Commuter/0.1 (local development)",
+      "User-Agent": "Commuter/1.0 (OpenStreetMap search)",
+      Referer: process.env.APP_URL ?? "http://localhost:3000",
     },
     next: { revalidate: 60 },
   });
-  if (!res.ok) {
-    console.error("[places/autocomplete] Nominatim", res.status);
-    return NextResponse.json([], { status: 502 });
-  }
+  if (!res.ok) return NextResponse.json([], { status: 502 });
 
-  const data = (await res.json()) as Array<{
-    osm_type: "node" | "way" | "relation";
-    osm_id: number;
-    display_name: string;
-  }>;
-  const results = data.map((place) => ({
-    place_id: `${place.osm_type[0].toUpperCase()}${place.osm_id}`,
-    display_name: place.display_name,
-  }));
+  const data = await res.json();
+  const results = (Array.isArray(data) ? data : []).map(
+    (place: { lat: string; lon: string; display_name: string }) => ({
+      place_id: `${place.lat},${place.lon}`,
+      display_name: place.display_name,
+    }),
+  );
   return NextResponse.json(results);
 }

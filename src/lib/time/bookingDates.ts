@@ -1,8 +1,8 @@
 import { addDays, format, startOfDay } from "date-fns";
 
-/** Earliest selectable booking date: tomorrow, or day-after-tomorrow if now >= 17:00 local. */
+/** Earliest selectable booking date: tomorrow, or day-after-tomorrow if now >= 20:00 local. */
 export function earliestBookingDate(now: Date = new Date()): string {
-  const offset = now.getHours() >= 17 ? 2 : 1;
+  const offset = now.getHours() >= 20 ? 2 : 1;
   return format(addDays(startOfDay(now), offset), "yyyy-MM-dd");
 }
 

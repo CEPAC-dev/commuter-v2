@@ -10,7 +10,7 @@ import {
   computeTripPriceEgp,
   type VehicleKey,
 } from "@/lib/config/vehicles";
-import { isDateInWindow } from "@/lib/time/bookingDates";
+import { bookingWindow, isDateInWindow } from "@/lib/time/bookingDates";
 import { getVehicles } from "@/lib/db/getVehicles";
 import {
   findNearestStations,
@@ -21,6 +21,7 @@ import {
 import type { StopInput, TripInput } from "@/types/forms";
 import type { PaymentStatus } from "@/types/booking";
 import { listUserTrips } from "@/lib/services/trips";
+import { createNotification } from "@/lib/notifications/createNotification";
 import { Types } from "mongoose";
 
 const PRIVATE_VEHICLE_KEYS = new Set<VehicleKey>([
@@ -464,8 +465,21 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const perDateAmountEgp = serverTrips.reduce((sum, t) => sum + t.priceEgp, 0);
-  const amountEgp = perDateAmountEgp * dates.length;
+  const weekDates = bookingWindow();
+  const isFullWeekSelection =
+    dates.length === weekDates.length &&
+    weekDates.every((day) => dates.includes(day));
+  const seventhDay = weekDates[weekDates.length - 1];
+  const amountEgp = dates.reduce((total, date) => {
+    const dayTotal = serverTrips.reduce((sum, trip) => {
+      const tripPriceForDate =
+        isFullWeekSelection && date === seventhDay
+          ? Math.round(trip.priceEgp * 0.95)
+          : trip.priceEgp;
+      return sum + tripPriceForDate;
+    }, 0);
+    return total + dayTotal;
+  }, 0);
 
   const request = await Request.create({
     userId: new Types.ObjectId(session.userId),
@@ -486,6 +500,10 @@ export async function POST(req: NextRequest) {
           date,
           cycleIndex,
           ...trip,
+          priceEgp:
+            isFullWeekSelection && date === seventhDay
+              ? Math.round(trip.priceEgp * 0.95)
+              : trip.priceEgp,
           paymentStatus: "pending",
           status: "pending_payment",
         })),
@@ -500,6 +518,14 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  await createNotification({
+    userId: session.userId,
+    type: "request_created",
+    title: "Trip request received",
+    body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
+    data: { bookingId: String(request._id), amountEgp },
+  });
 
   return NextResponse.json(
     { bookingId: String(request._id), amountEgp },

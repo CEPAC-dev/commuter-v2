@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
-import { NextResponse } from "next/server";
-// import { adminAuth } from "@/lib/middleware/adminAuth";
+import { NextRequest, NextResponse } from "next/server";
+import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
 import { Driver } from "@/models/Driver";
@@ -14,8 +14,9 @@ import { haversineKm } from "@/lib/geo/stations";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function getTodayDate() {
+function getTomorrowDate() {
   const today = new Date();
+  today.setDate(today.getDate() + 1);
 
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, "0");
@@ -25,10 +26,10 @@ function getTodayDate() {
 }
 
 interface PrivateRow {
-  rideId: number;
-  passId: number | null;
-  originNearestStationNo: number | null;
-  destinationNearestStationNo: number | null;
+  Ride_ID: number;
+  Pass_ID: number | null;
+  originStationNo: number | null;
+  destinationStationNo: number | null;
   stop1Number: number | null;
   stop1Lat: number | null;
   stop1Long: number | null;
@@ -59,31 +60,26 @@ interface PrivateRow {
   stop4WaitingTime: number | null;
   readyFrom: string;
   shouldArrivebefore: string;
-  rideType: number;
-  totalStartedPassengers: number;
+  Ride_Type: number;
+  Origin_Boarding: number;
 }
 
 interface SharedRow {
-  rideId: number;
-  passId: number | null;
-  originNearestStationNo: number | null;
-  destinationNearestStationNo: number | null;
+  Ride_ID: number;
+  Pass_ID: number | null;
+  Origin_Reg_ID: number | null;
+  Dest_Reg_ID: number | null;
   readyFrom: string;
   shouldArrivebefore: string;
-  rideType: number;
-  totalStartedPassengers: number;
+  Ride_Type: number;
+  Origin_Boarding: number;
 }
 
 interface AvailabilityRow {
   availabilityId: number;
   driverId: number | null;
-  date: string;
-  startLat: number;
-  startLong: number;
-  startNearestStationNo: number | null;
-  endLat: number;
-  endLong: number;
-  endNearestStationNo: number | null;
+  startStationNo: number | null;
+  endStationNo: number | null;
   startTime: string;
   endTime: string;
   vehicleType: number;
@@ -97,14 +93,14 @@ interface StationInfo {
 }
 
 const PRIVATE_COLUMNS: (keyof PrivateRow)[] = [
-  "rideId",
-  "passId",
-  "originNearestStationNo",
-  "destinationNearestStationNo",
+  "Ride_ID",
+  "Pass_ID",
+  "originStationNo",
+  "destinationStationNo",
   "readyFrom",
   "shouldArrivebefore",
-  "rideType",
-  "totalStartedPassengers",
+  "Ride_Type",
+  "Origin_Boarding",
   "stop1Number",
   "stop1Alighting",
   "stop1Boarding",
@@ -124,30 +120,67 @@ const PRIVATE_COLUMNS: (keyof PrivateRow)[] = [
 ];
 
 const SHARED_COLUMNS: (keyof SharedRow)[] = [
-  "rideId",
-  "passId",
-  "originNearestStationNo",
-  "destinationNearestStationNo",
+  "Ride_ID",
+  "Pass_ID",
+  "Origin_Reg_ID",
+  "Dest_Reg_ID",
   "readyFrom",
   "shouldArrivebefore",
-  "rideType",
-  "totalStartedPassengers",
+  "Ride_Type",
+  "Origin_Boarding",
 ];
 
 const AVAILABILITY_COLUMNS: (keyof AvailabilityRow)[] = [
   "availabilityId",
   "driverId",
-  "date",
-  "startLat",
-  "startLong",
-  "startNearestStationNo",
-  "endLat",
-  "endLong",
-  "endNearestStationNo",
+  "startStationNo",
+  "endStationNo",
   "startTime",
   "endTime",
   "vehicleType",
 ];
+
+const SHARED_HEADER_LABELS: Record<string, string> = {
+  readyFrom: "Ready From",
+  shouldArrivebefore: "Should arrive before",
+};
+
+const AVAILABILITY_HEADER_LABELS: Record<string, string> = {
+  availabilityId: "Trip_ID",
+  driverId: "Driver_ID",
+  startStationNo: "Origin_Reg_ID",
+  endStationNo: "Dest_Reg_ID",
+  startTime: "Ready work From",
+  endTime: "Ready Work To",
+  vehicleType: "Vehicle_Type",
+};
+
+const PRIVATE_HEADER_LABELS: Record<string, string> = {
+  Ride_ID: "Ride_ID",
+  Pass_ID: "Pass_ID",
+  originStationNo: "Origin_Req_ID",
+  destinationStationNo: "Dest_Req_ID",
+  readyFrom: "Ready From",
+  shouldArrivebefore: "Should arrive before",
+  Ride_Type: "Ride_Type",
+  Origin_Boarding: "Origin_Boarding",
+  stop1Number: "ID_Stop_1",
+  stop1Alighting: "Alighting_Stop_1",
+  stop1Boarding: "Boarding_Stop_1",
+  stop1WaitingTime: "Waiting_Stop_1",
+  stop2Number: "ID_Stop_2",
+  stop2Alighting: "Alighting_Stop_2",
+  stop2Boarding: "Boarding_Stop_2",
+  stop2WaitingTime: "Waiting_Stop_2",
+  stop3Number: "ID_Stop_3",
+  stop3Alighting: "Alighting_Stop_3",
+  stop3Boarding: "Boarding_Stop_3",
+  stop3WaitingTime: "Waiting_Stop_3",
+  stop4Number: "ID_Stop_4",
+  stop4Alighting: "Alighting_Stop_4",
+  stop4Boarding: "Boarding_Stop_4",
+  stop4WaitingTime: "Waiting_Stop_4",
+};
 
 const CAR_TYPE_TO_VEHICLE_TYPE: Record<string, number> = {
   private: 1,
@@ -200,10 +233,20 @@ function adjustWorksheetSizing(sheet: ExcelJS.Worksheet) {
   });
 }
 
-function formatTime12Hour(value: string | null | undefined): string {
+function formatTime24Hour(value: string | null | undefined): string {
   if (!value) return "";
   const trimmed = String(value).trim();
   if (!trimmed) return "";
+
+  const meridiemMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (meridiemMatch) {
+    const hour = Number(meridiemMatch[1]);
+    const minute = Number(meridiemMatch[2]);
+    const isPm = meridiemMatch[3].toUpperCase() === "PM";
+    const normalizedHour = ((hour % 12) + (isPm ? 12 : 0)) % 24;
+    return `${String(normalizedHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
   const match = trimmed.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return trimmed;
 
@@ -211,9 +254,23 @@ function formatTime12Hour(value: string | null | undefined): string {
   const minute = Number(match[2]);
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return trimmed;
 
-  const period = hour >= 12 ? "PM" : "AM";
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function toExcelTimeValue(value: string | null | undefined): number | string {
+  const formatted = formatTime24Hour(value);
+  if (!formatted) return "";
+
+  const match = formatted.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return formatted;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return formatted;
+
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return formatted;
+
+  return (hour * 60 + minute) / (24 * 60);
 }
 
 function formatWaitingMinutes(value: number | null | undefined): string {
@@ -232,7 +289,7 @@ function getDisplayValueForColumn<T extends PrivateRow | SharedRow>(
     (column === "readyFrom" || column === "shouldArrivebefore") &&
     typeof row[column] === "string"
   ) {
-    return formatTime12Hour(row[column] as string | null | undefined);
+    return formatTime24Hour(row[column] as string | null | undefined);
   }
 
   if (
@@ -248,16 +305,31 @@ function getDisplayValueForColumn<T extends PrivateRow | SharedRow>(
   return row[column] as string | number | null;
 }
 
-export async function GET() {
-  //   const auth = await adminAuth(req);
-  //   if (!auth.authorized) return auth.response;
+function getExcelValueForColumn<T extends PrivateRow | SharedRow>(
+  row: T,
+  column: keyof T,
+): string | number | null {
+  if (
+    (column === "readyFrom" || column === "shouldArrivebefore") &&
+    typeof row[column] === "string"
+  ) {
+    return toExcelTimeValue(row[column] as string | null | undefined);
+  }
+
+  return getDisplayValueForColumn(row, column);
+}
+
+export async function GET(req: NextRequest) {
+  const auth = await adminAuth(req);
+  if (!auth.authorized) return auth.response;
 
   await connectDB();
 
-  const today = getTodayDate();
+  const requestedDate = req.nextUrl.searchParams.get("date")?.trim();
+  const targetDate = requestedDate || getTomorrowDate();
 
   const privateTrips = await Trip.find({
-    date: today,
+    date: targetDate,
     status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["private_car", "taxi_private"] },
@@ -283,7 +355,7 @@ export async function GET() {
   >();
 
   const sharedTrips = await Trip.find({
-    date: today,
+    date: targetDate,
     status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["taxi_shared", "van_shared", "microbus_shared"] },
@@ -301,7 +373,7 @@ export async function GET() {
   >();
 
   const availabilities = await Availability.find({
-    date: today,
+    date: targetDate,
   }).lean<
     {
       availabilityNumber: number;
@@ -338,16 +410,69 @@ export async function GET() {
     drivers.map((driver) => [String(driver.userId), driver.carType]),
   );
 
-  let nextStopNumber = 5000;
   const syntheticStations: StationInfo[] = [];
+  const syntheticStationKeyToId = new Map<string, number>();
+  const syntheticStationCoordinateToId = new Map<string, number>();
+  const stopStationIdRef = { current: 5000 };
+  const privateStationIdRef = { current: 7000 };
+  const availabilityStationIdRef = { current: 8000 };
+
+  function buildCoordinateKey(lat: number, lng: number) {
+    return `${lat.toFixed(6)}|${lng.toFixed(6)}`;
+  }
+
+  function buildSyntheticStationKey(point: {
+    lat: number;
+    lng: number;
+    address?: string | null;
+  }) {
+    return [
+      buildCoordinateKey(point.lat, point.lng),
+      (point.address ?? "").trim().replace(/\s+/g, " "),
+    ].join("|");
+  }
+
+  function addSyntheticStation(
+    point:
+      | { lat: number; lng: number; address?: string | null }
+      | null
+      | undefined,
+    nextIdRef: { current: number },
+  ): number | null {
+    if (point?.lat == null || point?.lng == null) return null;
+    const key = buildSyntheticStationKey(point);
+    const existingId = syntheticStationKeyToId.get(key);
+    if (existingId != null) return existingId;
+
+    const objectId = nextIdRef.current;
+    nextIdRef.current += 1;
+
+    syntheticStations.push({
+      objectId,
+      name: point.address ?? "",
+      lat: point.lat,
+      lng: point.lng,
+    });
+    syntheticStationKeyToId.set(key, objectId);
+    syntheticStationCoordinateToId.set(
+      buildCoordinateKey(point.lat, point.lng),
+      objectId,
+    );
+    return objectId;
+  }
 
   const privateRows: PrivateRow[] = privateTrips.map((trip) => {
     const s = trip.stops ?? [];
+    const originStationNo = addSyntheticStation(trip.pickup, privateStationIdRef);
+    const destinationStationNo = addSyntheticStation(
+      trip.dropoff,
+      privateStationIdRef,
+    );
     const row: PrivateRow = {
-      rideId: trip.tripNumber,
-      passId: userNumberMap.get(String(trip.userId)) ?? null,
-      originNearestStationNo: trip.pickupStation?.id ?? null,
-      destinationNearestStationNo: trip.dropoffStation?.id ?? null,
+      Ride_ID: trip.tripNumber,
+      Pass_ID: userNumberMap.get(String(trip.userId)) ?? null,
+      originStationNo,
+      destinationStationNo,
       stop1Number: null,
       stop1Lat: null,
       stop1Long: null,
@@ -378,8 +503,8 @@ export async function GET() {
       stop4WaitingTime: null,
       readyFrom: trip.pickupTime,
       shouldArrivebefore: trip.arrivalTime,
-      rideType: trip.vehicleType === "private_car" ? 1 : 2,
-      totalStartedPassengers: trip.numberOfPassengers,
+      Ride_Type: trip.vehicleType === "private_car" ? 1 : 2,
+      Origin_Boarding: trip.numberOfPassengers,
     };
 
     const assignStop = (
@@ -397,17 +522,11 @@ export async function GET() {
       const waitingKey = `${stopKey}WaitingTime` as keyof PrivateRow;
 
       if (point?.lat != null && point?.lng != null) {
-        row[numberKey] = nextStopNumber as never;
+        const stopId = addSyntheticStation(point, stopStationIdRef);
+        row[numberKey] = (stopId ?? 0) as never;
         row[latKey] = point.lat as never;
         row[longKey] = point.lng as never;
         row[addressKey] = (point.address ?? null) as never;
-        syntheticStations.push({
-          objectId: nextStopNumber,
-          name: point.address ?? "",
-          lat: point.lat,
-          lng: point.lng,
-        });
-        nextStopNumber += 1;
       } else {
         row[numberKey] = 0 as never;
         row[latKey] = 0 as never;
@@ -429,34 +548,75 @@ export async function GET() {
   });
 
   const sharedRows: SharedRow[] = sharedTrips.map((trip) => ({
-    rideId: trip.tripNumber,
-    passId: userNumberMap.get(String(trip.userId)) ?? null,
-    originNearestStationNo: trip.pickupStation?.id ?? null,
-    destinationNearestStationNo: trip.dropoffStation?.id ?? null,
+    Ride_ID: trip.tripNumber,
+    Pass_ID: userNumberMap.get(String(trip.userId)) ?? null,
+    Origin_Reg_ID: trip.pickupStation?.id ?? null,
+    Dest_Reg_ID: trip.dropoffStation?.id ?? null,
     readyFrom: trip.pickupTime,
     shouldArrivebefore: trip.arrivalTime,
-    rideType:
+    Ride_Type:
       trip.vehicleType === "taxi_shared"
         ? 3
         : trip.vehicleType === "van_shared"
           ? 4
           : 5,
-    totalStartedPassengers: trip.extraPassengers + 1,
+    Origin_Boarding: trip.extraPassengers + 1,
   }));
+
+  const existingStationIds = Array.from(
+    new Set(
+      sharedRows
+        .flatMap((row) => [row.Origin_Reg_ID, row.Dest_Reg_ID])
+        .filter(
+          (id): id is number => typeof id === "number" && Number.isFinite(id),
+        ),
+    ),
+  );
+
+  const existingStations = await Station.find({
+    objectId: { $in: existingStationIds },
+  })
+    .select("objectId name lat lng")
+    .lean<StationInfo[]>();
+  const existingStationCoordinateToId = new Map(
+    existingStations.map((station) => [
+      buildCoordinateKey(station.lat, station.lng),
+      station.objectId,
+    ]),
+  );
+
+  function resolveAvailabilityStationNo(
+    point:
+      | { lat: number; lng: number; address?: string | null }
+      | null
+      | undefined,
+  ) {
+    if (point?.lat == null || point?.lng == null) return null;
+
+    const coordinateKey = buildCoordinateKey(point.lat, point.lng);
+    const existingStationId =
+      existingStationCoordinateToId.get(coordinateKey) ??
+      syntheticStationCoordinateToId.get(coordinateKey);
+
+    if (existingStationId != null) return existingStationId;
+
+    return addSyntheticStation(point, availabilityStationIdRef);
+  }
 
   const availabilityRows: AvailabilityRow[] = availabilities.map(
     (availability) => {
       const carType = carTypeMap.get(String(availability.driverId));
+      const startStationNo = resolveAvailabilityStationNo(
+        availability.startLocation,
+      );
+      const endStationNo = resolveAvailabilityStationNo(
+        availability.endLocation,
+      );
       return {
         availabilityId: availability.availabilityNumber,
         driverId: userNumberMap.get(String(availability.driverId)) ?? null,
-        date: availability.date,
-        startLat: availability.startLocation.lat,
-        startLong: availability.startLocation.lng,
-        startNearestStationNo: availability.startNearestStation?.id ?? null,
-        endLat: availability.endLocation.lat,
-        endLong: availability.endLocation.lng,
-        endNearestStationNo: availability.endNearestStation?.id ?? null,
+        startStationNo,
+        endStationNo,
         startTime: availability.startTime,
         endTime: availability.endTime,
         vehicleType: carType ? (CAR_TYPE_TO_VEHICLE_TYPE[carType] ?? 0) : 0,
@@ -468,19 +628,11 @@ export async function GET() {
     new Set(
       [
         ...privateRows
-          .map((row) => [
-            row.originNearestStationNo,
-            row.destinationNearestStationNo,
-          ])
+          .map((row) => [row.originStationNo, row.destinationStationNo])
           .flat(),
-        ...sharedRows
-          .map((row) => [
-            row.originNearestStationNo,
-            row.destinationNearestStationNo,
-          ])
-          .flat(),
+        ...sharedRows.map((row) => [row.Origin_Reg_ID, row.Dest_Reg_ID]).flat(),
         ...availabilityRows
-          .map((row) => [row.startNearestStationNo, row.endNearestStationNo])
+          .map((row) => [row.startStationNo, row.endStationNo])
           .flat(),
         ...syntheticStations.map((station) => station.objectId),
       ].filter(
@@ -532,11 +684,15 @@ export async function GET() {
 
     const metrics = {
       distance_km:
-        result[0] && Number.isFinite(result[0].distance_km) && result[0].distance_km > 0
+        result[0] &&
+        Number.isFinite(result[0].distance_km) &&
+        result[0].distance_km > 0
           ? Math.round(result[0].distance_km * 10) / 10
           : Math.round(directDistanceKm * 10) / 10,
       duration_minutes:
-        result[0] && Number.isFinite(result[0].duration_minutes) && result[0].duration_minutes > 0
+        result[0] &&
+        Number.isFinite(result[0].duration_minutes) &&
+        result[0].duration_minutes > 0
           ? result[0].duration_minutes
           : estimatedDurationMinutes,
     };
@@ -547,8 +703,8 @@ export async function GET() {
 
   const wb = new ExcelJS.Workbook();
 
-  const stationsSheet = wb.addWorksheet("Stations");
-  stationsSheet.addRow(["District Id", "lat", "lng", "District Name"]);
+  const stationsSheet = wb.addWorksheet("Stops");
+  stationsSheet.addRow(["Stop", "Lat", "Long", "Stop_Name"]);
   for (const station of stationsSheetRows) {
     stationsSheet.addRow([
       station.objectId,
@@ -560,27 +716,23 @@ export async function GET() {
   styleWorksheet(stationsSheet);
   adjustWorksheetSizing(stationsSheet);
 
-  const matrixDistance = wb.addWorksheet("StationMatrixDistance");
-  matrixDistance.getCell("A1").value = "District Name";
-  matrixDistance.getCell("B2").value = "District Id";
+  const matrixDistance = wb.addWorksheet("Dist_Skim");
+  matrixDistance.getCell("A1").value = "District Id";
 
-  const matrixDuration = wb.addWorksheet("StationMatrixDuration");
-  matrixDuration.getCell("A1").value = "District Name";
-  matrixDuration.getCell("B2").value = "District Id";
+  const matrixDuration = wb.addWorksheet("Time_Skim");
+  matrixDuration.getCell("A1").value = "District Id";
 
   stationsSheetRows.forEach((station, index) => {
-    const column = index + 3;
+    const column = index + 2;
     const label = station.name || String(station.objectId);
 
-    matrixDistance.getRow(1).getCell(column).value = label;
-    matrixDistance.getRow(2).getCell(column).value = station.objectId;
-    matrixDistance.getRow(index + 3).getCell(1).value = label;
-    matrixDistance.getRow(index + 3).getCell(2).value = station.objectId;
+    matrixDistance.getRow(1).getCell(column).value = station.objectId;
+    matrixDistance.getRow(index + 2).getCell(1).value = station.objectId;
+    matrixDistance.getRow(index + 2).getCell(2).value = label;
 
-    matrixDuration.getRow(1).getCell(column).value = label;
-    matrixDuration.getRow(2).getCell(column).value = station.objectId;
-    matrixDuration.getRow(index + 3).getCell(1).value = label;
-    matrixDuration.getRow(index + 3).getCell(2).value = station.objectId;
+    matrixDuration.getRow(1).getCell(column).value = station.objectId;
+    matrixDuration.getRow(index + 2).getCell(1).value = station.objectId;
+    matrixDuration.getRow(index + 2).getCell(2).value = label;
   });
 
   for (let rowIndex = 0; rowIndex < stationsSheetRows.length; rowIndex++) {
@@ -591,9 +743,9 @@ export async function GET() {
         { lat: originStation.lat, lng: originStation.lng },
         { lat: destStation.lat, lng: destStation.lng },
       );
-      matrixDistance.getRow(rowIndex + 3).getCell(colIndex + 3).value =
+      matrixDistance.getRow(rowIndex + 2).getCell(colIndex + 2).value =
         metrics.distance_km;
-      matrixDuration.getRow(rowIndex + 3).getCell(colIndex + 3).value =
+      matrixDuration.getRow(rowIndex + 2).getCell(colIndex + 2).value =
         metrics.duration_minutes;
     }
   }
@@ -602,30 +754,63 @@ export async function GET() {
   styleWorksheet(matrixDuration);
   adjustWorksheetSizing(matrixDuration);
 
-  const privateSheet = wb.addWorksheet("PrivateRideRequests");
-  privateSheet.addRow(PRIVATE_COLUMNS.map((column) => column));
+  const privateSheet = wb.addWorksheet("Private_Requests");
+  privateSheet.addRow(
+    PRIVATE_COLUMNS.map((column) => PRIVATE_HEADER_LABELS[column] ?? column),
+  );
   for (const row of privateRows) {
-    privateSheet.addRow(
-      PRIVATE_COLUMNS.map((column) => getDisplayValueForColumn(row, column)),
+    const sheetRow = privateSheet.addRow(
+      PRIVATE_COLUMNS.map((column) => getExcelValueForColumn(row, column)),
     );
+    sheetRow.eachCell((cell, cellIndex) => {
+      const column = PRIVATE_COLUMNS[cellIndex - 1];
+      if (column === "readyFrom" || column === "shouldArrivebefore") {
+        cell.numFmt = "HH:mm";
+      }
+    });
   }
   styleWorksheet(privateSheet);
   adjustWorksheetSizing(privateSheet);
 
-  const sharedSheet = wb.addWorksheet("SharedRideRequests");
-  sharedSheet.addRow(SHARED_COLUMNS);
+  const sharedSheet = wb.addWorksheet("Shared_Requests");
+  sharedSheet.addRow(
+    SHARED_COLUMNS.map((column) => SHARED_HEADER_LABELS[column] ?? column),
+  );
   for (const row of sharedRows) {
-    sharedSheet.addRow(
-      SHARED_COLUMNS.map((column) => getDisplayValueForColumn(row, column)),
+    const sheetRow = sharedSheet.addRow(
+      SHARED_COLUMNS.map((column) => getExcelValueForColumn(row, column)),
     );
+    sheetRow.eachCell((cell, cellIndex) => {
+      const column = SHARED_COLUMNS[cellIndex - 1];
+      if (column === "readyFrom" || column === "shouldArrivebefore") {
+        cell.numFmt = "HH:mm";
+      }
+    });
   }
   styleWorksheet(sharedSheet);
   adjustWorksheetSizing(sharedSheet);
 
-  const availabilitySheet = wb.addWorksheet("Availability");
-  availabilitySheet.addRow(AVAILABILITY_COLUMNS);
+  const availabilitySheet = wb.addWorksheet("Trip_Requests");
+  availabilitySheet.addRow(
+    AVAILABILITY_COLUMNS.map(
+      (column) => AVAILABILITY_HEADER_LABELS[column] ?? column,
+    ),
+  );
   for (const row of availabilityRows) {
-    availabilitySheet.addRow(AVAILABILITY_COLUMNS.map((column) => row[column]));
+    const sheetRow = availabilitySheet.addRow(
+      AVAILABILITY_COLUMNS.map((column) => {
+        if (column === "startTime" || column === "endTime") {
+          return toExcelTimeValue(row[column]);
+        }
+        return row[column];
+      }),
+    );
+    sheetRow.eachCell((cell, cellIndex) => {
+      const column = AVAILABILITY_COLUMNS[cellIndex - 1];
+      if (column === "startTime" || column === "endTime") {
+        cell.numFmt = "HH:mm";
+      }
+    });
   }
   styleWorksheet(availabilitySheet);
   adjustWorksheetSizing(availabilitySheet);
@@ -651,7 +836,10 @@ export async function GET() {
 
   const zip = new JSZip();
   zip.file("match-data.json", JSON.stringify(outputJson, null, 2));
-  zip.file("match-data.xlsx", Buffer.from(await wb.xlsx.writeBuffer()));
+  zip.file(
+    `match-data-${targetDate}.xlsx`,
+    Buffer.from(await wb.xlsx.writeBuffer()),
+  );
 
   const body = await zip.generateAsync({ type: "blob" });
   return new NextResponse(body, {

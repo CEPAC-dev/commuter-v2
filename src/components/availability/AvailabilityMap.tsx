@@ -1,27 +1,26 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
-import { MAP_STYLE } from "@/lib/googleMapsStyle";
+import type { LayerGroup, Map as LeafletMap } from "leaflet";
 import { reverseGeocode, formatDisplayName } from "@/lib/nominatim";
+import { loadLeaflet, svgDataUrl, MAP_COLORS } from "@/lib/leaflet";
 import type { TripPoint } from "@/lib/store/useTripStore";
 
-const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 const CAIRO = { lat: 30.0444, lng: 31.2357 };
 
-const START_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+const START_ICON = svgDataUrl(
   `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36">
     <circle cx="18" cy="18" r="16" fill="#0B1E3D" stroke="#00C2A8" stroke-width="3"/>
     <circle cx="18" cy="18" r="6" fill="#ffffff"/>
   </svg>`,
-)}`;
+);
 
-const END_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+const END_ICON = svgDataUrl(
   `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="48">
     <path d="M18 0C8.06 0 0 8.06 0 18c0 13.05 18 32.4 18 32.4S36 31.05 36 18C36 8.06 27.94 0 18 0z" fill="#00C2A8"/>
     <circle cx="18" cy="18" r="8" fill="white"/>
     <circle cx="18" cy="18" r="4.5" fill="#0B1E3D"/>
   </svg>`,
-)}`;
+);
 
 interface Props {
   startLocation: TripPoint | null;
@@ -38,19 +37,49 @@ export default function AvailabilityMap({
   onPick,
   onCancelPick,
 }: Props) {
-  const { isLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: API_KEY,
-  });
-
-  const mapRef = useRef<google.maps.Map | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const layersRef = useRef<LayerGroup | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [leafletReady, setLeafletReady] = useState(false);
   const [resolving, setResolving] = useState(false);
 
-  const onLoad = useCallback((map: google.maps.Map) => {
-    mapRef.current = map;
+  const onLoad = useCallback(() => {
     setMapReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    let disposed = false;
+
+    loadLeaflet().then((L) => {
+      if (disposed || !containerRef.current) return;
+      const map = L.map(containerRef.current, {
+        zoomControl: false,
+        attributionControl: false,
+      }).setView([CAIRO.lat, CAIRO.lng], 11);
+
+      L.tileLayer(MAP_COLORS.tileUrl, {
+        attribution: MAP_COLORS.tileAttribution,
+        maxZoom: 19,
+      }).addTo(map);
+
+      mapRef.current = map;
+      layersRef.current = L.layerGroup().addTo(map);
+      setLeafletReady(true);
+      onLoad();
+    });
+
+    return () => {
+      disposed = true;
+      layersRef.current?.clearLayers();
+      layersRef.current = null;
+      mapRef.current?.remove();
+      mapRef.current = null;
+      setLeafletReady(false);
+      setMapReady(false);
+    };
+  }, [onLoad]);
 
   // Fit bounds when locations change
   useEffect(() => {
@@ -62,21 +91,23 @@ export default function AvailabilityMap({
       mapRef.current.setZoom(14);
       return;
     }
-    const bounds = new google.maps.LatLngBounds();
-    pts.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
-    mapRef.current.fitBounds(bounds, {
-      top: 50,
-      right: 40,
-      bottom: 50,
-      left: 40,
+    loadLeaflet().then((L) => {
+      if (!mapRef.current) return;
+      const bounds = L.latLngBounds(
+        pts.map((point) => [point.lat, point.lng] as [number, number]),
+      );
+      mapRef.current.fitBounds(bounds, { padding: [50, 40] });
     });
   }, [startLocation, endLocation, mapReady]);
 
-  const handleMapClick = useCallback(
-    async (e: google.maps.MapMouseEvent) => {
-      if (!picking || !e.latLng) return;
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
+  useEffect(() => {
+    if (!mapRef.current) return;
+    let active = true;
+
+    const handleMapClick = async (e: { latlng: { lat: number; lng: number } }) => {
+      if (!picking || !active) return;
+      const lat = e.latlng.lat;
+      const lng = e.latlng.lng;
       setResolving(true);
       let address = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
       try {
@@ -86,13 +117,60 @@ export default function AvailabilityMap({
       } catch {
         // fall back to coordinates
       }
+      if (!active) return;
       setResolving(false);
       onPick(picking, { address, lat, lng });
-    },
-    [picking, onPick],
-  );
+    };
 
-  if (!isLoaded) {
+    const map = mapRef.current;
+    map.on("click", handleMapClick);
+    return () => {
+      active = false;
+      map.off("click", handleMapClick);
+    };
+  }, [onPick, picking]);
+
+  useEffect(() => {
+    if (!layersRef.current) return;
+    let disposed = false;
+
+    loadLeaflet().then((L) => {
+      if (disposed || !layersRef.current) return;
+      const layers = layersRef.current;
+      layers.clearLayers();
+
+      const startIcon = L.icon({
+        iconUrl: START_ICON,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      });
+      const endIcon = L.icon({
+        iconUrl: END_ICON,
+        iconSize: [36, 48],
+        iconAnchor: [18, 48],
+      });
+
+      if (startLocation) {
+        L.marker([startLocation.lat, startLocation.lng], {
+          icon: startIcon,
+          title: "Start location",
+        }).addTo(layers);
+      }
+
+      if (endLocation) {
+        L.marker([endLocation.lat, endLocation.lng], {
+          icon: endIcon,
+          title: "End location",
+        }).addTo(layers);
+      }
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [endLocation, startLocation]);
+
+  if (!leafletReady) {
     return (
       <div
         style={{
@@ -108,7 +186,7 @@ export default function AvailabilityMap({
           borderRadius: 12,
         }}
       >
-        Loading map…
+        Loading map...
       </div>
     );
   }
@@ -123,45 +201,25 @@ export default function AvailabilityMap({
         overflow: "hidden",
       }}
     >
-      <GoogleMap
-        mapContainerStyle={{ width: "100%", height: "100%" }}
-        center={CAIRO}
-        zoom={11}
-        onLoad={onLoad}
-        onClick={handleMapClick}
-        options={{
-          styles: MAP_STYLE,
-          disableDefaultUI: true,
-          gestureHandling: "greedy",
-          clickableIcons: false,
-          draggableCursor: picking ? "crosshair" : undefined,
-        }}
-      >
-        {startLocation && (
-          <Marker
-            position={{ lat: startLocation.lat, lng: startLocation.lng }}
-            icon={{
-              url: START_ICON,
-              scaledSize: new google.maps.Size(36, 36),
-              anchor: new google.maps.Point(18, 18),
-            }}
-            title="Start location"
-            zIndex={10}
-          />
-        )}
-        {endLocation && (
-          <Marker
-            position={{ lat: endLocation.lat, lng: endLocation.lng }}
-            icon={{
-              url: END_ICON,
-              scaledSize: new google.maps.Size(36, 48),
-              anchor: new google.maps.Point(18, 48),
-            }}
-            title="End location"
-            zIndex={10}
-          />
-        )}
-      </GoogleMap>
+      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+
+      {!leafletReady && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "#e8f0f7",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#5A6A7A",
+            fontSize: 14,
+            fontFamily: "inherit",
+          }}
+        >
+          Loading map...
+        </div>
+      )}
 
       {/* Picking overlay banner */}
       {picking && (

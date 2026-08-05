@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
+import { createNotification } from "@/lib/notifications/createNotification";
 import { Types } from "mongoose";
 
 const KASHIER_URL =
@@ -73,16 +74,25 @@ export async function POST(req: NextRequest) {
   };
 
   // Validate Kashier credentials early to avoid opaque upstream HTML errors
-  if (!process.env.KASHIER_API_KEY || !process.env.KASHIER_SECRET_KEY || !process.env.KASHIER_MERCHANT_ID) {
-    console.error('Kashier credentials missing: KASHIER_API_KEY/KASHIER_SECRET_KEY/KASHIER_MERCHANT_ID');
+  if (
+    !process.env.KASHIER_API_KEY ||
+    !process.env.KASHIER_SECRET_KEY ||
+    !process.env.KASHIER_MERCHANT_ID
+  ) {
+    console.error(
+      "Kashier credentials missing: KASHIER_API_KEY/KASHIER_SECRET_KEY/KASHIER_MERCHANT_ID",
+    );
     return NextResponse.json(
-      { error: 'Kashier credentials are not configured on the server.' },
+      { error: "Kashier credentials are not configured on the server." },
       { status: 500 },
     );
   }
 
   // Helpful non-sensitive debug info
-  console.error('Kashier request', { KASHIER_URL, merchantId: process.env.KASHIER_MERCHANT_ID });
+  console.error("Kashier request", {
+    KASHIER_URL,
+    merchantId: process.env.KASHIER_MERCHANT_ID,
+  });
 
   let kashierRes: Response;
   try {
@@ -105,13 +115,21 @@ export async function POST(req: NextRequest) {
 
   // Read raw text and attempt safe JSON parse (some upstream errors return HTML)
   const kashierText = await kashierRes.text();
-  let kashierData: any = null;
+  let kashierData: Record<string, unknown> | null = null;
   try {
-    kashierData = JSON.parse(kashierText);
-  } catch (err) {
-    console.error("Kashier non-JSON response", kashierRes.status, kashierText.substring(0, 200));
+    kashierData = JSON.parse(kashierText) as Record<string, unknown>;
+  } catch {
+    console.error(
+      "Kashier non-JSON response",
+      kashierRes.status,
+      kashierText.substring(0, 200),
+    );
     return NextResponse.json(
-      { error: "Payment gateway returned non-JSON response", status: kashierRes.status, details: kashierText },
+      {
+        error: "Payment gateway returned non-JSON response",
+        status: kashierRes.status,
+        details: kashierText,
+      },
       { status: 502 },
     );
   }
@@ -127,6 +145,14 @@ export async function POST(req: NextRequest) {
   await Request.findByIdAndUpdate(bookingId, {
     kashierSessionId: kashierData._id ?? "",
     kashierOrderId: String(booking._id),
+  });
+
+  await createNotification({
+    userId: session.userId,
+    type: "payment_required",
+    title: "Complete your payment",
+    body: "Your booking is waiting for payment. Continue checkout to secure your trip.",
+    data: { bookingId },
   });
 
   return NextResponse.json({ sessionUrl: kashierData.sessionUrl });

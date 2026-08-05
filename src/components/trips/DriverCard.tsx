@@ -20,7 +20,13 @@ function initials(name?: string): string {
     .join("");
 }
 
-export default function DriverCard({ driver }: { driver: DriverCardData }) {
+export default function DriverCard({
+  driver,
+  showCall = true,
+}: {
+  driver: DriverCardData;
+  showCall?: boolean;
+}) {
   return (
     <div
       style={{
@@ -95,27 +101,29 @@ export default function DriverCard({ driver }: { driver: DriverCardData }) {
           </p>
         </div>
 
-        <a
-          href={`tel:${driver.phone}`}
-          aria-label={`Call ${driver.name}`}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "10px 16px",
-            background: "linear-gradient(135deg, #00C2A8 0%, #00A896 100%)",
-            color: "#fff",
-            borderRadius: 12,
-            fontSize: 14,
-            fontWeight: 700,
-            textDecoration: "none",
-            flexShrink: 0,
-            boxShadow: "0 2px 8px rgba(0,194,168,0.25)",
-          }}
-        >
-          <Phone size={16} aria-hidden="true" />
-          Call
-        </a>
+        {showCall && (
+          <a
+            href={`tel:${driver.phone}`}
+            aria-label={`Call ${driver.name}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 16px",
+              background: "linear-gradient(135deg, #00C2A8 0%, #00A896 100%)",
+              color: "#fff",
+              borderRadius: 12,
+              fontSize: 14,
+              fontWeight: 700,
+              textDecoration: "none",
+              flexShrink: 0,
+              boxShadow: "0 2px 8px rgba(0,194,168,0.25)",
+            }}
+          >
+            <Phone size={16} aria-hidden="true" />
+            Call
+          </a>
+        )}
       </div>
 
       <div

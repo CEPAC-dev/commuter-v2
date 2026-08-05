@@ -1,3 +1,5 @@
+import { bookingWindow } from "@/lib/time/bookingDates";
+
 export type VehicleKey =
   | "private_car"
   | "taxi_private"
@@ -16,23 +18,13 @@ export interface VehicleConfig {
   capacity: number; // max seats (integer, placeholder until user edits)
   occupancy: number; // current occupancy (integer, placeholder)
   min_occupancy: number; // minimum occupancy required (integer, placeholder)
+  minimum_charge: number; // EGP minimum charge for this vehicle type
 }
 
 export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   private_car: {
     key: "private_car",
     label: "Private car",
-    rate: 15,
-    ride: "private",
-    buffer: 20,
-    window: 10,
-    capacity: 4,
-    occupancy: 4,
-    min_occupancy: 1,
-  },
-  taxi_private: {
-    key: "taxi_private",
-    label: "Private Taxi",
     rate: 12,
     ride: "private",
     buffer: 20,
@@ -40,17 +32,31 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     capacity: 4,
     occupancy: 4,
     min_occupancy: 1,
+    minimum_charge: 100, // EGP minimum charge for private car rides
+  },
+  taxi_private: {
+    key: "taxi_private",
+    label: "Private Taxi",
+    rate: 10,
+    ride: "private",
+    buffer: 20,
+    window: 10,
+    capacity: 4,
+    occupancy: 4,
+    min_occupancy: 1,
+    minimum_charge: 75, // EGP minimum charge for private taxi rides
   },
   taxi_shared: {
     key: "taxi_shared",
     label: "Shared Taxi",
-    rate: 10,
+    rate: 8,
     ride: "shared",
     buffer: 30,
     window: 20,
-    capacity: 4,
+    capacity: 3,
     occupancy: 3,
     min_occupancy: 2,
+    minimum_charge: 50, // EGP minimum charge for shared taxi rides
   },
   van_shared: {
     key: "van_shared",
@@ -59,9 +65,10 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     ride: "shared",
     buffer: 45,
     window: 25,
-    capacity: 7,
-    occupancy: 6,
+    capacity: 5,
+    occupancy: 5,
     min_occupancy: 4,
+    minimum_charge: 50, // EGP minimum charge for van rides
   },
   microbus_shared: {
     key: "microbus_shared",
@@ -70,9 +77,10 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     ride: "shared",
     buffer: 45,
     window: 30,
-    capacity: 14,
-    occupancy: 10,
+    capacity: 9,
+    occupancy: 9,
     min_occupancy: 8,
+    minimum_charge: 50, // EGP minimum charge for microbus rides
   },
 };
 
@@ -83,13 +91,18 @@ export function priceFor(
   key: VehicleKey,
   vehiclesMap: Record<VehicleKey, VehicleConfig> = VEHICLES,
 ): number {
-  console.log(
-    "priceFor",
-    { distanceKm, key, vehiclesMap },
-    "is: ",
-    Math.round(vehiclesMap[key].rate * Math.pow(distanceKm, 0.8)),
-  );
   return Math.round(vehiclesMap[key].rate * Math.pow(distanceKm, 0.8));
+}
+
+function applyMinimumCharge(
+  price: number,
+  vehicleType: VehicleKey | "",
+  vehiclesMap: Partial<Record<VehicleKey, VehicleConfig>> = VEHICLES,
+): number {
+  if (!vehicleType) return Math.max(0, Math.round(price));
+  const vehicle = vehiclesMap[vehicleType as VehicleKey];
+  const normalizedPrice = Math.max(0, Math.round(price));
+  return Math.max(vehicle?.minimum_charge ?? 0, normalizedPrice);
 }
 
 /** Private-ride wait charge: each 60 minutes costs 50 km at 50% of vehicle rate. */
@@ -159,13 +172,61 @@ export function finalPrice(
   }
 
   if (vehicleType === "private_car" || vehicleType === "taxi_private") {
-    if (n === 1) return r(0.1);
-    if (n === 2) return r(0.2);
-    if (n === 3) return r(0.3);
+    if (n === 1) return r(0.25);
+    if (n === 2) return r(0.5);
+    if (n === 3) return r(0.75);
     return basePrice;
   }
 
   return basePrice;
+}
+
+export function computeTripPriceForSelection({
+  basePrice,
+  distanceKm,
+  vehicleType,
+  extraPassengers = 0,
+  numberOfPassengers,
+  selectedDates,
+  vehiclesMap = VEHICLES,
+}: {
+  basePrice?: number;
+  distanceKm?: number;
+  vehicleType: VehicleKey | "";
+  extraPassengers?: number;
+  numberOfPassengers?: number;
+  selectedDates?: string[];
+  vehiclesMap?: Partial<Record<VehicleKey, VehicleConfig>>;
+}): number {
+  if (!vehicleType) return 0;
+  const singleTripPrice = computeTripPriceEgp({
+    basePrice,
+    distanceKm,
+    vehicleType,
+    extraPassengers,
+    numberOfPassengers,
+    vehiclesMap,
+  });
+
+  if (!Array.isArray(selectedDates) || selectedDates.length === 0) {
+    return singleTripPrice;
+  }
+
+  const weekDates = bookingWindow();
+  const isFullWeekSelection =
+    selectedDates.length === weekDates.length &&
+    weekDates.every((day) => selectedDates.includes(day));
+
+  if (!isFullWeekSelection) {
+    return singleTripPrice * selectedDates.length;
+  }
+
+  const seventhDay = weekDates[weekDates.length - 1];
+  return selectedDates.reduce((total, date) => {
+    const priceForDate =
+      date === seventhDay ? Math.round(singleTripPrice * 0.95) : singleTripPrice;
+    return total + priceForDate;
+  }, 0);
 }
 
 export interface PrivateFareLeg {
@@ -216,9 +277,13 @@ export function computeTripPriceEgp({
       ? Math.max(0, normalizedNumberOfPassengers - 1)
       : normalizedExtraPassengers;
 
-  return finalPrice(
-    normalizedBasePrice,
-    effectiveExtraPassengers,
+  return applyMinimumCharge(
+    finalPrice(
+      normalizedBasePrice,
+      effectiveExtraPassengers,
+      vehicleType,
+      vehiclesMap,
+    ),
     vehicleType,
     vehiclesMap,
   );

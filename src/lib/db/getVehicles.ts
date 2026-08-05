@@ -39,6 +39,7 @@ export async function getVehicles(): Promise<
         capacity: d.capacity,
         occupancy: d.occupancy,
         min_occupancy: d.min_occupancy,
+        minimum_charge: d.minimum_charge ?? fallback?.minimum_charge ?? 0,
       };
     }
     cache = { map, expiresAt: Date.now() + TTL_MS };

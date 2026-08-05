@@ -6,7 +6,7 @@ import { CalendarClock, Trash2 } from "lucide-react";
 interface AvailabilityRecord {
   _id: string;
   driver?: {
-    _id?: string;
+    userNumber?: number;
     name?: string;
     phone?: string;
     carType?: string;
@@ -73,7 +73,7 @@ export default function AdminAvailabilityTable({ initialRecords }: { initialReco
           <tbody>
             {records.map((record) => (
               <tr key={record._id} style={{ borderTop: "1px solid #eef2f5" }}>
-                <td style={{ padding: "14px 16px", color: "#0B1E3D", fontWeight: 600 }}>{record.driver?._id ? String(record.driver._id).slice(-6) : "—"}</td>
+                <td style={{ padding: "14px 16px", color: "#0B1E3D", fontWeight: 600 }}>{record.driver?.userNumber ? `#${record.driver.userNumber}` : "—"}</td>
                 <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>{record.driver?.name ?? "—"}</td>
                 <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>{record.date ?? "—"}</td>
                 <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>{CAR_TYPE_LABELS[record.driver?.carType ?? ""] ?? "—"}</td>
