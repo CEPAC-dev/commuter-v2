@@ -18,25 +18,46 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
-    console.log(
-      "Phase 1: Database connection established. Proceeding to find user.",
+    const identifier = phone.trim();
+    const isEmail = identifier.includes("@");
+
+    // First try exact match with phone/email AND specified role
+    let user = await User.findOne(
+      isEmail
+        ? { email: identifier.toLowerCase(), role }
+        : { phone: identifier, role }
     );
 
-    const user = await User.findOne({ phone: phone.trim(), role });
-    if (!user)
-      return NextResponse.json(
-        { error: "Invalid phone or password." },
-        { status: 401 },
+    // If not found with exact role, check if user exists under a different role to give helpful error
+    if (!user) {
+      const existingUserAnyRole = await User.findOne(
+        isEmail
+          ? { email: identifier.toLowerCase() }
+          : { phone: identifier }
       );
 
-    console.log("Phase 2: User found. Proceeding to password validation.");
+      if (existingUserAnyRole) {
+        const correctTab =
+          existingUserAnyRole.role === "driver" ? "Driver" : "Passenger";
+        return NextResponse.json(
+          {
+            error: `This account is registered as a ${correctTab}. Please select the ${correctTab} tab to log in.`,
+          },
+          { status: 401 }
+        );
+      }
+
+      return NextResponse.json(
+        { error: "Invalid phone/email or password." },
+        { status: 401 }
+      );
+    }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
-    console.log("Phase 3: Password validation completed. Valid:", valid);
     if (!valid)
       return NextResponse.json(
-        { error: "Invalid phone or password." },
-        { status: 401 },
+        { error: "Invalid phone/email or password." },
+        { status: 401 }
       );
 
     await createSession({

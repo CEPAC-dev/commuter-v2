@@ -192,15 +192,13 @@ export default function PrivateRideDetails({
       >
         <TripStatBlock
           icon={<RouteIcon size={15} color="#0B1E3D" aria-hidden="true" />}
-          headline="Total distance"
-          value={`${distanceKm.toFixed(1)} km`}
-          lines={segLines}
-        />
-        <TripStatBlock
-          icon={<Clock size={15} color="#0B1E3D" aria-hidden="true" />}
-          headline="Total duration"
-          value={`${durationMinutes} min`}
-          lines={segLines}
+          headline="Distance & duration"
+          value={`${distanceKm.toFixed(1)} km · ${durationMinutes} min`}
+          lines={[
+            { label: "Distance", value: `${distanceKm.toFixed(1)} km` },
+            { label: "Duration", value: `${durationMinutes} min` },
+            ...segLines,
+          ]}
           accent="#F5A623"
         />
       </div>

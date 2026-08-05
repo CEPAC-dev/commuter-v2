@@ -359,12 +359,12 @@ export default async function RequestDetailPage({
                         />
                         <Detail
                           icon={<Clock size={15} color="#0B1E3D" />}
-                          label="Pickup time"
+                          label={t.rideType === "shared" ? "Estimated board station by" : "Pickup time"}
                           value={to12h(t.pickupTime)}
                         />
                         <Detail
                           icon={<Clock size={15} color="#0B1E3D" />}
-                          label="Arrival time"
+                          label={t.rideType === "shared" ? "Latest arrival time" : "Arrival time"}
                           value={to12h(t.arrivalTime)}
                         />
                         <Detail

@@ -11,6 +11,8 @@ interface Props {
   assignedSeatNumbers?: number[];
   activeStationIndex?: number | null;
   rideStarted?: boolean;
+  confirmedStationIndices?: number[];
+  stationSelections?: Record<string, Record<string, "arrived" | "no_show">>;
 }
 
 export interface SeatGridCell {
@@ -104,17 +106,45 @@ export default function VehicleSeatMap({
   assignedSeatNumbers = [],
   activeStationIndex = null,
   rideStarted = false,
+  confirmedStationIndices = [],
+  stationSelections = {},
 }: Props) {
   const vType = ride?.vehicleType ?? vehicleType;
   const grid = getVehicleSeatGrid(vType);
 
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
 
-  const passengerBySeat = new Map<number, RidePassengerDetail>();
+  const lastConfirmedStationIndex =
+    confirmedStationIndices.length > 0
+      ? Math.max(...confirmedStationIndices)
+      : null;
+
+  const seatStateBySeat = new Map<
+    number,
+    {
+      passenger?: RidePassengerDetail;
+      state: "grey" | "green" | "blue" | "red";
+      label: string;
+    }
+  >();
+
   if (ride?.passengers) {
+    const seatPassengers = new Map<number, RidePassengerDetail[]>();
     let currentSeat = 1;
-    for (let i = 0; i < ride.passengers.length; i++) {
-      const p = ride.passengers[i];
+
+    for (const p of ride.passengers) {
+      const normalizedStatus = p.status?.toLowerCase?.() ?? "";
+      const seatNumbers = Array.isArray(p.seatNumbers) ? p.seatNumbers : [];
+      const shouldShowPassenger =
+        rideStarted &&
+        ride.status !== "completed" &&
+        (["boarding", "on_board", "picked_up"].includes(normalizedStatus) ||
+          (normalizedStatus === "dropped_off" && seatNumbers.length > 0));
+
+      if (!shouldShowPassenger) {
+        continue;
+      }
+
       let seats = p.seatNumbers ?? [];
       if (!seats || seats.length === 0) {
         const count = p.numberOfPassengers || 1;
@@ -123,13 +153,68 @@ export default function VehicleSeatMap({
       } else {
         currentSeat = Math.max(currentSeat, Math.max(...seats) + 1);
       }
-      for (const s of seats) {
-        passengerBySeat.set(s, p);
+
+      for (const seat of seats) {
+        if (typeof seat !== "number" || !Number.isFinite(seat)) continue;
+        const existing = seatPassengers.get(seat) ?? [];
+        seatPassengers.set(seat, [...existing, p]);
       }
+    }
+
+    for (const [seat, passengers] of seatPassengers.entries()) {
+      const greenPassenger = passengers.find((p) => {
+        const normalizedStatus = p.status?.toLowerCase?.() ?? "";
+        return normalizedStatus === "boarding";
+      });
+
+      if (greenPassenger) {
+        seatStateBySeat.set(seat, {
+          passenger: greenPassenger,
+          state: "green",
+          label: "Boarding",
+        });
+        continue;
+      }
+
+      const bluePassenger = passengers.find((p) => {
+        const normalizedStatus = p.status?.toLowerCase?.() ?? "";
+        return normalizedStatus === "on_board" || normalizedStatus === "picked_up";
+      });
+
+      if (bluePassenger) {
+        seatStateBySeat.set(seat, {
+          passenger: bluePassenger,
+          state: "blue",
+          label: "On Board",
+        });
+        continue;
+      }
+
+      const redPassenger = passengers.find((p) => {
+        const normalizedStatus = p.status?.toLowerCase?.() ?? "";
+        return normalizedStatus === "dropped_off";
+      });
+
+      if (redPassenger) {
+        seatStateBySeat.set(seat, {
+          passenger: redPassenger,
+          state: "red",
+          label: "Alighted",
+        });
+        continue;
+      }
+
+      seatStateBySeat.set(seat, {
+        passenger: undefined,
+        state: "grey",
+        label: "Empty",
+      });
     }
   }
 
-  const selectedPassenger = selectedSeat ? passengerBySeat.get(selectedSeat) : null;
+  const selectedPassenger = selectedSeat
+    ? seatStateBySeat.get(selectedSeat)?.passenger ?? null
+    : null;
   const isShared = ride?.rideType === "shared";
 
   return (
@@ -174,7 +259,7 @@ export default function VehicleSeatMap({
           >
             {isDriver
               ? rideStarted
-                ? "Live chair status: Empty, Boarding, Alighting, Onboard"
+                ? "Live chair status: Empty, Boarding (Green), Onboard / Alighting (Red)"
                 : "All chairs empty until ride starts"
               : "Your assigned seat position on board"}
           </p>
@@ -278,8 +363,11 @@ export default function VehicleSeatMap({
                 }
 
                 const seatNo = cell.seatNumber!;
-                const passenger = passengerBySeat.get(seatNo);
-                const isOccupied = Boolean(passenger);
+                const seatState = seatStateBySeat.get(seatNo) ?? {
+                  passenger: undefined,
+                  state: "grey" as const,
+                  label: "Empty",
+                };
                 const isSelected = selectedSeat === seatNo;
                 const isMySeat = !isDriver && assignedSeatNumbers.includes(seatNo);
 
@@ -294,47 +382,26 @@ export default function VehicleSeatMap({
                   color = "#00806E";
                   labelText = "YOUR SEAT";
                 } else if (isDriver) {
-                  if (!rideStarted || !isOccupied) {
+                  if (!rideStarted || seatState.state === "grey") {
                     bg = "#F8FAFC";
                     borderColor = "#CBD5E1";
                     color = "#64748B";
                     labelText = "Empty";
-                  } else {
-                    const stIdx = activeStationIndex ?? 0;
-                    const pIdx = passenger?.pickupOrder ?? 1;
-                    const dIdx = passenger?.dropoffOrder ?? 99;
-
-                    if (activeStationIndex === null || !rideStarted) {
-                      bg = "#F8FAFC";
-                      borderColor = "#CBD5E1";
-                      color = "#64748B";
-                      labelText = "Empty";
-                    } else if (pIdx === stIdx) {
-                      bg = "#E8F8F5";
-                      borderColor = "#27AE60";
-                      color = "#196F3D";
-                      labelText = "Boarding";
-                    } else if (dIdx === stIdx) {
-                      bg = "#FFEBEE";
-                      borderColor = "#E74C3C";
-                      color = "#C0392B";
-                      labelText = "Alighting";
-                    } else if (pIdx < stIdx && dIdx > stIdx) {
-                      bg = "#EFF6FF";
-                      borderColor = "#2F80ED";
-                      color = "#1D4ED8";
-                      labelText = "Onboard";
-                    } else if (pIdx > stIdx) {
-                      bg = "#F8FAFC";
-                      borderColor = "#CBD5E1";
-                      color = "#64748B";
-                      labelText = "Empty";
-                    } else {
-                      bg = "#F8FAFC";
-                      borderColor = "#CBD5E1";
-                      color = "#64748B";
-                      labelText = "Empty";
-                    }
+                  } else if (seatState.state === "green") {
+                    bg = "#E8F8F5";
+                    borderColor = "#27AE60";
+                    color = "#196F3D";
+                    labelText = "Boarding";
+                  } else if (seatState.state === "blue") {
+                    bg = "#EFF6FF";
+                    borderColor = "#2F80ED";
+                    color = "#1D4ED8";
+                    labelText = "On Board";
+                  } else if (seatState.state === "red") {
+                    bg = "#FFEBEE";
+                    borderColor = "#E74C3C";
+                    color = "#C0392B";
+                    labelText = "Alighted";
                   }
                 }
 
@@ -441,7 +508,7 @@ export default function VehicleSeatMap({
                 }}
               />
               <span style={{ fontSize: 11, color: "#5A6A7A", fontWeight: 600 }}>
-                Empty
+                Empty / Waiting (Grey)
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -455,21 +522,7 @@ export default function VehicleSeatMap({
                 }}
               />
               <span style={{ fontSize: 11, color: "#196F3D", fontWeight: 700 }}>
-                Boarding
-              </span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 3,
-                  background: "#FFEBEE",
-                  border: "1px solid #E74C3C",
-                }}
-              />
-              <span style={{ fontSize: 11, color: "#C0392B", fontWeight: 700 }}>
-                Alighting
+                Arrived (Green)
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -483,7 +536,21 @@ export default function VehicleSeatMap({
                 }}
               />
               <span style={{ fontSize: 11, color: "#1D4ED8", fontWeight: 700 }}>
-                Onboard
+                On Board (Blue)
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 3,
+                  background: "#FFEBEE",
+                  border: "1px solid #E74C3C",
+                }}
+              />
+              <span style={{ fontSize: 11, color: "#C0392B", fontWeight: 700 }}>
+                Alighted (Red)
               </span>
             </div>
           </>

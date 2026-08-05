@@ -9,6 +9,7 @@ import {
   Route,
   Users,
 } from "lucide-react";
+import { isSharedVehicle } from "@/lib/geo/stations";
 import { getSession } from "@/lib/auth/session";
 import { listUserTrips, listDriverTrips } from "@/lib/services/trips";
 import { getRidesByDriver } from "@/lib/services/rideService";
@@ -1010,7 +1011,7 @@ export default async function MyTripsPage({
                                 <span
                                   style={{ fontSize: 12, color: "#5A6A7A" }}
                                 >
-                                  Pickup{" "}
+                                  {isSharedVehicle(trip.vehicleType) ? "Estimated board station by" : "Pickup"}{" "}
                                   <strong style={{ color: "#0B1E3D" }}>
                                     {to12h(trip.pickupTime)}
                                   </strong>
@@ -1031,7 +1032,7 @@ export default async function MyTripsPage({
                                 <span
                                   style={{ fontSize: 12, color: "#5A6A7A" }}
                                 >
-                                  Arrive{" "}
+                                  {isSharedVehicle(trip.vehicleType) ? "Latest arrival time" : "Arrive"}{" "}
                                   <strong style={{ color: "#0B1E3D" }}>
                                     {to12h(trip.arrivalTime)}
                                   </strong>

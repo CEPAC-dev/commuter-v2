@@ -1551,7 +1551,7 @@ export default function TripCycle({
                     style={{ color: "#F5A623" }}
                     aria-hidden="true"
                   />
-                  Arrival time{" "}
+                 Latest Arrival time{" "}
                   <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                     *
                   </span>
@@ -1646,7 +1646,7 @@ export default function TripCycle({
                   aria-hidden="true"
                 />
                 {isSharedVehicle(data.vehicleType)
-                  ? "Board station by"
+                  ? "Estimated board station by"
                   : "Pickup time"}
                 <span
                   title={
@@ -2289,7 +2289,7 @@ export default function TripCycle({
             </div>
 
             <div>
-              <label style={labelStyle}>Arrival time</label>
+              <label style={labelStyle}>Latest Arrival time</label>
               <div style={readonlyStyle} role="status">
                 <Clock
                   size={15}

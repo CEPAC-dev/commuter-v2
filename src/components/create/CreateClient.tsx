@@ -1147,8 +1147,7 @@ export default function CreateClient({ userEmail }: Props) {
                           style={{ flexShrink: 0 }}
                         />
                         <span>
-                          Pickup: <strong>{to12h(t.pickupTime)}</strong> ·
-                          Arrive: <strong>{to12h(t.arrivalTime)}</strong>
+                          Early pickup: <strong>{to12h(t.pickupTime)}</strong> ·arrival time: <strong>{to12h(t.arrivalTime)}</strong>
                         </span>
                       </span>
                       {t.distanceKm && (
@@ -1170,139 +1169,7 @@ export default function CreateClient({ userEmail }: Props) {
                       )}
                     </div>
 
-                    {/* Per-trip instructions */}
-                    <div
-                      style={{
-                        marginTop: 10,
-                        padding: "10px 12px",
-                        background: "rgba(245,166,35,0.07)",
-                        border: "1px solid rgba(245,166,35,0.35)",
-                        borderRadius: 8,
-                      }}
-                    >
-                      <p
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 800,
-                          color: "#0B1E3D",
-                          margin: "0 0 6px",
-                          letterSpacing: "0.04em",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        ⚠️ Instructions & Conditions
-                      </p>
-                      <ul
-                        style={{
-                          margin: 0,
-                          paddingLeft: 16,
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 4,
-                        }}
-                      >
-                        <li
-                          style={{
-                            fontSize: 12,
-                            color: "#0B1E3D",
-                            fontWeight: 600,
-                            listStyle: "inside",
-                          }}
-                        >
-                          Be punctual — driver will not wait beyond the allowed
-                          time.
-                        </li>
-                        <li
-                          style={{
-                            fontSize: 12,
-                            color: "#e74c3c",
-                            fontWeight: 600,
-                            listStyle: "inside",
-                          }}
-                        >
-                          Only declared passengers may board (except for
-                          infants). All passengers are picked up and dropped off
-                          exclusively at the specified locations — no additional
-                          stops.
-                        </li>
-                        {(t.vehicleType === "van_shared" ||
-                          t.vehicleType === "microbus_shared") && (
-                          <>
-                            <li
-                              style={{
-                                fontSize: 12,
-                                color: "#e74c3c",
-                                fontWeight: 700,
-                                listStyle: "inside",
-                              }}
-                            >
-                              No extra baggage allowed
-                            </li>
-                            <li
-                              style={{
-                                fontSize: 12,
-                                color: "#e74c3c",
-                                fontWeight: 700,
-                                listStyle: "inside",
-                              }}
-                            >
-                              No waiting time for Van / Microbus — be at the
-                              pickup point on time.
-                            </li>
-                          </>
-                        )}
-                        {t.vehicleType === "taxi_shared" && (
-                          <>
-                            <li
-                              style={{
-                                fontSize: 12,
-                                color: "#e74c3c",
-                                fontWeight: 600,
-                                listStyle: "inside",
-                              }}
-                            >
-                              No extra baggage allowed
-                            </li>
-                            <li
-                              style={{
-                                fontSize: 12,
-                                color: "#0B1E3D",
-                                fontWeight: 600,
-                                listStyle: "inside",
-                              }}
-                            >
-                              Shared Taxi: maximum waiting time is{" "}
-                              <strong>2 minutes</strong>.
-                            </li>
-                          </>
-                        )}
-                        {(t.vehicleType === "private_car" ||
-                          t.vehicleType === "taxi_private") && (
-                          <>
-                            <li
-                              style={{
-                                fontSize: 12,
-                                color: "#0B1E3D",
-                                fontWeight: 600,
-                                listStyle: "inside",
-                              }}
-                            >
-                              Maximum waiting time: <strong>2 minutes</strong>.
-                            </li>
-                            <li
-                              style={{
-                                fontSize: 12,
-                                color: "#0B1E3D",
-                                fontWeight: 600,
-                                listStyle: "inside",
-                              }}
-                            >
-                              Maximum baggage: <strong>2 back bags</strong>.
-                            </li>
-                          </>
-                        )}
-                      </ul>
-                    </div>
+                    {/* per-trip instructions moved to /terms page */}
                   </div>
                 );
               })}
@@ -1421,8 +1288,12 @@ export default function CreateClient({ userEmail }: Props) {
                       lineHeight: 1.5,
                     }}
                   >
-                    I have read and agree to all the instructions, conditions,
-                    and trip details above and confirm they are correct.
+                    I have read and agree to the
+                    {' '}
+                    <Link href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: "#00C2A8", fontWeight: 700 }}>
+                      instructions, conditions
+                    </Link>
+                    {' '}and trip details above and confirm they are correct.
                   </span>
                 </label>
               </div>

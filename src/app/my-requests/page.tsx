@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { MapPin, Clock, Car } from "lucide-react";
+import { isSharedVehicle } from "@/lib/geo/stations";
 import { getSession } from "@/lib/auth/session";
 import AppHeader from "@/components/layout/AppHeader";
 import { expireStaleForUser, listUserRequests } from "@/lib/services/requests";
@@ -426,7 +427,7 @@ export default async function MyTripsPage({
                               aria-hidden="true"
                             />
                             <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                              Pickup{" "}
+                              {isSharedVehicle(trip.vehicleType) ? "Estimated board station by" : "Pickup"}{" "}
                               <strong style={{ color: "#0B1E3D" }}>
                                 {to12h(trip.pickupTime)}
                               </strong>
@@ -445,7 +446,7 @@ export default async function MyTripsPage({
                               aria-hidden="true"
                             />
                             <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                              Arrive{" "}
+                              {isSharedVehicle(trip.vehicleType) ? "Latest arrival time" : "Arrive"}{" "}
                               <strong style={{ color: "#0B1E3D" }}>
                                 {to12h(trip.arrivalTime)}
                               </strong>
