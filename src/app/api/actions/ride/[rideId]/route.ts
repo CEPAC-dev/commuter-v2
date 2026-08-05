@@ -1,15 +1,202 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
+import { VEHICLES } from "@/lib/config/vehicles";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { getSession } from "@/lib/auth/session";
 import * as rideActions from "@/lib/services/rideActionHelpers";
 
 interface RideRouteStop {
+  address?: string;
   point: { address: string; lat: number; lng: number };
   alighting: number;
   boarding: number;
   waitingMinutes: number;
+}
+
+interface RidePassengerLike {
+  tripId?: string | { toString(): string } | null;
+  status?: string | null;
+  pickupOrder?: number | null;
+  dropoffOrder?: number | null;
+  pickupStation?: { id?: number | null; name?: string | null; address?: string | null } | null;
+  dropoffStation?: { id?: number | null; name?: string | null; address?: string | null } | null;
+  seatNumbers?: number[] | null;
+}
+
+interface RideDocLike {
+  passengers?: RidePassengerLike[];
+  route?: RideRouteStop[];
+  vehicleType?: string;
+  vehicleCapacity?: number;
+  driverId?: string;
+  rideType?: string;
+  status?: string;
+}
+
+interface RideLogLike {
+  action?: string;
+  stationIndex?: number;
+  createdAt?: Date;
+}
+
+function getPassengerStatus(passenger: RidePassengerLike | null | undefined): string {
+  return String(passenger?.status ?? "waiting").toLowerCase();
+}
+
+function normalizeStationValue(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function getPassengerStationKey(
+  passenger: RidePassengerLike | null | undefined,
+  direction: "pickup" | "dropoff",
+) {
+  const orderValue =
+    direction === "pickup"
+      ? Number(passenger?.pickupOrder ?? 0)
+      : Number(passenger?.dropoffOrder ?? 0);
+
+  if (orderValue > 0) {
+    return { type: "order" as const, value: orderValue };
+  }
+
+  const station =
+    direction === "pickup" ? passenger?.pickupStation : passenger?.dropoffStation;
+
+  if (typeof station?.id === "number" && Number.isFinite(station.id) && station.id > 0) {
+    return { type: "id" as const, value: station.id };
+  }
+
+  const stationName = station?.name ?? station?.address ?? null;
+  if (stationName) {
+    return { type: "name" as const, value: stationName };
+  }
+
+  return null;
+}
+
+function stationMatchesPassenger(
+  passenger: RidePassengerLike | null | undefined,
+  stationIndex: number,
+  stationName: string | null | undefined,
+  direction: "pickup" | "dropoff",
+) {
+  const stationReference = getPassengerStationKey(passenger, direction);
+  if (!stationReference) {
+    return false;
+  }
+
+  if (stationReference.type === "order") {
+    return stationIndex === stationReference.value;
+  }
+
+  if (stationReference.type === "id") {
+    return false;
+  }
+
+  const normalizedStationName = normalizeStationValue(stationName);
+  const normalizedPassengerStation = normalizeStationValue(stationReference.value);
+
+  return Boolean(normalizedStationName) && normalizedStationName === normalizedPassengerStation;
+}
+
+function getRemainingStations(ride: RideDocLike | null | undefined) {
+  const route = Array.isArray(ride?.route) ? ride.route : [];
+  const remainingStationKeys = new Set<number>();
+
+  for (const passenger of ride?.passengers ?? []) {
+    const status = getPassengerStatus(passenger);
+
+    if (status === "waiting") {
+      const pickupKey = getPassengerStationKey(passenger, "pickup");
+      if (!pickupKey) {
+        continue;
+      }
+
+      for (const [index, stop] of route.entries()) {
+        const stationIndex = index + 1;
+        const stationName = stop?.point?.address ?? stop?.address ?? null;
+
+        if (
+          (pickupKey.type === "order" && stationIndex === pickupKey.value) ||
+          (pickupKey.type === "name" &&
+            normalizeStationValue(stationName) === normalizeStationValue(pickupKey.value))
+        ) {
+          remainingStationKeys.add(stationIndex);
+        }
+      }
+    }
+
+    if (["picked_up", "boarding", "on_board"].includes(status)) {
+      const dropoffKey = getPassengerStationKey(passenger, "dropoff");
+      if (!dropoffKey) {
+        continue;
+      }
+
+      for (const [index, stop] of route.entries()) {
+        const stationIndex = index + 1;
+        const stationName = stop?.point?.address ?? stop?.address ?? null;
+
+        if (
+          (dropoffKey.type === "order" && stationIndex === dropoffKey.value) ||
+          (dropoffKey.type === "name" &&
+            normalizeStationValue(stationName) === normalizeStationValue(dropoffKey.value))
+        ) {
+          remainingStationKeys.add(stationIndex);
+        }
+      }
+    }
+  }
+
+  return route
+    .map((stop: RideRouteStop, index: number) => {
+      const stationIndex = index + 1;
+      if (!remainingStationKeys.has(stationIndex)) {
+        return null;
+      }
+      return {
+        stationIndex,
+        stationName: stop?.point?.address ?? `Station ${stationIndex}`,
+      };
+    })
+    .filter(Boolean) as Array<{ stationIndex: number; stationName: string }>;
+}
+
+function assignSeat(ride: RideDocLike | null | undefined): number {
+  const occupied = new Set<number>();
+
+  for (const passenger of ride?.passengers ?? []) {
+    if (!["picked_up", "boarding", "on_board"].includes(getPassengerStatus(passenger))) {
+      continue;
+    }
+
+    const seatNumbers = Array.isArray(passenger?.seatNumbers)
+      ? passenger.seatNumbers
+      : [];
+
+    for (const seat of seatNumbers) {
+      if (typeof seat === "number" && Number.isFinite(seat)) {
+        occupied.add(seat);
+      }
+    }
+  }
+
+  const vehicleType = ride?.vehicleType as keyof typeof VEHICLES | undefined;
+  const capacity = Number(
+    ride?.vehicleCapacity ??
+      (vehicleType && VEHICLES[vehicleType]?.capacity
+        ? VEHICLES[vehicleType].capacity
+        : 4),
+  );
+
+  for (let seat = 1; seat <= capacity; seat += 1) {
+    if (!occupied.has(seat)) {
+      return seat;
+    }
+  }
+
+  throw new Error("No seats available");
 }
 
 /**
@@ -39,7 +226,7 @@ export async function GET(
     // Fetch ride
     const ride = await Ride.findById(rideId)
       .populate("passengers.tripId")
-      .lean();
+      .lean<RideDocLike | null>();
 
     if (!ride) {
       return NextResponse.json(
@@ -49,7 +236,7 @@ export async function GET(
     }
 
     // Verify driver owns this ride
-    if (ride.driverId.toString() !== session.userId) {
+    if (ride.driverId?.toString() !== session.userId) {
       return NextResponse.json(
         { success: false, error: "Forbidden - not your ride" },
         { status: 403 },
@@ -63,7 +250,7 @@ export async function GET(
     const lastLog = logs[0];
 
     // Determine next action based on ride type and current state
-    let nextAction: any = {};
+    let nextAction: Record<string, unknown> = {};
 
     if (ride.rideType === "shared") {
       nextAction = getNextSharedRideAction(ride, logs, lastLog);
@@ -93,7 +280,11 @@ export async function GET(
 /**
  * Determine next action for shared rides
  */
-function getNextSharedRideAction(ride: any, logs: any[], lastLog: any) {
+function getNextSharedRideAction(
+  ride: RideDocLike & { route?: RideRouteStop[] },
+  logs: RideLogLike[],
+  lastLog?: RideLogLike,
+) {
   const route = ride.route as RideRouteStop[];
 
   // Check if ride hasn't started yet
@@ -168,7 +359,11 @@ function getNextSharedRideAction(ride: any, logs: any[], lastLog: any) {
 /**
  * Determine next action for private rides
  */
-function getNextPrivateRideAction(ride: any, logs: any[], lastLog: any) {
+function getNextPrivateRideAction(
+  ride: RideDocLike & { route?: RideRouteStop[] },
+  logs: RideLogLike[],
+  lastLog?: RideLogLike,
+) {
   const route = ride.route as RideRouteStop[];
 
   // Check if ride hasn't started yet
@@ -276,7 +471,7 @@ export async function POST(
     }
 
     // Verify driver owns this ride
-    if (ride.driverId.toString() !== session.userId) {
+    if (ride.driverId?.toString() !== session.userId) {
       return NextResponse.json(
         { success: false, error: "Forbidden - not your ride" },
         { status: 403 },
@@ -290,26 +485,39 @@ export async function POST(
       stationName,
       boardingCount,
       alightingCount,
-      pickupConfirmation,
       metadata = {},
     } = body;
 
     const driverId = ride.driverId;
-    const tripIds = ride.passengers.map((p: any) => p.tripId);
+    const tripIds = (ride.passengers ?? [])
+      .map((passenger: RidePassengerLike) =>
+        typeof passenger.tripId === "object" && passenger.tripId !== null && "_id" in (passenger.tripId as object)
+          ? (passenger.tripId as { _id: unknown })._id
+          : passenger.tripId,
+      )
+      .filter(Boolean);
 
-    let result: any = { success: false };
+    let result: Record<string, unknown> = { success: false };
 
     switch (action) {
       case "start_ride":
         // Log ride start for all trips
         await rideActions.logRideStarted(rideId, tripIds, driverId, metadata);
 
-        // Update ride status and driverOrigin
         const originLoc = metadata?.currentLocation ?? null;
-        await Ride.findByIdAndUpdate(rideId, {
-          status: "active",
-          ...(originLoc ? { driverOrigin: originLoc } : {}),
-        });
+        const rideDoc = await Ride.findById(rideId);
+        if (rideDoc) {
+          rideDoc.status = "active";
+          if (originLoc) {
+            rideDoc.driverOrigin = originLoc;
+          }
+          for (const passenger of rideDoc.passengers ?? []) {
+            passenger.status = "waiting";
+            passenger.seatNumbers = [];
+          }
+          await rideDoc.save();
+        }
+
         result = {
           success: true,
           message: "Ride started",
@@ -339,8 +547,8 @@ export async function POST(
           metadata,
         );
 
-        // Update statuses for passengers boarding or alighting at this station
         const currentRideDoc = await Ride.findById(rideId);
+        let remainingStations: Array<{ stationIndex: number; stationName: string }> = [];
         if (currentRideDoc && currentRideDoc.passengers) {
           const confirmations = Array.isArray(metadata?.confirmations)
             ? metadata.confirmations.filter(
@@ -357,39 +565,102 @@ export async function POST(
           }
 
           let updatedPassengers = false;
-          for (const p of currentRideDoc.passengers) {
-            const pPickupIdx = p.pickupOrder ?? 0;
-            const pDropoffIdx = p.dropoffOrder ?? 0;
-            const pPickupName = (p.pickupStation as { name?: string } | undefined)?.name;
-            const pDropoffName = (p.dropoffStation as { name?: string } | undefined)?.name;
-            const confirmationStatus = confirmationMap.get(p.tripId?.toString?.() ?? "");
 
-            const isPickup =
-              pPickupIdx === stationIndex || pPickupName === stationName;
-            const isDropoff =
-              pDropoffIdx === stationIndex || pDropoffName === stationName;
+          // 1. Convert all existing green seats to blue on arrival.
+          //    Passengers with boarding/picked_up status who are not boarding here
+          //    become fully on board.
+          for (const passenger of currentRideDoc.passengers) {
+            const isPickup = stationMatchesPassenger(
+              passenger,
+              stationIndex,
+              stationName,
+              "pickup",
+            );
+            const isDropoff = stationMatchesPassenger(
+              passenger,
+              stationIndex,
+              stationName,
+              "dropoff",
+            );
 
-            if (confirmationStatus === "arrived") {
-              p.status = "picked_up";
+            if (
+              (passenger.status === "boarding" || passenger.status === "picked_up") &&
+              !isPickup
+            ) {
+              passenger.status = "on_board";
               updatedPassengers = true;
-              await Trip.findByIdAndUpdate(p.tripId, { status: "active" });
-            } else if (confirmationStatus === "no_show") {
-              p.status = "no_show";
+            }
+
+            // 2. Convert every existing red seat to grey before processing this station.
+            //    Keep current-station dropoffs assigned until after alighting has been
+            //    processed so red seats remain visible on the current stop.
+            if (
+              passenger.status === "dropped_off" &&
+              !isDropoff &&
+              (passenger.seatNumbers?.length ?? 0) > 0
+            ) {
+              passenger.seatNumbers = [];
               updatedPassengers = true;
-              await Trip.findByIdAndUpdate(p.tripId, { status: "cancelled" });
-            } else if (isPickup) {
-              p.status = "picked_up";
-              updatedPassengers = true;
-              await Trip.findByIdAndUpdate(p.tripId, { status: "active" });
-            } else if (isDropoff) {
-              p.status = "dropped_off";
-              updatedPassengers = true;
-              await Trip.findByIdAndUpdate(p.tripId, { status: "completed" });
             }
           }
+
+          // 3. Process boarding passengers for the current station.
+          for (const passenger of currentRideDoc.passengers) {
+            const passengerTripId = passenger.tripId?.toString?.() ?? "";
+            const confirmationStatus = confirmationMap.get(passengerTripId);
+            const isPickup = stationMatchesPassenger(
+              passenger,
+              stationIndex,
+              stationName,
+              "pickup",
+            );
+
+            if (!isPickup || passenger.status !== "waiting") {
+              continue;
+            }
+
+            if (confirmationStatus === "no_show") {
+              passenger.status = "no_show";
+              passenger.seatNumbers = [];
+              updatedPassengers = true;
+            } else if (confirmationStatus === "arrived") {
+              passenger.status = "boarding";
+              let seat = 1;
+              try {
+                seat = assignSeat(currentRideDoc);
+              } catch (seatErr) {
+                console.warn("[station_arrived] Seat assignment fallback:", seatErr);
+              }
+              passenger.seatNumbers = [seat];
+              updatedPassengers = true;
+              await Trip.findByIdAndUpdate(passenger.tripId, { status: "active" });
+            }
+          }
+
+          // 4. Now process passengers getting off at the current station.
+          for (const passenger of currentRideDoc.passengers) {
+            const isDropoff = stationMatchesPassenger(
+              passenger,
+              stationIndex,
+              stationName,
+              "dropoff",
+            );
+
+            if (
+              isDropoff &&
+              (passenger.status === "on_board" || passenger.status === "picked_up")
+            ) {
+              passenger.status = "dropped_off";
+              updatedPassengers = true;
+              await Trip.findByIdAndUpdate(passenger.tripId, { status: "completed" });
+            }
+          }
+
           if (updatedPassengers) {
             await currentRideDoc.save();
           }
+
+          remainingStations = getRemainingStations(currentRideDoc.toObject());
         }
 
         result = {
@@ -397,6 +668,7 @@ export async function POST(
           message: `Arrived and confirmed passenger rides at ${stationName}`,
           action: "station_arrived",
           nextAction: "boarding_alighting",
+          remainingStations,
         };
         break;
 
@@ -511,7 +783,6 @@ export async function POST(
           );
         }
 
-        // Log no-show and cancel trip
         await rideActions.logNoShow(
           rideId,
           tripId,
@@ -520,12 +791,21 @@ export async function POST(
           metadata,
         );
 
-        // Update trip status to cancelled
-        await Trip.findByIdAndUpdate(tripId, { status: "cancelled" });
+        const currentRideDocNoShow = await Ride.findById(rideId);
+        if (currentRideDocNoShow) {
+          const passenger = currentRideDocNoShow.passengers.find(
+            (p: RidePassengerLike) => p.tripId?.toString?.() === tripId.toString(),
+          );
+          if (passenger) {
+            passenger.status = "no_show";
+            passenger.seatNumbers = [];
+            await currentRideDocNoShow.save();
+          }
+        }
 
         result = {
           success: true,
-          message: "No-show logged and trip cancelled",
+          message: "No-show logged",
           action: "no_show_logged",
         };
         break;
@@ -601,7 +881,10 @@ export async function POST(
   } catch (error) {
     console.error("[POST /api/actions/ride/:rideId]", error);
     return NextResponse.json(
-      { success: false, error: "Failed to process action" },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to process action",
+      },
       { status: 500 },
     );
   }
