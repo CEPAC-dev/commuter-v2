@@ -91,6 +91,18 @@ export default function DatePicker({ value, onChange }: Props) {
       <p style={{ fontSize: 12, color: "#5A6A7A", margin: "8px 0 0" }}>
         Pick one or more days — trips repeat on each selected date.
       </p>
+      {value.length === days.length && days.every((day) => value.includes(day)) && (
+        <p
+          style={{
+            margin: "8px 0 0",
+            fontSize: 12,
+            fontWeight: 700,
+            color: "#15803d",
+          }}
+        >
+          Full week selected — 5% off applies to the 7th-day trips.
+        </p>
+      )}
     </div>
   );
 }

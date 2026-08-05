@@ -1,3 +1,5 @@
+import { bookingWindow } from "@/lib/time/bookingDates";
+
 export type VehicleKey =
   | "private_car"
   | "taxi_private"
@@ -89,13 +91,18 @@ export function priceFor(
   key: VehicleKey,
   vehiclesMap: Record<VehicleKey, VehicleConfig> = VEHICLES,
 ): number {
-  console.log(
-    "priceFor",
-    { distanceKm, key, vehiclesMap },
-    "is: ",
-    Math.round(vehiclesMap[key].rate * Math.pow(distanceKm, 0.8)),
-  );
   return Math.round(vehiclesMap[key].rate * Math.pow(distanceKm, 0.8));
+}
+
+function applyMinimumCharge(
+  price: number,
+  vehicleType: VehicleKey | "",
+  vehiclesMap: Partial<Record<VehicleKey, VehicleConfig>> = VEHICLES,
+): number {
+  if (!vehicleType) return Math.max(0, Math.round(price));
+  const vehicle = vehiclesMap[vehicleType as VehicleKey];
+  const normalizedPrice = Math.max(0, Math.round(price));
+  return Math.max(vehicle?.minimum_charge ?? 0, normalizedPrice);
 }
 
 /** Private-ride wait charge: each 60 minutes costs 50 km at 50% of vehicle rate. */
@@ -165,13 +172,61 @@ export function finalPrice(
   }
 
   if (vehicleType === "private_car" || vehicleType === "taxi_private") {
-    if (n === 1) return r(0.1);
-    if (n === 2) return r(0.2);
-    if (n === 3) return r(0.3);
+    if (n === 1) return r(0.25);
+    if (n === 2) return r(0.5);
+    if (n === 3) return r(0.75);
     return basePrice;
   }
 
   return basePrice;
+}
+
+export function computeTripPriceForSelection({
+  basePrice,
+  distanceKm,
+  vehicleType,
+  extraPassengers = 0,
+  numberOfPassengers,
+  selectedDates,
+  vehiclesMap = VEHICLES,
+}: {
+  basePrice?: number;
+  distanceKm?: number;
+  vehicleType: VehicleKey | "";
+  extraPassengers?: number;
+  numberOfPassengers?: number;
+  selectedDates?: string[];
+  vehiclesMap?: Partial<Record<VehicleKey, VehicleConfig>>;
+}): number {
+  if (!vehicleType) return 0;
+  const singleTripPrice = computeTripPriceEgp({
+    basePrice,
+    distanceKm,
+    vehicleType,
+    extraPassengers,
+    numberOfPassengers,
+    vehiclesMap,
+  });
+
+  if (!Array.isArray(selectedDates) || selectedDates.length === 0) {
+    return singleTripPrice;
+  }
+
+  const weekDates = bookingWindow();
+  const isFullWeekSelection =
+    selectedDates.length === weekDates.length &&
+    weekDates.every((day) => selectedDates.includes(day));
+
+  if (!isFullWeekSelection) {
+    return singleTripPrice * selectedDates.length;
+  }
+
+  const seventhDay = weekDates[weekDates.length - 1];
+  return selectedDates.reduce((total, date) => {
+    const priceForDate =
+      date === seventhDay ? Math.round(singleTripPrice * 0.95) : singleTripPrice;
+    return total + priceForDate;
+  }, 0);
 }
 
 export interface PrivateFareLeg {
@@ -222,9 +277,13 @@ export function computeTripPriceEgp({
       ? Math.max(0, normalizedNumberOfPassengers - 1)
       : normalizedExtraPassengers;
 
-  return finalPrice(
-    normalizedBasePrice,
-    effectiveExtraPassengers,
+  return applyMinimumCharge(
+    finalPrice(
+      normalizedBasePrice,
+      effectiveExtraPassengers,
+      vehicleType,
+      vehiclesMap,
+    ),
     vehicleType,
     vehiclesMap,
   );

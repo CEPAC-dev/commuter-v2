@@ -5,11 +5,9 @@ import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { verifyAndSettleTopup } from "@/lib/payments/kashier";
-import {
-  completeWithdrawal,
-  refundWithdrawal,
-} from "@/lib/wallet/wallet";
+import { completeWithdrawal, refundWithdrawal } from "@/lib/wallet/wallet";
 import { queryKashierPayoutStatus } from "@/lib/payments/kashierPayout";
+import { createNotification } from "@/lib/notifications/createNotification";
 import { Types } from "mongoose";
 
 function verifySignature(p: Record<string, string>, sig: string): boolean {
@@ -104,6 +102,21 @@ export async function POST(req: NextRequest) {
       { requestId: settled._id },
       { paymentStatus: "paid", status: "submitted" },
     );
+    await createNotification({
+      userId: String(settled.userId),
+      type: "payment_paid",
+      title: "Payment completed",
+      body: "Your booking payment was successful. We’ll keep you updated on your trip status.",
+      data: { bookingId: String(settled._id) },
+    });
+  } else if (settled && !paid) {
+    await createNotification({
+      userId: String(settled.userId),
+      type: "payment_failed",
+      title: "Payment issue",
+      body: "We couldn’t confirm your payment. You can try again from your requests page.",
+      data: { bookingId: String(settled._id) },
+    });
   }
 
   return NextResponse.json({ received: true });

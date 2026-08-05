@@ -23,7 +23,7 @@ import { earliestBookingDate } from "@/lib/time/bookingDates";
 import type { SavedAddress } from "@/types/shared";
 import { haversineKm } from "@/lib/geo/stations";
 import type { Station } from "@/lib/geo/stations";
-import { computeTripPriceEgp } from "@/lib/config/vehicles";
+import { computeTripPriceForSelection } from "@/lib/config/vehicles";
 
 interface Props {
   userEmail: string;
@@ -198,15 +198,16 @@ export default function CreateClient({ userEmail }: Props) {
   const getTripPriceForSubmission = useCallback(
     (trip: TripData) => {
       if (!trip.vehicleType) return 0;
-      return computeTripPriceEgp({
+      return computeTripPriceForSelection({
         basePrice: trip.priceEgp ?? 0,
         vehicleType: trip.vehicleType,
         extraPassengers: trip.extraPassengers ?? 0,
         numberOfPassengers: trip.numberOfPassengers ?? 1,
+        selectedDates,
         vehiclesMap: vehiclesMap ?? undefined,
       });
     },
-    [vehiclesMap],
+    [selectedDates, vehiclesMap],
   );
 
   async function handleSubmit() {
@@ -506,7 +507,7 @@ export default function CreateClient({ userEmail }: Props) {
     (sum, t) => sum + getTripPriceForSubmission(t),
     0,
   );
-  const grandTotalEgp = totalEgp * Math.max(1, selectedDates.length);
+  const grandTotalEgp = totalEgp;
 
   if (!mounted) {
     return (

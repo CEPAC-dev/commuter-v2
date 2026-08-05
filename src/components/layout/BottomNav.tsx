@@ -79,16 +79,23 @@ export default function BottomNav() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
+    let ignore = false;
+
     async function loadUnreadCount() {
       try {
         const count = await getUnreadCount();
-        setUnreadCount(count);
+        if (!ignore) setUnreadCount(count);
       } catch (error) {
         console.error("Failed to fetch unread notification count:", error);
       }
     }
 
     loadUnreadCount();
+    const interval = window.setInterval(loadUnreadCount, 15000);
+    return () => {
+      ignore = true;
+      window.clearInterval(interval);
+    };
   }, []);
 
   const NAV_ITEMS = [
