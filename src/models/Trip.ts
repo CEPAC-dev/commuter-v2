@@ -154,6 +154,10 @@ const TripSchema = new Schema(
       type: Schema.Types.Mixed,
       default: null,
     },
+    details: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
   },
   { timestamps: true, collection: "trips" },
 );

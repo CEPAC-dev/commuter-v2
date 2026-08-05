@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
 import { getDriverSummaryByUserNumber } from "@/lib/services/trips";
+import { createNotification } from "@/lib/notifications/createNotification";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -105,6 +106,36 @@ function parseNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseTripNumber(value: string): number | null {
+  if (!value) return null;
+  const normalized = value.trim().replace(/,/g, "");
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return null;
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function getWorksheetByName(
+  workbook: ExcelJS.Workbook,
+  candidates: string[],
+): ExcelJS.Worksheet | undefined {
+  for (const candidate of candidates) {
+    const sheet = workbook.getWorksheet(candidate);
+    if (sheet) return sheet;
+  }
+
+  const normalizedCandidates = new Set(
+    candidates.map((candidate) => normalizeLookupKey(candidate)),
+  );
+
+  for (const sheet of workbook.worksheets) {
+    if (normalizedCandidates.has(normalizeLookupKey(sheet.name))) {
+      return sheet;
+    }
+  }
+
+  return undefined;
+}
+
 function parsePointFromStopRow(row: ExcelJS.Row, indexes: Map<string, number>) {
   const lat = parseNumber(
     pickValue(row, indexes, ["lat", "latitude", "latitute"]),
@@ -175,51 +206,62 @@ export async function POST(req: NextRequest) {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as ArrayBuffer);
 
-    const ridesSummarySheet = workbook.getWorksheet("Rides_Summary");
-    const stopsSheet = workbook.getWorksheet("Stops");
+    const ridesSummarySheet = getWorksheetByName(workbook, [
+      "Rides_Summary",
+      "Rides Summary",
+      "Summary",
+    ]);
+    const ridesDetailsSheet = getWorksheetByName(workbook, [
+      "Rides_Details",
+      "Rides Details",
+      "Details",
+    ]);
+    const stopsSheet = getWorksheetByName(workbook, ["Stops", "Stop"]);
     if (!ridesSummarySheet) {
       return NextResponse.json(
-        { error: "Rides_Summary sheet is required" },
+        { error: "A summary sheet is required" },
         { status: 400 },
       );
     }
     if (!stopsSheet) {
       return NextResponse.json(
-        { error: "Stops sheet is required" },
+        { error: "A stops sheet is required" },
         { status: 400 },
       );
     }
 
     const stopLookup = buildStopLookup(stopsSheet);
-    const headerRow = ridesSummarySheet.getRow(1);
-    const indexes = getHeaderIndexes(headerRow);
-    const rows =
+    const summaryHeaderRow = ridesSummarySheet.getRow(1);
+    const summaryIndexes = getHeaderIndexes(summaryHeaderRow);
+    const summaryRows =
       ridesSummarySheet.getRows(2, ridesSummarySheet.rowCount - 1) ?? [];
     const updatedTripIds: string[] = [];
 
-    for (const row of rows) {
+    for (const row of summaryRows) {
       if (!row) continue;
-      const rideIdValue = getCellValue(row, indexes, "Ride_ID");
+      const rideIdValue = getCellValue(row, summaryIndexes, "Ride_ID");
       if (!rideIdValue) continue;
 
-      const tripNumber = Number(rideIdValue);
-      if (!Number.isInteger(tripNumber)) continue;
+      const tripNumber = parseTripNumber(rideIdValue);
+      if (tripNumber == null) continue;
 
-      const trip = await Trip.findOne({ tripNumber }).lean<{
+      const trip = await Trip.findOne({
+        $or: [{ tripNumber }, { tripNumber: String(tripNumber) }],
+      }).lean<{
         _id: unknown;
         tripNumber: number;
       }>();
       if (!trip) continue;
 
-      const driverIdValue = getCellValue(row, indexes, "Driver_ID");
-      const totalPersonsValue = getCellValue(row, indexes, "Total_Pers");
-      const totalFeesValue = getCellValue(row, indexes, "Total_Fees");
-      const firstStopValue = getCellValue(row, indexes, "First Stop");
-      const boardingValue = getCellValue(row, indexes, "Boarding");
-      const departureValue = getCellValue(row, indexes, "Departure");
-      const lastStopValue = getCellValue(row, indexes, "Last Stop");
-      const alightingValue = getCellValue(row, indexes, "Alighting");
-      const arrivalValue = getCellValue(row, indexes, "Arrival");
+      const driverIdValue = getCellValue(row, summaryIndexes, "Driver_ID");
+      const totalPersonsValue = getCellValue(row, summaryIndexes, "Total_Pers");
+      const totalFeesValue = getCellValue(row, summaryIndexes, "Total_Fees");
+      const firstStopValue = getCellValue(row, summaryIndexes, "First Stop");
+      const boardingValue = getCellValue(row, summaryIndexes, "Boarding");
+      const departureValue = getCellValue(row, summaryIndexes, "Departure");
+      const lastStopValue = getCellValue(row, summaryIndexes, "Last Stop");
+      const alightingValue = getCellValue(row, summaryIndexes, "Alighting");
+      const arrivalValue = getCellValue(row, summaryIndexes, "Arrival");
 
       const driverSummary = await getDriverSummaryByUserNumber(driverIdValue);
       const pickUpStopPoint = stopLookup.get(
@@ -232,7 +274,7 @@ export async function POST(req: NextRequest) {
       const summary = {
         driver: driverSummary,
         totalPersons: parseNumber(totalPersonsValue),
-        totalFees: parseNumber(totalFeesValue),
+        totalFees: Math.round(parseNumber(totalFeesValue) ?? 0),
         pickupPoint: pickUpStopPoint
           ? {
               lat: pickUpStopPoint.lat,
@@ -253,8 +295,76 @@ export async function POST(req: NextRequest) {
         arrivalTime: normalizeTimeValue(arrivalValue),
       };
 
-      await Trip.updateOne({ tripNumber }, { $set: { summary } });
+      await Trip.collection.updateOne({ tripNumber }, { $set: { summary } });
       updatedTripIds.push(String(trip.tripNumber));
+    }
+
+    if (ridesDetailsSheet) {
+      const detailsHeaderRow = ridesDetailsSheet.getRow(1);
+      const detailsIndexes = getHeaderIndexes(detailsHeaderRow);
+      const detailsRows =
+        ridesDetailsSheet.getRows(2, ridesDetailsSheet.rowCount - 1) ?? [];
+
+      for (const row of detailsRows) {
+        if (!row) continue;
+        const rideIdValue = getCellValue(row, detailsIndexes, "Ride_ID");
+        if (!rideIdValue) continue;
+
+        const tripNumber = parseTripNumber(rideIdValue);
+        if (tripNumber == null) continue;
+
+        const trip = await Trip.findOne({
+          $or: [{ tripNumber }, { tripNumber: String(tripNumber) }],
+        }).lean<{
+          _id: unknown;
+          tripNumber: number;
+          userId?: unknown;
+          summary?: Record<string, unknown> | null;
+        }>();
+        if (!trip) continue;
+
+        const seatValue = getCellValue(row, detailsIndexes, "Seat");
+        const stopsValue = getCellValue(row, detailsIndexes, "Stops");
+        const details = {
+          driver: trip.summary?.driver ?? null,
+          seatNumber: seatValue,
+          pickupPoint: trip.summary?.pickupPoint ?? null,
+          departureTime: trip.summary?.departureTime ?? null,
+          dropoffPoint: trip.summary?.dropoffPoint ?? null,
+          arrivalTime: trip.summary?.arrivalTime ?? null,
+          stops: stopsValue,
+        };
+
+        const confirmedTime = normalizeTimeValue(
+          getCellValue(row, detailsIndexes, "Arrival"),
+        );
+
+        await Trip.collection.updateOne(
+          {
+            $or: [{ tripNumber }, { tripNumber: String(tripNumber) }],
+          },
+          {
+            $set: {
+              details,
+              status: "matched",
+            },
+          },
+        );
+
+        if (trip.userId) {
+          await createNotification({
+            userId: String(trip.userId),
+            type: "trip_submitted",
+            title: "Trip matched",
+            body: `Your trip has been matched and confirmed for ${confirmedTime || "the scheduled time"}.`,
+            data: {
+              tripNumber,
+              status: "matched",
+              confirmedTime,
+            },
+          });
+        }
+      }
     }
 
     return NextResponse.json({
