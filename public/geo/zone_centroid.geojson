@@ -420,6 +420,34 @@
             "properties": {
                 "NAME": "الشروق / بدر"
             }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 31",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.108817,
+                    30.044925
+                ]
+            },
+            "properties": {
+                "NAME": "اكتوبر - الشيخ زايد"
+            }
+        },
+        {
+            "type": "Feature",
+            "id": "ZONE 32",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    31.195468,
+                    29.906506
+                ]
+            },
+            "properties": {
+                "NAME": "الحوامدية"
+            }
         }
     ]
 }
