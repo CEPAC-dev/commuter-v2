@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getTripMessages, sendMessage, type ChatMessage } from "@/lib/api/chat";
+import { useClientLocale } from "@/lib/i18n/client";
 
 interface TripChatProps {
   tripId: string;
@@ -58,6 +59,7 @@ export default function TripChat({ tripId, role }: TripChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { t, dir } = useClientLocale();
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -66,9 +68,9 @@ export default function TripChat({ tripId, role }: TripChatProps) {
       setMessages(list);
       setLoadError(null);
     } catch {
-      setLoadError("Couldn't load messages. Try again.");
+      setLoadError(t("chat.load_error"));
     }
-  }, [tripId]);
+  }, [tripId, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -114,7 +116,7 @@ export default function TripChat({ tripId, role }: TripChatProps) {
     }
   }
 
-  const btnLabel = role === "user" ? "Chat with driver" : "Chat with passenger";
+  const btnLabel = role === "user" ? t("chat.with_driver") : t("chat.with_passenger");
 
   return (
     <>
@@ -161,6 +163,7 @@ export default function TripChat({ tripId, role }: TripChatProps) {
       {/* Chat panel (bottom sheet) */}
       {open && (
         <div
+          dir={dir}
           style={{
             position: "fixed",
             bottom: 0,
@@ -216,7 +219,7 @@ export default function TripChat({ tripId, role }: TripChatProps) {
                   {btnLabel}
                 </p>
                 <p style={{ margin: 0, fontSize: 11, color: "#9AA0A6" }}>
-                  Trip #{tripId.slice(-6)}
+                  {t("chat.trip_prefix").replace("{id}", tripId.slice(-6))}
                 </p>
               </div>
             </div>
@@ -270,7 +273,7 @@ export default function TripChat({ tripId, role }: TripChatProps) {
                 }}
               >
                 <p style={{ fontSize: 32, margin: "0 0 8px" }}>💬</p>
-                <p style={{ fontSize: 13 }}>No messages yet. Say hello!</p>
+                <p style={{ fontSize: 13 }}>{t("chat.no_messages")}</p>
               </div>
             )}
             {messages.map((msg) => {
@@ -347,7 +350,7 @@ export default function TripChat({ tripId, role }: TripChatProps) {
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={handleKey}
-              placeholder="Type a message…"
+              placeholder={t("chat.type_placeholder")}
               style={{
                 flex: 1,
                 padding: "10px 14px",

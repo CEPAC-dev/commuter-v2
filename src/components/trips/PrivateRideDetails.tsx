@@ -1,6 +1,7 @@
 import { MapPin, Users, Clock, Route as RouteIcon, LogIn, LogOut } from "lucide-react";
 import { RideDetailRow, TripStatBlock } from "@/components/trips/TripDetailParts";
 import type { GeoPoint } from "@/types/geo";
+import { translate, localeDirection, type Locale } from "@/lib/i18n";
 
 interface Stop {
   point: GeoPoint;
@@ -43,23 +44,28 @@ export default function PrivateRideDetails({
   distanceKm,
   durationMinutes,
   to12h,
-}: Props) {
+  locale,
+}: Props & { locale: Locale }) {
   const chain: GeoPoint[] = [pickup, ...stops.map((s) => s.point), dropoff];
   const segKm = chain.slice(1).map((pt, i) => haversineKm(chain[i], pt));
   const segTotal = segKm.reduce((a, b) => a + b, 0) || 1;
+  const pickupLabel = translate(locale, "ride.pickup");
+  const dropoffLabel = translate(locale, "ride.dropoff");
+  const stopLabel = translate(locale, "ride.station");
   const segLines = segKm.map((km, i) => {
-    const from = i === 0 ? "Pickup" : `Stop ${i}`;
-    const to = i === segKm.length - 1 ? "Dropoff" : `Stop ${i + 1}`;
+    const from = i === 0 ? pickupLabel : `${stopLabel} ${i}`;
+    const to = i === segKm.length - 1 ? dropoffLabel : `${stopLabel} ${i + 1}`;
     const shareKm = (km / segTotal) * distanceKm;
     const shareMin = (km / segTotal) * durationMinutes;
     return {
-      label: `${from} → ${to} (est.)`,
+      label: `${from} → ${to} ${translate(locale, "ride.estimated")}`,
       value: `${shareKm.toFixed(1)} km · ${Math.round(shareMin)} min`,
     };
   });
 
   return (
     <div
+      dir={localeDirection(locale)}
       style={{
         background: "#fff",
         borderRadius: 16,
@@ -78,43 +84,43 @@ export default function PrivateRideDetails({
           letterSpacing: "0.04em",
         }}
       >
-        Private ride
+        {translate(locale, "ride.private")}
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <RideDetailRow
           icon={<MapPin size={15} />}
           color="#00C2A8"
-          headline="Origin"
+          headline={translate(locale, "ride.origin")}
           value={pickup.address}
         />
         <RideDetailRow
           icon={<Clock size={15} />}
           color="#00C2A8"
-          headline="Pickup time"
+          headline={translate(locale, "ride.pickup_time")}
           value={to12h(pickupTime)}
         />
 
         <RideDetailRow
           icon={<Users size={15} />}
           color="#0B1E3D"
-          headline="Total passengers"
-          value={`${numberOfPassengers} passenger${numberOfPassengers === 1 ? "" : "s"}`}
+          headline={translate(locale, "ride.total_passengers")}
+          value={`${numberOfPassengers} ${translate(locale, numberOfPassengers === 1 ? "my_trips.passenger_singular" : "my_trips.passenger_plural")}`}
         />
 
         {stops.map((s, i) => (
           <div
             key={i}
             style={{
-              borderLeft: "2px dashed #E2E8F0",
-              marginLeft: 7,
-              paddingLeft: 16,
+              borderInlineStart: "2px dashed #E2E8F0",
+              marginInlineStart: 7,
+              paddingInlineStart: 16,
             }}
           >
             <RideDetailRow
               icon={<MapPin size={15} />}
               color="#F5A623"
-              headline="Station"
+              headline={translate(locale, "ride.station")}
               value={s.point.address}
             />
             <div
@@ -136,7 +142,7 @@ export default function PrivateRideDetails({
                 }}
               >
                 <LogOut size={12} aria-hidden="true" />
-                Alighting: <strong style={{ color: "#0B1E3D" }}>{s.alighting}</strong>
+                {translate(locale, "ride.alighting")}: <strong style={{ color: "#0B1E3D" }}>{s.alighting}</strong>
               </span>
               <span
                 style={{
@@ -148,7 +154,7 @@ export default function PrivateRideDetails({
                 }}
               >
                 <LogIn size={12} aria-hidden="true" />
-                Boarding: <strong style={{ color: "#0B1E3D" }}>{s.boarding}</strong>
+                {translate(locale, "ride.boarding")}: <strong style={{ color: "#0B1E3D" }}>{s.boarding}</strong>
               </span>
               <span
                 style={{
@@ -160,7 +166,7 @@ export default function PrivateRideDetails({
                 }}
               >
                 <Clock size={12} aria-hidden="true" />
-                Wait: <strong style={{ color: "#0B1E3D" }}>{s.waitingMinutes} min</strong>
+                {translate(locale, "ride.wait")}: <strong style={{ color: "#0B1E3D" }}>{s.waitingMinutes} {translate(locale, "ride.minutes_short")}</strong>
               </span>
             </div>
           </div>
@@ -169,13 +175,13 @@ export default function PrivateRideDetails({
         <RideDetailRow
           icon={<MapPin size={15} />}
           color="#E74C3C"
-          headline="Destination"
+          headline={translate(locale, "ride.destination")}
           value={dropoff.address}
         />
         <RideDetailRow
           icon={<Clock size={15} />}
           color="#E74C3C"
-          headline="Drop-off time"
+          headline={translate(locale, "ride.dropoff_time")}
           value={to12h(arrivalTime)}
         />
       </div>
@@ -192,11 +198,11 @@ export default function PrivateRideDetails({
       >
         <TripStatBlock
           icon={<RouteIcon size={15} color="#0B1E3D" aria-hidden="true" />}
-          headline="Distance & duration"
-          value={`${distanceKm.toFixed(1)} km · ${durationMinutes} min`}
+          headline={translate(locale, "ride.distance_duration")}
+          value={`${distanceKm.toFixed(1)} km · ${durationMinutes} ${translate(locale, "ride.minutes_short")}`}
           lines={[
-            { label: "Distance", value: `${distanceKm.toFixed(1)} km` },
-            { label: "Duration", value: `${durationMinutes} min` },
+            { label: translate(locale, "ride.distance"), value: `${distanceKm.toFixed(1)} km` },
+            { label: translate(locale, "ride.duration"), value: `${durationMinutes} ${translate(locale, "ride.minutes_short")}` },
             ...segLines,
           ]}
           accent="#F5A623"

@@ -7,6 +7,7 @@ import AppHeader from "@/components/layout/AppHeader";
 import ChangePasswordSection from "@/components/shared/ChangePasswordSection";
 import SavedAddressesSection from "@/components/shared/SavedAddressesSection";
 import type { SavedAddress } from "@/types/shared";
+import { useClientLocale } from "@/lib/i18n/client";
 
 interface Props {
   userNumber: number;
@@ -26,6 +27,7 @@ export default function ProfileClient({
   initialSavedAddresses,
 }: Props) {
   const router = useRouter();
+  const { t, dir } = useClientLocale();
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
   const [profilePic, setProfilePic] = useState(initialProfilePic ?? null);
@@ -49,7 +51,7 @@ export default function ProfileClient({
       });
       const uploadData = await uploadRes.json();
       if (!uploadRes.ok) {
-        setError(uploadData.error ?? "Upload failed.");
+        setError(uploadData.error ?? t("profile.upload_failed"));
         return;
       }
       const saveRes = await fetch("/api/auth/me", {
@@ -63,13 +65,13 @@ export default function ProfileClient({
       });
       const saveData = await saveRes.json();
       if (!saveRes.ok) {
-        setError(saveData.error ?? "Failed to save.");
+        setError(saveData.error ?? t("profile.save_failed"));
         return;
       }
       setProfilePic(uploadData.path);
       router.refresh();
     } catch {
-      setError("Network error. Please retry.");
+      setError(t("profile.network_error"));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -79,7 +81,7 @@ export default function ProfileClient({
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
-      setError("Name is required.");
+      setError(t("profile.name_required"));
       return;
     }
     setSaving(true);
@@ -93,14 +95,14 @@ export default function ProfileClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to save.");
+        setError(data.error ?? t("profile.save_failed"));
         return;
       }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
       router.refresh();
     } catch {
-      setError("Network error. Please retry.");
+      setError(t("profile.network_error"));
     } finally {
       setSaving(false);
     }
@@ -111,6 +113,7 @@ export default function ProfileClient({
       <AppHeader authed email={email} variant="app" backHref="/" />
 
       <main
+        dir={dir}
         style={{ maxWidth: 520, margin: "0 auto", padding: "32px 20px 48px" }}
       >
         {/* Avatar + name */}
@@ -133,7 +136,7 @@ export default function ProfileClient({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            aria-label="Change profile picture"
+            aria-label={t("profile.change_picture")}
             className="group"
             style={{
               position: "relative",
@@ -154,7 +157,7 @@ export default function ProfileClient({
             {profilePic ? (
               <img
                 src={profilePic}
-                alt="Profile"
+                alt={t("profile.profile_alt")}
                 style={{
                   width: "100%",
                   height: "100%",
@@ -229,7 +232,7 @@ export default function ProfileClient({
               margin: 0,
             }}
           >
-            Edit profile
+            {t("profile.edit_profile")}
           </h1>
 
           {/* Name */}
@@ -244,7 +247,7 @@ export default function ProfileClient({
                 marginBottom: 6,
               }}
             >
-              Full name{" "}
+              {t("profile.full_name")}{" "}
               <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                 *
               </span>
@@ -302,7 +305,7 @@ export default function ProfileClient({
                 marginBottom: 6,
               }}
             >
-              Email
+              {t("profile.email")}
             </label>
             <div style={{ position: "relative" }}>
               <Mail
@@ -343,7 +346,7 @@ export default function ProfileClient({
             <p
               style={{ fontSize: 12, color: "#9aa8b5", margin: "5px 0 0 2px" }}
             >
-              Email cannot be changed.
+              {t("profile.email_readonly_note")}
             </p>
           </div>
 
@@ -359,7 +362,7 @@ export default function ProfileClient({
                 marginBottom: 6,
               }}
             >
-              Phone number
+              {t("profile.phone_number")}
             </label>
             <div
               style={{
@@ -399,7 +402,7 @@ export default function ProfileClient({
                 inputMode="numeric"
                 maxLength={10}
                 autoComplete="tel"
-                placeholder="1XXXXXXXXX"
+                placeholder={t("profile.phone_placeholder")}
                 value={phone.replace(/^\+?20/, "")}
                 onChange={(e) => {
                   const digits = e.target.value
@@ -460,7 +463,7 @@ export default function ProfileClient({
               }}
             >
               <Check size={14} aria-hidden="true" />
-              Profile updated.
+              {t("profile.updated_success")}
             </p>
           )}
 
@@ -497,10 +500,10 @@ export default function ProfileClient({
                   aria-hidden="true"
                   style={{ animation: "spin 0.7s linear infinite" }}
                 />
-                Saving…
+                {t("profile.saving")}
               </>
             ) : (
-              "Save changes"
+              t("profile.save_changes")
             )}
           </button>
         </form>
@@ -537,7 +540,7 @@ export default function ProfileClient({
               borderRadius: 10,
             }}
           >
-            Book a ride →
+            {t("profile.book_a_ride")}
           </Link>
         </div>
 

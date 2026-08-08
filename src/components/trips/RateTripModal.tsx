@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useClientLocale } from "@/lib/locale.client";
 import { Star, X } from "lucide-react";
 
 interface RateTripModalProps {
@@ -73,6 +74,7 @@ export default function RateTripModal({ tripId, onRated }: RateTripModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const { t } = useClientLocale();
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +83,7 @@ export default function RateTripModal({ tripId, onRated }: RateTripModalProps) {
 
   async function handleSubmit() {
     if (driverRating < 1 || carRating < 1) {
-      setError("Please rate both the driver and the car.");
+      setError(t("rate_trip.error_missing"));
       return;
     }
     setSubmitting(true);
@@ -98,7 +100,7 @@ export default function RateTripModal({ tripId, onRated }: RateTripModalProps) {
       onRated?.();
       setTimeout(() => setOpen(false), 1200);
     } catch {
-      setError("Couldn't submit your rating. Try again.");
+      setError(t("rate_trip.submit_error"));
     } finally {
       setSubmitting(false);
     }
@@ -129,7 +131,7 @@ export default function RateTripModal({ tripId, onRated }: RateTripModalProps) {
         }}
       >
         <Star size={15} aria-hidden="true" />
-        Rate trip
+        {t("rate_trip.button")}
       </button>
 
       {open && (
@@ -177,10 +179,10 @@ export default function RateTripModal({ tripId, onRated }: RateTripModalProps) {
                     color: "#0B1E3D",
                   }}
                 >
-                  Rate your trip
+                  {t("rate_trip.title")}
                 </p>
                 <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9aa7b4" }}>
-                  Your feedback helps improve the service.
+                  {t("rate_trip.subtitle")}
                 </p>
               </div>
               <button
@@ -207,20 +209,20 @@ export default function RateTripModal({ tripId, onRated }: RateTripModalProps) {
 
             {done ? (
               <p style={{ textAlign: "center", color: "#27AE60", fontWeight: 700, padding: "20px 0" }}>
-                Thanks for your feedback!
+                {t("rate_trip.thanks")}
               </p>
             ) : (
               <>
-                <StarPicker value={driverRating} onChange={setDriverRating} label="Driver" />
-                <StarPicker value={carRating} onChange={setCarRating} label="Car" />
+                <StarPicker value={driverRating} onChange={setDriverRating} label={t("rate_trip.driver")} />
+                <StarPicker value={carRating} onChange={setCarRating} label={t("rate_trip.car")} />
 
                 <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
-                  Feedback <span style={{ color: "#9aa7b4", fontWeight: 500 }}>(optional)</span>
+                  {t("rate_trip.feedback")} <span style={{ color: "#9aa7b4", fontWeight: 500 }}>{t("rate_trip.feedback_optional")}</span>
                 </p>
                 <textarea
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
-                  placeholder="Tell us more…"
+                  placeholder={t("rate_trip.placeholder")}
                   rows={3}
                   maxLength={1000}
                   style={{

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useClientLocale } from "@/lib/locale.client";
 import { Check, Loader2 } from "lucide-react";
 import PasswordInput from "@/components/shared/PasswordInput";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
@@ -8,6 +9,7 @@ import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
 export default function ChangePasswordSection() {
   const [isOpen, setIsOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
+  const { t } = useClientLocale();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -20,15 +22,15 @@ export default function ChangePasswordSection() {
     setSuccess(false);
 
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setError("All password fields are required.");
+      setError(t("change_password.fields_required"));
       return;
     }
     if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters.");
+      setError(t("change_password.min_length"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("New passwords do not match.");
+      setError(t("change_password.mismatch"));
       return;
     }
 
@@ -41,7 +43,7 @@ export default function ChangePasswordSection() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to change password.");
+        setError(data.error ?? t("addresses.failed"));
         return;
       }
       setCurrentPassword("");
@@ -50,7 +52,7 @@ export default function ChangePasswordSection() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch {
-      setError("Network error. Please retry.");
+      setError(t("change_password.network_error") ?? t("addresses.network_error"));
     } finally {
       setSaving(false);
     }
@@ -91,17 +93,17 @@ export default function ChangePasswordSection() {
             margin: 0,
           }}
         >
-          Change password
+          {t("change_password.title")}
         </h2>
         <span style={{ fontSize: 14, color: "#00C2A8", fontWeight: 700 }}>
-          {isOpen ? "Hide" : "Show"}
+          {isOpen ? t("change_password.hide") : t("change_password.show")}
         </span>
       </button>
 
       {isOpen && (
         <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <PasswordInput
-            label="Current password"
+            label={t("change_password.current")}
             id="cp-current"
             autoComplete="current-password"
             value={currentPassword}
@@ -109,7 +111,7 @@ export default function ChangePasswordSection() {
           />
 
       <PasswordInput
-        label="New password"
+            label={t("change_password.new")}
         id="cp-new"
         autoComplete="new-password"
         value={newPassword}
@@ -118,7 +120,7 @@ export default function ChangePasswordSection() {
       <PasswordStrengthMeter password={newPassword} />
 
           <PasswordInput
-            label="Confirm new password"
+            label={t("change_password.confirm")}
             id="cp-confirm"
             autoComplete="new-password"
             value={confirmPassword}
@@ -161,7 +163,7 @@ export default function ChangePasswordSection() {
               }}
             >
               <Check size={14} aria-hidden="true" />
-              Password updated.
+              {t("change_password.updated")}
             </p>
           )}
 
@@ -200,10 +202,10 @@ export default function ChangePasswordSection() {
                   aria-hidden="true"
                   style={{ animation: "spin 0.7s linear infinite" }}
                 />
-                Updating…
+                {t("action.saving")}
               </>
             ) : (
-              "Update password"
+              t("change_password.update")
             )}
           </button>
         </form>

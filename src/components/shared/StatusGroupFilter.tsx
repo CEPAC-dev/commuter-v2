@@ -1,23 +1,23 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-
-const GROUPS: {
-  value: "" | "upcoming" | "ongoing" | "previous" | "pending_payment";
-  label: string;
-}[] = [
-  { value: "", label: "All" },
-  { value: "upcoming", label: "Upcoming" },
-  { value: "ongoing", label: "Ongoing" },
-  { value: "previous", label: "Previous" },
-  { value: "pending_payment", label: "Pending payment" },
-];
+import { useClientLocale } from "@/lib/locale.client";
 
 export default function StatusGroupFilter({
   hiddenGroups = [],
 }: {
-  hiddenGroups?: Array<(typeof GROUPS)[number]["value"]>;
+  hiddenGroups?: Array<"" | "upcoming" | "ongoing" | "previous" | "pending_payment">;
 }) {
+  const { t } = useClientLocale();
+
+  const GROUPS = [
+    { value: "", label: t("filter.all") },
+    { value: "upcoming", label: t("status.upcoming") },
+    { value: "ongoing", label: t("status.ongoing") },
+    { value: "previous", label: t("status.previous") },
+    { value: "pending_payment", label: t("status.pending_payment") },
+  ] as const;
+
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();

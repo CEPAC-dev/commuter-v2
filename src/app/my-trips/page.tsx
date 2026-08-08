@@ -9,6 +9,8 @@ import {
   Route,
   Users,
 } from "lucide-react";
+import { getServerLocale } from "@/lib/i18n/server";
+import { translate, formatDate, formatTime, formatEgp, toArabicDigits, formatDistanceKm, formatMinutes } from "@/lib/i18n";
 import { isSharedVehicle } from "@/lib/geo/stations";
 import { getSession } from "@/lib/auth/session";
 import { listUserTrips, listDriverTrips } from "@/lib/services/trips";
@@ -32,42 +34,50 @@ const PAGE_SIZE = 12;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function to12h(hhmm: string): string {
-  if (!hhmm) return "—";
-  const [h, m] = hhmm.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-
 function truncate(s: string, max = 38): string {
   return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
-function prettyDate(date: string): string {
-  return new Date(`${date}T12:00:00`).toLocaleDateString("en-EG", {
+function prettyDate(locale: "en" | "ar", date: string): string {
+  const intl = locale === "ar" ? "ar-EG" : "en-EG";
+  const out = new Date(`${date}T12:00:00`).toLocaleDateString(intl, {
     weekday: "short",
     month: "short",
     day: "numeric",
   });
+  return locale === "ar" ? toArabicDigits(out) : out;
 }
 
-const STATUS_PILL: Record<
-  BookingStatus,
-  { label: string; bg: string; color: string }
-> = {
-  pending_payment: {
-    label: "Pending payment",
-    bg: "#FFF3E0",
-    color: "#E65100",
-  },
-  submitted: { label: "Upcoming", bg: "#E2E8F0", color: "#5A6A7A" },
-  matched: { label: "Ongoing", bg: "#00C2A8", color: "#fff" },
-  confirmed: { label: "Upcoming", bg: "#E2E8F0", color: "#5A6A7A" },
-  active: { label: "Ongoing", bg: "#00C2A8", color: "#fff" },
-  completed: { label: "Previous", bg: "#0B1E3D", color: "#fff" },
-  cancelled: { label: "Previous", bg: "#0B1E3D", color: "#fff" },
-  time_out: { label: "Previous", bg: "#0B1E3D", color: "#fff" },
-};
+function toArabicDigitsIf(locale: "en" | "ar", s: string): string {
+  return locale === "ar" ? toArabicDigits(s) : s;
+}
+
+function getStatusPill(locale: "en" | "ar") {
+  return {
+    pending_payment: {
+      label: translate(locale, "status.pending_payment"),
+      bg: "#FFF3E0",
+      color: "#E65100",
+    },
+    submitted: { label: translate(locale, "status.upcoming"), bg: "#E2E8F0", color: "#5A6A7A" },
+    matched: { label: translate(locale, "status.ongoing"), bg: "#00C2A8", color: "#fff" },
+    confirmed: { label: translate(locale, "status.upcoming"), bg: "#E2E8F0", color: "#5A6A7A" },
+    active: { label: translate(locale, "status.ongoing"), bg: "#00C2A8", color: "#fff" },
+    completed: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
+    cancelled: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
+    time_out: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
+  } as Record<BookingStatus, { label: string; bg: string; color: string }>;
+}
+function descriptionForVehicle(locale: "en" | "ar", vehicleType: string) {
+  const key = `vehicles.${vehicleType}`;
+  const translated = translate(locale, key);
+  if (translated !== key) return translated;
+  return VEHICLES[vehicleType as VehicleKey]?.label ?? vehicleType;
+}
+
+function rideTypeLabel(locale: "en" | "ar", rideType: string) {
+  return translate(locale, `ride_type.${rideType}`);
+}
 
 function Pill({
   label,
@@ -97,13 +107,13 @@ function Pill({
   );
 }
 
-function rideStatusPill(status: RideListRow["status"]) {
+function rideStatusPill(status: RideListRow["status"], locale: "en" | "ar") {
+  const pills = getStatusPill(locale);
   if (status === "completed" || status === "cancelled") {
-    return STATUS_PILL[status === "completed" ? "completed" : "cancelled"];
+    return pills[status === "completed" ? "completed" : "cancelled"];
   }
-  return STATUS_PILL.matched;
+  return pills.matched;
 }
-
 type DayItem =
   | { kind: "trip"; data: TripListRow }
   | { kind: "ride"; data: RideListRow };
@@ -199,6 +209,22 @@ export default async function MyTripsPage({
 
   const hasFilters = Boolean(groupFilter || dateFrom || dateTo);
 
+  const locale = await getServerLocale();
+
+  let summaryText = "";
+  if (total === 0) {
+    if (hasFilters) summaryText = translate(locale, "my_trips.no_trips_filters");
+    else summaryText = isDriver ? translate(locale, "my_trips.no_assigned_trips") : translate(locale, "my_trips.no_trips");
+  } else {
+    if (isDriver) {
+      summaryText = driverOngoingView
+        ? translate(locale, "my_trips.total_ongoing", { total })
+        : translate(locale, "my_trips.total_assigned", { total });
+    } else {
+      summaryText = translate(locale, "my_trips.total_history", { total });
+    }
+  }
+
   return (
     <div style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
       <AppHeader
@@ -213,7 +239,7 @@ export default async function MyTripsPage({
         style={{ maxWidth: 640, margin: "0 auto", padding: "28px 20px 56px" }}
       >
         <div style={{ marginBottom: 22 }}>
-          <h1
+            <h1
             style={{
               fontSize: 22,
               fontWeight: 800,
@@ -222,20 +248,10 @@ export default async function MyTripsPage({
               letterSpacing: "-0.02em",
             }}
           >
-            My trips
+            {translate(locale, "my_trips.title")}
           </h1>
           <p style={{ fontSize: 14, color: "#5A6A7A", margin: 0 }}>
-            {total === 0
-              ? hasFilters
-                ? "No trips match these filters."
-                : isDriver
-                  ? "No assigned trips yet."
-                  : "No trips yet."
-              : isDriver
-                ? driverOngoingView
-                  ? `${total} ongoing ride${total === 1 ? "" : "s"}`
-                  : `${total} assigned trip${total === 1 ? "" : "s"}`
-                : `${total} trip${total === 1 ? "" : "s"} in your history`}
+            {summaryText}
           </p>
         </div>
 
@@ -257,21 +273,21 @@ export default async function MyTripsPage({
             icon={isDriver ? "🚗" : "🧾"}
             title={
               hasFilters
-                ? "Nothing here"
+                ? translate(locale, "my_trips.empty_title_filtered")
                 : isDriver
                   ? driverOngoingView
-                    ? "No ongoing rides yet"
-                    : "No assigned trips yet"
-                  : "No trips yet"
+                    ? translate(locale, "my_trips.empty_ongoing")
+                    : translate(locale, "my_trips.empty_assigned")
+                  : translate(locale, "my_trips.empty")
             }
             description={
               hasFilters
-                ? "Try clearing the filters to see your full history."
+                ? translate(locale, "my_trips.empty_description_filtered")
                 : isDriver
                   ? driverOngoingView
-                    ? "Matched rides with your assigned passengers will show here."
-                    : "Once a trip is assigned to you, it will show up here."
-                  : "Every trip from your requests will be logged here."
+                    ? translate(locale, "my_trips.empty_description_ongoing")
+                    : translate(locale, "my_trips.empty_description_assigned")
+                  : translate(locale, "my_trips.empty_description")
             }
             action={
               !isDriver ? (
@@ -288,7 +304,7 @@ export default async function MyTripsPage({
                     textDecoration: "none",
                   }}
                 >
-                  Book a ride
+                  {translate(locale, "my_trips.book_ride")}
                 </Link>
               ) : undefined
             }
@@ -315,23 +331,15 @@ export default async function MyTripsPage({
                       letterSpacing: "0.04em",
                     }}
                   >
-                    {group.date === todayStr ? "Today" : prettyDate(group.date)}
+                    {group.date === todayStr ? translate(locale, "my_trips.today") : prettyDate(locale, group.date)}
                   </span>
                   <span
                     style={{ fontSize: 12, color: "#9aa7b4", fontWeight: 600 }}
                   >
-                    · {group.items.length}{" "}
-                    {isDriver ? "ride" : "trip"}
-                    {group.items.length === 1 ? "" : "s"}
-                    {isDriver
-                      ? ` · ${group.items.reduce(
-                          (sum, item) =>
-                            item.kind === "ride"
-                              ? sum + item.data.passengerCount
-                              : sum,
-                          0,
-                        )} passengers`
-                      : ""}
+                    · {group.items.length} {group.items.length === 1 ? (isDriver ? translate(locale, "my_trips.ride_singular") : translate(locale, "my_trips.trip_singular")) : (isDriver ? translate(locale, "my_trips.ride_plural") : translate(locale, "my_trips.trip_plural"))}
+                    {isDriver ? (
+                      ` · ${group.items.reduce((sum, item) => item.kind === "ride" ? sum + item.data.passengerCount : sum, 0)} ${translate(locale, "my_trips.passengers")}`
+                    ) : ""}
                   </span>
                 </div>
                 <div
@@ -340,9 +348,7 @@ export default async function MyTripsPage({
                   {group.items.map((item) => {
                     if (item.kind === "ride") {
                       const ride = item.data;
-                      const vLabel =
-                        VEHICLES[ride.vehicleType as VehicleKey]?.label ??
-                        ride.vehicleType;
+                      const vLabel = descriptionForVehicle(locale, ride.vehicleType);
                       const detailHref = `/my-trips/${ride.id}`;
 
                       return (
@@ -373,18 +379,7 @@ export default async function MyTripsPage({
                                       fontWeight: 600,
                                     }}
                                   >
-                                    Ride #{ride.rideNumber} ·{" "}
-                                    {ride.passengers.length} trip
-                                    {ride.passengers.length === 1 ? "" : "s"} ·{" "}
-                                    {new Date(ride.createdAt).toLocaleString(
-                                      "en-EG",
-                                      {
-                                        month: "short",
-                                        day: "numeric",
-                                        hour: "numeric",
-                                        minute: "2-digit",
-                                      },
-                                    )}
+                                    {translate(locale, "my_trips.ride_number", { rideNumber: ride.rideNumber })} · {ride.passengers.length} {ride.passengers.length === 1 ? translate(locale, "my_trips.trip_singular") : translate(locale, "my_trips.trip_plural")} · {toArabicDigitsIf(locale, new Date(ride.createdAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-EG", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}
                                   </span>
                                 </div>
 
@@ -439,7 +434,7 @@ export default async function MyTripsPage({
                                         textTransform: "capitalize",
                                       }}
                                     >
-                                      {ride.rideType}
+                                      {rideTypeLabel(locale, ride.rideType)}
                                     </span>
                                   </div>
                                   <span
@@ -450,7 +445,7 @@ export default async function MyTripsPage({
                                       fontVariantNumeric: "tabular-nums",
                                     }}
                                   >
-                                    {ride.totalCost} EGP
+                                    {formatEgp(locale, ride.totalCost)}
                                   </span>
                                 </div>
 
@@ -463,7 +458,7 @@ export default async function MyTripsPage({
                                     marginBottom: 12,
                                   }}
                                 >
-                                  <Pill {...rideStatusPill(ride.status)} />
+                                  <Pill {...rideStatusPill(ride.status, locale)} />
                                   <span
                                     style={{
                                       display: "inline-flex",
@@ -475,8 +470,7 @@ export default async function MyTripsPage({
                                     }}
                                   >
                                     <Users size={12} aria-hidden="true" />
-                                    {ride.passengerCount} passenger
-                                    {ride.passengerCount === 1 ? "" : "s"}
+                                    {ride.passengerCount} {ride.passengerCount === 1 ? translate(locale, "my_trips.passenger_singular") : translate(locale, "my_trips.passenger_plural")}
                                   </span>
                                 </div>
 
@@ -504,10 +498,10 @@ export default async function MyTripsPage({
                                     <span
                                       style={{ fontSize: 12, color: "#5A6A7A" }}
                                     >
-                                      Window{" "}
+                                      {translate(locale, "my_trips.window_label")} {" "}
                                       <strong style={{ color: "#0B1E3D" }}>
-                                        {to12h(ride.startTime)} –{" "}
-                                        {to12h(ride.endTime)}
+                                        {formatTime(locale, ride.startTime)} –{" "}
+                                        {formatTime(locale, ride.endTime)}
                                       </strong>
                                     </span>
                                   </div>
@@ -522,8 +516,7 @@ export default async function MyTripsPage({
                                       }}
                                     >
                                       <Route size={12} aria-hidden="true" />
-                                      {ride.route.length} stop
-                                      {ride.route.length === 1 ? "" : "s"}
+                                      {ride.route.length} {ride.route.length === 1 ? translate(locale, "my_trips.stop_singular") : translate(locale, "my_trips.stop_plural")}
                                     </span>
                                   )}
                                 </div>
@@ -561,7 +554,7 @@ export default async function MyTripsPage({
                                             color: "#00806E",
                                           }}
                                         >
-                                          Pickup #{passenger.pickupOrder}
+                                          {translate(locale, "my_trips.pickup_prefix", { n: passenger.pickupOrder })}
                                         </span>
                                         <span
                                           style={{
@@ -570,7 +563,7 @@ export default async function MyTripsPage({
                                             color: "#E74C3C",
                                           }}
                                         >
-                                          Dropoff #{passenger.dropoffOrder}
+                                          {translate(locale, "my_trips.dropoff_prefix", { n: passenger.dropoffOrder })}
                                         </span>
                                         <span
                                           style={{
@@ -580,7 +573,7 @@ export default async function MyTripsPage({
                                           }}
                                         >
                                           · {passenger.numberOfPassengers}{" "}
-                                          pax · {passenger.tripCost} EGP
+                                          {translate(locale, passenger.numberOfPassengers === 1 ? "my_trips.passenger_singular_short" : "my_trips.passenger_plural_short")} · {formatEgp(locale, passenger.tripCost)}
                                         </span>
                                       </div>
                                       <div
@@ -674,7 +667,7 @@ export default async function MyTripsPage({
                             </Link>
                           ) : (
                             <div style={{ padding: "16px 18px" }}>
-                              <Pill {...rideStatusPill(ride.status)} />
+                              <Pill {...rideStatusPill(ride.status, locale)} />
                             </div>
                           )}
                         </div>
@@ -682,9 +675,7 @@ export default async function MyTripsPage({
                     }
 
                     const trip = item.data;
-                    const vLabel =
-                      VEHICLES[trip.vehicleType as VehicleKey]?.label ??
-                      trip.vehicleType;
+                    const vLabel = descriptionForVehicle(locale, trip.vehicleType);
                     const timedOut = trip.status === "time_out";
                     const hasAssignedDriver = Boolean(trip.assignedDriver);
                     const needsPayment =
@@ -717,18 +708,18 @@ export default async function MyTripsPage({
                                   fontSize: 11,
                                   color: "#9aa7b4",
                                   fontWeight: 600,
-                                }}
+                                }}  
                               >
-                                Trip #{trip.tripNumber} · Requested{" "}
-                                {new Date(trip.createdAt).toLocaleString(
-                                  "en-EG",
+                                {translate(locale, "my_trips.trip_number", { n: trip.tripNumber })} · {translate(locale, "my_trips.requested_label")}{" "}
+                                {toArabicDigitsIf(locale, new Date(trip.createdAt).toLocaleString(
+                                  locale === "ar" ? "ar-EG" : "en-EG",
                                   {
                                     month: "short",
                                     day: "numeric",
                                     hour: "numeric",
                                     minute: "2-digit",
                                   },
-                                )}
+                                ))}
                               </span>
                             </div>
 
@@ -773,7 +764,7 @@ export default async function MyTripsPage({
                                   fontVariantNumeric: "tabular-nums",
                                 }}
                               >
-                                {trip.priceEgp} EGP
+                                {formatEgp(locale, trip.priceEgp)}
                               </span>
                             </div>
 
@@ -788,8 +779,8 @@ export default async function MyTripsPage({
                               }}
                             >
                               <Pill
-                                {...(STATUS_PILL[trip.status] ??
-                                  STATUS_PILL.pending_payment)}
+                                {...(getStatusPill(locale)[trip.status] ??
+                                  getStatusPill(locale).pending_payment)}
                               />
                             </div>
 
@@ -819,7 +810,7 @@ export default async function MyTripsPage({
                                     <img
                                       src={trip.assignedDriver.profilePic}
                                       alt={
-                                        trip.assignedDriver?.name ?? "Driver"
+                                        trip.assignedDriver?.name ?? translate(locale, "my_trips.driver_fallback")
                                       }
                                       style={{
                                         width: 40,
@@ -865,7 +856,7 @@ export default async function MyTripsPage({
                                         letterSpacing: "0.05em",
                                       }}
                                     >
-                                      Driver
+                                      {translate(locale, "my_trips.driver_heading")}
                                     </p>
                                     <p
                                       style={{
@@ -1011,9 +1002,9 @@ export default async function MyTripsPage({
                                 <span
                                   style={{ fontSize: 12, color: "#5A6A7A" }}
                                 >
-                                  {isSharedVehicle(trip.vehicleType) ? "Estimated board station by" : "Pickup"}{" "}
+                                  {isSharedVehicle(trip.vehicleType) ? translate(locale, "board_station_by") : translate(locale, "pickup")}{" "}
                                   <strong style={{ color: "#0B1E3D" }}>
-                                    {to12h(trip.pickupTime)}
+                                    {formatTime(locale, trip.pickupTime)}
                                   </strong>
                                 </span>
                               </div>
@@ -1032,9 +1023,9 @@ export default async function MyTripsPage({
                                 <span
                                   style={{ fontSize: 12, color: "#5A6A7A" }}
                                 >
-                                  {isSharedVehicle(trip.vehicleType) ? "Latest arrival time" : "Arrive"}{" "}
+                                  {isSharedVehicle(trip.vehicleType) ? translate(locale, "latest_arrival_time") : translate(locale, "arrive")}{" "}
                                   <strong style={{ color: "#0B1E3D" }}>
-                                    {to12h(trip.arrivalTime)}
+                                    {formatTime(locale, trip.arrivalTime)}
                                   </strong>
                                 </span>
                               </div>
@@ -1061,8 +1052,8 @@ export default async function MyTripsPage({
                                 }}
                               >
                                 <Route size={12} aria-hidden="true" />
-                                {trip.distanceKm?.toFixed(1)} km ·{" "}
-                                {trip.durationMinutes} min
+                                {formatDistanceKm(locale, trip.distanceKm ?? 0)} ·{" "}
+                                {formatMinutes(locale, trip.durationMinutes ?? 0)}
                               </span>
                               <ChevronRight
                                 size={16}

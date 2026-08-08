@@ -16,7 +16,9 @@ import {
   LogIn,
   CalendarPlus,
   CalendarClock,
+  Languages,
 } from "lucide-react";
+import { useClientLocale, setLocaleCookie } from "@/lib/locale.client";
 import { useTripStore } from "@/lib/store/useTripStore";
 import LogoutConfirmModal from "@/components/shared/LogoutConfirmModal";
 
@@ -33,17 +35,17 @@ interface Props {
 }
 
 const PASSENGER_NAV_LINKS = [
-  { href: "/create", label: "Book", icon: CalendarPlus },
-  { href: "/my-trips", label: "My trips", icon: FileText },
-  { href: "/wallet", label: "Wallet", icon: Wallet },
-  { href: "/profile", label: "Profile", icon: User },
+  { href: "/create", labelKey: "nav.book", icon: CalendarPlus },
+  { href: "/my-trips", labelKey: "nav.my_trips", icon: FileText },
+  { href: "/wallet", labelKey: "nav.wallet", icon: Wallet },
+  { href: "/profile", labelKey: "nav.profile", icon: User },
 ] as const;
 
 const DRIVER_NAV_LINKS = [
-  { href: "/my-trips", label: "My trips", icon: History },
-  { href: "/availability", label: "Availability", icon: CalendarClock },
-  { href: "/wallet", label: "Wallet", icon: Wallet },
-  { href: "/profile", label: "Profile", icon: User },
+  { href: "/my-trips", labelKey: "nav.my_trips", icon: History },
+  { href: "/availability", labelKey: "nav.availability", icon: CalendarClock },
+  { href: "/wallet", labelKey: "nav.wallet", icon: Wallet },
+  { href: "/profile", labelKey: "nav.profile", icon: User },
 ] as const;
 
 export default function AppHeader({
@@ -53,6 +55,7 @@ export default function AppHeader({
   role = "passenger",
   backHref,
 }: Props) {
+  const { t, locale } = useClientLocale();
   const router = useRouter();
   const pathname = usePathname();
   const { clear } = useTripStore();
@@ -61,6 +64,11 @@ export default function AppHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  function toggleLocale() {
+    setLocaleCookie(locale === "ar" ? "en" : "ar");
+    router.refresh();
+  }
 
   const isLanding = variant === "landing";
 
@@ -98,6 +106,8 @@ export default function AppHeader({
 
   return (
     <header
+      dir="ltr"
+      className="force-ltr"
       style={{
         position: isLanding ? "fixed" : "sticky",
         top: 0,
@@ -183,12 +193,12 @@ export default function AppHeader({
         {/* Desktop nav */}
         <nav
           aria-label="Main navigation"
-          style={{ display: "flex", alignItems: "center", gap: 6 }}
+          style={{ display: "flex", alignItems: "center", gap: 6, direction: "ltr", textAlign: "left" }}
           className="appheader-desktop"
         >
           {authed ? (
             <>
-              {NAV_LINKS.map(({ href, label }) => (
+              {NAV_LINKS.map(({ href, labelKey }) => (
                 <Link
                   key={href}
                   href={href}
@@ -211,7 +221,7 @@ export default function AppHeader({
                       : "transparent";
                   }}
                 >
-                  {label}
+                  {t(labelKey)}
                 </Link>
               ))}
               <button
@@ -252,7 +262,7 @@ export default function AppHeader({
                 }}
               >
                 <LogOut size={14} aria-hidden="true" />
-                Log out
+                {t("nav.log_out")}
               </button>
             </>
           ) : (
@@ -287,9 +297,36 @@ export default function AppHeader({
               }}
             >
               <LogIn size={15} aria-hidden="true" />
-              Log in
+              {t("nav.log_in")}
             </Link>
           )}
+          <button
+            onClick={toggleLocale}
+            aria-label="Switch language"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              marginLeft: 4,
+              background: "transparent",
+              border: `1.5px solid ${
+                isLanding && !scrolled
+                  ? "rgba(255,255,255,0.5)"
+                  : "rgba(255,255,255,0.25)"
+              }`,
+              borderRadius: 8,
+              cursor: "pointer",
+              color: fg,
+              fontSize: 13,
+              fontWeight: 700,
+              fontFamily: "inherit",
+              padding: "8px 12px",
+              minHeight: 36,
+            }}
+          >
+            <Languages size={14} aria-hidden="true" />
+            {locale === "ar" ? "EN" : "AR"}
+          </button>
         </nav>
 
         {/* Mobile toggle */}
@@ -326,6 +363,8 @@ export default function AppHeader({
             display: "flex",
             flexDirection: "column",
             gap: 6,
+            direction: "ltr",
+            textAlign: "left",
           }}
         >
           {authed ? (
@@ -341,7 +380,7 @@ export default function AppHeader({
                   {email}
                 </p>
               )}
-              {NAV_LINKS.map(({ href, label, icon: Icon }) => (
+              {NAV_LINKS.map(({ href, labelKey, icon: Icon }) => (
                 <Link
                   key={href}
                   href={href}
@@ -360,7 +399,7 @@ export default function AppHeader({
                   }}
                 >
                   <Icon size={17} aria-hidden="true" />
-                  {label}
+                  {t(labelKey)}
                 </Link>
               ))}
               <button
@@ -385,7 +424,7 @@ export default function AppHeader({
                 }}
               >
                 <LogOut size={16} aria-hidden="true" />
-                Log out
+                {t("nav.log_out")}
               </button>
             </>
           ) : (
@@ -408,9 +447,32 @@ export default function AppHeader({
               }}
             >
               <LogIn size={16} aria-hidden="true" />
-              Log in
+              {t("nav.log_in")}
             </Link>
           )}
+          <button
+            onClick={toggleLocale}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              fontWeight: 700,
+              fontSize: 15,
+              color: "#0B1E3D",
+              padding: "13px 20px",
+              borderRadius: 10,
+              border: "2px solid #eef0f3",
+              background: "transparent",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              minHeight: 48,
+              marginTop: 4,
+            }}
+          >
+            <Languages size={16} aria-hidden="true" />
+            {locale === "ar" ? "English" : "العربية"}
+          </button>
         </nav>
       )}
 
