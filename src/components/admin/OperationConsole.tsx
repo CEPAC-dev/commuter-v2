@@ -21,6 +21,10 @@ export default function OperationConsole() {
   const [matchDataMessage, setMatchDataMessage] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [shiftFromDate, setShiftFromDate] = useState("");
+  const [shiftToDate, setShiftToDate] = useState("");
+  const [loadingShiftDates, setLoadingShiftDates] = useState(false);
+  const [shiftDatesMessage, setShiftDatesMessage] = useState<string | null>(null);
 
   async function handleInspectAvailability(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -93,6 +97,46 @@ export default function OperationConsole() {
       );
     } finally {
       setLoadingMatchData(false);
+    }
+  }
+
+  async function handleShiftDates(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoadingShiftDates(true);
+    setShiftDatesMessage(null);
+
+    if (!shiftFromDate.trim() || !shiftToDate.trim()) {
+      setShiftDatesMessage("Both fromDate and toDate are required.");
+      setLoadingShiftDates(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/shiftDates", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fromDate: shiftFromDate.trim(),
+          toDate: shiftToDate.trim(),
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to shift dates.");
+      }
+
+      setShiftDatesMessage(
+        `Shifted ${payload?.availabilityCount ?? 0} availability record(s) and ${payload?.tripCount ?? 0} trip record(s).`,
+      );
+    } catch (error) {
+      setShiftDatesMessage(
+        error instanceof Error ? error.message : "Unable to shift dates.",
+      );
+    } finally {
+      setLoadingShiftDates(false);
     }
   }
 
@@ -234,6 +278,93 @@ export default function OperationConsole() {
             }}
           >
             {matchDataMessage}
+          </p>
+        ) : null}
+
+        <form
+          onSubmit={handleShiftDates}
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+            marginTop: 16,
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 220,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              From date
+            </span>
+            <input
+              value={shiftFromDate}
+              onChange={(event) => setShiftFromDate(event.target.value)}
+              type="date"
+              style={{
+                border: "1px solid #D8E0E4",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+              }}
+            />
+          </label>
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 220,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              To date
+            </span>
+            <input
+              value={shiftToDate}
+              onChange={(event) => setShiftToDate(event.target.value)}
+              type="date"
+              style={{
+                border: "1px solid #D8E0E4",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+              }}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={loadingShiftDates}
+            style={{
+              border: "none",
+              borderRadius: 10,
+              background: loadingShiftDates ? "#7BD7CB" : "#0B1E3D",
+              color: "#ffffff",
+              fontWeight: 700,
+              padding: "10px 16px",
+              cursor: loadingShiftDates ? "wait" : "pointer",
+              alignSelf: "flex-end",
+            }}
+          >
+            {loadingShiftDates ? "Shifting dates..." : "Shift dates"}
+          </button>
+        </form>
+        {shiftDatesMessage ? (
+          <p
+            style={{
+              margin: "10px 0 0",
+              fontSize: 14,
+              color: shiftDatesMessage.includes("Shifted")
+                ? "#00877A"
+                : "#B94A48",
+            }}
+          >
+            {shiftDatesMessage}
           </p>
         ) : null}
 
