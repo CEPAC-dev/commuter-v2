@@ -16,7 +16,7 @@ import {
   LogIn,
   CalendarPlus,
   CalendarClock,
-  Languages,
+  Globe,
 } from "lucide-react";
 import { useClientLocale, setLocaleCookie } from "@/lib/locale.client";
 import { useTripStore } from "@/lib/store/useTripStore";
@@ -324,7 +324,7 @@ export default function AppHeader({
               minHeight: 36,
             }}
           >
-            <Languages size={14} aria-hidden="true" />
+            <Globe size={14} aria-hidden="true" />
             {locale === "ar" ? "EN" : "AR"}
           </button>
         </nav>
@@ -470,7 +470,7 @@ export default function AppHeader({
               marginTop: 4,
             }}
           >
-            <Languages size={16} aria-hidden="true" />
+            <Globe size={16} aria-hidden="true" />
             {locale === "ar" ? "English" : "العربية"}
           </button>
         </nav>

@@ -2,8 +2,10 @@
 import { motion } from "motion/react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { useClientLocale } from "@/lib/locale.client";
 
 export default function CTA() {
+  const { t } = useClientLocale();
   return (
     <section
       style={{
@@ -51,7 +53,7 @@ export default function CTA() {
             margin: "0 0 16px",
           }}
         >
-          Ready to ride?
+          {t("cta.section_label")}
         </p>
         <h2
           style={{
@@ -63,7 +65,7 @@ export default function CTA() {
             lineHeight: 1.1,
           }}
         >
-          Smarter commutes start here.
+          {t("cta.heading")}
         </h2>
         <p
           style={{
@@ -73,8 +75,7 @@ export default function CTA() {
             lineHeight: 1.7,
           }}
         >
-          Join thousands of Greater Cairo commuters who save time and money every day
-          with Commuter.
+          {t("cta.description")}
         </p>
 
         <div
@@ -112,7 +113,7 @@ export default function CTA() {
               e.currentTarget.style.transform = "scale(1)";
             }}
           >
-            Get started 
+            {t("cta.button")}
             <ArrowRight size={18} aria-hidden="true" />
           </Link>
         </div>

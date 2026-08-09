@@ -1,35 +1,37 @@
 "use client";
 import { motion } from "motion/react";
 import { Car, MapPin, CheckCircle } from "lucide-react";
-
-const STEPS = [
-  {
-    icon: Car,
-    step: "01",
-    title: "Choose your ride",
-    desc: "Pick from private cars, taxis, or shared vans — each with transparent pricing.",
-    color: "#F5A623",
-    bg: "rgba(245,166,35,0.08)",
-  },
-  {
-    icon: MapPin,
-    step: "02",
-    title: "Enter your trip details",
-    desc: "Enter pickup and dropoff, set your time, add stop points, or pick the nearest station.",
-    color: "#00C2A8",
-    bg: "rgba(0,194,168,0.08)",
-  },
-  {
-    icon: CheckCircle,
-    step: "03",
-    title: "Confirm & go",
-    desc: "Review your pickup time, pay securely, and you're set.",
-    color: "#0B1E3D",
-    bg: "rgba(11,30,61,0.06)",
-  },
-];
+import { useClientLocale } from "@/lib/locale.client";
 
 export default function HowItWorks() {
+  const { t } = useClientLocale();
+
+  const STEPS = [
+    {
+      icon: Car,
+      step: "01",
+      title: t("howitworks.step1_title"),
+      desc: t("howitworks.step1_desc"),
+      color: "#F5A623",
+      bg: "rgba(245,166,35,0.08)",
+    },
+    {
+      icon: MapPin,
+      step: "02",
+      title: t("howitworks.step2_title"),
+      desc: t("howitworks.step2_desc"),
+      color: "#00C2A8",
+      bg: "rgba(0,194,168,0.08)",
+    },
+    {
+      icon: CheckCircle,
+      step: "03",
+      title: t("howitworks.step3_title"),
+      desc: t("howitworks.step3_desc"),
+      color: "#0B1E3D",
+      bg: "rgba(11,30,61,0.06)",
+    },
+  ];
   return (
     <section
       id="how-it-works"
@@ -54,7 +56,7 @@ export default function HowItWorks() {
               margin: "0 0 12px",
             }}
           >
-            How it works
+            {t("howitworks.section_label")}
           </p>
           <h2
             id="hiw-heading"
@@ -66,7 +68,7 @@ export default function HowItWorks() {
               margin: 0,
             }}
           >
-            Three steps to your ride
+            {t("howitworks.heading")}
           </h2>
         </motion.div>
 

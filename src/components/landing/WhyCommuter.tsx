@@ -1,39 +1,41 @@
 "use client";
 import { motion } from "motion/react";
 import { Clock, Shield, MapPinned, Wallet } from "lucide-react";
-
-const FEATURES = [
-  {
-    icon: Clock,
-    title: "Timed to your schedule",
-    desc: "Set your arrival time — we compute the pickup so you never miss a meeting or flight.",
-    color: "#00C2A8",
-    bg: "rgba(0,194,168,0.08)",
-  },
-  {
-    icon: MapPinned,
-    title: "Greater Cairo coverage",
-    desc: "From Maadi to 6th of October — smart routing across the entire metropolitan area.",
-    color: "#F5A623",
-    bg: "rgba(245,166,35,0.08)",
-  },
-  {
-    icon: Shield,
-    title: "Private or shared",
-    desc: "Choose a private car for comfort or a shared ride to save — four vehicle types to fit every trip.",
-    color: "#0B1E3D",
-    bg: "rgba(11,30,61,0.06)",
-  },
-  {
-    icon: Wallet,
-    title: "Transparent pricing",
-    desc: "See your fare before you book. No surge, no surprises — pay securely when you confirm.",
-    color: "#1C3557",
-    bg: "rgba(28,53,87,0.07)",
-  },
-];
+import { useClientLocale } from "@/lib/locale.client";
 
 export default function WhyCommuter() {
+  const { t } = useClientLocale();
+
+  const FEATURES = [
+    {
+      icon: Clock,
+      title: t("why.feature1_title"),
+      desc: t("why.feature1_desc"),
+      color: "#00C2A8",
+      bg: "rgba(0,194,168,0.08)",
+    },
+    {
+      icon: MapPinned,
+      title: t("why.feature2_title"),
+      desc: t("why.feature2_desc"),
+      color: "#F5A623",
+      bg: "rgba(245,166,35,0.08)",
+    },
+    {
+      icon: Shield,
+      title: t("why.feature3_title"),
+      desc: t("why.feature3_desc"),
+      color: "#0B1E3D",
+      bg: "rgba(11,30,61,0.06)",
+    },
+    {
+      icon: Wallet,
+      title: t("why.feature4_title"),
+      desc: t("why.feature4_desc"),
+      color: "#1C3557",
+      bg: "rgba(28,53,87,0.07)",
+    },
+  ];
   return (
     <section
       id="why-commuter"
@@ -58,7 +60,7 @@ export default function WhyCommuter() {
               margin: "0 0 12px",
             }}
           >
-            Why Commuter
+            {t("why.section_label")}
           </p>
           <h2
             id="why-heading"
@@ -70,7 +72,7 @@ export default function WhyCommuter() {
               margin: 0,
             }}
           >
-            Built for daily commutes
+            {t("why.heading")}
           </h2>
         </motion.div>
 
