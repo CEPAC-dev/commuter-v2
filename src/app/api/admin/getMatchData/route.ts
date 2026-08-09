@@ -10,6 +10,7 @@ import { User } from "@/models/User";
 import { Station } from "@/models/Station";
 import { fetchDirections } from "@/app/api/directions/route";
 import { haversineKm } from "@/lib/geo/stations";
+import { VEHICLE_LIST } from "@/lib/config/vehicles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -463,7 +464,10 @@ export async function GET(req: NextRequest) {
 
   const privateRows: PrivateRow[] = privateTrips.map((trip) => {
     const s = trip.stops ?? [];
-    const originStationNo = addSyntheticStation(trip.pickup, privateStationIdRef);
+    const originStationNo = addSyntheticStation(
+      trip.pickup,
+      privateStationIdRef,
+    );
     const destinationStationNo = addSyntheticStation(
       trip.dropoff,
       privateStationIdRef,
@@ -703,6 +707,48 @@ export async function GET(req: NextRequest) {
 
   const wb = new ExcelJS.Workbook();
 
+  const policiesSheet = wb.addWorksheet("Policies");
+  policiesSheet.addRow([
+    "Ride_Type",
+    "Veh_Type",
+    "Trip_Type",
+    "Cap",
+    "Rate (LE/Km)",
+    "Waiting Rate (LE/hour)",
+    "Additional Rate (LE/km/person)",
+    "Margin (min)",
+    "Min_Av_Occupancy",
+    "Min_Charge",
+  ]);
+
+  VEHICLE_LIST.forEach((vehicle, index) => {
+    const rowNumber = index + 2;
+    const waitingRateFormula = `=ROUND(0.5*E${rowNumber}*50^0.8*I${rowNumber},0)`;
+    const additionalRateFormula = `=${vehicle.additional_rate}*E${rowNumber}`;
+    const waitingRateValue =
+      0.5 * vehicle.rate * Math.pow(50, 0.8) * vehicle.min_occupancy;
+    const additionalRateValue = vehicle.additional_rate * vehicle.rate;
+
+    const row = policiesSheet.addRow([
+      vehicle.label,
+      vehicle.vehicle_type,
+      vehicle.trip_type,
+      vehicle.capacity,
+      vehicle.rate,
+      { formula: waitingRateFormula, result: waitingRateValue },
+      { formula: additionalRateFormula, result: additionalRateValue },
+      vehicle.window,
+      vehicle.min_occupancy,
+      vehicle.minimum_charge,
+    ]);
+
+    row.getCell(6).numFmt = "0.00";
+    row.getCell(7).numFmt = "0.00";
+  });
+
+  styleWorksheet(policiesSheet);
+  adjustWorksheetSizing(policiesSheet);
+
   const stationsSheet = wb.addWorksheet("Stops");
   stationsSheet.addRow(["Stop", "Lat", "Long", "Stop_Name"]);
   for (const station of stationsSheetRows) {
@@ -815,6 +861,196 @@ export async function GET(req: NextRequest) {
   styleWorksheet(availabilitySheet);
   adjustWorksheetSizing(availabilitySheet);
 
+  const logsRows: Array<{
+    validationName: string;
+    description: string;
+    testedSheets: string;
+    solution: string;
+    numberOfViolations: number;
+  }> = [];
+
+  const timeValidationColor = "FFFFC7CE";
+  const vehicleValidationColor = "FFFFEB9C";
+  const timeToMinutes = (time: string) => {
+    const formatted = formatTime24Hour(time);
+    const match = formatted.match(/^(\d{2}):(\d{2})$/);
+    if (!match) return null;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    return hour * 60 + minute;
+  };
+  const highlightCells = (
+    row: ExcelJS.Row,
+    cellIndexes: number[],
+    color: string,
+  ) => {
+    cellIndexes.forEach((cellIndex) => {
+      const cell = row.getCell(cellIndex);
+      const existingFill = cell.fill as unknown as Record<string, unknown> | undefined;
+      const hasExistingColor = Boolean(existingFill?.fgColor);
+      if (hasExistingColor) return;
+
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: color },
+      };
+    });
+  };
+
+  const privateTimeCellIndexes = [
+    PRIVATE_COLUMNS.indexOf("readyFrom") + 1,
+    PRIVATE_COLUMNS.indexOf("shouldArrivebefore") + 1,
+  ];
+  const sharedTimeCellIndexes = [
+    SHARED_COLUMNS.indexOf("readyFrom") + 1,
+    SHARED_COLUMNS.indexOf("shouldArrivebefore") + 1,
+  ];
+  const privateRideTypeCellIndex = PRIVATE_COLUMNS.indexOf("Ride_Type") + 1;
+  const sharedRideTypeCellIndex = SHARED_COLUMNS.indexOf("Ride_Type") + 1;
+
+  const availabilityStartTimes = availabilityRows
+    .map((row) => timeToMinutes(row.startTime))
+    .filter((time): time is number => time !== null);
+  const availabilityEndTimes = availabilityRows
+    .map((row) => timeToMinutes(row.endTime))
+    .filter((time): time is number => time !== null);
+
+  if (availabilityStartTimes.length > 0 && availabilityEndTimes.length > 0) {
+    const earliestAvailability = Math.min(...availabilityStartTimes);
+    const latestAvailability = Math.max(...availabilityEndTimes);
+    let timeViolationsCount = 0;
+
+    const validateRequestTimes = (
+      sheet: ExcelJS.Worksheet,
+      rows: Array<PrivateRow | SharedRow>,
+    ) => {
+      rows.forEach((request, index) => {
+        const readyFrom = timeToMinutes(request.readyFrom);
+        const shouldArriveBefore = timeToMinutes(request.shouldArrivebefore);
+        if (
+          (readyFrom !== null && readyFrom < earliestAvailability) ||
+          (shouldArriveBefore !== null &&
+            shouldArriveBefore > latestAvailability)
+        ) {
+          const row = sheet.getRow(index + 2);
+          const targetCellIndexes =
+            sheet.name === "Private_Requests"
+              ? privateTimeCellIndexes
+              : sharedTimeCellIndexes;
+          highlightCells(row, targetCellIndexes, timeValidationColor);
+          timeViolationsCount += 1;
+        }
+      });
+    };
+
+    validateRequestTimes(privateSheet, privateRows);
+    validateRequestTimes(sharedSheet, sharedRows);
+
+    if (timeViolationsCount > 0) {
+      logsRows.push({
+        validationName: "Driver availability time window",
+        description: `Requests must be between ${formatTime24Hour(
+          availabilityRows.find(
+            (row) => timeToMinutes(row.startTime) === earliestAvailability,
+          )?.startTime,
+        )} and ${formatTime24Hour(
+          availabilityRows.find(
+            (row) => timeToMinutes(row.endTime) === latestAvailability,
+          )?.endTime,
+        )}. Violating request rows are red.`,
+        testedSheets: "Trip_Requests, Private_Requests, Shared_Requests",
+        solution: "Adjust the request time or add driver availability covering the request.",
+        numberOfViolations: timeViolationsCount,
+      });
+    }
+  }
+
+  const availableVehicles = availabilityRows.reduce(
+    (counts, row) => {
+      if (row.vehicleType >= 1 && row.vehicleType <= 4) {
+        counts[row.vehicleType] += 1;
+      }
+      return counts;
+    },
+    { 1: 0, 2: 0, 3: 0, 4: 0 } as Record<number, number>,
+  );
+  const vehicleTypeForRideType: Record<number, number> = {
+    1: 1,
+    2: 2,
+    3: 2,
+    4: 3,
+    5: 4,
+  };
+  let vehicleViolationsCount = 0;
+
+  const validateVehicleAvailability = (
+    sheet: ExcelJS.Worksheet,
+    rows: Array<PrivateRow | SharedRow>,
+  ) => {
+    rows.forEach((request, index) => {
+      const vehicleType = vehicleTypeForRideType[request.Ride_Type];
+      if (vehicleType && availableVehicles[vehicleType] > 0) {
+        availableVehicles[vehicleType] -= 1;
+        return;
+      }
+
+      const row = sheet.getRow(index + 2);
+      const targetCellIndex =
+        sheet.name === "Private_Requests"
+          ? privateRideTypeCellIndex
+          : sharedRideTypeCellIndex;
+      highlightCells(row, [targetCellIndex], vehicleValidationColor);
+      vehicleViolationsCount += 1;
+    });
+  };
+
+  validateVehicleAvailability(privateSheet, privateRows);
+  validateVehicleAvailability(sharedSheet, sharedRows);
+
+  if (vehicleViolationsCount > 0) {
+    logsRows.push({
+      validationName: "Vehicle availability capacity",
+      description:
+        "Each request requires one matching available vehicle. Ride types 2 and 3 both require vehicle type 2. Unmatched request rows are amber.",
+      testedSheets: "Trip_Requests, Private_Requests, Shared_Requests",
+      solution:
+        "Add matching vehicle availability or reduce the number of requests for that vehicle type.",
+      numberOfViolations: vehicleViolationsCount,
+    });
+  }
+
+  if (logsRows.length > 0) {
+    const logsSheet = wb.addWorksheet("logs");
+    logsSheet.addRow([
+      "Validation Name",
+      "Description",
+      "Tested Sheet/s",
+      "Solution",
+      "numberOfViolations",
+    ]);
+
+    logsRows.forEach((logRow) => {
+      const row = logsSheet.addRow([
+        logRow.validationName,
+        logRow.description,
+        logRow.testedSheets,
+        logRow.solution,
+        logRow.numberOfViolations,
+      ]);
+      highlightCells(
+        row,
+        [1, 2, 3, 4, 5],
+        logRow.validationName === "Driver availability time window"
+          ? timeValidationColor
+          : vehicleValidationColor,
+      );
+    });
+
+    styleWorksheet(logsSheet);
+    adjustWorksheetSizing(logsSheet);
+  }
+
   const outputJson = {
     privateRideRequests: privateRows,
     sharedRideRequests: sharedRows,
@@ -835,11 +1071,11 @@ export async function GET(req: NextRequest) {
   };
 
   const zip = new JSZip();
+  const xlsxFileName = logsRows.length > 0
+    ? `match-data-${targetDate}-V.xlsx`
+    : `match-data-${targetDate}.xlsx`;
   zip.file("match-data.json", JSON.stringify(outputJson, null, 2));
-  zip.file(
-    `match-data-${targetDate}.xlsx`,
-    Buffer.from(await wb.xlsx.writeBuffer()),
-  );
+  zip.file(xlsxFileName, Buffer.from(await wb.xlsx.writeBuffer()));
 
   const body = await zip.generateAsync({ type: "blob" });
   return new NextResponse(body, {
