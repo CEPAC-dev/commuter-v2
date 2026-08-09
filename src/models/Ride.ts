@@ -25,7 +25,7 @@ export const AssignedDriverSchema = new Schema(
 
 const RidePassengerSchema = new Schema(
   {
-    tripId: { type: Types.ObjectId, ref: "Trip", required: true, index: true },
+    tripId: { type: Types.ObjectId, ref: "Trip", required: true },
     userId: { type: Types.ObjectId, ref: "User", required: true },
     pickup: { type: PointSchema, required: true },
     dropoff: { type: PointSchema, required: true },
@@ -66,14 +66,14 @@ const RideSchema = new Schema(
     availabilityId: {
       type: Types.ObjectId,
       ref: "Availability",
-      required: true,
-      index: true,
+      required: false,
+      default: null,
     },
     driverId: {
       type: Types.ObjectId,
       ref: "User",
-      required: true,
-      index: true,
+      required: false,
+      default: null,
     },
     assignedDriver: {
       type: AssignedDriverSchema,
@@ -114,7 +114,7 @@ const RideSchema = new Schema(
 );
 
 RideSchema.index({ driverId: 1, date: -1 });
-RideSchema.index({ availabilityId: 1 }); // add { unique: true } if one availability can only ever produce one ride
+RideSchema.index({ availabilityId: 1 });
 RideSchema.index({ "passengers.tripId": 1 });
 
 export type RideDoc = InferSchemaType<typeof RideSchema>;
