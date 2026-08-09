@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useClientLocale } from "@/lib/locale.client";
 import L from "leaflet";
 import { Crosshair, Loader2, MapPin, Search, X } from "lucide-react";
 import OsmMapCanvas, { type OsmPoint } from "./OsmMapCanvas";
@@ -44,6 +45,7 @@ export default function LocationPickerMapOsm({
   onChange,
   error,
 }: Props) {
+  const { t } = useClientLocale();
   const [map, setMap] = useState<L.Map | null>(null);
   const [query, setQuery] = useState(name);
   const [results, setResults] = useState<
@@ -152,19 +154,10 @@ export default function LocationPickerMapOsm({
           ) : (
             <Search size={16} color="#9CA3AF" />
           )}
-          <input
-            value={query}
-            onChange={(event) => handleSearch(event.target.value)}
-            placeholder="Search for your default pickup area..."
-            autoComplete="off"
-            style={{
-              flex: 1,
-              border: 0,
-              outline: 0,
-              fontFamily: "inherit",
-              fontSize: 13,
-            }}
-          />
+              <LocalizedSearchInput
+                value={query}
+                onChange={(value: string) => handleSearch(value)}
+              />
           {query && (
             <button
               type="button"
@@ -287,5 +280,31 @@ export default function LocationPickerMapOsm({
         )}
       </div>
     </div>
+  );
+}
+
+function LocalizedSearchInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { t, dir } = useClientLocale();
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={t("addresses.select_placeholder")}
+      autoComplete="off"
+      style={{
+        flex: 1,
+        border: 0,
+        outline: 0,
+        fontFamily: "inherit",
+        fontSize: 13,
+        direction: dir,
+      }}
+    />
   );
 }

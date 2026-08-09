@@ -146,6 +146,13 @@ html[dir="rtl"] nav * {
   text-align: left;
 }
 
+/* Force English-style header layout for components that need exact LTR structure */
+.force-ltr,
+.force-ltr * {
+  direction: ltr !important;
+  text-align: left !important;
+}
+
 /* ── Nearby commuters chip animation ───────────────────── */
 @keyframes slideInLeft {
   from {

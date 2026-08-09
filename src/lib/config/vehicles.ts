@@ -95,8 +95,8 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     trip_type: 5,
     buffer: 45,
     window: 30,
-    capacity: 9,
-    occupancy: 9,
+    capacity: 10,
+    occupancy: 10,
     min_occupancy: 8,
     minimum_charge: 50, // EGP minimum charge for microbus rides
   },

@@ -18,6 +18,7 @@ import AppHeader from "@/components/layout/AppHeader";
 import BottomSheet from "@/components/shared/BottomSheet";
 import EmptyState from "@/components/shared/EmptyState";
 import AddressInput from "@/components/landing/AddressInput";
+import { useClientLocale } from "@/lib/locale.client";
 const AvailabilityMap = dynamic(
   () => import("@/components/availability/AvailabilityMapOsm"),
   { ssr: false },
@@ -93,6 +94,7 @@ export default function AvailabilityClient({
   initialRecords: AvailabilityRecord[];
   verificationStatus: string;
 }) {
+  const { t } = useClientLocale();
   // const isVerified = verificationStatus === "verified";
   const isVerified = "verified";
   const [records, setRecords] = useState(initialRecords);
@@ -167,13 +169,11 @@ export default function AvailabilityClient({
     }
     if (isOutsideMorningWindow(nextStartTime)) {
       setStartTime("");
-      setError(
-        "Start time must be between 06:00 AM and 12:00 AM (next day). Please reselect a valid time.",
-      );
+      setError(t("availability.error.time_window"));
       return;
     }
     setStartTime(nextStartTime);
-    if (error.includes("Please reselect a valid time.")) setError("");
+    setError("");
   }
 
   function handleEndTimeChange(nextEndTime: string) {
@@ -183,26 +183,24 @@ export default function AvailabilityClient({
     }
     if (isOutsideMorningWindow(nextEndTime)) {
       setEndTime("");
-      setError(
-        "End time must be between 06:00 AM and 12:00 AM (next day). Please reselect a valid time.",
-      );
+      setError(t("availability.error.time_window"));
       return;
     }
     setEndTime(nextEndTime);
-    if (error.includes("Please reselect a valid time.")) setError("");
+    setError("");
   }
 
   async function handleSubmit() {
     if (!selectedDates.length) {
-      setError("Select at least one date.");
+      setError(t("availability.error.select_date"));
       return;
     }
     if (!startLocation || !endLocation) {
-      setError("Start and end locations are required.");
+      setError(t("availability.error.locations_required"));
       return;
     }
     if (!startTime || !endTime) {
-      setError("Start and end time are required.");
+      setError(t("availability.error.times_required"));
       return;
     }
     if (
@@ -211,13 +209,11 @@ export default function AvailabilityClient({
       endTime < MORNING_TIME_MIN ||
       endTime > MORNING_TIME_MAX
     ) {
-      setError(
-        "Start and end time must be between 06:00 AM and 12:00 AM (next day).",
-      );
+      setError(t("availability.error.time_window"));
       return;
     }
     if (startTime >= endTime) {
-      setError("End time must be after start time.");
+      setError(t("availability.error.end_after_start"));
       return;
     }
 
@@ -237,7 +233,7 @@ export default function AvailabilityClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Could not create availability.");
+        setError(data.error ?? t("availability.error.create_failed"));
         setSaving(false);
         return;
       }
@@ -247,7 +243,7 @@ export default function AvailabilityClient({
       setModalOpen(false);
       resetForm();
     } catch {
-      setError("Network error. Please retry.");
+      setError(t("error.network"));
     } finally {
       setSaving(false);
     }
@@ -297,10 +293,10 @@ export default function AvailabilityClient({
                 letterSpacing: "-0.02em",
               }}
             >
-              Availability
+              {t("availability.title")}
             </h1>
             <p style={{ fontSize: 14, color: "#5A6A7A", margin: 0 }}>
-              Set when you&apos;re available to drive.
+              {t("availability.description")}
             </p>
           </div>
           {records.length > 0 && (
@@ -326,7 +322,7 @@ export default function AvailabilityClient({
               }}
             >
               <Plus size={16} aria-hidden="true" />
-              Add availability
+              {t("availability.add_button")}
             </button>
           )}
         </div>
@@ -343,7 +339,7 @@ export default function AvailabilityClient({
               color: "#8A6D00",
             }}
           >
-            Your profile must be verified before you can add availability.
+            {t("availability.verification_required")}
           </div>
         )}
 
@@ -362,8 +358,8 @@ export default function AvailabilityClient({
           >
             <EmptyState
               icon="📅"
-              title="No availability yet"
-              description="Add the dates, locations and hours you're available to drive."
+              title={t("availability.empty_title")}
+              description={t("availability.empty_description")}
             />
             <button
               type="button"
@@ -386,7 +382,7 @@ export default function AvailabilityClient({
               }}
             >
               <Plus size={18} aria-hidden="true" />
-              Add availability
+              {t("availability.add_button")}
             </button>
           </div>
         ) : (
@@ -463,8 +459,8 @@ export default function AvailabilityClient({
                     )}&body=${encodeURIComponent(
                       `I want to change/cancel my availability on ${r.date} (${r.startTime}\u2013${r.endTime}).`,
                     )}`}
-                    aria-label="Contact admin to change locked availability"
-                    title="Locked \u2014 contact admin to change"
+                    aria-label={t("availability.locked_title")}
+                    title={t("availability.locked_title")}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -484,13 +480,14 @@ export default function AvailabilityClient({
                   >
                     <Lock size={13} aria-hidden="true" />
                     <Mail size={13} aria-hidden="true" />
+                    {t("availability.locked_cta")}
                   </a>
                 ) : (
                   <button
                     type="button"
                     onClick={() => handleDelete(r._id)}
                     disabled={deletingId === r._id}
-                    aria-label="Delete availability"
+                    aria-label={t("availability.delete_availability")}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -524,7 +521,7 @@ export default function AvailabilityClient({
           setModalOpen(false);
           resetForm();
         }}
-        title="Add availability"
+        title={t("availability.modal_title")}
       >
         <div
           style={{
@@ -557,7 +554,7 @@ export default function AvailabilityClient({
           </div>
           <div>
             <label style={labelStyle}>
-              Available days{" "}
+              {t("availability.days_label")}{" "}
               <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                 *
               </span>
@@ -594,13 +591,13 @@ export default function AvailabilityClient({
 
           <div>
             <label style={labelStyle}>
-              Start location{" "}
+              {t("availability.start_location")}{" "}
               <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                 *
               </span>
             </label>
             <AddressInput
-              placeholder="Where do you start?"
+              placeholder={t("availability.start_location_placeholder")}
               value={startLocation}
               onChange={setStartLocation}
               icon={<MapPin size={17} aria-hidden="true" />}
@@ -630,7 +627,7 @@ export default function AvailabilityClient({
                 ) : (
                   <Navigation size={12} aria-hidden="true" />
                 )}
-                Use my current location
+                {t("availability.use_current_location")}
               </button>
               <button
                 type="button"
@@ -652,20 +649,22 @@ export default function AvailabilityClient({
                 }}
               >
                 <MapPin size={12} aria-hidden="true" />
-                {picking === "start" ? "Picking…" : "Pin on map"}
+                {picking === "start"
+                  ? t("availability.picking")
+                  : t("availability.pin_on_map")}
               </button>
             </div>
           </div>
 
           <div>
             <label style={labelStyle}>
-              End location{" "}
+              {t("availability.end_location")}{" "}
               <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                 *
               </span>
             </label>
             <AddressInput
-              placeholder="Where do you end?"
+              placeholder={t("availability.end_location_placeholder")}
               value={endLocation}
               onChange={setEndLocation}
               icon={<Flag size={17} aria-hidden="true" />}
@@ -695,7 +694,7 @@ export default function AvailabilityClient({
                 ) : (
                   <Navigation size={12} aria-hidden="true" />
                 )}
-                Use my current location
+                {t("availability.use_current_location")}
               </button>
               <button
                 type="button"
@@ -717,7 +716,9 @@ export default function AvailabilityClient({
                 }}
               >
                 <Flag size={12} aria-hidden="true" />
-                {picking === "end" ? "Picking…" : "Pin on map"}
+                {picking === "end"
+                  ? t("availability.picking")
+                  : t("availability.pin_on_map")}
               </button>
             </div>
           </div>
@@ -727,7 +728,7 @@ export default function AvailabilityClient({
           >
             <div>
               <label htmlFor="a-start-time" style={labelStyle}>
-                Start time{" "}
+                {t("availability.start_time")}{" "}
                 <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                   *
                 </span>
@@ -744,7 +745,7 @@ export default function AvailabilityClient({
             </div>
             <div>
               <label htmlFor="a-end-time" style={labelStyle}>
-                End time{" "}
+                {t("availability.end_time")}{" "}
                 <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                   *
                 </span>
@@ -794,7 +795,7 @@ export default function AvailabilityClient({
             {saving && (
               <Loader2 size={18} className="spin" aria-hidden="true" />
             )}
-            {saving ? "Saving…" : "Save availability"}
+            {saving ? t("action.saving") : t("availability.save")}
           </button>
         </div>
       </BottomSheet>

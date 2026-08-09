@@ -12,8 +12,6 @@ import {
 import { getSession } from "@/lib/auth/session";
 import { getDriverRide } from "@/lib/services/rideService";
 import { getUserTrip, getDriverTrip } from "@/lib/services/trips";
-import { VEHICLES } from "@/lib/config/vehicles";
-import type { VehicleKey } from "@/lib/config/vehicles";
 import AppHeader from "@/components/layout/AppHeader";
 import RouteMap from "@/components/shared/RouteMapOsmLoader";
 import DriverCard from "@/components/trips/DriverCard";
@@ -29,26 +27,12 @@ import type {
   TripStatus,
 } from "@/types/booking";
 import type { GeoPoint, StationSelection } from "@/types/geo";
+import { translate, formatDate, formatTime, formatEgp, localeDirection } from "@/lib/i18n";
+import { getServerLocale } from "@/lib/i18n/server";
 export const metadata = { title: "Trip detail — Commuter" };
 export const dynamic = "force-dynamic";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-function to12h(hhmm: string): string {
-  if (!hhmm) return "—";
-  const [h, m] = hhmm.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-
-function prettyDate(date: string): string {
-  return new Date(`${date}T12:00:00`).toLocaleDateString("en-EG", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
 
 const PAY_PILL: Record<
   PaymentStatus,
@@ -283,6 +267,9 @@ export default async function TripDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const locale = await getServerLocale();
+  const to12h = (hhmm: string) => formatTime(locale, hhmm);
+
   const session = await getSession();
   const { id } = await params;
   if (!session) redirect(`/login?redirect=/my-trips/${id}`);
@@ -303,8 +290,7 @@ export default async function TripDetailPage({
 
   if (!trip) notFound();
 
-  const vLabel =
-    VEHICLES[trip.vehicleType as VehicleKey]?.label ?? trip.vehicleType;
+  const vLabel = translate(locale, `vehicles.${trip.vehicleType}`);
   const paymentStatus = (trip.paymentStatus as PaymentStatus) ?? "pending";
   const status = (trip.status as TripStatus) ?? "pending_payment";
   const isOngoing = status === "active" || status === "matched";
@@ -313,7 +299,7 @@ export default async function TripDetailPage({
   );
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
+    <div dir={localeDirection(locale)} style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
       <AppHeader
         authed
         email={session.email}
@@ -339,7 +325,7 @@ export default async function TripDetailPage({
             }}
           >
             <CalendarDays size={14} aria-hidden="true" />
-            Trip #{trip.tripNumber} · {prettyDate(trip.date)}
+            {translate(locale, "my_trips.ride_number", { rideNumber: trip.tripNumber })} · {formatDate(locale, trip.date)}
           </span>
           <div
             style={{
@@ -350,9 +336,21 @@ export default async function TripDetailPage({
               gap: 10,
             }}
           >
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Pill {...(PAY_PILL[paymentStatus] ?? PAY_PILL.pending)} />
-              <Pill {...(STATUS_PILL[status] ?? STATUS_PILL.pending_payment)} />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Pill {...({ ...(PAY_PILL[paymentStatus] ?? PAY_PILL.pending), label: translate(locale, `payments.${paymentStatus}`) })} />
+              <Pill {...({ ...(STATUS_PILL[status] ?? STATUS_PILL.pending_payment), label: translate(locale, ((): string => {
+                const map: Record<string, string> = {
+                  pending_payment: "pending_payment",
+                  submitted: "upcoming",
+                  matched: "ongoing",
+                  confirmed: "upcoming",
+                  active: "ongoing",
+                  completed: "previous",
+                  cancelled: "previous",
+                  time_out: "previous",
+                };
+                return `status.${map[status] ?? "previous"}`;
+              })()) })} />
             </div>
             <span
               style={{
@@ -362,7 +360,7 @@ export default async function TripDetailPage({
                 fontVariantNumeric: "tabular-nums",
               }}
             >
-              {trip.priceEgp} EGP
+              {formatEgp(locale, trip.priceEgp)}
             </span>
           </div>
           {status === "completed" && !isDriver && (
@@ -416,12 +414,12 @@ export default async function TripDetailPage({
             >
               <Detail
                 icon={<Route size={15} color="#0B1E3D" />}
-                label="Ride type"
-                value={trip.rideType === "shared" ? "Shared" : "Private"}
+                label={translate(locale, "ride_type.label")}
+                value={translate(locale, `ride_type.${trip.rideType}`)}
               />
               <Detail
                 icon={<Car size={15} color="#0B1E3D" />}
-                label="Vehicle"
+                label={translate(locale, "my_requests.vehicle")}
                 value={vLabel}
               />
             </div>
@@ -431,6 +429,7 @@ export default async function TripDetailPage({
         {/* Private ride: origin, stops, destination, distance/time breakdown */}
         {trip.rideType === "private" && (
           <PrivateRideDetails
+            locale={locale}
             pickup={trip.pickup}
             dropoff={trip.dropoff}
             pickupTime={trip.pickupTime}
@@ -446,6 +445,7 @@ export default async function TripDetailPage({
         {/* Shared ride: origin/station, destination/station, distance/time breakdown */}
         {trip.rideType === "shared" && (
           <SharedRideDetails
+            locale={locale}
             pickup={trip.pickup}
             dropoff={trip.dropoff}
             pickupTime={trip.pickupTime}
@@ -478,7 +478,7 @@ export default async function TripDetailPage({
                   ? trip.seatNumbers
                   : [1];
 
-            return (
+              return (
               <VehicleSeatMap
                 ride={trip.rideDetails}
                 vehicleType={trip.vehicleType}
@@ -536,7 +536,7 @@ export default async function TripDetailPage({
                 letterSpacing: "0.04em",
               }}
             >
-              Passenger stops
+                {translate(locale, "my_trips.passenger_stops")}
             </p>
             {distinctPassengers.map((p, i) => (
               <div
@@ -555,7 +555,7 @@ export default async function TripDetailPage({
                     color: "#5A6A7A",
                   }}
                 >
-                  Passenger {i + 1}
+                  {translate(locale, "my_trips.passenger_singular")} {i + 1}
                 </p>
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 4 }}
@@ -608,7 +608,10 @@ export default async function TripDetailPage({
             marginTop: 20,
           }}
         >
-          Requested {new Date(trip.createdAt).toLocaleString("en-EG")}
+          {translate(locale, "my_trips.requested_at").replace(
+            "{datetime}",
+            new Date(trip.createdAt).toLocaleString("en-EG"),
+          )}
         </p>
       </main>
     </div>

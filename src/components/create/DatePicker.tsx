@@ -1,7 +1,10 @@
 "use client";
 import { Calendar, Check } from "lucide-react";
 import { format } from "date-fns";
+import { ar, enUS } from "date-fns/locale";
 import { bookingWindow } from "@/lib/time/bookingDates";
+import { useClientLocale } from "@/lib/locale.client";
+import { toArabicDigits } from "@/lib/i18n";
 
 interface Props {
   value: string[]; // selected "YYYY-MM-DD" dates
@@ -10,6 +13,8 @@ interface Props {
 
 export default function DatePicker({ value, onChange }: Props) {
   const days = bookingWindow();
+  const { t, locale } = useClientLocale();
+  const dateLocale = locale === "ar" ? ar : enUS;
 
   function toggle(day: string) {
     if (value.includes(day)) {
@@ -29,11 +34,11 @@ export default function DatePicker({ value, onChange }: Props) {
           margin: "0 0 10px",
         }}
       >
-        Request date(s)
+        {t("create.request_dates")}
       </p>
       <div
         role="group"
-        aria-label="Select one or more booking dates"
+        aria-label={t("create.select_dates_aria")}
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(84px, 1fr))",
@@ -43,6 +48,8 @@ export default function DatePicker({ value, onChange }: Props) {
         {days.map((day) => {
           const d = new Date(`${day}T00:00:00`);
           const selected = value.includes(day);
+          const weekday = format(d, "EEE", { locale: dateLocale });
+          const monthDay = format(d, "MMM d", { locale: dateLocale });
           return (
             <button
               key={day}
@@ -79,17 +86,17 @@ export default function DatePicker({ value, onChange }: Props) {
                 aria-hidden="true"
               />
               <span style={{ fontSize: 11, fontWeight: 600 }}>
-                {format(d, "EEE")}
+                {weekday}
               </span>
               <span style={{ fontSize: 13, fontWeight: 800 }}>
-                {format(d, "MMM d")}
+                {locale === "ar" ? toArabicDigits(monthDay) : monthDay}
               </span>
             </button>
           );
         })}
       </div>
       <p style={{ fontSize: 12, color: "#5A6A7A", margin: "8px 0 0" }}>
-        Pick one or more days — trips repeat on each selected date.
+        {t("create.pick_days_note")}
       </p>
       {value.length === days.length && days.every((day) => value.includes(day)) && (
         <p

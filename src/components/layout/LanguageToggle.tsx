@@ -1,8 +1,9 @@
 // @ts-nocheck
 "use client";
-import { useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
+import { Globe } from "lucide-react";
+import { setLocaleCookie, useClientLocale } from "@/lib/locale.client";
 
 interface LanguageToggleProps {
   inverted?: boolean; // true = white text/border (for dark backgrounds)
@@ -11,13 +12,13 @@ interface LanguageToggleProps {
 export default function LanguageToggle({
   inverted = false,
 }: LanguageToggleProps) {
-  const locale = useLocale();
+  const { locale } = useClientLocale();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   function toggle() {
     const next = locale === "en" ? "ar" : "en";
-    document.cookie = `NEXT_LOCALE=${next}; path=/; max-age=31536000`;
+    setLocaleCookie(next);
     startTransition(() => router.refresh());
   }
 
@@ -41,6 +42,9 @@ export default function LanguageToggle({
         opacity: isPending ? 0.5 : 1,
         fontFamily: "inherit",
         letterSpacing: "0.03em",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
       }}
       onMouseEnter={(e) => {
         (e.target as HTMLButtonElement).style.borderColor = "#00C2A8";
@@ -52,7 +56,7 @@ export default function LanguageToggle({
       }}
       aria-label={locale === "en" ? "Switch to Arabic" : "Switch to English"}
     >
-      {locale === "en" ? "AR" : "EN"}
+      <Globe size={18} />
     </button>
   );
 }

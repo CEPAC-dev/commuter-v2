@@ -1,3 +1,4 @@
+import { getServerLocale } from "@/lib/i18n/server";
 import { redirect, notFound } from "next/navigation";
 import {
   Car,
@@ -11,6 +12,7 @@ import {
 import { getSession } from "@/lib/auth/session";
 import { expireStaleRequest, getUserRequest } from "@/lib/services/requests";
 import { VEHICLES } from "@/lib/config/vehicles";
+import { translate } from "@/lib/locale";
 import type { VehicleKey } from "@/lib/config/vehicles";
 import AppHeader from "@/components/layout/AppHeader";
 import RouteMap from "@/components/shared/RouteMapOsmLoader";
@@ -110,6 +112,7 @@ export default async function RequestDetailPage({
   const detail = await getUserRequest(session.userId, id);
   if (!detail) notFound();
 
+  const locale = await getServerLocale();
   const { request, trips: rawTrips, walletBalance } = detail;
   const { dates, amountEgp, paymentStatus, status, createdAt } = request;
   // Group materialized trips by date for detail display
@@ -250,7 +253,10 @@ export default async function RequestDetailPage({
                             letterSpacing: "0.05em",
                           }}
                         >
-                          Trip {t.cycleIndex + 1}
+                          {translate(locale, "my_requests.trip").replace(
+                            "{tripNumber}",
+                            String(t.cycleIndex + 1),
+                          )}
                         </span>
                         <span
                           style={{
@@ -349,45 +355,53 @@ export default async function RequestDetailPage({
                       >
                         <Detail
                           icon={<Car size={15} color="#0B1E3D" />}
-                          label="Vehicle"
-                          value={`${vLabel}  (${t.rideType})`}
+                          label={translate(locale, "my_requests.vehicle")}
+                          value={`${vLabel}  (${translate(locale, `ride_type.${t.rideType}`)})`}
                         />
                         <Detail
                           icon={<Users size={15} color="#0B1E3D" />}
-                          label="Extra passengers"
+                          label={translate(locale, "my_requests.extra_passengers")}
                           value={String(t.extraPassengers)}
                         />
                         <Detail
                           icon={<Clock size={15} color="#0B1E3D" />}
-                          label={t.rideType === "shared" ? "Estimated board station by" : "Pickup time"}
+                          label={
+                            t.rideType === "shared"
+                              ? translate(locale, "board_station_by")
+                              : translate(locale, "pickup")
+                          }
                           value={to12h(t.pickupTime)}
                         />
                         <Detail
                           icon={<Clock size={15} color="#0B1E3D" />}
-                          label={t.rideType === "shared" ? "Latest arrival time" : "Arrival time"}
+                          label={
+                            t.rideType === "shared"
+                              ? translate(locale, "latest_arrival_time")
+                              : translate(locale, "arrive")
+                          }
                           value={to12h(t.arrivalTime)}
                         />
                         <Detail
                           icon={<Route size={15} color="#0B1E3D" />}
-                          label="Distance"
+                          label={translate(locale, "my_requests.distance")}
                           value={`+${t.distanceKm} km`}
                         />
                         <Detail
                           icon={<Clock size={15} color="#0B1E3D" />}
-                          label="Drive time"
+                          label={translate(locale, "my_requests.drive_time")}
                           value={`+${t.durationMinutes} min`}
                         />
                         {t.rideType === "shared" && t.pickupStation && (
                           <Detail
                             icon={<MapPin size={15} color="#00C2A8" />}
-                            label="Pickup station"
+                            label={translate(locale, "my_requests.pickup_station")}
                             value={`${t.pickupStation.name} · ${t.walkingMinToStation ?? 0} min walk`}
                           />
                         )}
                         {t.rideType === "shared" && t.dropoffStation && (
                           <Detail
                             icon={<MapPin size={15} color="#E74C3C" />}
-                            label="Dropoff station"
+                            label={translate(locale, "my_requests.dropoff_station")}
                             value={`${t.dropoffStation.name} · ${t.walkingMinFromStation ?? 0} min walk`}
                           />
                         )}
@@ -398,10 +412,8 @@ export default async function RequestDetailPage({
                         <div className="mt-3">
                           <Detail
                             icon={<Notebook size={15} color="#0B1E3D" />}
-                            label="Note"
-                            value={
-                              "The exact Arrival time, Distance and Drive time will be calculated after a driver is assigned."
-                            }
+                            label={translate(locale, "my_requests.note")}
+                            value={translate(locale, "my_requests.note_description")}
                           />
                         </div>
                       ) : null}
@@ -432,7 +444,10 @@ export default async function RequestDetailPage({
             marginTop: 20,
           }}
         >
-          Requested {new Date(createdAt).toLocaleString("en-EG")}
+          {translate(locale, "my_requests.requested_at").replace(
+            "{datetime}",
+            new Date(createdAt).toLocaleString("en-EG"),
+          )}
         </p>
       </main>
     </div>

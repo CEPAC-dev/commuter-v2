@@ -13,6 +13,8 @@ import {
   Landmark,
   Smartphone,
 } from "lucide-react";
+import { useClientLocale } from "@/lib/locale.client";
+import { toArabicDigits } from "@/lib/i18n";
 
 interface Tx {
   id: string;
@@ -74,6 +76,63 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
 
   const role = data?.role ?? initialRole ?? "passenger";
   const isDriver = role === "driver";
+  const { locale, dir, t } = useClientLocale();
+
+  const formatAmountLabel = (key: string, value: number) =>
+    t(key).replace("{amount}", locale === "ar" ? toArabicDigits(value.toString()) : value.toString());
+
+  const formatLabel = (
+    key: string,
+    values: Record<string, string | number>,
+  ) =>
+    t(key).replace(/\{(\w+)\}/g, (_, placeholder) => {
+      const raw = String(values[placeholder] ?? "");
+      return locale === "ar" ? toArabicDigits(raw) : raw;
+    });
+
+  const formatNumber = (value: number) => {
+    const out = value.toLocaleString(locale === "ar" ? "ar-EG" : "en-EG");
+    return locale === "ar" ? toArabicDigits(out) : out;
+  };
+
+  const formatTransactionDescription = (transaction: Tx) => {
+    if (transaction.type === "earning") {
+      const match = transaction.description.match(/^Trip #(\d+) earnings$/);
+      if (match) {
+        return formatLabel("wallet.earning_description", {
+          tripNumber: match[1],
+        });
+      }
+      if (transaction.description === "Trip earnings") {
+        return t("wallet.earning_description_no_number");
+      }
+    }
+    if (transaction.type === "withdrawal") {
+      const match = transaction.description.match(/^Withdrawal to (.+)$/);
+      if (match) {
+        return formatLabel("wallet.withdrawal_to", {
+          destination: match[1],
+        });
+      }
+    }
+    if (transaction.type === "topup") {
+      const match = transaction.description.match(/^Wallet top-up of (\d+) EGP$/);
+      if (match) {
+        return formatLabel("wallet.topup_description", { amount: match[1] });
+      }
+    }
+    if (transaction.type === "payment") {
+      if (/^Payment for booking /.test(transaction.description)) {
+        return t("wallet.payment_description");
+      }
+    }
+    if (transaction.type === "refund") {
+      if (/already paid$/.test(transaction.description)) {
+        return t("wallet.refund_description");
+      }
+    }
+    return transaction.description;
+  };
 
   const load = useCallback(async () => {
     const res = await fetch("/api/wallet", { cache: "no-store" });
@@ -103,7 +162,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
     let cancelled = false;
     (async () => {
       if (topupId) {
-        setNotice("Confirming your top-up…");
+        setNotice(t("wallet.topup_confirming"));
         try {
           const res = await fetch("/api/wallet/topup/verify", {
             method: "POST",
@@ -113,14 +172,14 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
           const json = await res.json();
           if (!cancelled) {
             if (json.status === "paid")
-              setNotice("Top-up added to your wallet.");
+              setNotice(t("wallet.topup_added"));
             else if (json.status === "failed")
-              setNotice("Top-up failed. No charge was made.");
-            else setNotice("Top-up is still processing. Refresh shortly.");
+              setNotice(t("wallet.topup_failed"));
+            else setNotice(t("wallet.topup_processing"));
           }
         } catch {
           if (!cancelled)
-            setNotice("Could not confirm top-up. Try refreshing.");
+            setNotice(t("wallet.topup_confirm_error"));
         }
         // Clean the URL so a refresh doesn't re-verify.
         router.replace("/wallet");
@@ -148,7 +207,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
     setError("");
     const amt = Math.round(Number(amount));
     if (!isFinite(amt) || amt < 10 || amt > 5000) {
-      setError("Enter an amount between 10 and 5000 EGP.");
+      setError(t("wallet.enter_amount_range"));
       return;
     }
     setBusy(true);
@@ -160,13 +219,13 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "Could not start top-up.");
+        setError(json.error ?? t("wallet.topup_error"));
         setBusy(false);
         return;
       }
       window.location.href = json.sessionUrl;
     } catch {
-      setError("Network error. Please retry.");
+      setError(t("wallet.network_error"));
       setBusy(false);
     }
   }
@@ -194,7 +253,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setPayoutError(json.error ?? "Could not save payout method.");
+        setPayoutError(json.error ?? t("wallet.topup_error"));
         return;
       }
       const next: PayoutMethod = {
@@ -206,9 +265,9 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
       };
       setPayout(next);
       setPayoutDraft(next);
-      setNotice("Payout method saved.");
+      setNotice(t("wallet.saved_notice"));
     } catch {
-      setPayoutError("Network error. Please retry.");
+      setPayoutError(t("wallet.network_error"));
     } finally {
       setPayoutBusy(false);
     }
@@ -218,11 +277,11 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
     setWithdrawError("");
     const amt = Math.round(Number(withdrawAmount));
     if (!isFinite(amt) || amt < 50 || amt > 10000) {
-      setWithdrawError("Enter an amount between 50 and 10,000 EGP.");
+      setWithdrawError(t("wallet.enter_withdraw_range"));
       return;
     }
     if (!payout.payoutMethod) {
-      setWithdrawError("Save a payout method first.");
+      setWithdrawError(t("wallet.save_payout_first"));
       return;
     }
     setWithdrawBusy(true);
@@ -234,13 +293,13 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setWithdrawError(json.error ?? "Withdrawal failed.");
+        setWithdrawError(json.error ?? t("wallet.withdraw_error"));
         return;
       }
-      setNotice(json.message ?? "Withdrawal submitted.");
+      setNotice(json.message ?? t("wallet.saved_notice"));
       await load();
     } catch {
-      setWithdrawError("Network error. Please retry.");
+      setWithdrawError(t("wallet.network_error"));
     } finally {
       setWithdrawBusy(false);
     }
@@ -265,11 +324,17 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
     color: "#0B1E3D",
     marginBottom: 12,
     boxSizing: "border-box",
+    textAlign: "center",
   };
 
   return (
     <main
-      style={{ maxWidth: 640, margin: "0 auto", padding: "28px 20px 56px" }}
+      style={{
+        maxWidth: 640,
+        margin: "0 auto",
+        padding: "28px 20px 56px",
+        direction: dir,
+      }}
     >
       {/* Balance card */}
       <div
@@ -292,7 +357,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
         >
           <WalletIcon size={16} aria-hidden="true" />
           <span style={{ fontSize: 13, fontWeight: 600 }}>
-            {isDriver ? "Earnings balance" : "Wallet balance"}
+            {isDriver ? t("wallet.earnings_balance") : t("wallet.balance_label")}
           </span>
         </div>
         <div
@@ -303,7 +368,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          {data ? `${data.balanceEgp} EGP` : "—"}
+          {data ? formatNumber(data.balanceEgp) + " " + t("wallet.egp_suffix") : "—"}
         </div>
       </div>
 
@@ -334,17 +399,17 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                 margin: "0 0 14px",
               }}
             >
-              Payout method
+              {t("wallet.payout_method")}
             </h2>
             <p style={{ fontSize: 13, color: "#5A6A7A", margin: "0 0 14px" }}>
-              Where Kashier sends your withdrawals (mobile wallet or bank).
+              {t("wallet.payout_method_description")}
             </p>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
               {(
                 [
-                  ["mobile_wallet", "Mobile wallet", Smartphone],
-                  ["bank", "Bank account", Landmark],
+                  ["mobile_wallet", t("wallet.mobile_wallet"), Smartphone],
+                  ["bank", t("wallet.bank_account"), Landmark],
                 ] as const
               ).map(([key, label, Icon]) => (
                 <button
@@ -371,6 +436,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                     cursor: "pointer",
                     fontFamily: "inherit",
                     display: "flex",
+                    flexDirection: dir === "rtl" ? "row-reverse" : "row",
                     alignItems: "center",
                     justifyContent: "center",
                     gap: 6,
@@ -385,7 +451,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
             {payoutDraft.payoutMethod === "mobile_wallet" ? (
               <input
                 type="tel"
-                placeholder="01xxxxxxxxx"
+                placeholder={t("wallet.mobile_wallet_placeholder")}
                 value={payoutDraft.payoutMobile}
                 onChange={(e) =>
                   setPayoutDraft((p) => ({
@@ -395,14 +461,14 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                       .slice(0, 11),
                   }))
                 }
-                aria-label="Mobile wallet number"
+                aria-label={t("wallet.mobile_wallet_label")}
                 style={inputStyle}
               />
             ) : (
               <>
                 <input
                   type="text"
-                  placeholder="Bank name"
+                  placeholder={t("wallet.bank_name_placeholder")}
                   value={payoutDraft.payoutBankName}
                   onChange={(e) =>
                     setPayoutDraft((p) => ({
@@ -414,7 +480,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                 />
                 <input
                   type="text"
-                  placeholder="Account number"
+                  placeholder={t("wallet.account_number_placeholder")}
                   value={payoutDraft.payoutAccountNumber}
                   onChange={(e) =>
                     setPayoutDraft((p) => ({
@@ -426,7 +492,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                 />
                 <input
                   type="text"
-                  placeholder="Account holder name"
+                  placeholder={t("wallet.account_holder_placeholder")}
                   value={payoutDraft.payoutAccountHolder}
                   onChange={(e) =>
                     setPayoutDraft((p) => ({
@@ -460,9 +526,10 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                 fontSize: 14,
                 cursor: payoutBusy ? "not-allowed" : "pointer",
                 fontFamily: "inherit",
+                textAlign: "center",
               }}
             >
-              {payoutBusy ? "Saving…" : "Save payout method"}
+              {payoutBusy ? t("wallet.saving") : t("wallet.save_payout_method")}
             </button>
           </section>
 
@@ -475,15 +542,15 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                 margin: "0 0 14px",
               }}
             >
-              Withdraw earnings
+              {t("wallet.withdraw_earnings")}
             </h2>
-
             <div
               style={{
                 display: "flex",
                 gap: 8,
                 flexWrap: "wrap",
                 marginBottom: 12,
+                justifyContent: dir === "rtl" ? "flex-end" : "flex-start",
               }}
             >
               {WITHDRAW_PRESETS.map((p) => (
@@ -507,9 +574,13 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                     fontSize: 14,
                     cursor: "pointer",
                     fontFamily: "inherit",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    textAlign: "center",
                   }}
                 >
-                  {p}
+                  {formatNumber(p)}
                 </button>
               ))}
             </div>
@@ -520,7 +591,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
               max={10000}
               value={withdrawAmount}
               onChange={(e) => setWithdrawAmount(Number(e.target.value))}
-              aria-label="Withdrawal amount in EGP"
+              aria-label={t("wallet.withdraw_amount_label")}
               style={inputStyle}
             />
 
@@ -550,6 +621,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                     : "pointer",
                 fontFamily: "inherit",
                 display: "flex",
+                flexDirection: dir === "rtl" ? "row-reverse" : "row",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
@@ -561,8 +633,8 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                 <Banknote size={18} aria-hidden="true" />
               )}
               {withdrawBusy
-                ? "Processing…"
-                : `Withdraw ${withdrawAmount} EGP via Kashier`}
+                ? t("wallet.processing")
+                : formatAmountLabel("wallet.withdraw_button", withdrawAmount)}
             </button>
           </section>
         </>
@@ -576,7 +648,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
               margin: "0 0 14px",
             }}
           >
-            Add funds
+            {t("wallet.add_funds")}
           </h2>
 
           <div
@@ -585,6 +657,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
               gap: 8,
               flexWrap: "wrap",
               marginBottom: 12,
+              justifyContent: dir === "rtl" ? "flex-end" : "flex-start",
             }}
           >
             {PRESETS.map((p) => (
@@ -607,9 +680,12 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                   fontSize: 14,
                   cursor: "pointer",
                   fontFamily: "inherit",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                {p}
+                {formatNumber(p)}
               </button>
             ))}
           </div>
@@ -620,7 +696,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
             max={5000}
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value))}
-            aria-label="Top-up amount in EGP"
+            aria-label={t("wallet.topup_amount_label")}
             style={inputStyle}
           />
 
@@ -646,6 +722,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
               cursor: busy ? "not-allowed" : "pointer",
               fontFamily: "inherit",
               display: "flex",
+              flexDirection: dir === "rtl" ? "row-reverse" : "row",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
@@ -656,7 +733,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
             ) : (
               <Plus size={18} aria-hidden="true" />
             )}
-            {busy ? "Redirecting…" : `Charge ${amount} EGP`}
+            {busy ? t("wallet.redirecting") : formatAmountLabel("wallet.charge_button", amount)}
           </button>
         </section>
       )}
@@ -670,29 +747,29 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
           margin: "0 0 12px",
         }}
       >
-        History
+        {t("wallet.history_title")}
       </h2>
 
       {!data ? (
-        <p style={{ fontSize: 14, color: "#5A6A7A" }}>Loading…</p>
+        <p style={{ fontSize: 14, color: "#5A6A7A" }}>{t("wallet.loading")}</p>
       ) : data.transactions.length === 0 ? (
-        <p style={{ fontSize: 14, color: "#5A6A7A" }}>No transactions yet.</p>
+        <p style={{ fontSize: 14, color: "#5A6A7A" }}>{t("wallet.no_transactions")}</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {data.transactions.map((t) => {
+          {data.transactions.map((transaction) => {
             const isCredit =
-              t.type === "topup" || t.type === "refund" || t.type === "earning";
+              transaction.type === "topup" || transaction.type === "refund" || transaction.type === "earning";
             const Icon =
-              t.type === "topup" || t.type === "earning"
+              transaction.type === "topup" || transaction.type === "earning"
                 ? ArrowDownLeft
-                : t.type === "refund"
+                : transaction.type === "refund"
                   ? RotateCcw
-                  : t.type === "withdrawal"
+                  : transaction.type === "withdrawal"
                     ? Banknote
                     : ArrowUpRight;
             return (
               <div
-                key={t.id}
+                key={transaction.id}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -729,16 +806,19 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                       textOverflow: "ellipsis",
                     }}
                   >
-                    {t.description}
+                    {formatTransactionDescription(transaction)}
                   </div>
                   <div style={{ fontSize: 12, color: "#5A6A7A" }}>
-                    {new Date(t.createdAt).toLocaleString("en-EG", {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                    {t.status !== "completed" ? ` · ${t.status}` : ""}
+                    {new Date(transaction.createdAt).toLocaleString(
+                      locale === "ar" ? "ar-EG" : "en-EG",
+                      {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      },
+                    )}
+                    {transaction.status !== "completed" ? ` · ${t(`wallet.status.${transaction.status}`)}` : ""}
                   </div>
                 </div>
                 <span
@@ -750,7 +830,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                   }}
                 >
                   {isCredit ? "+" : "−"}
-                  {t.amountEgp}
+                  {formatNumber(Math.abs(transaction.amountEgp))}
                 </span>
               </div>
             );

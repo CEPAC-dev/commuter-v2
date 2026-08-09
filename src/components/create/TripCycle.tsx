@@ -9,6 +9,8 @@ import {
   Info,
   RotateCcw,
 } from "lucide-react";
+import { useClientLocale } from "@/lib/locale.client";
+import { formatTime, formatDistanceKm, formatMinutes } from "@/lib/i18n";
 import AddressInput from "@/components/landing/AddressInput";
 import {
   VEHICLES,
@@ -247,11 +249,13 @@ function CounterField({
   value,
   max,
   onChange,
+  t,
 }: {
   label: string;
   value: number;
   max: number;
   onChange: (value: number) => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   return (
     <div>
@@ -265,7 +269,7 @@ function CounterField({
           type="button"
           onClick={() => onChange(Math.max(0, value - 1))}
           disabled={value <= 0}
-          aria-label={`Decrease ${label.toLowerCase()}`}
+          aria-label={t("create.decrease_field_aria", { label })}
           style={counterButtonStyle(value <= 0)}
         >
           −
@@ -277,7 +281,7 @@ function CounterField({
           type="button"
           onClick={() => onChange(Math.min(max, value + 1))}
           disabled={value >= max}
-          aria-label={`Increase ${label.toLowerCase()}`}
+          aria-label={t("create.increase_field_aria", { label })}
           style={counterButtonStyle(value >= max)}
         >
           +
@@ -292,11 +296,13 @@ function StationOptions({
   options,
   selectedId,
   onSelect,
+  locale,
 }: {
   label: string;
   options: StationOption[];
   selectedId: number | undefined;
   onSelect: (stationId: number) => void;
+  locale: "en" | "ar";
 }) {
   if (!options.length) return null;
 
@@ -337,7 +343,7 @@ function StationOptions({
               {option.direction ? ` (${option.direction})` : ""}
             </strong>
             <span style={{ marginLeft: "auto", color: "#5A6A7A" }}>
-              {option.distanceKm.toFixed(2)} km · ~{option.walkingMin} min walk
+              {formatDistanceKm(locale, option.distanceKm)} · ~{formatMinutes(locale, option.walkingMin)}
             </span>
           </label>
         );
@@ -403,6 +409,7 @@ export default function TripCycle({
   const [stopError, setStopError] = useState("");
   const [timeError, setTimeError] = useState<string | null>(null);
   const [locating, setLocating] = useState<"pickup" | "dropoff" | null>(null);
+  const { t, locale } = useClientLocale();
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
   const previousStopErrorRef = useRef<string | null>(null);
@@ -882,7 +889,7 @@ export default function TripCycle({
     }
     if (isOutsideMorningWindow(nextArrivalTime)) {
       setTimeError(
-        "Arrival time must be between 06:00 AM and 12:00 AM (next day). Please reselect a valid time.",
+        t("create.arrival_window_error"),
       );
       onChange({ ...data, arrivalTime: "", pickupTime: "" });
       return;
@@ -899,7 +906,7 @@ export default function TripCycle({
     }
     if (isOutsideMorningWindow(nextPickupTime)) {
       setTimeError(
-        "Pickup time must be between 06:00 AM and 12:00 AM (next day). Please reselect a valid time.",
+        t("create.pickup_window_error"),
       );
       set("pickupTime", "");
       return;
@@ -952,7 +959,7 @@ export default function TripCycle({
       data.pickup.lat === data.dropoff.lat &&
       data.pickup.lng === data.dropoff.lng
     )
-      return "Pickup and dropoff cannot be the same location.";
+      return t("create.pickup_dropoff_same_error");
     // Use actual route distance once known; straight-line only as a pre-route fallback
     const dist =
       data.distanceKm ??
@@ -963,7 +970,7 @@ export default function TripCycle({
         data.dropoff.lng,
       );
     if (dist < 0.5)
-      return "Minimum distance is 500 m — choose locations farther apart.";
+      return t("create.min_distance_error");
     return null;
   })();
 
@@ -1189,7 +1196,7 @@ export default function TripCycle({
         {/* Vehicle type */}
         <div>
           <label htmlFor={`vehicle-${data.id}`} style={labelStyle}>
-            Vehicle type{" "}
+            {t("create.vehicle_type")}{" "}
             <span aria-hidden="true" style={{ color: "#e74c3c" }}>
               *
             </span>
@@ -1288,7 +1295,7 @@ export default function TripCycle({
             }}
           >
             <option value="" disabled>
-              Select type to continue
+              {t("create.select_vehicle_type")}
             </option>
             {vList.map((v) => (
               <option key={v.key} value={v.key}>
@@ -1311,7 +1318,7 @@ export default function TripCycle({
                     style={{ color: "#0B1E3D" }}
                     aria-hidden="true"
                   />
-                  Pickup location{" "}
+                  {t("create.route_pickup_label")}{" "}
                   <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                     *
                   </span>
@@ -1319,7 +1326,7 @@ export default function TripCycle({
               </label>
               <AddressInput
                 id={`pickup-${data.id}`}
-                placeholder="Enter pickup address"
+                placeholder={t("create.enter_pickup_address")}
                 value={data.pickup}
                 onChange={(p) => set("pickup", p)}
                 iconColor="#0B1E3D"
@@ -1337,7 +1344,7 @@ export default function TripCycle({
                   ) : (
                     <Navigation size={13} aria-hidden="true" />
                   )}
-                  Use my current location
+                  {t("create.use_current_location")}
                 </button>
                 {data.pickup &&
                   !isAlreadySaved(data.pickup, savedAddresses) && (
@@ -1353,7 +1360,7 @@ export default function TripCycle({
                     style={pickBtnStyle(picking === "pickup")}
                   >
                     <MapPin size={13} aria-hidden="true" />
-                    {picking === "pickup" ? "Click the map…" : "Pick from map"}
+                    {picking === "pickup" ? t("create.click_map") : t("create.pick_from_map")}
                   </button>
                 )}
               </div>
@@ -1377,7 +1384,7 @@ export default function TripCycle({
                   >
                     <span aria-hidden="true">↪</span>
                     <span>
-                      Station: <strong>{data.pickupStation.name}</strong>
+                      {t("create.station")}: <strong>{data.pickupStation.name}</strong>
                       {data.walkingMinToStation != null
                         ? ` (~${data.walkingMinToStation} min walk)`
                         : ""}
@@ -1385,10 +1392,11 @@ export default function TripCycle({
                   </div>
                 )}
               <StationOptions
-                label={`Pickup station for trip ${index + 1}`}
+                label={t("create.pickup_station_for_trip").replace("{tripNumber}", String(index + 1))}
                 options={data.pickupStationOptions}
                 selectedId={data.pickupStation?.id}
                 onSelect={(stationId) => selectStation("pickup", stationId)}
+                locale={locale}
               />
             </div>
 
@@ -1401,7 +1409,7 @@ export default function TripCycle({
                     style={{ color: "#00C2A8" }}
                     aria-hidden="true"
                   />
-                  Dropoff location{" "}
+                  {t("create.route_dropoff_label")}{" "}
                   <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                     *
                   </span>
@@ -1409,7 +1417,7 @@ export default function TripCycle({
               </label>
               <AddressInput
                 id={`dropoff-${data.id}`}
-                placeholder="Enter dropoff address"
+                placeholder={t("create.enter_dropoff_address")}
                 value={data.dropoff}
                 onChange={(p) => set("dropoff", p)}
                 iconColor="#00C2A8"
@@ -1426,7 +1434,7 @@ export default function TripCycle({
                 ) : (
                   <Navigation size={13} aria-hidden="true" />
                 )}
-                Use my current location
+                {t("create.use_current_location")}
               </button>
               {data.dropoff &&
                 !isAlreadySaved(data.dropoff, savedAddresses) && (
@@ -1442,7 +1450,7 @@ export default function TripCycle({
                   style={pickBtnStyle(picking === "dropoff")}
                 >
                   <MapPin size={13} aria-hidden="true" />
-                  {picking === "dropoff" ? "Click the map…" : "Pick from map"}
+                  {picking === "dropoff" ? t("create.click_map") : t("create.pick_from_map")}
                 </button>
               )}
               {isSharedVehicle(data.vehicleType) &&
@@ -1464,7 +1472,7 @@ export default function TripCycle({
                   >
                     <span aria-hidden="true">↪</span>
                     <span>
-                      Station: <strong>{data.dropoffStation.name}</strong>
+                      {t("create.station")}: <strong>{data.dropoffStation.name}</strong>
                       {data.walkingMinFromStation != null
                         ? ` (~${data.walkingMinFromStation} min walk)`
                         : ""}
@@ -1472,10 +1480,11 @@ export default function TripCycle({
                   </div>
                 )}
               <StationOptions
-                label={`Dropoff station for trip ${index + 1}`}
+                label={t("create.dropoff_station_for_trip").replace("{tripNumber}", String(index + 1))}
                 options={data.dropoffStationOptions}
                 selectedId={data.dropoffStation?.id}
                 onSelect={(stationId) => selectStation("dropoff", stationId)}
+                locale={locale}
               />
               {locationError && (
                 <div
@@ -1531,13 +1540,12 @@ export default function TripCycle({
                 />
                 <span>
                   <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {data.distanceKm} km
+                    {formatDistanceKm(locale, data.distanceKm)}
                   </strong>
                   {" · "}
                   <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {data.durationMinutes} min
+                    {formatMinutes(locale, data.durationMinutes)}
                   </strong>
-                  {" drive"}
                 </span>
               </div>
             )}
@@ -1551,7 +1559,7 @@ export default function TripCycle({
                     style={{ color: "#F5A623" }}
                     aria-hidden="true"
                   />
-                 Latest Arrival time{" "}
+                 {t("latest_arrival_time")} {" "}
                   <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                     *
                   </span>
@@ -1618,14 +1626,13 @@ export default function TripCycle({
                     gap: 4,
                   }}
                 >
-                  ⚠ Must be after <strong>{to12h(minArrivalTime)}</strong> —
-                  when the previous trip ends.
+                  ⚠ {t("create.must_be_after_previous_trip").replace("{time}", formatTime(locale, minArrivalTime))}
                 </p>
               ) : (
                 <p
                   style={{ fontSize: 12, color: "#5A6A7A", margin: "5px 0 0" }}
                 >
-                  When do you need to arrive at your destination?
+                  {t("create.booked_arrival_question")}
                 </p>
               )}
             </div>
@@ -1646,13 +1653,13 @@ export default function TripCycle({
                   aria-hidden="true"
                 />
                 {isSharedVehicle(data.vehicleType)
-                  ? "Estimated board station by"
-                  : "Pickup time"}
+                  ? t("board_station_by")
+                  : t("create.pickup_time_label")}
                 <span
                   title={
                     isSharedVehicle(data.vehicleType)
-                      ? "Time to be at the pickup station. Computed from arrival − walk from dropoff station − ride − buffer."
-                      : "Computed from arrival − drive − buffer. You can depart earlier."
+                      ? t("create.pickup_time_tooltip_shared")
+                      : t("create.pickup_time_tooltip_private")
                   }
                   style={{ cursor: "help", color: "#5A6A7A" }}
                 >
@@ -1662,7 +1669,7 @@ export default function TripCycle({
               {data.pickupTime ? (
                 <div
                   style={readonlyStyle}
-                  aria-label="Pickup time window"
+                  aria-label={t("create.pickup_time_window_aria")}
                   role="status"
                 >
                   <span
@@ -1673,22 +1680,21 @@ export default function TripCycle({
                       fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {/* {to12h(data.pickupTime)} ~ {to12h(pickupWindowEnd)} */}
-                    {to12h(data.pickupTime)}
+                    {formatTime(locale, data.pickupTime)}
                   </span>
                 </div>
               ) : (
                 <div
                   style={readonlyStyle}
-                  aria-label="Computed pickup time"
+                  aria-label={t("create.computed_pickup_time_aria")}
                   role="status"
                 >
                   <span style={{ fontSize: 14, color: "#9aa5b4" }}>
                     {!data.pickup || !data.dropoff
-                      ? "Set pickup + dropoff first"
+                      ? t("create.set_pickup_dropoff_first")
                       : !data.arrivalTime
-                        ? "Set arrival time above"
-                        : "Calculating…"}
+                        ? t("create.set_arrival_time_above")
+                        : t("create.calculating")}
                   </span>
                 </div>
               )}
@@ -1718,7 +1724,7 @@ export default function TripCycle({
 
             {/* Extra passengers */}
             <div>
-              <label style={labelStyle}>Extra passengers</label>
+              <label style={labelStyle}>{t("create.extra_passengers")}</label>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <button
                   type="button"
@@ -1731,7 +1737,7 @@ export default function TripCycle({
                     });
                   }}
                   disabled={(data.extraPassengers ?? 0) <= 0}
-                  aria-label="Decrease passengers"
+                  aria-label={t("create.decrease_passengers_aria")}
                   style={{
                     width: 40,
                     height: 40,
@@ -1790,7 +1796,7 @@ export default function TripCycle({
                     (data.extraPassengers ?? 0) >=
                     maxExtraPassengers(data.vehicleType)
                   }
-                  aria-label="Increase passengers"
+                  aria-label={t("create.increase_passengers_aria")}
                   style={{
                     width: 40,
                     height: 40,
@@ -1813,8 +1819,7 @@ export default function TripCycle({
                   +
                 </button>
                 <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                  (you + {data.extraPassengers ?? 0} passenger
-                  {(data.extraPassengers ?? 0) !== 1 ? "s" : ""})
+                  {t("create.you_plus_passengers").replace("{n}", String(data.extraPassengers ?? 0))}
                 </span>
               </div>
 
@@ -1840,7 +1845,7 @@ export default function TripCycle({
                         marginBottom: 6,
                       }}
                     >
-                      Passenger {idx + 1}
+                      {t("create.passenger_label").replace("{n}", String(idx + 1))}
                     </span>
                     <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                       <button
@@ -1854,7 +1859,7 @@ export default function TripCycle({
                         }
                         style={pickBtnStyle(p.sameAsMain)}
                       >
-                        Same as main
+                        {t("create.same_as_main")}
                       </button>
                       <button
                         type="button"
@@ -1863,7 +1868,7 @@ export default function TripCycle({
                         }
                         style={pickBtnStyle(!p.sameAsMain)}
                       >
-                        Different points
+                        {t("create.different_points")}
                       </button>
                     </div>
                     {!p.sameAsMain && (
@@ -1877,7 +1882,7 @@ export default function TripCycle({
                         <div>
                           <AddressInput
                             id={`pax-${p.id}-pickup`}
-                            placeholder="Passenger pickup address"
+                            placeholder={t("create.passenger_pickup_address")}
                             value={p.pickup}
                             onChange={(pt) =>
                               updatePassenger(p.id, { pickup: pt })
@@ -1903,14 +1908,14 @@ export default function TripCycle({
                                 padding: 0,
                               }}
                             >
-                              Use main pickup location
+                              {t("create.use_main_pickup_location")}
                             </button>
                           )}
                         </div>
                         <div>
                           <AddressInput
                             id={`pax-${p.id}-dropoff`}
-                            placeholder="Passenger dropoff address"
+                            placeholder={t("create.passenger_dropoff_address")}
                             value={p.dropoff}
                             onChange={(pt) =>
                               updatePassenger(p.id, { dropoff: pt })
@@ -1936,7 +1941,7 @@ export default function TripCycle({
                                 padding: 0,
                               }}
                             >
-                              Use main dropoff location
+                              {t("create.use_main_dropoff_location")}
                             </button>
                           )}
                         </div>
@@ -1958,8 +1963,7 @@ export default function TripCycle({
                     marginTop: 10,
                   }}
                 >
-                  ⚠ Passenger detour exceeds 25% of the base route — adjust
-                  points.
+                  ⚠ {t("create.passenger_detour_exceeded")}
                 </div>
               )}
             </div>
@@ -1969,7 +1973,7 @@ export default function TripCycle({
         {isPrivate && (
           <>
             <div>
-              <label style={labelStyle}>Number of passengers</label>
+              <label style={labelStyle}>{t("create.number_of_passengers")}</label>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <button
                   type="button"
@@ -1979,7 +1983,7 @@ export default function TripCycle({
                     )
                   }
                   disabled={data.numberOfPassengers <= 1}
-                  aria-label="Decrease passengers"
+                  aria-label={t("create.decrease_passengers_aria")}
                   style={counterButtonStyle(data.numberOfPassengers <= 1)}
                 >
                   −
@@ -2009,7 +2013,7 @@ export default function TripCycle({
                     data.numberOfPassengers >=
                     vMap[data.vehicleType as VehicleKey].occupancy
                   }
-                  aria-label="Increase passengers"
+                  aria-label={t("create.increase_passengers_aria")}
                   style={counterButtonStyle(
                     data.numberOfPassengers >=
                       vMap[data.vehicleType as VehicleKey].occupancy,
@@ -2018,17 +2022,16 @@ export default function TripCycle({
                   +
                 </button>
                 <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                  Up to {vMap[data.vehicleType as VehicleKey].occupancy}{" "}
-                  including you
+                  {t("create.up_to_including_you").replace("{max}", String(vMap[data.vehicleType as VehicleKey].occupancy))}
                 </span>
               </div>
             </div>
 
             <div>
-              <label style={labelStyle}>Pickup location *</label>
+              <label style={labelStyle}>{t("create.pickup_location")} *</label>
               <AddressInput
                 id={`pickup-${data.id}`}
-                placeholder="Enter pickup address"
+                placeholder={t("create.enter_pickup_address")}
                 value={data.pickup}
                 onChange={(point) => set("pickup", point)}
                 iconColor="#0B1E3D"
@@ -2045,7 +2048,7 @@ export default function TripCycle({
                 ) : (
                   <Navigation size={13} aria-hidden="true" />
                 )}
-                Use my current location
+                {t("create.use_current_location")}
               </button>
               {data.pickup && !isAlreadySaved(data.pickup, savedAddresses) && (
                 <SaveAddressButton
@@ -2060,7 +2063,7 @@ export default function TripCycle({
                   style={pickBtnStyle(picking === "pickup")}
                 >
                   <MapPin size={13} aria-hidden="true" />
-                  {picking === "pickup" ? "Click the map…" : "Pick from map"}
+                  {picking === "pickup" ? t("create.click_map") : t("create.pick_from_map")}
                 </button>
               )}
             </div>
@@ -2099,7 +2102,7 @@ export default function TripCycle({
                       }}
                     >
                       <strong style={{ fontSize: 13, color: "#0B1E3D" }}>
-                        Stop {stopIndex + 1}
+                        {t("create.stop_label").replace("{n}", String(stopIndex + 1))}
                       </strong>
                       <button
                         type="button"
@@ -2109,7 +2112,7 @@ export default function TripCycle({
                             data.stops.filter((item) => item.id !== stop.id),
                           )
                         }
-                        aria-label={`Remove stop ${stopIndex + 1}`}
+                        aria-label={t("create.remove_stop_aria").replace("{n}", String(stopIndex + 1))}
                         style={{
                           border: "none",
                           background: "none",
@@ -2123,7 +2126,7 @@ export default function TripCycle({
                     </div>
                     <AddressInput
                       id={`stop-${data.id}-${stop.id}`}
-                      placeholder="Enter stop address"
+                      placeholder={t("create.enter_stop_address")}
                       value={stop.point}
                       onChange={(point) => updateStop(stop.id, { point })}
                       iconColor="#F5A623"
@@ -2138,27 +2141,29 @@ export default function TripCycle({
                       }}
                     >
                       <CounterField
-                        label="Alighting"
+                        label={t("create.alighting")}
                         value={stop.alighting}
                         max={maxAlighting}
                         onChange={(alighting) =>
                           updateStop(stop.id, { alighting })
                         }
+                        t={t}
                       />
                       <CounterField
-                        label="Boarding"
+                        label={t("create.boarding")}
                         value={stop.boarding}
                         max={maxBoarding}
                         onChange={(boarding) =>
                           updateStop(stop.id, { boarding })
                         }
+                        t={t}
                       />
                     </div>
                     <label
                       htmlFor={`wait-${stop.id}`}
                       style={{ ...labelStyle, marginTop: 10 }}
                     >
-                      Waiting time (hh:mm)
+                      {t("create.waiting_time_label")}
                     </label>
                     <WaitDurationInput
                       key={`${stop.id}-${stop.waitingMinutes}`}
@@ -2177,7 +2182,7 @@ export default function TripCycle({
                   onClick={addStopPoint}
                   style={{ ...pickBtnStyle(false), marginTop: 0 }}
                 >
-                  + Add stop point
+                  {t("create.add_stop_point")}
                 </button>
               )}
               {stopError && (
@@ -2188,10 +2193,10 @@ export default function TripCycle({
             </div>
 
             <div>
-              <label style={labelStyle}>Dropoff location *</label>
+              <label style={labelStyle}>{t("create.dropoff_location")} *</label>
               <AddressInput
                 id={`dropoff-${data.id}`}
-                placeholder="Enter dropoff address"
+                placeholder={t("create.enter_dropoff_address")}
                 value={data.dropoff}
                 onChange={(point) => set("dropoff", point)}
                 iconColor="#00C2A8"
@@ -2208,7 +2213,7 @@ export default function TripCycle({
                 ) : (
                   <Navigation size={13} aria-hidden="true" />
                 )}
-                Use my current location
+                {t("create.use_current_location")}
               </button>
               {data.dropoff &&
                 !isAlreadySaved(data.dropoff, savedAddresses) && (
@@ -2224,7 +2229,7 @@ export default function TripCycle({
                   style={pickBtnStyle(picking === "dropoff")}
                 >
                   <MapPin size={13} aria-hidden="true" />
-                  {picking === "dropoff" ? "Click the map…" : "Pick from map"}
+                  {picking === "dropoff" ? t("create.click_map") : t("create.pick_from_map")}
                 </button>
               )}
               {locationError && (
@@ -2245,7 +2250,7 @@ export default function TripCycle({
                 }}
               >
                 <Loader2 size={14} className="spin" aria-hidden="true" />
-                Calculating route…
+                {t("create.calculating_route")}
               </div>
             )}
             {!routeLoading && data.distanceKm && data.durationMinutes && (
@@ -2256,15 +2261,14 @@ export default function TripCycle({
                   aria-hidden="true"
                 />
                 <span>
-                  <strong>{data.distanceKm} km</strong> ·{" "}
-                  <strong>{data.durationMinutes} min</strong> drive
+                  {formatDistanceKm(locale, data.distanceKm)} · {formatMinutes(locale, data.durationMinutes)}
                 </span>
               </div>
             )}
 
             <div>
               <label htmlFor={`pickup-time-${data.id}`} style={labelStyle}>
-                Pickup time *
+                {t("create.pickup_time_label")} *
               </label>
               <input
                 id={`pickup-time-${data.id}`}
@@ -2289,7 +2293,7 @@ export default function TripCycle({
             </div>
 
             <div>
-              <label style={labelStyle}>Latest Arrival time</label>
+              <label style={labelStyle}>{t("latest_arrival_time")}</label>
               <div style={readonlyStyle} role="status">
                 <Clock
                   size={15}
@@ -2304,20 +2308,23 @@ export default function TripCycle({
                   }}
                 >
                   {data.arrivalTime
-                    ? to12h(data.arrivalTime)
-                    : "Set pickup and route first"}
+                    ? formatTime(locale, data.arrivalTime)
+                    : t("create.set_pickup_dropoff_first")}
                 </span>
               </div>
               {data.stops.length > 0 && (
                 <p
                   style={{ fontSize: 12, color: "#5A6A7A", margin: "5px 0 0" }}
                 >
-                  Includes{" "}
-                  {data.stops.reduce(
-                    (total, stop) => total + stop.waitingMinutes,
-                    0,
-                  )}{" "}
-                  min waiting time.
+                  {t("create.includes_waiting_time").replace(
+                    "{n}",
+                    String(
+                      data.stops.reduce(
+                        (total, stop) => total + stop.waitingMinutes,
+                        0,
+                      ),
+                    ),
+                  )}
                 </p>
               )}
             </div>

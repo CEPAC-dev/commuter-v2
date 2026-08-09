@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { User, X, MapPin } from "lucide-react";
+import { User, X, MapPin, Car, Bus, Truck, Circle } from "lucide-react";
 import type { RideDetailView, RidePassengerDetail } from "@/types/booking";
+import { useClientLocale } from "@/lib/i18n/client";
+import { formatEgp } from "@/lib/i18n";
 
 interface Props {
   ride?: RideDetailView | null;
@@ -26,6 +28,7 @@ export function getVehicleSeatGrid(vType: string): {
   rows: SeatGridCell[][];
   totalSeats: number;
   label: string;
+  labelKey: string;
 } {
   const isCarOrTaxi =
     vType === "private_car" ||
@@ -36,6 +39,7 @@ export function getVehicleSeatGrid(vType: string): {
   if (isCarOrTaxi) {
     return {
       label: "Private Car / Taxi",
+      labelKey: "vehicle_seating.vehicle_type_private",
       totalSeats: 3,
       rows: [
         [
@@ -53,6 +57,7 @@ export function getVehicleSeatGrid(vType: string): {
   if (isVan) {
     return {
       label: "Van",
+      labelKey: "vehicle_seating.vehicle_type_van",
       totalSeats: 5,
       rows: [
         [
@@ -73,7 +78,8 @@ export function getVehicleSeatGrid(vType: string): {
 
   return {
     label: "Microbus",
-    totalSeats: 9,
+    labelKey: "vehicle_seating.vehicle_type_microbus",
+    totalSeats: 10,
     rows: [
       [
         { seatNumber: null, isDriverSeat: true, row: 0, col: 0 },
@@ -94,9 +100,33 @@ export function getVehicleSeatGrid(vType: string): {
       [
         { seatNumber: 8, row: 4, col: 0 },
         { seatNumber: 9, row: 4, col: 1 },
+        { seatNumber: 10, row: 4, col: 2 },
       ],
     ],
   };
+}
+
+export function getVehicleChassisStyle(vType: string): {
+  Icon: typeof Car;
+  accent: string;
+  accentSoft: string;
+} {
+  const isCarOrTaxi =
+    vType === "private_car" ||
+    vType === "taxi_private" ||
+    vType === "taxi_shared";
+  const isVan = vType === "van_shared";
+
+  if (isCarOrTaxi) {
+    return { Icon: Car, accent: "#0B1E3D", accentSoft: "#EEF2FF" };
+  }
+
+  if (isVan) {
+    return { Icon: Truck, accent: "#0B6E5A", accentSoft: "#E8F8F5" };
+  }
+
+  // Microbus
+  return { Icon: Bus, accent: "#8A4B00", accentSoft: "#FFF3E0" };
 }
 
 export default function VehicleSeatMap({
@@ -111,6 +141,8 @@ export default function VehicleSeatMap({
 }: Props) {
   const vType = ride?.vehicleType ?? vehicleType;
   const grid = getVehicleSeatGrid(vType);
+  const chassis = getVehicleChassisStyle(vType);
+  const { t, dir, locale } = useClientLocale();
 
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
 
@@ -171,7 +203,7 @@ export default function VehicleSeatMap({
         seatStateBySeat.set(seat, {
           passenger: greenPassenger,
           state: "green",
-          label: "Boarding",
+          label: "boarding",
         });
         continue;
       }
@@ -185,7 +217,7 @@ export default function VehicleSeatMap({
         seatStateBySeat.set(seat, {
           passenger: bluePassenger,
           state: "blue",
-          label: "On Board",
+          label: "on_board",
         });
         continue;
       }
@@ -199,7 +231,7 @@ export default function VehicleSeatMap({
         seatStateBySeat.set(seat, {
           passenger: redPassenger,
           state: "red",
-          label: "Alighted",
+          label: "alighted",
         });
         continue;
       }
@@ -207,7 +239,7 @@ export default function VehicleSeatMap({
       seatStateBySeat.set(seat, {
         passenger: undefined,
         state: "grey",
-        label: "Empty",
+        label: "empty",
       });
     }
   }
@@ -219,114 +251,115 @@ export default function VehicleSeatMap({
 
   return (
     <div
+      dir={dir}
       style={{
-        background: "#fff",
-        borderRadius: 16,
-        border: "1px solid #eef0f3",
-        padding: "20px 18px",
+        background: "#ffffff",
+        borderRadius: 20,
+        border: "1px solid #e9edf2",
+        padding: "22px 20px",
         marginBottom: 16,
+        boxShadow: "0 1px 2px rgba(11,30,61,0.04)",
+        textAlign: "center",
       }}
     >
       {/* Header */}
       <div
         style={{
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 16,
+          gap: 8,
+          marginBottom: 20,
         }}
       >
-        <div>
-          <h3
-            style={{
-              margin: 0,
-              fontSize: 14,
-              fontWeight: 800,
-              color: "#0B1E3D",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-            }}
-          >
-            Vehicle Seating Chart ({grid.label})
-          </h3>
-          <p
-            style={{
-              margin: "2px 0 0",
-              fontSize: 12,
-              color: "#5A6A7A",
-              fontWeight: 500,
-            }}
-          >
-            {isDriver
-              ? rideStarted
-                ? "Live chair status: Empty, Boarding (Green), Onboard / Alighting (Red)"
-                : "All chairs empty until ride starts"
-              : "Your assigned seat position on board"}
-          </p>
-        </div>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            padding: "4px 10px",
-            borderRadius: 20,
-            background: "#EEF2FF",
-            color: "#0B1E3D",
-          }}
-        >
-          {grid.totalSeats} Seats
-        </span>
-      </div>
-
-      {/* 2D Car Chassis Container */}
-      <div
-        style={{
-          maxWidth: 320,
-          margin: "0 auto",
-          background: "linear-gradient(180deg, #F8FAFC 0%, #EFF3F8 100%)",
-          borderRadius: 28,
-          border: "2px solid #CBD5E1",
-          padding: "24px 20px 20px",
-          boxShadow: "inset 0 2px 4px rgba(0,0,0,0.03)",
-          position: "relative",
-        }}
-      >
-        {/* Windshield graphic */}
         <div
           style={{
-            height: 14,
-            borderRadius: "12px 12px 4px 4px",
-            background: "linear-gradient(180deg, #94A3B8 0%, #CBD5E1 100%)",
-            marginBottom: 20,
-            opacity: 0.7,
+            width: 48,
+            height: 48,
+            borderRadius: 14,
+            background: chassis.accentSoft,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 800,
-              color: "#fff",
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-            }}
-          >
-            FRONT
-          </span>
+          <chassis.Icon size={24} color={chassis.accent} />
+        </div>
+        <h3
+          style={{
+            margin: 0,
+            fontSize: 14,
+            fontWeight: 800,
+            color: "#0B1E3D",
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
+          {t("vehicle_seating.title").replace("{label}", t(grid.labelKey))}
+        </h3>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 12,
+            color: "#5A6A7A",
+            fontWeight: 500,
+          }}
+        >
+          {isDriver
+            ? rideStarted
+              ? t("vehicle_seating.live_status_true")
+              : t("vehicle_seating.live_status_false")
+            : t("vehicle_seating.your_assigned")}
+        </p>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            padding: "5px 14px",
+            borderRadius: 20,
+            background: chassis.accent,
+            color: "#fff",
+          }}
+        >
+          {t("vehicle_seating.seats", { count: grid.totalSeats })}
+        </span>
+      </div>
+
+      {/* Seat Grid — locked ltr so driver/seat order never flips in Arabic */}
+      <div
+        dir="ltr"
+        style={{
+          maxWidth: 320,
+          margin: "0 auto",
+          background: "#F8FAFC",
+          borderRadius: 20,
+          border: "1px solid #E9EDF2",
+          padding: 18,
+        }}
+      >
+        {/* Front indicator */}
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            color: "#94A3B8",
+            textTransform: "uppercase",
+            letterSpacing: "0.14em",
+            marginBottom: 14,
+            textAlign: "center",
+          }}
+        >
+          {t("vehicle_seating.front")}
         </div>
 
-        {/* Seat Grid */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {grid.rows.map((row, rIdx) => (
             <div
               key={`row-${rIdx}`}
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 16,
-                alignItems: "center",
+                gridTemplateColumns: `repeat(${row.length}, 1fr)`,
+                gap: 10,
               }}
             >
               {row.map((cell) => {
@@ -335,28 +368,27 @@ export default function VehicleSeatMap({
                     <div
                       key={`driver-seat`}
                       style={{
-                        padding: "10px 8px",
-                        borderRadius: 12,
-                        background: "#0B1E3D",
+                        padding: "12px 8px",
+                        borderRadius: 14,
+                        background: chassis.accent,
                         color: "#fff",
                         textAlign: "center",
                         display: "flex",
                         flexDirection: "column",
                         alignItems: "center",
                         justifyContent: "center",
-                        boxShadow: "0 2px 4px rgba(11,30,61,0.2)",
+                        gap: 3,
                       }}
                     >
-                      <span style={{ fontSize: 16, lineHeight: 1 }}>☸</span>
+                      <Circle size={15} strokeWidth={2.5} />
                       <span
                         style={{
                           fontSize: 10,
                           fontWeight: 700,
-                          marginTop: 4,
                           letterSpacing: "0.02em",
                         }}
                       >
-                        DRIVER
+                        {t("vehicle_seating.front")}
                       </span>
                     </div>
                   );
@@ -366,42 +398,42 @@ export default function VehicleSeatMap({
                 const seatState = seatStateBySeat.get(seatNo) ?? {
                   passenger: undefined,
                   state: "grey" as const,
-                  label: "Empty",
+                  label: "empty",
                 };
                 const isSelected = selectedSeat === seatNo;
                 const isMySeat = !isDriver && assignedSeatNumbers.includes(seatNo);
 
-                let bg = "#F8FAFC";
+                let bg = "#ffffff";
                 let borderColor = "#CBD5E1";
                 let color = "#64748B";
-                let labelText = "Empty";
+                let labelText = t("vehicle_seating.empty");
 
                 if (isMySeat) {
                   bg = "#E8F8F5";
                   borderColor = "#00C2A8";
                   color = "#00806E";
-                  labelText = "YOUR SEAT";
+                  labelText = t("vehicle_seating.your_seat");
                 } else if (isDriver) {
                   if (!rideStarted || seatState.state === "grey") {
-                    bg = "#F8FAFC";
+                    bg = "#ffffff";
                     borderColor = "#CBD5E1";
                     color = "#64748B";
-                    labelText = "Empty";
+                    labelText = t("vehicle_seating.empty");
                   } else if (seatState.state === "green") {
                     bg = "#E8F8F5";
                     borderColor = "#27AE60";
                     color = "#196F3D";
-                    labelText = "Boarding";
+                    labelText = t("vehicle_seating.boarding");
                   } else if (seatState.state === "blue") {
                     bg = "#EFF6FF";
                     borderColor = "#2F80ED";
                     color = "#1D4ED8";
-                    labelText = "On Board";
+                    labelText = t("vehicle_seating.on_board");
                   } else if (seatState.state === "red") {
                     bg = "#FFEBEE";
                     borderColor = "#E74C3C";
                     color = "#C0392B";
-                    labelText = "Alighted";
+                    labelText = t("vehicle_seating.alighted");
                   }
                 }
 
@@ -420,22 +452,20 @@ export default function VehicleSeatMap({
                       }
                     }}
                     style={{
-                      padding: "12px 8px",
-                      borderRadius: 12,
+                      padding: "12px 6px",
+                      borderRadius: 14,
                       background: bg,
-                      border: `2px solid ${borderColor}`,
+                      border: `1.5px solid ${borderColor}`,
                       color,
                       textAlign: "center",
                       cursor: isDriver ? "pointer" : "default",
-                      transition: "all 0.15s ease",
-                      position: "relative",
+                      transition: "box-shadow 0.12s ease",
                       outline: "none",
                       boxShadow: isSelected
-                        ? "0 0 0 3px rgba(245,166,35,0.3)"
-                        : "0 1px 3px rgba(0,0,0,0.05)",
+                        ? "0 0 0 3px rgba(245,166,35,0.28)"
+                        : "none",
                     }}
                   >
-                    {/* Person Icon for all seats */}
                     <div
                       style={{
                         fontSize: 12,
@@ -447,7 +477,7 @@ export default function VehicleSeatMap({
                       }}
                     >
                       <User size={15} color={color} />
-                      <span>Seat {seatNo}</span>
+                      <span>{t("vehicle_seating.seat", { n: seatNo })}</span>
                     </div>
                     <span
                       style={{
@@ -458,10 +488,11 @@ export default function VehicleSeatMap({
                         whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
+                        textAlign: "center",
                       }}
                     >
                       {isMySeat
-                        ? "YOUR SEAT"
+                        ? t("vehicle_seating.your_seat")
                         : isDriver
                         ? labelText
                         : ""}
@@ -472,17 +503,6 @@ export default function VehicleSeatMap({
             </div>
           ))}
         </div>
-
-        {/* Rear graphic */}
-        <div
-          style={{
-            height: 8,
-            borderRadius: "4px 4px 10px 10px",
-            background: "#CBD5E1",
-            marginTop: 20,
-            opacity: 0.6,
-          }}
-        />
       </div>
 
       {/* Legend */}
@@ -508,7 +528,7 @@ export default function VehicleSeatMap({
                 }}
               />
               <span style={{ fontSize: 11, color: "#5A6A7A", fontWeight: 600 }}>
-                Empty / Waiting (Grey)
+                {t("vehicle_seating.legend_empty")}
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -522,7 +542,7 @@ export default function VehicleSeatMap({
                 }}
               />
               <span style={{ fontSize: 11, color: "#196F3D", fontWeight: 700 }}>
-                Arrived (Green)
+                {t("vehicle_seating.legend_arrived")}
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -536,7 +556,7 @@ export default function VehicleSeatMap({
                 }}
               />
               <span style={{ fontSize: 11, color: "#1D4ED8", fontWeight: 700 }}>
-                On Board (Blue)
+                {t("vehicle_seating.legend_on_board")}
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -550,7 +570,7 @@ export default function VehicleSeatMap({
                 }}
               />
               <span style={{ fontSize: 11, color: "#C0392B", fontWeight: 700 }}>
-                Alighted (Red)
+                {t("vehicle_seating.legend_alighted")}
               </span>
             </div>
           </>
@@ -567,7 +587,7 @@ export default function VehicleSeatMap({
                 }}
               />
               <span style={{ fontSize: 11, color: "#5A6A7A", fontWeight: 600 }}>
-                Other Seats
+                {t("vehicle_seating.legend_other")}
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -581,7 +601,7 @@ export default function VehicleSeatMap({
                 }}
               />
               <span style={{ fontSize: 11, color: "#5A6A7A", fontWeight: 600 }}>
-                Your Seat
+                {t("vehicle_seating.legend_your")}
               </span>
             </div>
           </>
@@ -650,10 +670,10 @@ export default function VehicleSeatMap({
                       color: "#0B1E3D",
                     }}
                   >
-                    Seat #{selectedSeat} Details
+                    {t("vehicle_seating.seat_details", { n: selectedSeat })}
                   </h4>
                   <span style={{ fontSize: 12, color: "#5A6A7A", fontWeight: 500 }}>
-                    {selectedPassenger ? "Occupied Seat" : "Empty Seat"}
+                    {selectedPassenger ? t("vehicle_seating.occupied_seat") : t("vehicle_seating.empty_seat", { n: selectedSeat })}
                   </span>
                 </div>
               </div>
@@ -672,7 +692,7 @@ export default function VehicleSeatMap({
                   cursor: "pointer",
                   color: "#64748B",
                 }}
-                aria-label="Close modal"
+                aria-label={t("doc.view")}
               >
                 <X size={16} />
               </button>
@@ -760,7 +780,7 @@ export default function VehicleSeatMap({
                           display: "block",
                         }}
                       >
-                        {isShared ? "Pickup Station" : "Origin (Pickup Address)"}
+                        {isShared ? t("ride.pickup_station_label") : t("ride.origin_label")}
                       </span>
                       <span
                         style={{
@@ -772,7 +792,7 @@ export default function VehicleSeatMap({
                         {isShared
                           ? selectedPassenger.pickupStation?.name ??
                             ride?.pickupStation?.name ??
-                            "Pickup station"
+                            t("ride.pickup_station_fallback")
                           : selectedPassenger.pickupAddress}
                       </span>
                     </div>
@@ -803,7 +823,7 @@ export default function VehicleSeatMap({
                           display: "block",
                         }}
                       >
-                        {isShared ? "Dropoff Station" : "Destination (Dropoff Address)"}
+                        {isShared ? t("ride.dropoff_station_label") : t("ride.destination_label")}
                       </span>
                       <span
                         style={{
@@ -815,7 +835,7 @@ export default function VehicleSeatMap({
                         {isShared
                           ? selectedPassenger.dropoffStation?.name ??
                             ride?.dropoffStation?.name ??
-                            "Dropoff station"
+                            t("ride.dropoff_station_fallback")
                           : selectedPassenger.dropoffAddress}
                       </span>
                     </div>
@@ -847,10 +867,10 @@ export default function VehicleSeatMap({
                         display: "block",
                       }}
                     >
-                      Passengers
+                      {t("vehicle_seating.passengers")}
                     </span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
-                      {selectedPassenger.numberOfPassengers} Pax
+                      {selectedPassenger.numberOfPassengers} {t("my_trips.passenger_singular_short")}
                     </span>
                   </div>
                   <div
@@ -870,10 +890,10 @@ export default function VehicleSeatMap({
                         display: "block",
                       }}
                     >
-                      Trip Fare
+                      {t("vehicle_seating.trip_fare")}
                     </span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
-                      {selectedPassenger.tripCost} EGP
+                      {formatEgp(locale, selectedPassenger.tripCost)}
                     </span>
                   </div>
                 </div>
@@ -904,10 +924,10 @@ export default function VehicleSeatMap({
                   <User size={24} color="#94A3B8" />
                 </div>
                 <h5 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0B1E3D" }}>
-                  Seat #{selectedSeat} is Empty
+                  {t("vehicle_seating.empty_seat", { n: selectedSeat })}
                 </h5>
                 <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748B" }}>
-                  No passenger is currently assigned to this chair position.
+                  {t("vehicle_seating.no_passenger_assigned")}
                 </p>
               </div>
             )}

@@ -1,4 +1,7 @@
+"use client";
+
 import { Phone, Car } from "lucide-react";
+import { useClientLocale } from "@/lib/locale.client";
 
 interface DriverCardData {
   name?: string;
@@ -27,8 +30,11 @@ export default function DriverCard({
   driver: DriverCardData;
   showCall?: boolean;
 }) {
+  const { t, dir } = useClientLocale();
+
   return (
     <div
+      dir={dir}
       style={{
         background: "#fff",
         borderRadius: 16,
@@ -47,7 +53,7 @@ export default function DriverCard({
           letterSpacing: "0.05em",
         }}
       >
-        Your driver
+        {t("my_trips.driver_heading")}
       </p>
 
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -94,17 +100,17 @@ export default function DriverCard({
               color: "#0B1E3D",
             }}
           >
-            {driver.name ?? "Driver"}
+            {driver.name ?? t("my_trips.driver_fallback")}
           </p>
           <p style={{ margin: "2px 0 0", fontSize: 13, color: "#5A6A7A" }}>
-            {driver.phone ?? "No phone on file"}
+            {driver.phone ?? t("my_trips.no_phone")}
           </p>
         </div>
 
         {showCall && (
           <a
             href={`tel:${driver.phone}`}
-            aria-label={`Call ${driver.name}`}
+            aria-label={`${t("my_trips.call")} ${driver.name ?? ""}`}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -121,7 +127,7 @@ export default function DriverCard({
             }}
           >
             <Phone size={16} aria-hidden="true" />
-            Call
+            {t("my_trips.call")}
           </a>
         )}
       </div>
@@ -139,7 +145,7 @@ export default function DriverCard({
         <Car size={18} color="#0B1E3D" style={{ flexShrink: 0 }} aria-hidden="true" />
         <div style={{ minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0B1E3D" }}>
-            {(driver.carBrand ?? "") + (driver.carBrand && driver.carModel ? " " : "") + (driver.carModel ?? "") || "Vehicle details pending"}
+            {(driver.carBrand ?? "") + (driver.carBrand && driver.carModel ? " " : "") + (driver.carModel ?? "") || t("my_trips.vehicle_pending")}
             {driver.modelYear ? ` · ${driver.modelYear}` : ""}
           </p>
           <p
@@ -151,7 +157,7 @@ export default function DriverCard({
               fontWeight: 600,
             }}
           >
-            {driver.plate ?? "Plate pending"}
+            {driver.plate ?? t("my_trips.plate_pending")}
           </p>
         </div>
       </div>

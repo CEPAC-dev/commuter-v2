@@ -6,6 +6,7 @@ import { ArrowUpDown, ChevronRight } from "lucide-react";
 import { useTripStore } from "@/lib/store/useTripStore";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import AddressInput from "./AddressInput";
+import { useClientLocale } from "@/lib/locale.client";
 
 interface Props {
   authed?: boolean;
@@ -19,6 +20,7 @@ const STATS = [
 
 export default function Hero({ authed = false }: Props) {
   const router = useRouter();
+  const { t } = useClientLocale();
   const [mounted, setMounted] = useState(false);
   const { pickup, dropoff, setPickup, setDropoff, swap } = useTripStore();
   const [error, setError] = useState("");
@@ -29,7 +31,7 @@ export default function Hero({ authed = false }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!pickup || !dropoff) {
-      setError("Please enter both pickup and dropoff locations.");
+      setError(t("hero.enter_both_locations"));
       return;
     }
     setError("");
@@ -217,7 +219,7 @@ export default function Hero({ authed = false }: Props) {
                   {mounted ? (
                     <AddressInput
                       id="pickup-input"
-                      placeholder="Pickup location"
+                      placeholder={t("hero.pickup_placeholder")}
                       value={pickup}
                       onChange={(p: TripPoint | null) => setPickup(p)}
                       iconColor="#0B1E3D"
@@ -285,7 +287,7 @@ export default function Hero({ authed = false }: Props) {
                   {mounted ? (
                     <AddressInput
                       id="dropoff-input"
-                      placeholder="Dropoff location"
+                      placeholder={t("hero.dropoff_placeholder")}
                       value={dropoff}
                       onChange={(p: TripPoint | null) => setDropoff(p)}
                       iconColor="#00C2A8"
