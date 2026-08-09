@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import AppHeader from "@/components/layout/AppHeader";
+import { useClientLocale } from "@/lib/locale.client";
 
 const palette = {
   navy: "#0B1E3D",
@@ -16,63 +17,65 @@ const palette = {
   plumBg: "#F1EDF9",
 };
 
-type Group = {
-  key: string;
-  title: string;
-  icon: string;
-  accent: string;
-  accentBg: string;
-  rules: string[];
-};
-
-const groups: Group[] = [
-  {
-    key: "general",
-    title: "General",
-    icon: "①",
-    accent: palette.navy,
-    accentBg: "#EEF1F5",
-    rules: [
-      "Be punctual — the driver will not wait beyond the allowed time.",
-      "Only declared passengers may board, except for infants. Pickup and drop-off happen exclusively at the specified locations — no additional stops.",
-    ],
-  },
-  {
-    key: "shared",
-    title: "Shared Taxi",
-    icon: "🚕",
-    accent: palette.amber,
-    accentBg: palette.amberBg,
-    rules: [
-      "No extra baggage allowed.",
-      "Maximum waiting time: 2 minutes.",
-    ],
-  },
-  {
-    key: "private",
-    title: "Private Vehicles",
-    icon: "🚗",
-    accent: palette.teal,
-    accentBg: palette.tealBg,
-    rules: [
-      "Maximum waiting time: 2 minutes.",
-      "Maximum baggage: 2 back bags.",
-    ],
-  },
-  {
-    key: "van",
-    title: "Vans & Microbus",
-    icon: "🚐",
-    accent: palette.plum,
-    accentBg: palette.plumBg,
-    rules: [
-      "No extra baggage allowed for shared van/microbus bookings.",
-      "No waiting time — be at the pickup point on time.",
-    ],
-  },
-];
-
 export default function TermsPage() {
+  const { t, locale } = useClientLocale();
+  const isArabic = locale === "ar";
+
+  type Group = {
+    key: string;
+    title: string;
+    icon: string;
+    accent: string;
+    accentBg: string;
+    rules: string[];
+  };
+
+  const groups: Group[] = [
+    {
+      key: "general",
+      title: t("terms.general_title"),
+      icon: "①",
+      accent: palette.navy,
+      accentBg: "#EEF1F5",
+      rules: [
+        t("terms.general_rule1"),
+        t("terms.general_rule2"),
+      ],
+    },
+    {
+      key: "shared",
+      title: t("terms.shared_taxi_title"),
+      icon: "🚕",
+      accent: palette.amber,
+      accentBg: palette.amberBg,
+      rules: [
+        t("terms.shared_taxi_rule1"),
+        t("terms.shared_taxi_rule2"),
+      ],
+    },
+    {
+      key: "private",
+      title: t("terms.private_vehicles_title"),
+      icon: "🚗",
+      accent: palette.teal,
+      accentBg: palette.tealBg,
+      rules: [
+        t("terms.private_vehicles_rule1"),
+        t("terms.private_vehicles_rule2"),
+      ],
+    },
+    {
+      key: "van",
+      title: t("terms.van_microbus_title"),
+      icon: "🚐",
+      accent: palette.plum,
+      accentBg: palette.plumBg,
+      rules: [
+        t("terms.van_microbus_rule1"),
+        t("terms.van_microbus_rule2"),
+      ],
+    },
+  ];
   return (
     <div style={{ minHeight: "100dvh", background: palette.bg }}>
       <AppHeader authed variant="app" />
@@ -89,7 +92,7 @@ export default function TermsPage() {
               margin: "0 0 8px",
             }}
           >
-            Before you book
+            {t("terms.before_book")}
           </p>
           <h1
             style={{
@@ -100,11 +103,10 @@ export default function TermsPage() {
               letterSpacing: "-0.01em",
             }}
           >
-            Terms & Conditions
+            {t("terms.heading")}
           </h1>
           <p style={{ color: palette.muted, marginTop: 8, lineHeight: 1.6, maxWidth: 560 }}>
-            Read these conditions carefully before booking. Confirming a
-            booking means you accept and agree to the terms below.
+            {t("terms.intro")}
           </p>
         </div>
 
@@ -123,8 +125,7 @@ export default function TermsPage() {
         >
           <span style={{ fontSize: 16, lineHeight: "20px" }}>⚠️</span>
           <p style={{ margin: 0, fontSize: 13.5, color: "#7A5210", lineHeight: 1.5 }}>
-            Waiting-time and baggage limits differ by vehicle type — check the
-            section for the ride you booked.
+            {t("terms.warning_banner")}
           </p>
         </div>
 
@@ -134,7 +135,7 @@ export default function TermsPage() {
             aria-hidden
             style={{
               position: "absolute",
-              left: 15,
+              [isArabic ? "right" : "left"]: 15,
               top: 8,
               bottom: 8,
               width: 2,
@@ -147,14 +148,14 @@ export default function TermsPage() {
               key={g.key}
               style={{
                 position: "relative",
-                paddingLeft: 44,
+                [isArabic ? "paddingRight" : "paddingLeft"]: 44,
                 marginBottom: i === groups.length - 1 ? 0 : 22,
               }}
             >
               <div
                 style={{
                   position: "absolute",
-                  left: 0,
+                  [isArabic ? "right" : "left"]: 0,
                   top: 0,
                   width: 32,
                   height: 32,
@@ -174,7 +175,7 @@ export default function TermsPage() {
                 style={{
                   background: palette.card,
                   border: `1px solid ${palette.border}`,
-                  borderLeft: `3px solid ${g.accent}`,
+                  [isArabic ? "borderRight" : "borderLeft"]: `3px solid ${g.accent}`,
                   borderRadius: 12,
                   padding: "14px 18px",
                 }}
@@ -189,7 +190,7 @@ export default function TermsPage() {
                 >
                   {g.title}
                 </p>
-                <ul style={{ margin: 0, paddingLeft: 18, color: palette.navy }}>
+                <ul style={{ margin: 0, [isArabic ? "paddingRight" : "paddingLeft"]: 18, color: palette.navy }}>
                   {g.rules.map((rule, idx) => (
                     <li
                       key={idx}
@@ -209,9 +210,9 @@ export default function TermsPage() {
         </div>
 
         <p style={{ marginTop: 32, color: palette.muted, fontSize: 14 }}>
-          Back to booking:{" "}
+          {t("terms.back_to_booking")}{" "}
           <Link href="/create" style={{ color: palette.navy, fontWeight: 600 }}>
-            Create booking
+            {t("terms.create_booking")}
           </Link>
         </p>
       </main>

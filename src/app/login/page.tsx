@@ -1,5 +1,5 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, Suspense, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,9 +11,12 @@ import {
   Phone,
   Loader2,
   ArrowLeft,
+  Globe,
 } from "lucide-react";
 import Image from "next/image";
 import DriverRegisterForm from "@/components/auth/DriverRegisterForm";
+import { useClientLocale, setLocaleCookie } from "@/lib/i18n/client";
+import { localeDirection } from "@/lib/i18n/config";
 
 type Mode = "login" | "register";
 type Role = "passenger" | "driver";
@@ -22,12 +25,21 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const redirect = params.get("redirect") ?? "/create";
+  const { t, locale } = useClientLocale();
+  const [isPending, startTransition] = useTransition();
 
   const [role, setRole] = useState<Role>("passenger");
   const [mode, setMode] = useState<Mode>("login");
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
+
+  // Language toggle
+  function toggleLanguage() {
+    const next = locale === "en" ? "ar" : "en";
+    setLocaleCookie(next);
+    startTransition(() => router.refresh());
+  }
 
   // Fields — controlled + shared across role/mode switches so nothing is wiped.
   const [name, setName] = useState("");
@@ -61,7 +73,7 @@ function LoginForm() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Something went wrong.");
+        setError(data.error ?? t("auth.something_went_wrong"));
         setLoading(false);
         return;
       }
@@ -74,7 +86,7 @@ function LoginForm() {
       }
       router.replace(redirect);
     } catch {
-      setError("Network error. Please check your connection.");
+      setError(t("auth.network_error"));
       setLoading(false);
     }
   }
@@ -88,6 +100,8 @@ function LoginForm() {
     fontFamily: "inherit",
     color: "#0B1E3D",
     minWidth: 0,
+    direction: "ltr",
+    textAlign: "left",
   };
 
   const fieldStyle: React.CSSProperties = {
@@ -100,6 +114,7 @@ function LoginForm() {
     borderRadius: 12,
     border: "1.5px solid #e8edf0",
     transition: "border-color 0.15s, box-shadow 0.15s",
+    direction: "ltr",
   };
 
   const focusField = (el: HTMLDivElement) => {
@@ -121,10 +136,45 @@ function LoginForm() {
         alignItems: "center",
         justifyContent: "center",
         padding: "24px 16px",
+        direction: localeDirection(locale),
       }}
     >
       {/* Back to home */}
-      <div style={{ width: "100%", maxWidth: 440, marginBottom: 16 }}>
+      <div style={{ width: "100%", maxWidth: 440, marginBottom: 16, display: "flex", justifyContent: locale === "ar" ? "flex-end" : "flex-start", gap: 8 }}>
+        <button
+          onClick={toggleLanguage}
+          disabled={isPending}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 8,
+            border: "1px solid rgba(255,255,255,0.3)",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            background: "transparent",
+            color: "rgba(255,255,255,0.8)",
+            transition: "border-color 0.15s, color 0.15s",
+            opacity: isPending ? 0.5 : 1,
+            fontFamily: "inherit",
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            order: locale === "ar" ? 1 : 2,
+          }}
+          onMouseEnter={(e) => {
+            (e.target as HTMLButtonElement).style.borderColor = "#00C2A8";
+            (e.target as HTMLButtonElement).style.color = "#00C2A8";
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.3)";
+            (e.target as HTMLButtonElement).style.color = "rgba(255,255,255,0.8)";
+          }}
+          aria-label={locale === "en" ? "Switch to Arabic" : "Switch to English"}
+        >
+          <Globe size={14} aria-hidden="true" />
+          {locale === "en" ? "العربية" : "English"}
+        </button>
+        
         <Link
           href="/"
           style={{
@@ -136,6 +186,8 @@ function LoginForm() {
             fontSize: 14,
             fontWeight: 500,
             transition: "color 0.15s",
+            order: locale === "ar" ? 2 : 1,
+            flexDirection: locale === "ar" ? "row-reverse" : "row",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.color = "#ffffff";
@@ -145,7 +197,7 @@ function LoginForm() {
           }}
         >
           <ArrowLeft size={16} aria-hidden="true" />
-          Back to home
+          {t("auth.back_to_home")}
         </Link>
       </div>
 
@@ -226,9 +278,13 @@ function LoginForm() {
                 color: role === r ? "#ffffff" : "#5A6A7A",
                 transition: "all 0.2s",
                 minHeight: 44,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
               }}
             >
-              {r === "passenger" ? "Passenger" : "Driver"}
+              {r === "passenger" ? t("auth.passenger.role") : t("auth.driver.role")}
             </button>
           ))}
         </div>
@@ -269,9 +325,13 @@ function LoginForm() {
                 boxShadow: mode === m ? "0 1px 6px rgba(0,0,0,0.1)" : "none",
                 transition: "all 0.2s",
                 minHeight: 44,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
               }}
             >
-              {m === "login" ? "Log in" : "Register"}
+              {m === "login" ? t("auth.login_tab") : t("auth.register_tab")}
             </button>
           ))}
         </div>
@@ -304,7 +364,7 @@ function LoginForm() {
                       fontWeight: 600,
                     }}
                   >
-                    Forgot password?
+                    {t("auth.forgot_password")}
                   </Link>
                 </div>
               ) : null}
@@ -322,7 +382,7 @@ function LoginForm() {
                       marginBottom: 6,
                     }}
                   >
-                    Full name{" "}
+                    {t("auth.full_name")}{" "}
                     <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                       *
                     </span>
@@ -367,13 +427,20 @@ function LoginForm() {
                     marginBottom: 6,
                   }}
                 >
-                  Phone{" "}
+                  {t("auth.phone")}{" "}
                   <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                     *
                   </span>
                 </label>
                 <div
-                  style={{ ...fieldStyle, padding: 0, overflow: "hidden" }}
+                  dir="ltr"
+                  style={{
+                    ...fieldStyle,
+                    padding: 0,
+                    overflow: "hidden",
+                    flexDirection: "row",
+                    unicodeBidi: "isolate",
+                  }}
                   onFocusCapture={(e) =>
                     focusField(e.currentTarget as HTMLDivElement)
                   }
@@ -382,8 +449,10 @@ function LoginForm() {
                   }
                 >
                   <span
+                    dir="ltr"
                     style={{
                       display: "flex",
+                      flexDirection: "row",
                       alignItems: "center",
                       gap: 6,
                       height: "100%",
@@ -393,6 +462,8 @@ function LoginForm() {
                       fontWeight: 600,
                       color: "#0B1E3D",
                       flexShrink: 0,
+                      direction: "ltr",
+                      unicodeBidi: "isolate",
                     }}
                   >
                     <Phone
@@ -400,7 +471,7 @@ function LoginForm() {
                       style={{ color: "#5A6A7A" }}
                       aria-hidden="true"
                     />
-                    +20
+                    <span dir="ltr" style={{ direction: "ltr", unicodeBidi: "plaintext" }}>+20</span>
                   </span>
                   <input
                     id="phone"
@@ -434,7 +505,7 @@ function LoginForm() {
                     marginBottom: 6,
                   }}
                 >
-                  Password{" "}
+                  {t("auth.password")}{" "}
                   <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                     *
                   </span>
@@ -460,7 +531,7 @@ function LoginForm() {
                       mode === "login" ? "current-password" : "new-password"
                     }
                     placeholder={
-                      mode === "register" ? "Min. 8 characters" : "••••••••"
+                      mode === "register" ? t("auth.password_placeholder_register") : t("auth.password_placeholder_login")
                     }
                     required
                     minLength={mode === "register" ? 8 : undefined}
@@ -471,7 +542,7 @@ function LoginForm() {
                   <button
                     type="button"
                     onClick={() => setShowPass((v) => !v)}
-                    aria-label={showPass ? "Hide password" : "Show password"}
+                    aria-label={showPass ? t("auth.hide_password") : t("auth.show_password")}
                     style={{
                       background: "none",
                       border: "none",
@@ -498,7 +569,7 @@ function LoginForm() {
                       marginBottom: 0,
                     }}
                   >
-                    Must be at least 8 characters.
+                    {t("auth.password_min_chars")}
                   </p>
                 )}
               </div>
@@ -516,9 +587,9 @@ function LoginForm() {
                       marginBottom: 6,
                     }}
                   >
-                    Email address{" "}
+                    {t("auth.email")}{" "}
                     <span style={{ fontWeight: 400, color: "#5A6A7A" }}>
-                      (optional)
+                      {t("auth.email_optional")}
                     </span>
                   </label>
                   <div
@@ -539,7 +610,7 @@ function LoginForm() {
                       id="email"
                       type="email"
                       autoComplete="email"
-                      placeholder="you@example.com"
+                      placeholder={t("auth.email_placeholder")}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       style={inputStyle}
@@ -602,10 +673,10 @@ function LoginForm() {
                 <Loader2 size={18} className="spin" aria-hidden="true" />
               )}
               {loading
-                ? "Please wait…"
+                ? t("auth.please_wait")
                 : mode === "login"
-                  ? "Log in"
-                  : "Create account"}
+                  ? t("auth.log_in_button")
+                  : t("auth.create_account_button")}
             </button>
           </form>
         )}
@@ -621,8 +692,8 @@ function LoginForm() {
           }}
         >
           {mode === "login"
-            ? "Don't have an account? "
-            : "Already have an account? "}
+            ? t("auth.dont_have_account") + " "
+            : t("auth.already_have_account") + " "}
           <button
             type="button"
             onClick={() => {
@@ -640,7 +711,7 @@ function LoginForm() {
               padding: 0,
             }}
           >
-            {mode === "login" ? "Register" : "Log in"}
+            {mode === "login" ? t("auth.register_button") : t("auth.log_in_button")}
           </button>
         </p>
       </div>

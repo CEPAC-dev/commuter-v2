@@ -3,13 +3,15 @@
 import Link from "next/link";
 import Image from "next/image";
 import { SUPPORT_EMAIL } from "@/lib/config/site";
+import { useClientLocale } from "@/lib/locale.client";
 
 export default function Footer() {
+  const { t } = useClientLocale();
   const year = new Date().getFullYear();
 
   const links: [string, string][] = [
-    ["Contact us", "/contact"],
-    ["FAQ", "/faq"],
+    [t("footer.contact"), "/contact"],
+    [t("footer.faq"), "/faq"],
   ];
 
   return (
@@ -60,7 +62,7 @@ export default function Footer() {
           <div style={{ maxWidth: 360 }}>
             <Link
               href="/"
-              aria-label="Commuter home"
+              aria-label={t("footer.home_aria")}
               style={{
                 textDecoration: "none",
                 display: "inline-flex",
@@ -94,8 +96,7 @@ export default function Footer() {
                 color: "rgba(255,255,255,0.5)",
               }}
             >
-              Affordable, reliable rides across Greater Cairo. Private and shared
-              options — always on time.
+              {t("footer.description")}
             </p>
           </div>
 
@@ -119,7 +120,7 @@ export default function Footer() {
                 letterSpacing: "0.12em",
               }}
             >
-              Help
+              {t("footer.help")}
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {links.map(([label, href]) => (
@@ -183,7 +184,7 @@ export default function Footer() {
           }}
         >
           <p style={{ fontSize: 13, margin: 0, color: "rgba(255,255,255,0.4)" }}>
-            © {year} Commuter. All rights reserved.
+            {t("footer.copyright", { year: year.toString() })}
           </p>
           <p
             style={{
@@ -195,7 +196,7 @@ export default function Footer() {
               gap: 6,
             }}
           >
-            Built for Greater Cairo
+            {t("footer.built_for")}
             <span aria-hidden="true">🇪🇬</span>
           </p>
         </div>

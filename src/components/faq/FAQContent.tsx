@@ -3,36 +3,38 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { ChevronDown, HelpCircle } from "lucide-react";
-
-const FAQ_ITEMS = [
-  {
-    q: "How do I book a ride?",
-    a: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Enter your pickup and dropoff, choose a vehicle, set your arrival time, and confirm your booking.",
-  },
-  {
-    q: "What payment methods are accepted?",
-    a: "Lorem ipsum dolor sit amet. We accept credit cards and mobile wallets through our secure payment partner. Your fare is calculated server-side before checkout.",
-  },
-  {
-    q: "Can I book multiple trips for the same day?",
-    a: "Lorem ipsum dolor sit amet, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Yes — add as many trips as you need on a single date before submitting.",
-  },
-  {
-    q: "What areas do you cover?",
-    a: "Lorem ipsum dolor sit amet. Commuter covers all of Greater Cairo including Giza, Helwan, New Cairo, and 6th of October City.",
-  },
-  {
-    q: "How is my pickup time calculated?",
-    a: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Your pickup time is computed from your arrival time minus the route duration and a vehicle-specific buffer.",
-  },
-  {
-    q: "Can I cancel or modify a booking?",
-    a: "Lorem ipsum dolor sit amet. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
-  },
-];
+import { useClientLocale } from "@/lib/locale.client";
 
 export default function FAQContent() {
+  const { t } = useClientLocale();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
+
+  const FAQ_ITEMS = [
+    {
+      q: t("faq.q1"),
+      a: t("faq.a1"),
+    },
+    {
+      q: t("faq.q2"),
+      a: t("faq.a2"),
+    },
+    {
+      q: t("faq.q3"),
+      a: t("faq.a3"),
+    },
+    {
+      q: t("faq.q4"),
+      a: t("faq.a4"),
+    },
+    {
+      q: t("faq.q5"),
+      a: t("faq.a5"),
+    },
+    {
+      q: t("faq.q6"),
+      a: t("faq.a6"),
+    },
+  ];
 
   return (
     <>
@@ -51,7 +53,7 @@ export default function FAQContent() {
             margin: "0 0 12px",
           }}
         >
-          FAQ
+          {t("faq.section_label")}
         </p>
         <h1
           style={{
@@ -62,7 +64,7 @@ export default function FAQContent() {
             margin: "0 0 16px",
           }}
         >
-          Frequently asked questions
+          {t("faq.heading")}
         </h1>
         <p
           style={{
@@ -73,8 +75,7 @@ export default function FAQContent() {
             maxWidth: 560,
           }}
         >
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Find answers
-          to common questions about booking, pricing, and payments.
+          {t("faq.description")}
         </p>
       </motion.div>
 

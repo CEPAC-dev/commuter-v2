@@ -168,7 +168,10 @@ export default function OperationConsole() {
       setImportMessage(
         `Imported ${payload?.updatedCount ?? 0} trip(s) successfully.`,
       );
-      event.currentTarget.reset();
+      const form = event.currentTarget;
+      if (form instanceof HTMLFormElement) {
+        form.reset();
+      }
       setSelectedFile(null);
     } catch (error) {
       setImportMessage(

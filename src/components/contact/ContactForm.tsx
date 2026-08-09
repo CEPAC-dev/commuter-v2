@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Send, CheckCircle, Loader2 } from "lucide-react";
+import { useClientLocale } from "@/lib/locale.client";
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -28,6 +29,7 @@ function blurField(e: React.FocusEvent<HTMLElement>) {
 }
 
 export default function ContactForm() {
+  const { t } = useClientLocale();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -38,7 +40,7 @@ export default function ContactForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !message.trim()) {
-      setError("Please fill in all fields.");
+      setError(t("contact.all_fields_required"));
       return;
     }
     setSending(true);
@@ -55,12 +57,12 @@ export default function ContactForm() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to send message.");
+        setError(data.error ?? t("contact.send_error"));
         return;
       }
       setSent(true);
     } catch {
-      setError("Network error. Please try again.");
+      setError(t("contact.network_error"));
     } finally {
       setSending(false);
     }
@@ -91,10 +93,10 @@ export default function ContactForm() {
             margin: "0 0 8px",
           }}
         >
-          Message sent
+          {t("contact.success_title")}
         </p>
         <p style={{ fontSize: 14, color: "#5A6A7A", margin: 0, lineHeight: 1.6 }}>
-          Thanks for reaching out. We&apos;ll get back to you soon.
+          {t("contact.success_message")}
         </p>
       </div>
     );
@@ -126,14 +128,14 @@ export default function ContactForm() {
             marginBottom: 6,
           }}
         >
-          Your name
+          {t("contact.name_label")}
         </label>
         <input
           id="contact-name"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="John Doe"
+          placeholder={t("contact.name_placeholder")}
           required
           style={inputStyle}
           onFocus={focusField}
@@ -152,14 +154,14 @@ export default function ContactForm() {
             marginBottom: 6,
           }}
         >
-          Email
+          {t("contact.email_label")}
         </label>
         <input
           id="contact-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
+          placeholder={t("contact.email_placeholder")}
           required
           style={inputStyle}
           onFocus={focusField}
@@ -178,13 +180,13 @@ export default function ContactForm() {
             marginBottom: 6,
           }}
         >
-          Message
+          {t("contact.message_label")}
         </label>
         <textarea
           id="contact-message"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="How can we help you?"
+          placeholder={t("contact.message_placeholder")}
           rows={5}
           required
           style={{
@@ -250,11 +252,11 @@ export default function ContactForm() {
               aria-hidden="true"
               style={{ animation: "spin 0.7s linear infinite" }}
             />
-            Sending…
+            {t("contact.button_sending")}
           </>
         ) : (
           <>
-            Send message
+            {t("contact.button_send")}
             <Send size={16} aria-hidden="true" />
           </>
         )}
