@@ -12,7 +12,10 @@ export interface VehicleConfig {
   key: VehicleKey;
   label: string;
   rate: number; // EGP per km
+  additional_rate: number; // EGP per km for extra passengers
   ride: RideType;
+  vehicle_type: number; // 1=private car, 2=taxi, 3=van, 4=microbus
+  trip_type: number; // 1=private, 2=taxi_private, 3=taxi_shared, 4=van_shared, 5=microbus_shared
   buffer: number; // minutes subtracted before the pickup window
   window: number; // width of the pickup window in minutes
   capacity: number; // max seats (integer, placeholder until user edits)
@@ -26,19 +29,25 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     key: "private_car",
     label: "Private car",
     rate: 12,
+    additional_rate: 0.25, // EGP per km for extra passengers
     ride: "private",
+    vehicle_type: 1,
+    trip_type: 1,
     buffer: 20,
     window: 10,
     capacity: 4,
     occupancy: 4,
     min_occupancy: 1,
-    minimum_charge: 100, // EGP minimum charge for private car rides
+    minimum_charge: 75, // EGP minimum charge for private car rides
   },
   taxi_private: {
     key: "taxi_private",
     label: "Private Taxi",
     rate: 10,
+    additional_rate: 0.25, // EGP per km for extra passengers
     ride: "private",
+    vehicle_type: 2,
+    trip_type: 2,
     buffer: 20,
     window: 10,
     capacity: 4,
@@ -50,7 +59,10 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     key: "taxi_shared",
     label: "Shared Taxi",
     rate: 8,
+    additional_rate: 0.5, // EGP per km for extra passengers
     ride: "shared",
+    vehicle_type: 2,
+    trip_type: 3,
     buffer: 30,
     window: 20,
     capacity: 3,
@@ -62,7 +74,10 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     key: "van_shared",
     label: "Van",
     rate: 7,
+    additional_rate: 0.5, // EGP per km for extra passengers
     ride: "shared",
+    vehicle_type: 3,
+    trip_type: 4,
     buffer: 45,
     window: 25,
     capacity: 5,
@@ -74,11 +89,14 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     key: "microbus_shared",
     label: "Microbus",
     rate: 4,
+    additional_rate: 0.5, // EGP per km for extra passengers
     ride: "shared",
+    vehicle_type: 4,
+    trip_type: 5,
     buffer: 45,
     window: 30,
-    capacity: 9,
-    occupancy: 9,
+    capacity: 10,
+    occupancy: 10,
     min_occupancy: 8,
     minimum_charge: 50, // EGP minimum charge for microbus rides
   },
@@ -224,7 +242,9 @@ export function computeTripPriceForSelection({
   const seventhDay = weekDates[weekDates.length - 1];
   return selectedDates.reduce((total, date) => {
     const priceForDate =
-      date === seventhDay ? Math.round(singleTripPrice * 0.95) : singleTripPrice;
+      date === seventhDay
+        ? Math.round(singleTripPrice * 0.95)
+        : singleTripPrice;
     return total + priceForDate;
   }, 0);
 }

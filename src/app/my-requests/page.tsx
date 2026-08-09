@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import { getServerLocale } from "@/lib/i18n/server";
 import Link from "next/link";
 import { MapPin, Clock, Car } from "lucide-react";
 import { isSharedVehicle } from "@/lib/geo/stations";
 import { getSession } from "@/lib/auth/session";
 import AppHeader from "@/components/layout/AppHeader";
+import { translate } from "@/lib/locale";
 import { expireStaleForUser, listUserRequests } from "@/lib/services/requests";
 import { VEHICLES } from "@/lib/config/vehicles";
 import EmptyState from "@/components/shared/EmptyState";
@@ -125,6 +127,8 @@ export default async function MyTripsPage({
   const session = await getSession();
   if (!session) redirect("/login?redirect=/my-requests");
   if (session.role === "admin") redirect("/admin/dashboard");
+
+  const locale = await getServerLocale();
 
   const params = await searchParams;
   const payment =
@@ -427,7 +431,7 @@ export default async function MyTripsPage({
                               aria-hidden="true"
                             />
                             <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                              {isSharedVehicle(trip.vehicleType) ? "Estimated board station by" : "Pickup"}{" "}
+                              {isSharedVehicle(trip.vehicleType) ? translate(locale, "board_station_by") : translate(locale, "pickup")}{" "}
                               <strong style={{ color: "#0B1E3D" }}>
                                 {to12h(trip.pickupTime)}
                               </strong>
@@ -446,7 +450,7 @@ export default async function MyTripsPage({
                               aria-hidden="true"
                             />
                             <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                              {isSharedVehicle(trip.vehicleType) ? "Latest arrival time" : "Arrive"}{" "}
+                              {isSharedVehicle(trip.vehicleType) ? translate(locale, "latest_arrival_time") : translate(locale, "arrive")}{" "}
                               <strong style={{ color: "#0B1E3D" }}>
                                 {to12h(trip.arrivalTime)}
                               </strong>

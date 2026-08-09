@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useClientLocale } from "@/lib/i18n/client";
 
 export function RideDetailRow({
   icon,
@@ -59,6 +60,7 @@ export function TripStatBlock({
 }) {
   const [hover, setHover] = useState(false);
   const hasTooltip = lines.length > 0;
+  const { t } = useClientLocale();
 
   return (
     <div
@@ -139,7 +141,7 @@ export function TripStatBlock({
             color: "#5A6A7A",
           }}
         >
-          {hover ? "Route breakdown" : "Hover for details"}
+          {hover ? t("map.route_breakdown") : t("map.hover_for_details")}
         </p>
       )}
 

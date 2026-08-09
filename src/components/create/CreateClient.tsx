@@ -14,6 +14,8 @@ import {
   Navigation,
 } from "lucide-react";
 import { useTripStore } from "@/lib/store/useTripStore";
+import { useClientLocale } from "@/lib/locale.client";
+import { formatTime, formatEgp, formatDistanceKm, formatMinutes } from "@/lib/i18n";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import AppHeader from "@/components/layout/AppHeader";
 import DatePicker from "./DatePicker";
@@ -111,6 +113,7 @@ export default function CreateClient({ userEmail }: Props) {
     startY: 0,
     startHeightVh: MOBILE_DRAWER_DEFAULT_VH,
   });
+  const { t, locale } = useClientLocale();
 
   // Hydrate from store after mount (avoid SSR mismatch)
   useEffect(() => {
@@ -255,7 +258,7 @@ export default function CreateClient({ userEmail }: Props) {
       const data = await res.json();
       if (!res.ok) {
         setSubmitError(
-          data.error ?? "Failed to create booking. Please try again.",
+          data.error ?? t("create.booking_create_failed"),
         );
         return;
       }
@@ -270,7 +273,7 @@ export default function CreateClient({ userEmail }: Props) {
         const walletData = await walletRes.json();
         if (!walletRes.ok) {
           setSubmitError(
-            walletData.error ?? "Wallet payment failed. Please try again.",
+            walletData.error ?? t("create.wallet_payment_failed"),
           );
           return;
         }
@@ -288,7 +291,7 @@ export default function CreateClient({ userEmail }: Props) {
       const payData = await payRes.json();
       if (!payRes.ok) {
         setSubmitError(
-          payData.error ?? "Failed to initiate payment. Please try again.",
+          payData.error ?? t("create.payment_init_failed"),
         );
         return;
       }
@@ -296,7 +299,7 @@ export default function CreateClient({ userEmail }: Props) {
       // Full redirect (not router.push) so the browser leaves the SPA entirely
       window.location.href = payData.sessionUrl;
     } catch {
-      setSubmitError("Network error. Please check your connection and retry.");
+      setSubmitError(t("create.network_error_retry"));
     } finally {
       if (!navigating) setSubmitting(false);
     }
@@ -403,33 +406,35 @@ export default function CreateClient({ userEmail }: Props) {
 
   // Validate all trips before preview
   function validate(): string | null {
-    if (selectedDates.length === 0) return "Select at least one date.";
+    if (selectedDates.length === 0) return t("create.select_at_least_one_date");
     for (let i = 0; i < trips.length; i++) {
-      const t = trips[i];
-      if (!t.vehicleType) return `Trip ${i + 1}: vehicle type required.`;
-      if (!t.pickup) return `Trip ${i + 1}: pickup location required.`;
-      if (!t.dropoff) return `Trip ${i + 1}: dropoff location required.`;
-      const vehicle = vehiclesMap?.[t.vehicleType] ?? VEHICLES[t.vehicleType];
+      const trip = trips[i];
+      const n = i + 1;
+      if (!trip.vehicleType) return t("create.validate_vehicle_required", { n });
+      if (!trip.pickup) return t("create.validate_pickup_required", { n });
+      if (!trip.dropoff) return t("create.validate_dropoff_required", { n });
+      const vehicle = vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType];
       const isPrivate = vehicle.ride === "private";
 
       if (isPrivate) {
-        if (!t.pickupTime) return `Trip ${i + 1}: pickup time required.`;
-        if (!t.arrivalTime || !t.distanceKm || !t.durationMinutes)
-          return `Trip ${i + 1}: route is still calculating — wait a moment.`;
+        if (!trip.pickupTime) return t("create.validate_pickup_time_required", { n });
+        if (!trip.arrivalTime || !trip.distanceKm || !trip.durationMinutes)
+          return t("create.validate_route_calculating", { n });
         if (
-          !Number.isInteger(t.numberOfPassengers) ||
-          t.numberOfPassengers < 1 ||
-          t.numberOfPassengers > vehicle.occupancy
+          !Number.isInteger(trip.numberOfPassengers) ||
+          trip.numberOfPassengers < 1 ||
+          trip.numberOfPassengers > vehicle.occupancy
         )
-          return `Trip ${i + 1}: passenger count must be between 1 and ${vehicle.occupancy}.`;
-        if (t.stops.length > 4)
-          return `Trip ${i + 1}: no more than 4 stop points allowed.`;
+          return t("create.validate_passenger_count", { n, max: vehicle.occupancy });
+        if (trip.stops.length > 4)
+          return t("create.validate_max_stops", { n });
 
-        let onboard = t.numberOfPassengers;
-        for (let stopIndex = 0; stopIndex < t.stops.length; stopIndex++) {
-          const stop = t.stops[stopIndex];
+        let onboard = trip.numberOfPassengers;
+        for (let stopIndex = 0; stopIndex < trip.stops.length; stopIndex++) {
+          const stop = trip.stops[stopIndex];
+          const stopN = stopIndex + 1;
           if (!stop.point)
-            return `Trip ${i + 1}, stop ${stopIndex + 1}: location required.`;
+            return t("create.validate_stop_location_required", { n, stop: stopN });
           if (
             !Number.isInteger(stop.alighting) ||
             !Number.isInteger(stop.boarding) ||
@@ -438,33 +443,37 @@ export default function CreateClient({ userEmail }: Props) {
             stop.boarding < 0 ||
             stop.waitingMinutes < 0
           )
-            return `Trip ${i + 1}, stop ${stopIndex + 1}: invalid stop details.`;
+            return t("create.validate_stop_invalid", { n, stop: stopN });
           if (stop.alighting > onboard - 1)
-            return `Trip ${i + 1}, stop ${stopIndex + 1}: at least one passenger must continue.`;
+            return t("create.validate_stop_min_passenger", { n, stop: stopN });
           const afterAlighting = onboard - stop.alighting;
           if (stop.boarding > vehicle.occupancy - afterAlighting)
-            return `Trip ${i + 1}, stop ${stopIndex + 1}: vehicle occupancy exceeded.`;
+            return t("create.validate_stop_occupancy", { n, stop: stopN });
           onboard = afterAlighting + stop.boarding;
         }
       } else {
-        if (!t.arrivalTime) return `Trip ${i + 1}: arrival time required.`;
-        if (!t.pickupTime)
-          return `Trip ${i + 1}: pickup time not yet computed — wait a moment.`;
+        if (!trip.arrivalTime) return t("create.validate_arrival_required", { n });
+        if (!trip.pickupTime)
+          return t("create.validate_pickup_not_computed", { n });
       }
       if (
-        t.passengerDetourKm != null &&
-        t.baseDistanceKm != null &&
-        t.passengerDetourKm > t.baseDistanceKm * 1.25
+        trip.passengerDetourKm != null &&
+        trip.baseDistanceKm != null &&
+        trip.passengerDetourKm > trip.baseDistanceKm * 1.25
       )
-        return `Trip ${i + 1}: passenger detour exceeds 25% of the base route — adjust points.`;
+        return t("create.validate_detour_exceeded", { n });
       // Time ordering: each trip must arrive after the previous trip
       if (i > 0) {
         const prev = trips[i - 1];
         if (
           prev.arrivalTime &&
-          toMinutes(t.arrivalTime) <= toMinutes(prev.arrivalTime)
+          toMinutes(trip.arrivalTime) <= toMinutes(prev.arrivalTime)
         ) {
-          return `Trip ${i + 1}: arrival time must be after trip ${i} ends (${to12h(prev.arrivalTime)}).`;
+          return t("create.validate_arrival_after_previous", {
+            n,
+            prev: i,
+            time: formatTime(locale, prev.arrivalTime),
+          });
         }
       }
     }
@@ -589,10 +598,10 @@ export default function CreateClient({ userEmail }: Props) {
                   letterSpacing: "-0.02em",
                 }}
               >
-                Book a ride
+                {t("create.book_a_ride_heading")}
               </h1>
               <p style={{ fontSize: 13, color: "#5A6A7A", margin: 0 }}>
-                Fill in the details for each trip on your chosen date.
+                {t("create.fill_trip_details")}
               </p>
             </div>
 
@@ -687,7 +696,7 @@ export default function CreateClient({ userEmail }: Props) {
                 }}
               >
                 <Plus size={16} aria-hidden="true" />
-                Add another trip
+                {t("create.add_another_trip")}
               </button>
             )}
 
@@ -783,7 +792,7 @@ export default function CreateClient({ userEmail }: Props) {
                 }
               >
                 <Eye size={17} aria-hidden="true" />
-                Preview booking
+                  {t("create.preview_booking")}
               </button>
             </div>
           </div>
@@ -798,7 +807,7 @@ export default function CreateClient({ userEmail }: Props) {
             margin: 40,
             borderRadius: 15,
           }}
-          aria-label="Map area"
+          aria-label={t("create.map_area_aria")}
           className="create-right"
         >
           <CreateMap
@@ -815,7 +824,7 @@ export default function CreateClient({ userEmail }: Props) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Booking preview"
+          aria-label={t("create.booking_preview_aria")}
           style={{
             position: "fixed",
             inset: 0,
@@ -858,11 +867,11 @@ export default function CreateClient({ userEmail }: Props) {
                   margin: 0,
                 }}
               >
-                Booking summary
+                {t("create.booking_summary_heading")}
               </h2>
               <button
                 onClick={() => setShowPreview(false)}
-                aria-label="Close preview"
+                aria-label={t("create.close_preview_aria")}
                 style={{
                   background: "none",
                   border: "none",
@@ -882,35 +891,35 @@ export default function CreateClient({ userEmail }: Props) {
 
             <div style={{ padding: "8px 24px 0" }}>
               <p style={{ fontSize: 13, color: "#5A6A7A", margin: "0 0 16px" }}>
-                Date{selectedDates.length > 1 ? "s" : ""}:{" "}
+                {selectedDates.length > 1 ? t("create.dates_label") : t("create.date_label")}:{" "}
                 <strong style={{ color: "#0B1E3D" }}>
                   {selectedDates.join(", ")}
                 </strong>
                 {selectedDates.length > 1 &&
-                  ` (× ${selectedDates.length} days)`}
+                  ` ${t("create.days_suffix").replace("{n}", String(selectedDates.length))}`}
               </p>
 
-              {trips.map((t, i) => {
+              {trips.map((trip, i) => {
                 const isPrivate =
-                  t.vehicleType !== "" &&
-                  (vehiclesMap?.[t.vehicleType] ?? VEHICLES[t.vehicleType])
+                  trip.vehicleType !== "" &&
+                  (vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType])
                     .ride === "private";
                 const routePoints = [
                   {
-                    label: "Pickup location",
-                    point: t.pickup,
+                    label: t("create.route_pickup_label"),
+                    point: trip.pickup,
                     icon: Navigation,
                   },
-                  ...t.stops.map((stop, stopIndex) => ({
-                    label: `Stop ${stopIndex + 1}`,
+                  ...trip.stops.map((stop, stopIndex) => ({
+                    label: t("create.stop_label").replace("{n}", String(stopIndex + 1)),
                     point: stop.point,
                     icon: MapPin,
                   })),
-                  { label: "Dropoff location", point: t.dropoff, icon: Flag },
+                  { label: t("create.route_dropoff_label"), point: trip.dropoff, icon: Flag },
                 ];
                 return (
                   <div
-                    key={t.id}
+                    key={trip.id}
                     style={{
                       padding: "14px 16px",
                       background: "#f8f9fa",
@@ -934,7 +943,7 @@ export default function CreateClient({ userEmail }: Props) {
                           color: "#0B1E3D",
                         }}
                       >
-                        Trip {i + 1}
+                        {t("create.trip_number").replace("{n}", String(i + 1))}
                       </span>
                       <span
                         style={{
@@ -944,7 +953,7 @@ export default function CreateClient({ userEmail }: Props) {
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
-                        {getTripPriceForSubmission(t)} EGP
+                        {formatEgp(locale, getTripPriceForSubmission(trip))}
                       </span>
                     </div>
                     <div
@@ -966,8 +975,10 @@ export default function CreateClient({ userEmail }: Props) {
                         >
                           <Users size={15} color="#0B1E3D" />
                           <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
-                            {t.numberOfPassengers} passenger
-                            {t.numberOfPassengers === 1 ? "" : "s"}
+                            {trip.numberOfPassengers}{" "}
+                            {trip.numberOfPassengers === 1
+                              ? t("create.passenger_count_suffix")
+                              : t("create.passengers_count_suffix")}
                           </strong>
                         </span>
                       ) : (
@@ -980,8 +991,10 @@ export default function CreateClient({ userEmail }: Props) {
                         >
                           <Users size={15} color="#0B1E3D" />
                           <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
-                            {t.extraPassengers} Extra passenger
-                            {t.extraPassengers === 1 ? "" : "s"}
+                            {trip.extraPassengers}{" "}
+                            {trip.extraPassengers === 1
+                              ? t("create.extra_passenger_count_suffix")
+                              : t("create.extra_passengers_count_suffix")}
                           </strong>
                         </span>
                       )}
@@ -999,7 +1012,7 @@ export default function CreateClient({ userEmail }: Props) {
                           style={{ flexShrink: 0 }}
                         />
                         <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
-                          {VEHICLE_LIST_LABEL(t.vehicleType)}
+                          {VEHICLE_LIST_LABEL(trip.vehicleType, t)}
                         </strong>
                       </span>
                       {isPrivate ? (
@@ -1015,7 +1028,7 @@ export default function CreateClient({ userEmail }: Props) {
                         >
                           {routePoints.map((routePoint, pointIndex) => {
                             const Icon = routePoint.icon;
-                            const leg = t.routeLegs[pointIndex];
+                            const leg = trip.routeLegs[pointIndex];
                             return (
                               <div key={routePoint.label}>
                                 <span
@@ -1074,7 +1087,7 @@ export default function CreateClient({ userEmail }: Props) {
                                       ` · ${Math.round(leg.priceEgp)} EGP`}
                                   </span>
                                 )}
-                                {t.stops[pointIndex - 1] && (
+                                {trip.stops[pointIndex - 1] && (
                                   <span
                                     style={{
                                       display: "block",
@@ -1084,11 +1097,11 @@ export default function CreateClient({ userEmail }: Props) {
                                     }}
                                   >
                                     Alighting:{" "}
-                                    {t.stops[pointIndex - 1].alighting} ·
-                                    Boarding: {t.stops[pointIndex - 1].boarding}
-                                    {t.stops[pointIndex - 1].waitingMinutes >
+                                    {trip.stops[pointIndex - 1].alighting} ·
+                                    Boarding: {trip.stops[pointIndex - 1].boarding}
+                                    {trip.stops[pointIndex - 1].waitingMinutes >
                                       0 &&
-                                      ` · Wait: ${t.stops[pointIndex - 1].waitingMinutes} min`}
+                                      ` · Wait: ${trip.stops[pointIndex - 1].waitingMinutes} min`}
                                   </span>
                                 )}
                               </div>
@@ -1110,8 +1123,8 @@ export default function CreateClient({ userEmail }: Props) {
                               aria-hidden="true"
                               style={{ flexShrink: 0 }}
                             />
-                            {t.pickup?.address
-                              ? formatDisplayName(t.pickup.address)
+                            {trip.pickup?.address
+                              ? formatDisplayName(trip.pickup.address)
                               : "—"}
                           </span>
                           <span
@@ -1127,8 +1140,8 @@ export default function CreateClient({ userEmail }: Props) {
                               aria-hidden="true"
                               style={{ flexShrink: 0 }}
                             />
-                            {t.dropoff?.address
-                              ? formatDisplayName(t.dropoff.address)
+                            {trip.dropoff?.address
+                              ? formatDisplayName(trip.dropoff.address)
                               : "—"}
                           </span>
                         </>
@@ -1147,10 +1160,10 @@ export default function CreateClient({ userEmail }: Props) {
                           style={{ flexShrink: 0 }}
                         />
                         <span>
-                          Early pickup: <strong>{to12h(t.pickupTime)}</strong> ·arrival time: <strong>{to12h(t.arrivalTime)}</strong>
+                          {t("create.early_pickup_label")} <strong>{formatTime(locale, trip.pickupTime)}</strong> · {t("latest_arrival_time")} <strong>{formatTime(locale, trip.arrivalTime)}</strong>
                         </span>
                       </span>
-                      {t.distanceKm && (
+                      {trip.distanceKm && (
                         <span
                           style={{
                             display: "flex",
@@ -1164,7 +1177,7 @@ export default function CreateClient({ userEmail }: Props) {
                             aria-hidden="true"
                             style={{ flexShrink: 0 }}
                           />
-                          {t.distanceKm} km · {t.durationMinutes} min drive
+                          {formatDistanceKm(locale, trip.distanceKm ?? 0)} · {formatMinutes(locale, trip.durationMinutes ?? 0)}
                         </span>
                       )}
                     </div>
@@ -1188,9 +1201,9 @@ export default function CreateClient({ userEmail }: Props) {
                   <span
                     style={{ fontWeight: 700, fontSize: 15, color: "#0B1E3D" }}
                   >
-                    Total
+                    {t("create.total_label")}
                     {selectedDates.length > 1 &&
-                      ` (× ${selectedDates.length} days)`}
+                      ` ${t("create.days_suffix").replace("{n}", String(selectedDates.length))}`}
                   </span>
                   <span
                     style={{
@@ -1200,7 +1213,7 @@ export default function CreateClient({ userEmail }: Props) {
                       fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {grandTotalEgp} EGP
+                    {formatEgp(locale, grandTotalEgp)}
                   </span>
                 </div>
               )}
@@ -1216,7 +1229,7 @@ export default function CreateClient({ userEmail }: Props) {
                     marginBottom: 6,
                   }}
                 >
-                  Add note
+                  {t("create.add_note_label")}
                 </label>
                 <textarea
                   id="booking-note"
@@ -1224,7 +1237,7 @@ export default function CreateClient({ userEmail }: Props) {
                   onChange={(event) =>
                     setBookingNote(event.target.value.slice(0, 1000))
                   }
-                  placeholder="Add pickup details or instructions for this request"
+                  placeholder={t("create.pickup_instructions_placeholder")}
                   rows={4}
                   style={{
                     width: "100%",
@@ -1288,12 +1301,12 @@ export default function CreateClient({ userEmail }: Props) {
                       lineHeight: 1.5,
                     }}
                   >
-                    I have read and agree to the
+                    {t("create.terms_agree_prefix")}
                     {' '}
                     <Link href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: "#00C2A8", fontWeight: 700 }}>
-                      instructions, conditions
+                      {t("create.terms_link_text")}
                     </Link>
-                    {' '}and trip details above and confirm they are correct.
+                    {' '}{t("create.terms_agree_suffix")}
                   </span>
                 </label>
               </div>
@@ -1330,7 +1343,7 @@ export default function CreateClient({ userEmail }: Props) {
                   if (agreedTerms) e.currentTarget.style.background = "#0B1E3D";
                 }}
               >
-                Confirm the request →
+                {t("create.confirm_request")}
               </button>
             </div>
           </div>
@@ -1342,7 +1355,7 @@ export default function CreateClient({ userEmail }: Props) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Payment"
+          aria-label={t("create.payment_aria")}
           style={{
             position: "fixed",
             inset: 0,
@@ -1387,7 +1400,7 @@ export default function CreateClient({ userEmail }: Props) {
               </h2>
               <button
                 onClick={() => setShowPaymentModal(false)}
-                aria-label="Close payment"
+                aria-label={t("create.close_payment_aria")}
                 style={{
                   background: "none",
                   border: "none",
@@ -1422,9 +1435,9 @@ export default function CreateClient({ userEmail }: Props) {
                 <span
                   style={{ fontSize: 14, fontWeight: 600, color: "#5A6A7A" }}
                 >
-                  Total amount
+                  {t("create.total_amount_label")}
                   {selectedDates.length > 1 &&
-                    ` (× ${selectedDates.length} days)`}
+                    ` ${t("create.days_suffix").replace("{n}", String(selectedDates.length))}`}
                 </span>
                 <span
                   style={{
@@ -1434,7 +1447,7 @@ export default function CreateClient({ userEmail }: Props) {
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  {grandTotalEgp} EGP
+                  {formatEgp(locale, grandTotalEgp)}
                 </span>
               </div>
 
@@ -1453,7 +1466,7 @@ export default function CreateClient({ userEmail }: Props) {
                         marginBottom: 10,
                       }}
                     >
-                      Payment method
+                      {t("create.payment_method_label")}
                     </span>
                     <div style={{ display: "flex", gap: 10 }}>
                       <button
@@ -1484,10 +1497,10 @@ export default function CreateClient({ userEmail }: Props) {
                             color: "#0B1E3D",
                           }}
                         >
-                          Card
+                          {t("create.pay_card")}
                         </span>
                         <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                          Pay via Kashier
+                          {t("create.pay_via_kashier")}
                         </span>
                       </button>
                       <button
@@ -1520,12 +1533,12 @@ export default function CreateClient({ userEmail }: Props) {
                             color: "#0B1E3D",
                           }}
                         >
-                          Wallet
+                          {t("create.pay_wallet")}
                         </span>
                         <span style={{ fontSize: 12, color: "#5A6A7A" }}>
                           {walletBalance === null
-                            ? "Loading balance…"
-                            : `Balance: ${walletBalance} EGP`}
+                            ? t("create.loading_balance")
+                            : t("create.wallet_balance_label").replace("{amount}", formatEgp(locale, walletBalance))}
                         </span>
                       </button>
                     </div>
@@ -1537,12 +1550,12 @@ export default function CreateClient({ userEmail }: Props) {
                           margin: "8px 0 0",
                         }}
                       >
-                        Not enough balance to pay {grandTotalEgp} EGP.{" "}
+                        {t("create.wallet_insufficient").replace("{amount}", formatEgp(locale, grandTotalEgp))}{" "}
                         <Link
                           href="/wallet"
                           style={{ color: "#00C2A8", fontWeight: 600 }}
                         >
-                          Top up your wallet
+                          {t("create.top_up_wallet")}
                         </Link>
                       </p>
                     )}
@@ -1612,10 +1625,10 @@ export default function CreateClient({ userEmail }: Props) {
                       }}
                       aria-hidden="true"
                     />
-                    Processing…
+                    {t("create.processing")}
                   </>
                 ) : (
-                  "Confirm & pay →"
+                  t("create.confirm_and_pay")
                 )}
               </button>
             </div>
@@ -1692,7 +1705,9 @@ import { VEHICLE_LIST, VEHICLES } from "@/lib/config/vehicles";
 import { formatDisplayName } from "@/lib/nominatim";
 import { toMinutes, toHHMM } from "@/lib/time/pickupWindow";
 
-function VEHICLE_LIST_LABEL(key: string) {
+function VEHICLE_LIST_LABEL(key: string, t: (key: string) => string) {
+  const translated = t(`vehicles.${key}`);
+  if (translated !== `vehicles.${key}`) return translated;
   return VEHICLE_LIST.find((v) => v.key === key)?.label ?? key;
 }
 

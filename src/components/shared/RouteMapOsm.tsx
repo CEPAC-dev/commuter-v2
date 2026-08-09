@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import L from "leaflet";
 import { MapPin } from "lucide-react";
 import OsmMapCanvas from "@/components/map/OsmMapCanvas";
+import { useClientLocale } from "@/lib/i18n/client";
 import {
   fitPoints,
   svgIcon,
@@ -49,6 +50,7 @@ function valid(point?: LatLng | null): point is LatLng {
 }
 
 function Placeholder({ height, rounded }: { height: number; rounded: number }) {
+  const { t } = useClientLocale();
   return (
     <div
       style={{
@@ -63,7 +65,7 @@ function Placeholder({ height, rounded }: { height: number; rounded: number }) {
       }}
     >
       <MapPin size={18} />
-      <span style={{ fontSize: 12, fontWeight: 600 }}>Route preview</span>
+      <span style={{ fontSize: 12, fontWeight: 600 }}>{t("map.route_preview")}</span>
     </div>
   );
 }

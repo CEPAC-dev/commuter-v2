@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useTransition } from "react";
 import {
   User,
   Loader2,
@@ -15,6 +15,8 @@ import ChangePasswordSection from "@/components/shared/ChangePasswordSection";
 import SavedAddressesSection from "@/components/shared/SavedAddressesSection";
 import { CAR_TYPE_LIST, type CarType } from "@/lib/config/driver";
 import type { SavedAddress } from "@/types/shared";
+import { useClientLocale } from "@/lib/locale.client";
+import { useRouter } from "next/navigation";
 
 interface DocKey {
   key:
@@ -30,14 +32,14 @@ interface DocKey {
 }
 
 const DOCUMENTS: DocKey[] = [
-  { key: "nationalIdFront", label: "National ID (Front)" },
-  { key: "nationalIdBack", label: "National ID (Back)" },
-  { key: "drivingLicense", label: "Driving license" },
-  { key: "carLicenseFront", label: "Car license (Front)" },
-  { key: "carLicenseBack", label: "Car license (Back)" },
-  { key: "criminalRecord", label: "Criminal record certificate" },
-  { key: "profilePic", label: "Profile picture" },
-  { key: "carImage", label: "Car image" },
+  { key: "nationalIdFront", label: "documents.nationalIdFront" },
+  { key: "nationalIdBack", label: "documents.nationalIdBack" },
+  { key: "drivingLicense", label: "documents.drivingLicense" },
+  { key: "carLicenseFront", label: "documents.carLicenseFront" },
+  { key: "carLicenseBack", label: "documents.carLicenseBack" },
+  { key: "criminalRecord", label: "documents.criminalRecord" },
+  { key: "profilePic", label: "documents.profilePic" },
+  { key: "carImage", label: "documents.carImage" },
 ];
 
 interface Props {
@@ -85,7 +87,26 @@ const inputStyle: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-const selectStyle: React.CSSProperties = { ...inputStyle, cursor: "pointer" };
+function getSelectStyle(dir: "ltr" | "rtl"): React.CSSProperties {
+  const isRtl = dir === "rtl";
+  // single-path SVG caret (down arrow) encoded to avoid gradient artifacts near rounded corners
+  const encodedSvg = "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1 3l4 4 4-4' stroke='%235A6A7A' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+
+  return {
+    ...inputStyle,
+    cursor: "pointer",
+    paddingInlineEnd: isRtl ? 14 : 36,
+    paddingInlineStart: isRtl ? 36 : 14,
+    textAlign: isRtl ? "right" : "left",
+    appearance: "none",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+    backgroundImage: `url("data:image/svg+xml;utf8,${encodedSvg}")`,
+    backgroundPosition: isRtl ? "12px center" : "calc(100% - 18px) center",
+    backgroundSize: "12px",
+    backgroundRepeat: "no-repeat",
+  };
+}
 
 const cardStyle: React.CSSProperties = {
   background: "#fff",
@@ -121,10 +142,12 @@ function ProgressBar({
   pct,
   filled,
   total,
+  t,
 }: {
   pct: number;
   filled: number;
   total: number;
+  t: (k: string) => string;
 }) {
   return (
     <div style={{ marginBottom: 12 }}>
@@ -137,7 +160,8 @@ function ProgressBar({
         }}
       >
         <span style={{ fontSize: 12, color: "#5A6A7A", fontWeight: 500 }}>
-          {filled} / {total} complete
+          {filled} / {total} {" "}
+          <span style={{ color: "#5A6A7A" }}>{t("progress.complete")}</span>
         </span>
         <span
           style={{
@@ -193,6 +217,10 @@ export default function DriverProfileClient({
   profileSince,
   initialSavedAddresses,
 }: Props) {
+  const { locale, dir, t } = useClientLocale();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const selectStyle = getSelectStyle(dir);
   // Personal info
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
@@ -280,7 +308,7 @@ export default function DriverProfileClient({
   async function savePersonal(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
-      setPersonalMsg({ ok: false, text: "Name is required." });
+      setPersonalMsg({ ok: false, text: t("error.name_required") });
       return;
     }
     setSavingPersonal(true);
@@ -297,12 +325,12 @@ export default function DriverProfileClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        setPersonalMsg({ ok: false, text: data.error ?? "Failed to save." });
+        setPersonalMsg({ ok: false, text: data.error ?? t("error.save_failed") });
         return;
       }
-      setPersonalMsg({ ok: true, text: "Saved." });
+      setPersonalMsg({ ok: true, text: t("action.saved") });
     } catch {
-      setPersonalMsg({ ok: false, text: "Network error. Please retry." });
+      setPersonalMsg({ ok: false, text: t("error.network") });
     } finally {
       setSavingPersonal(false);
     }
@@ -326,7 +354,7 @@ export default function DriverProfileClient({
       !/^\d{3,4}$/.test(plateDigits) ||
       !licenseExpiry.trim()
     ) {
-      setDetailsMsg({ ok: false, text: "All vehicle details are required." });
+      setDetailsMsg({ ok: false, text: t("error.details_required") });
       return;
     }
     setSavingDetails(true);
@@ -352,12 +380,12 @@ export default function DriverProfileClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        setDetailsMsg({ ok: false, text: data.error ?? "Failed to save." });
+        setDetailsMsg({ ok: false, text: data.error ?? t("error.save_failed") });
         return;
       }
-      setDetailsMsg({ ok: true, text: "Saved." });
+      setDetailsMsg({ ok: true, text: t("action.saved") });
     } catch {
-      setDetailsMsg({ ok: false, text: "Network error. Please retry." });
+      setDetailsMsg({ ok: false, text: t("error.network") });
     } finally {
       setSavingDetails(false);
     }
@@ -415,14 +443,14 @@ export default function DriverProfileClient({
       if (!res.ok) {
         const missingText = Array.isArray(data.missing)
           ? `Missing: ${data.missing.join(", ")}.`
-          : (data.error ?? "Could not submit for review.");
+          : (data.error ?? t("error.submit_failed"));
         setSubmitMsg({ ok: false, text: missingText });
         return;
       }
       setVerificationStatus("pending");
-      setSubmitMsg({ ok: true, text: "Submitted for review." });
+      setSubmitMsg({ ok: true, text: t("profile.submit_review_success") });
     } catch {
-      setSubmitMsg({ ok: false, text: "Network error. Please retry." });
+      setSubmitMsg({ ok: false, text: t("error.network") });
     } finally {
       setSubmitting(false);
     }
@@ -432,9 +460,9 @@ export default function DriverProfileClient({
     typeof verificationStatus,
     { label: string; bg: string; color: string }
   > = {
-    incomplete: { label: "Not verified", bg: "#FFF3E0", color: "#E65100" },
-    pending: { label: "Under review", bg: "#FFF8E1", color: "#F57F17" },
-    verified: { label: "Verified", bg: "#E8F5E9", color: "#27AE60" },
+    incomplete: { label: t("profile.status.incomplete"), bg: "#FFF3E0", color: "#E65100" },
+    pending: { label: t("profile.status.pending"), bg: "#FFF8E1", color: "#F57F17" },
+    verified: { label: t("profile.status.verified"), bg: "#E8F5E9", color: "#27AE60" },
   };
   const statusCfg = statusConfig[verificationStatus];
 
@@ -449,6 +477,7 @@ export default function DriverProfileClient({
       />
 
       <main
+        dir={dir}
         style={{ maxWidth: 560, margin: "0 auto", padding: "32px 20px 48px" }}
       >
         {/* Avatar + name */}
@@ -527,14 +556,15 @@ export default function DriverProfileClient({
               #{userNumber} · {email}
             </p>
           </div>
+
         </div>
 
         {/* Personal information */}
-        <Section title="Personal information">
+        <Section title={t("profile.personal_info")}>
           <form onSubmit={savePersonal} noValidate style={cardStyle}>
             <div>
               <label htmlFor="p-name" style={labelStyle}>
-                Full name{" "}
+                {t("profile.name")}{" "}
                 <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                   *
                 </span>
@@ -550,7 +580,7 @@ export default function DriverProfileClient({
             </div>
             <div>
               <label htmlFor="p-phone" style={labelStyle}>
-                Phone
+                {t("profile.phone")}
               </label>
               <div
                 style={{
@@ -559,6 +589,7 @@ export default function DriverProfileClient({
                   display: "flex",
                   alignItems: "stretch",
                   overflow: "hidden",
+                  direction: "ltr",
                 }}
               >
                 <span
@@ -569,7 +600,8 @@ export default function DriverProfileClient({
                     fontWeight: 600,
                     color: "#0B1E3D",
                     background: "#eef1f3",
-                    borderRight: "1.5px solid #e8edf0",
+                    borderRight: dir === "ltr" ? "1.5px solid #e8edf0" : undefined,
+                    borderLeft: dir === "rtl" ? "1.5px solid #e8edf0" : undefined,
                   }}
                 >
                   +20
@@ -599,13 +631,14 @@ export default function DriverProfileClient({
                     fontFamily: "inherit",
                     color: "#0B1E3D",
                     boxSizing: "border-box",
+                    textAlign: "left",
                   }}
                 />
               </div>
             </div>
             <div>
               <label htmlFor="p-gender" style={labelStyle}>
-                Gender
+                {t("profile.gender")}
               </label>
               <select
                 id="p-gender"
@@ -613,8 +646,8 @@ export default function DriverProfileClient({
                 onChange={(e) => setGender(e.target.value as "male" | "female")}
                 style={selectStyle}
               >
-                <option value="male">Male</option>
-                <option value="female">Female</option>
+                <option value="male">{t("gender.male")}</option>
+                <option value="female">{t("gender.female")}</option>
               </select>
             </div>
             {personalMsg && (
@@ -640,22 +673,23 @@ export default function DriverProfileClient({
               ) : (
                 <Check size={16} aria-hidden="true" />
               )}
-              {savingPersonal ? "Saving…" : "Save"}
+              {savingPersonal ? t("action.saving") : t("profile.save")}
             </button>
           </form>
         </Section>
 
         {/* Driver details */}
-        <Section title="Driver details">
+        <Section title={t("profile.driver_details")}>
           <ProgressBar
             pct={detailsPct}
             filled={detailsFilledCount}
             total={DETAIL_FIELDS.length}
+            t={t}
           />
           <form onSubmit={saveDetails} noValidate style={cardStyle}>
             <div>
               <label htmlFor="d-carType" style={labelStyle}>
-                Car type
+                {t("profile.car_type")}
               </label>
               <select
                 id="d-carType"
@@ -663,14 +697,14 @@ export default function DriverProfileClient({
                 onChange={(e) => setCarType(e.target.value as CarType)}
                 style={selectStyle}
               >
-                <option value="">Select…</option>
+                <option value="">{t("select.placeholder")}</option>
                 {CAR_TYPE_LIST.map((c) => (
                   <option key={c.key} value={c.key}>
-                    {c.label}
+                    {t(`vehicles.${c.key}`) || c.label}
                   </option>
                 ))}
               </select>
-              <p
+                <p
                 style={{
                   fontSize: 12,
                   color: "#5A6A7A",
@@ -681,8 +715,7 @@ export default function DriverProfileClient({
                   gap: 5,
                 }}
               >
-                <Car size={13} aria-hidden="true" /> Capacity: {capacity ?? "—"}{" "}
-                passengers (auto-calculated)
+                <Car size={13} aria-hidden="true" /> {t("profile.capacity_label")} {capacity ?? "—"} {t("profile.capacity_note")}
               </p>
             </div>
             <div
@@ -694,7 +727,7 @@ export default function DriverProfileClient({
             >
               <div>
                 <label htmlFor="d-carBrand" style={labelStyle}>
-                  Brand
+                  {t("profile.car_brand")}
                 </label>
                 <input
                   id="d-carBrand"
@@ -707,7 +740,7 @@ export default function DriverProfileClient({
               </div>
               <div>
                 <label htmlFor="d-carModel" style={labelStyle}>
-                  Model
+                  {t("profile.car_model")}
                 </label>
                 <input
                   id="d-carModel"
@@ -728,7 +761,7 @@ export default function DriverProfileClient({
             >
               <div>
                 <label htmlFor="d-modelYear" style={labelStyle}>
-                  Model year
+                  {t("profile.model_year")}
                 </label>
                 <input
                   id="d-modelYear"
@@ -744,7 +777,7 @@ export default function DriverProfileClient({
               </div>
               <div>
                 <label htmlFor="d-vehicleColor" style={labelStyle}>
-                  Color
+                  {t("profile.vehicle_color")}
                 </label>
                 <input
                   id="d-vehicleColor"
@@ -756,12 +789,12 @@ export default function DriverProfileClient({
               </div>
             </div>
             <div>
-              <label style={labelStyle}>License plate</label>
+              <label style={labelStyle}>{t("profile.plate_letters")} / {t("profile.plate_numbers")}</label>
               <div
                 style={{
                   display: "flex",
                   gap: 8,
-                  direction: "rtl",
+                  direction: dir === "rtl" ? "rtl" : "ltr",
                 }}
               >
                 {[
@@ -827,7 +860,7 @@ export default function DriverProfileClient({
             </div>
             <div>
               <label htmlFor="d-expiry" style={labelStyle}>
-                License expiry
+                {t("profile.license_expiry")}
               </label>
               <input
                 id="d-expiry"
@@ -847,8 +880,7 @@ export default function DriverProfileClient({
                 gap: 5,
               }}
             >
-              <Calendar size={13} aria-hidden="true" /> Profile since{" "}
-              {profileSinceLabel}
+              <Calendar size={13} aria-hidden="true" /> {t("profile.profile_since")} {profileSinceLabel}
             </p>
             {detailsMsg && (
               <p
@@ -873,17 +905,18 @@ export default function DriverProfileClient({
               ) : (
                 <Check size={16} aria-hidden="true" />
               )}
-              {savingDetails ? "Saving…" : "Save"}
+              {savingDetails ? t("action.saving") : t("profile.save")}
             </button>
           </form>
         </Section>
 
         {/* Documents */}
-        <Section title="Documents">
+        <Section title={t("profile.documents")}>
           <ProgressBar
             pct={docsPct}
             filled={docsFilledCount}
             total={DOCUMENTS.length}
+            t={t}
           />
           <div style={{ ...cardStyle, gap: 10 }}>
             {DOCUMENTS.map((doc) => {
@@ -924,18 +957,18 @@ export default function DriverProfileClient({
                       handleFileChange(doc.key, e.target.files?.[0] ?? null)
                     }
                   />
-                  <label
-                    htmlFor={`pdoc-${doc.key}`}
-                    style={{
-                      flex: 1,
-                      fontSize: 14,
-                      fontWeight: 500,
-                      color: "#0B1E3D",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {doc.label}
-                  </label>
+                    <label
+                      htmlFor={`pdoc-${doc.key}`}
+                      style={{
+                        flex: 1,
+                        fontSize: 14,
+                        fontWeight: 500,
+                        color: "#0B1E3D",
+                        cursor: "pointer",
+                      }}
+                    >
+                        {t(doc.label)}
+                    </label>
                   {done && (
                     <a
                       href={path ?? undefined}
@@ -948,16 +981,14 @@ export default function DriverProfileClient({
                         textDecoration: "none",
                       }}
                     >
-                      View
+                        {t("doc.view")}
                     </a>
                   )}
                   <button
                     type="button"
                     onClick={() => fileInputs.current[doc.key]?.click()}
                     disabled={busy}
-                    aria-label={
-                      done ? `Replace ${doc.label}` : `Upload ${doc.label}`
-                    }
+                        aria-label={done ? `${t("doc.replace")} ${t(doc.label)}` : `${t("doc.upload")} ${t(doc.label)}`}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -973,7 +1004,7 @@ export default function DriverProfileClient({
                       background: done ? "#E6F8F5" : "#0B1E3D",
                       color: done ? "#00806E" : "#ffffff",
                     }}
-                  >
+                    >
                     {busy ? (
                       <Loader2 size={14} className="spin" aria-hidden="true" />
                     ) : done ? (
@@ -981,7 +1012,7 @@ export default function DriverProfileClient({
                     ) : (
                       <Upload size={14} aria-hidden="true" />
                     )}
-                    {busy ? "Uploading…" : done ? "Replace" : "Upload"}
+                      {busy ? t("doc.uploading") : done ? t("doc.replace") : t("doc.upload")}
                   </button>
                 </div>
               );
@@ -993,8 +1024,7 @@ export default function DriverProfileClient({
         {verificationStatus === "incomplete" && (
           <div style={{ ...cardStyle, marginTop: 4 }}>
             <p style={{ margin: 0, fontSize: 13, color: "#5A6A7A" }}>
-              Once your driver details and all documents are filled in, submit
-              your profile for review.
+              {t("profile.subtitle")}
             </p>
             {!canSubmit && (
               <p
@@ -1007,8 +1037,11 @@ export default function DriverProfileClient({
                   borderRadius: 8,
                 }}
               >
-                Complete all driver details ({detailsPct}%) and upload all
-                documents ({docsPct}%) to enable submission.
+                {t("profile.complete_details_start")}
+                {detailsPct}
+                {t("profile.complete_details_middle")}
+                {docsPct}
+                {t("profile.complete_details_end")}
               </p>
             )}
             {submitMsg && (
@@ -1035,12 +1068,12 @@ export default function DriverProfileClient({
               ) : (
                 <Check size={16} aria-hidden="true" />
               )}
-              {submitting ? "Submitting…" : "Submit for review"}
+              {submitting ? t("action.submitting") : t("profile.submit_review")}
             </button>
           </div>
         )}
 
-        <Section title="Security">
+        <Section title={t("profile.change_password")}>
           <ChangePasswordSection />
         </Section>
 

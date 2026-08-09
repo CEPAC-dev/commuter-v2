@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json(
-        { error: "Invalid phone/email or password." },
+        { error: "Invalid phone or password." },
         { status: 401 }
       );
     }
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid)
       return NextResponse.json(
-        { error: "Invalid phone/email or password." },
+        { error: "Invalid phone or password." },
         { status: 401 }
       );
 

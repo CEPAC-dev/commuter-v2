@@ -8,6 +8,7 @@ const LocationPickerMap = dynamic(
 );
 import type { SavedAddress } from "@/types/shared";
 import type { TripPoint } from "@/lib/store/useTripStore";
+import { useClientLocale } from "@/lib/locale.client";
 
 interface Props {
   initialAddresses: SavedAddress[];
@@ -36,6 +37,7 @@ const BLANK_FORM: AddrForm = {
 const PRESET_LABELS = ["Home", "Work"];
 
 export default function SavedAddressesSection({ initialAddresses }: Props) {
+  const { t, dir } = useClientLocale();
   const [addresses, setAddresses] = useState<SavedAddress[]>(initialAddresses);
   const [addrForm, setAddrForm] = useState<AddrForm>(BLANK_FORM);
 
@@ -44,7 +46,10 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
   }
 
   function openEditForm(a: SavedAddress) {
-    const isPreset = PRESET_LABELS.includes(a.label);
+    const isPreset =
+      PRESET_LABELS.includes(a.label) ||
+      a.label === t("addresses.home") ||
+      a.label === t("addresses.work");
     setAddrForm({
       open: true,
       editId: a._id,
@@ -64,11 +69,11 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
     const resolvedLabel =
       addrForm.label === "Other" ? addrForm.otherLabel.trim() : addrForm.label;
     if (!resolvedLabel) {
-      setAddrForm((prev) => ({ ...prev, error: "Label required." }));
+      setAddrForm((prev) => ({ ...prev, error: t("addresses.label_required") }));
       return;
     }
     if (!addrForm.point) {
-      setAddrForm((prev) => ({ ...prev, error: "Select an address." }));
+      setAddrForm((prev) => ({ ...prev, error: t("addresses.select_address") }));
       return;
     }
     setAddrForm((prev) => ({ ...prev, saving: true, error: "" }));
@@ -98,7 +103,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
         setAddrForm((prev) => ({
           ...prev,
           saving: false,
-          error: data.error ?? "Failed.",
+          error: data.error ?? t("addresses.failed"),
         }));
         return;
       }
@@ -114,7 +119,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
       setAddrForm((prev) => ({
         ...prev,
         saving: false,
-        error: "Network error.",
+        error: t("addresses.network_error"),
       }));
     }
   }
@@ -158,7 +163,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
           }}
         >
           <Bookmark size={16} style={{ color: "#00C2A8" }} aria-hidden="true" />
-          Saved places
+          {t("addresses.title")}
         </h2>
         <button
           type="button"
@@ -186,7 +191,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
           }}
         >
           <Plus size={14} aria-hidden="true" />
-          Add place
+          {t("addresses.add")}
         </button>
       </div>
 
@@ -212,12 +217,12 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
             }}
           >
             <span style={{ fontSize: 14, fontWeight: 700, color: "#0B1E3D" }}>
-              {addrForm.editId ? "Edit place" : "Add new place"}
+              {addrForm.editId ? t("addresses.edit") : t("addresses.add_new")}
             </span>
             <button
               type="button"
               onClick={closeAddrForm}
-              aria-label="Close"
+              aria-label={t("addresses.close")}
               style={{
                 background: "none",
                 border: "none",
@@ -243,7 +248,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
                 marginBottom: 6,
               }}
             >
-              Label
+              {t("addresses.label")}
             </label>
             <select
               id="addr-label"
@@ -258,7 +263,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
               style={{
                 width: "100%",
                 height: 44,
-                padding: "0 14px",
+                padding: dir === "rtl" ? "0 14px 0 44px" : "0 44px 0 14px",
                 borderRadius: 10,
                 border: "1.5px solid #d0d8e0",
                 fontSize: 15,
@@ -268,14 +273,22 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
                 outline: "none",
                 boxSizing: "border-box",
                 cursor: "pointer",
+                appearance: "none",
+                WebkitAppearance: "none",
+                MozAppearance: "none",
+                textAlign: dir === "rtl" ? "right" : "left",
+                backgroundImage: "url(\"data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1 3l4 4 4-4' stroke='%235A6A7A' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+                backgroundPosition: dir === "rtl" ? "12px center" : "calc(100% - 18px) center",
+                backgroundSize: "12px",
+                backgroundRepeat: "no-repeat",
               }}
               onFocus={(e) => (e.currentTarget.style.borderColor = "#00C2A8")}
               onBlur={(e) => (e.currentTarget.style.borderColor = "#d0d8e0")}
             >
-              <option value="">Select…</option>
-              <option value="Home">Home</option>
-              <option value="Work">Work</option>
-              <option value="Other">Other…</option>
+              <option value="">{t("addresses.select_placeholder")}</option>
+              <option value="Home">{t("addresses.home")}</option>
+              <option value="Work">{t("addresses.work")}</option>
+              <option value="Other">{t("addresses.other")}</option>
             </select>
             {addrForm.label === "Other" && (
               <input
@@ -308,7 +321,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
           </div>
 
           <div>
-            <label
+              <label
               style={{
                 fontSize: 13,
                 fontWeight: 600,
@@ -317,7 +330,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
                 marginBottom: 6,
               }}
             >
-              Location
+              {t("addresses.location")}
             </label>
             <LocationPickerMap
               lat={addrForm.point ? String(addrForm.point.lat) : ""}
@@ -355,10 +368,10 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
             </p>
           )}
 
-          <button
-            type="button"
-            onClick={saveAddress}
-            disabled={addrForm.saving}
+            <button
+              type="button"
+              onClick={saveAddress}
+              disabled={addrForm.saving}
             style={{
               height: 44,
               background: addrForm.saving ? "#9aa8b5" : "#0B1E3D",
@@ -390,12 +403,12 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
                   size={14}
                   style={{ animation: "spin 0.7s linear infinite" }}
                 />
-                Saving…
+                {t("action.saving")}
               </>
             ) : addrForm.editId ? (
-              "Update place"
+              t("addresses.update")
             ) : (
-              "Save place"
+              t("addresses.save")
             )}
           </button>
         </div>
@@ -404,7 +417,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
       {/* Address list */}
       {addresses.length === 0 && !addrForm.open && (
         <p style={{ fontSize: 14, color: "#9aa5b4", margin: 0 }}>
-          No saved places yet. Add one to reuse it when booking.
+          {t("addresses.none")}
         </p>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -453,7 +466,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
             <button
               type="button"
               onClick={() => openEditForm(a)}
-              aria-label={`Edit ${a.label}`}
+              aria-label={t("addresses.edit") + " " + a.label}
               style={{
                 background: "none",
                 border: "none",
@@ -476,7 +489,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
             <button
               type="button"
               onClick={() => deleteAddress(a._id)}
-              aria-label={`Delete ${a.label}`}
+              aria-label={t("addresses.delete") + " " + a.label}
               style={{
                 background: "none",
                 border: "none",

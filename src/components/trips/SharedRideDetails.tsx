@@ -2,6 +2,7 @@ import { MapPin, Users, Clock, Route as RouteIcon } from "lucide-react";
 import { RideDetailRow, TripStatBlock } from "@/components/trips/TripDetailParts";
 import type { GeoPoint, StationSelection } from "@/types/geo";
 import type { StationOption } from "@/lib/services/trips";
+import { translate, localeDirection, type Locale } from "@/lib/i18n";
 
 interface Props {
   pickup: GeoPoint;
@@ -37,7 +38,8 @@ export default function SharedRideDetails({
   durationMinutes,
   to12h,
   isDriver = false,
-}: Props) {
+  locale,
+}: Props & { locale: Locale }) {
   const pickupOpt = pickupStationOptions.find((o) => o.id === pickupStation?.id);
   const dropoffOpt = dropoffStationOptions.find(
     (o) => o.id === dropoffStation?.id,
@@ -54,24 +56,25 @@ export default function SharedRideDetails({
   const segLines = isDriver
     ? [
         {
-          label: "Ride (station → station)",
-          value: `${distanceKm.toFixed(1)} km · ${durationMinutes} min`,
+          label: translate(locale, "ride.ride_station_to_station"),
+          value: `${distanceKm.toFixed(1)} km · ${durationMinutes} ${translate(locale, "ride.minutes_short")}`,
         },
       ]
     : [
-        { label: "Walk to station", value: `${walkToKm.toFixed(2)} km · ${walkToMin} min` },
+        { label: translate(locale, "ride.walk_to_station"), value: `${walkToKm.toFixed(2)} km · ${walkToMin} ${translate(locale, "ride.minutes_short")}` },
         {
-          label: "Ride (station → station)",
-          value: `${distanceKm.toFixed(1)} km · ${durationMinutes} min`,
+          label: translate(locale, "ride.ride_station_to_station"),
+          value: `${distanceKm.toFixed(1)} km · ${durationMinutes} ${translate(locale, "ride.minutes_short")}`,
         },
         {
-          label: "Walk to destination",
-          value: `${walkFromKm.toFixed(2)} km · ${walkFromMin} min`,
+          label: translate(locale, "ride.walk_to_destination"),
+          value: `${walkFromKm.toFixed(2)} km · ${walkFromMin} ${translate(locale, "ride.minutes_short")}`,
         },
       ];
 
   return (
     <div
+      dir={localeDirection(locale)}
       style={{
         background: "#fff",
         borderRadius: 16,
@@ -90,7 +93,7 @@ export default function SharedRideDetails({
           letterSpacing: "0.04em",
         }}
       >
-        Shared ride
+        {translate(locale, "ride.shared")}
       </p>
 
       <div style={{ display: "grid", gap: 14 }}>
@@ -124,9 +127,9 @@ export default function SharedRideDetails({
                   letterSpacing: "0.14em",
                 }}
               >
-                Pickup
+                {translate(locale, "ride.pickup")}
               </p>
-              <p
+                <p
                 style={{
                   margin: "8px 0 0",
                   fontSize: 15,
@@ -147,31 +150,31 @@ export default function SharedRideDetails({
                 padding: "6px 12px",
               }}
             >
-              +{extraPassengers} passenger{extraPassengers === 1 ? "" : "s"}
+              +{extraPassengers} {translate(locale, extraPassengers === 1 ? "my_trips.passenger_singular" : "my_trips.passenger_plural")}
             </span>
           </div>
 
           <div style={{ display: "grid", gap: 10 }}>
-            {!isDriver && pickup.address && (
+              {!isDriver && pickup.address && (
               <RideDetailRow
                 icon={<MapPin size={15} />}
                 color="#00C2A8"
-                headline="Origin"
+                  headline={translate(locale, "ride.origin")}
                 value={pickup.address}
               />
             )}
             <RideDetailRow
               icon={<Clock size={15} />}
               color="#00C2A8"
-              headline="Board by"
+                headline={translate(locale, "ride.board_by")}
               value={to12h(pickupTime)}
             />
             {(pickupStation || isDriver) && !pickupStation?.name && (
               <RideDetailRow
                 icon={<MapPin size={15} />}
                 color="#00C2A8"
-                headline="Station"
-                value={pickupStation?.name ?? "Pickup station"}
+                  headline={translate(locale, "ride.station")}
+                  value={pickupStation?.name ?? translate(locale, "ride.pickup_station_fallback")}
               />
             )}
           </div>
@@ -198,29 +201,29 @@ export default function SharedRideDetails({
               letterSpacing: "0.14em",
             }}
           >
-            Dropoff
+            {translate(locale, "ride.dropoff")}
           </p>
           <div style={{ display: "grid", gap: 10 }}>
             {(dropoffStation || isDriver) && (
               <RideDetailRow
                 icon={<MapPin size={15} />}
                 color="#E74C3C"
-                headline="Station"
-                value={dropoffStation?.name ?? "Dropoff station"}
+                headline={translate(locale, "ride.station")}
+                value={dropoffStation?.name ?? translate(locale, "ride.dropoff_station_fallback")}
               />
             )}
             {!isDriver && (
               <RideDetailRow
                 icon={<MapPin size={15} />}
                 color="#E74C3C"
-                headline="Destination"
+                headline={translate(locale, "ride.destination")}
                 value={dropoff.address}
               />
             )}
             <RideDetailRow
               icon={<Clock size={15} />}
               color="#E74C3C"
-              headline="Arrive by"
+              headline={translate(locale, "ride.arrive_by")}
               value={to12h(arrivalTime)}
             />
           </div>
@@ -236,11 +239,11 @@ export default function SharedRideDetails({
       >
         <TripStatBlock
           icon={<RouteIcon size={15} color="#0B1E3D" aria-hidden="true" />}
-          headline="Distance & duration"
-          value={`${totalKm.toFixed(1)} km · ${totalMin} min`}
+          headline={translate(locale, "ride.distance_duration")}
+          value={`${totalKm.toFixed(1)} km · ${totalMin} ${translate(locale, "ride.minutes_short")}`}
           lines={[
-            { label: "Distance", value: `${totalKm.toFixed(1)} km` },
-            { label: "Duration", value: `${totalMin} min` },
+            { label: translate(locale, "ride.distance"), value: `${totalKm.toFixed(1)} km` },
+            { label: translate(locale, "ride.duration"), value: `${totalMin} ${translate(locale, "ride.minutes_short")}` },
             ...segLines,
           ]}
           accent="#F5A623"

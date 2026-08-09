@@ -30,6 +30,7 @@ const AvailabilitySchema = new Schema(
       default: "open",
       enum: ["open", "matched", "full", "closed", "cancelled"],
     },
+    matched: { type: Boolean, required: true, default: false },
     rideId: {
       type: Types.ObjectId,
       ref: "Ride",

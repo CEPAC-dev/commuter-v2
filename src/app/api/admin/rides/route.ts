@@ -22,12 +22,19 @@ export async function GET(req: NextRequest) {
       .skip(skip)
       .limit(safeLimit)
       .populate("driverId", "name phone email")
+      .populate(
+        "availabilityId",
+        "availabilityNumber date startLocation endLocation startTime endTime status",
+      )
       .lean(),
     Ride.countDocuments(),
   ]);
 
   return NextResponse.json({
-    rides,
+    rides: rides.map((ride) => ({
+      ...ride,
+      availability: ride.availabilityId ?? null,
+    })),
     totalCount,
     page: safePage,
     limit: safeLimit,

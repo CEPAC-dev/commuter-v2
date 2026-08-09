@@ -15,6 +15,7 @@ import {
   subMonths,
 } from "date-fns";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { useClientLocale } from "@/lib/i18n/client";
 
 const triggerStyle: React.CSSProperties = {
   display: "inline-flex",
@@ -43,6 +44,7 @@ function toKey(d: Date): string {
 }
 
 export default function DateRangeCalendar() {
+  const { locale, t: translate } = useClientLocale();
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -126,7 +128,7 @@ export default function DateRangeCalendar() {
       ? `${format(from, "MMM d")} – ${format(to, "MMM d")}`
       : from
         ? `${format(from, "MMM d")} – …`
-        : "Any date";
+        : translate("calendar.any_date");
 
   return (
     <div ref={containerRef} style={{ position: "relative" }}>

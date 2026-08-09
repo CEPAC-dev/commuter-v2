@@ -13,28 +13,14 @@ import {
   LogIn,
   LogOut,
 } from "lucide-react";
+import { useClientLocale } from "@/lib/i18n/client";
+import { formatDate, formatTime, formatEgp } from "@/lib/i18n";
 import AppHeader from "@/components/layout/AppHeader";
 import RouteMap from "@/components/shared/RouteMap";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import { VEHICLES, type VehicleKey } from "@/lib/config/vehicles";
 import type { GeoPoint } from "@/types/geo";
 import type { RideDetailView, RideRouteStopDetail } from "@/types/booking";
-
-function to12h(hhmm: string): string {
-  if (!hhmm) return "—";
-  const [h, m] = hhmm.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-
-function prettyDate(date: string): string {
-  return new Date(`${date}T12:00:00`).toLocaleDateString("en-EG", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
 
 function normalizeStationValue(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
@@ -195,25 +181,23 @@ function Detail({
 export default function DriverRideInteractiveClient({
   ride: rideProp,
   email,
-}: {
-  ride: RideDetailView;
-  email: string;
-}) {
+}: { ride: RideDetailView; email: string }) {
   const [ride, setRide] = useState(rideProp);
   const [rideStarted, setRideStarted] = useState(
     ride.status === "active" || ride.status === "completed",
   );
   const [isCompleted, setIsCompleted] = useState(ride.status === "completed");
   const [confirmedStationIndices, setConfirmedStationIndices] = useState<number[]>([]);
-  const [stationSelections, setStationSelections] = useState<
-    Record<string, Record<string, "arrived" | "no_show">>
-  >({});
+  const [stationSelections, setStationSelections] = useState<Record<string, Record<string, "arrived" | "no_show">>>({});
   const [driverOrigin, setDriverOrigin] = useState<GeoPoint | null>(
     ride.driverOrigin ?? null,
   );
   const [driverDestination, setDriverDestination] = useState<GeoPoint | null>(
     ride.driverDestination ?? null,
   );
+  const { t, locale, dir } = useClientLocale();
+  const to12h = (hhmm: string) => formatTime(locale, hhmm);
+  const prettyDate = (date: string) => formatDate(locale, date);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [navigationErrorByStation, setNavigationErrorByStation] = useState<Record<number, string>>({});
 
@@ -226,7 +210,7 @@ export default function DriverRideInteractiveClient({
     if (typeof lat !== "number" || !Number.isFinite(lat) || typeof lng !== "number" || !Number.isFinite(lng)) {
       setNavigationErrorByStation((prev) => ({
         ...prev,
-        [step.stationIndex]: "Location is unavailable for this station.",
+        [step.stationIndex]: t("navigation.location_unavailable"),
       }));
       return;
     }
@@ -234,7 +218,7 @@ export default function DriverRideInteractiveClient({
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
       setNavigationErrorByStation((prev) => ({
         ...prev,
-        [step.stationIndex]: "Unable to access your current location.",
+        [step.stationIndex]: t("navigation.unable_access_location"),
       }));
       return;
     }
@@ -256,8 +240,7 @@ export default function DriverRideInteractiveClient({
     } catch (error) {
       setNavigationErrorByStation((prev) => ({
         ...prev,
-        [step.stationIndex]:
-          "Unable to get current location. Please allow location access and try again.",
+        [step.stationIndex]: t("navigation.unable_get_location"),
       }));
     }
   };
@@ -279,7 +262,7 @@ export default function DriverRideInteractiveClient({
     routeStops = ride.passengers
       .flatMap((p) => [
         {
-          address: p.pickupStation?.name ?? "Pickup station",
+          address: p.pickupStation?.name ?? t("ride.pickup_station_fallback"),
           point: p.pickupStation
             ? { lat: p.pickupStation.lat, lng: p.pickupStation.lng, address: p.pickupStation.name }
             : p.pickup,
@@ -288,7 +271,7 @@ export default function DriverRideInteractiveClient({
           waitingMinutes: 0,
         },
         {
-          address: p.dropoffStation?.name ?? "Dropoff station",
+          address: p.dropoffStation?.name ?? t("ride.dropoff_station_fallback"),
           point: p.dropoffStation
             ? { lat: p.dropoffStation.lat, lng: p.dropoffStation.lng, address: p.dropoffStation.name }
             : p.dropoff,
@@ -402,7 +385,7 @@ export default function DriverRideInteractiveClient({
     {
       type: "origin",
       stationIndex: 0,
-      name: driverOrigin?.address ?? "Driver current location",
+      name: driverOrigin?.address ?? t("ride.driver_origin"),
       zone: "",
       landmark: "",
       boarding: 0,
@@ -415,7 +398,7 @@ export default function DriverRideInteractiveClient({
         stopLike.name ??
         stop.address ??
         stop.point?.address ??
-        `Step ${i + 1}`;
+        `${t("ride.station_fallback", { n: i + 1 })}`;
       const meta = stationMetaMap.get(stationName);
       const counts = getStationCounts(stop.stationIndex, stationName);
       return {
@@ -433,7 +416,7 @@ export default function DriverRideInteractiveClient({
     {
       type: "destination",
       stationIndex: visibleRouteStops.length + 1,
-      name: driverDestination?.address ?? "Driver final destination",
+      name: driverDestination?.address ?? t("ride.driver_destination"),
       zone: "",
       landmark: "",
       boarding: 0,
@@ -611,7 +594,7 @@ export default function DriverRideInteractiveClient({
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
         throw new Error(
-          errorData?.error || `Failed to confirm station ${stationIndex}`,
+          errorData?.error || t("ride.confirm_station_error", { stationIndex }),
         );
       }
 
@@ -722,7 +705,7 @@ export default function DriverRideInteractiveClient({
   };
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
+    <div dir={dir} style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
       <AppHeader
         authed
         email={email}
@@ -746,7 +729,7 @@ export default function DriverRideInteractiveClient({
             }}
           >
             <CalendarDays size={14} aria-hidden="true" />
-            Ride #{ride.rideNumber} · {prettyDate(ride.date)}
+            {t("my_trips.ride_number", { rideNumber: ride.rideNumber })} · {prettyDate(ride.date)}
           </span>
           <div
             style={{
@@ -770,7 +753,7 @@ export default function DriverRideInteractiveClient({
                   color: "#fff",
                 }}
               >
-                {isCompleted ? "Completed" : rideStarted ? "Ongoing" : "Upcoming"}
+                {isCompleted ? t("driver.completed") : rideStarted ? t("driver.ongoing") : t("driver.upcoming")}
               </span>
               <span
                 style={{
@@ -783,7 +766,7 @@ export default function DriverRideInteractiveClient({
                 }}
               >
                 <Users size={12} aria-hidden="true" />
-                {ride.passengerCount} passenger{ride.passengerCount === 1 ? "" : "s"}
+                {t("driver.passenger_count", { count: ride.passengerCount, plural: ride.passengerCount === 1 ? "" : "s" })}
               </span>
             </div>
             <span
@@ -794,7 +777,7 @@ export default function DriverRideInteractiveClient({
                 fontVariantNumeric: "tabular-nums",
               }}
             >
-              {ride.totalCost} EGP
+              {formatEgp(locale, ride.totalCost)}
             </span>
           </div>
         </div>
@@ -817,10 +800,10 @@ export default function DriverRideInteractiveClient({
           >
             <div>
               <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#fff" }}>
-                Ready to Start Ride?
+                {t("driver.ready_to_start")}
               </p>
               <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94A3B8" }}>
-                All chairs are empty until you press start and log your origin location.
+                {t("driver.ready_to_start_desc")}
               </p>
             </div>
             <button
@@ -844,7 +827,7 @@ export default function DriverRideInteractiveClient({
               }}
             >
               <Play size={16} fill="#fff" />
-              {loadingAction === "start" ? "Starting..." : "Start Ride"}
+              {loadingAction === "start" ? t("driver.starting") : t("driver.start_ride")}
             </button>
           </div>
         )}
@@ -872,19 +855,19 @@ export default function DriverRideInteractiveClient({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Detail
                 icon={<Route size={15} color="#0B1E3D" />}
-                label="Ride type"
-                value={ride.rideType === "shared" ? "Shared" : "Private"}
+                label={t("ride_type.label")}
+                value={ride.rideType === "shared" ? t("ride_type.shared") : t("ride_type.private")}
               />
               <Detail
                 icon={<Car size={15} color="#0B1E3D" />}
-                label="Vehicle"
+                label={t("driver.vehicle")}
                 value={vLabel}
               />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
               <Clock size={14} color="#5A6A7A" aria-hidden="true" />
               <span style={{ fontSize: 13, color: "#5A6A7A", fontWeight: 500 }}>
-                Window{" "}
+                {t("driver.window_prefix")}{" "}
                 <strong style={{ color: "#0B1E3D" }}>
                   {to12h(ride.startTime)} – {to12h(ride.endTime)}
                 </strong>
@@ -932,10 +915,10 @@ export default function DriverRideInteractiveClient({
                   letterSpacing: "0.04em",
                 }}
               >
-                Route Details
+                {t("driver.route_details")}
               </p>
               <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                Driver route and station breakdown
+                {t("driver.route_details_desc")}
               </span>
             </div>
             <span
@@ -948,7 +931,7 @@ export default function DriverRideInteractiveClient({
                 borderRadius: 999,
               }}
             >
-              {steps.length} Steps
+              {t("driver.steps_count", { count: steps.length })}
             </span>
           </div>
 
@@ -1062,10 +1045,10 @@ export default function DriverRideInteractiveClient({
                           }}
                         >
                           {step.type === "origin"
-                            ? "Driver origin"
+                            ? t("driver.origin_label")
                             : step.type === "destination"
-                              ? "Driver destination"
-                              : "Station"}
+                              ? t("driver.destination_label")
+                              : t("driver.station_label")}
                         </span>
                         <p
                           style={{
@@ -1120,7 +1103,7 @@ export default function DriverRideInteractiveClient({
                                   : 1,
                             }}
                           >
-                            Go to Location
+                            {t("driver.go_to_location")}
                           </button>
 
                           <button
@@ -1154,10 +1137,10 @@ export default function DriverRideInteractiveClient({
                           >
                             <CheckCircle2 size={13} color={isActiveStation ? "#27AE60" : "#00C2A8"} />
                             {loadingAction === `confirm-${step.stationIndex}`
-                              ? "Confirming..."
+                              ? t("driver.confirming")
                               : requiresPassengerSelections
-                                ? "Confirm arrivals"
-                                : "Confirm stop"}
+                                ? t("driver.confirm_arrivals")
+                                : t("driver.confirm_stop")}
                           </button>
                         </>
                       )}
@@ -1198,7 +1181,7 @@ export default function DriverRideInteractiveClient({
                             }}
                           >
                             <LogOut size={12} aria-hidden="true" />
-                            Alighting: <strong style={{ color: "#0B1E3D" }}>{step.alighting}</strong>
+                            {t("driver.alighting")}: <strong style={{ color: "#0B1E3D" }}>{step.alighting}</strong>
                           </span>
                           <span
                             style={{
@@ -1210,14 +1193,14 @@ export default function DriverRideInteractiveClient({
                             }}
                           >
                             <LogIn size={12} aria-hidden="true" />
-                            Boarding: <strong style={{ color: "#0B1E3D" }}>{step.boarding}</strong>
+                            {t("driver.boarding")}: <strong style={{ color: "#0B1E3D" }}>{step.boarding}</strong>
                           </span>
                         </>
                       ) : (
                         <span style={{ fontSize: 12, color: "#5A6A7A" }}>
                           {step.type === "origin"
-                            ? "This is the driver’s starting point."
-                            : "This is the driver’s finish point."}
+                            ? t("driver.origin_note")
+                            : t("driver.destination_note")}
                         </span>
                       )}
                       {step.waitingMinutes > 0 && (
@@ -1231,7 +1214,7 @@ export default function DriverRideInteractiveClient({
                           }}
                         >
                           <Clock size={12} aria-hidden="true" />
-                          Wait: <strong style={{ color: "#0B1E3D" }}>{step.waitingMinutes} min</strong>
+                          {t("driver.wait")}: <strong style={{ color: "#0B1E3D" }}>{step.waitingMinutes} {t("ride.minutes_short")}</strong>
                         </span>
                       )}
                     </div>
@@ -1248,11 +1231,11 @@ export default function DriverRideInteractiveClient({
                         }}
                       >
                         <p style={{ margin: 0, fontSize: 12, color: "#5A6A7A", fontWeight: 600 }}>
-                          Boarding and alighting passengers for this stop.
+                          {t("driver.boarding_alighting_desc")}
                         </p>
                         {passengersForStation.length === 0 ? (
                           <p style={{ margin: 0, fontSize: 12, color: "#5A6A7A" }}>
-                            No passenger is assigned to this stop yet.
+                            {t("driver.no_passenger_assigned")}
                           </p>
                         ) : (
                           passengersForStation.map((passenger) => {
@@ -1279,10 +1262,10 @@ export default function DriverRideInteractiveClient({
                               >
                                 <div>
                                   <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
-                                    {passenger.passengerName ?? `Passenger ${passenger.pickupOrder ?? 1}`}
+                                    {passenger.passengerName ?? t("driver.passenger_fallback", { n: passenger.pickupOrder ?? 1 })}
                                   </span>
                                   <div style={{ marginTop: 4, fontSize: 11, color: "#5A6A7A" }}>
-                                    {isBoardingPassenger ? "Boarding" : isAlightingPassenger ? "Alighting" : "Pending"}
+                                    {isBoardingPassenger ? t("driver.status_boarding") : isAlightingPassenger ? t("driver.status_alighting") : t("driver.status_pending")}
                                   </div>
                                 </div>
                                 {isBoardingPassenger ? (
@@ -1309,7 +1292,7 @@ export default function DriverRideInteractiveClient({
                                         cursor: "pointer",
                                       }}
                                     >
-                                      Arrived
+                                      {t("driver.arrived")}
                                     </button>
                                     <button
                                       type="button"
@@ -1333,12 +1316,12 @@ export default function DriverRideInteractiveClient({
                                         cursor: "pointer",
                                       }}
                                     >
-                                      No show
+                                      {t("driver.no_show")}
                                     </button>
                                   </div>
                                 ) : (
                                   <span style={{ fontSize: 12, fontWeight: 700, color: "#00806E" }}>
-                                    Will alight here
+                                    {t("driver.will_alight_here")}
                                   </span>
                                 )}
                               </div>
@@ -1350,7 +1333,7 @@ export default function DriverRideInteractiveClient({
 
                     {step.type === "station" && isConfirmedStep && !isCurrentStep && (
                       <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: "#27AE60" }}>
-                        Confirmed for this station.
+                        {t("driver.confirmed_station")}
                       </div>
                     )}
                   </div>
@@ -1380,7 +1363,7 @@ export default function DriverRideInteractiveClient({
               }}
             >
               <Flag size={14} />
-              {loadingAction === "close" ? "Closing..." : "Close ride"}
+              {loadingAction === "close" ? t("driver.closing") : t("driver.close_ride")}
             </button>
           )}
         </div>

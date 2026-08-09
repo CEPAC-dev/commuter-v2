@@ -113,6 +113,7 @@ export async function GET(req: NextRequest) {
   const driverId = searchParams.get("driverId")?.trim();
   const date = searchParams.get("date")?.trim();
   const status = searchParams.get("status")?.trim();
+  const availabilityNumber = Number(searchParams.get("availabilityNumber") ?? "");
   const safePage = Number.isFinite(page) && page > 0 ? page : 1;
   const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 20;
   const skip = (safePage - 1) * safeLimit;
@@ -121,6 +122,7 @@ export async function GET(req: NextRequest) {
   if (driverId) query.driverId = driverId;
   if (date) query.date = date;
   if (status && ALLOWED_STATUSES.includes(status)) query.status = status;
+  if (Number.isFinite(availabilityNumber)) query.availabilityNumber = availabilityNumber;
 
   const [records, totalCount] = await Promise.all([
     Availability.find(query)
