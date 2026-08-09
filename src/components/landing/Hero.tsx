@@ -12,18 +12,23 @@ interface Props {
   authed?: boolean;
 }
 
-const STATS = [
-  { label: "types available", value: "4 vehicles" },
-  { label: "fully covered", value: "Greater Cairo" },
-  { label: "from", value: "4 EGP" },
-] as const;
-
 export default function Hero({ authed = false }: Props) {
   const router = useRouter();
-  const { t } = useClientLocale();
+  const { t, locale } = useClientLocale();
+  const isArabic = locale === "ar";
   const [mounted, setMounted] = useState(false);
   const { pickup, dropoff, setPickup, setDropoff, swap } = useTripStore();
   const [error, setError] = useState("");
+
+  // Prevent sessionStorage hydration mismatch
+  useEffect(() => { setMounted(true); }, []);
+
+  // Build stats dynamically from translations
+  const STATS = [
+    { label: t("hero.stats.types_available"), value: t("hero.stats.types_value") },
+    { label: t("hero.stats.fully_covered"), value: t("hero.stats.coverage_value") },
+    { label: t("hero.stats.from"), value: t("hero.stats.price_value") },
+  ] as const;
 
   // Prevent sessionStorage hydration mismatch
   useEffect(() => { setMounted(true); }, []);
@@ -104,7 +109,7 @@ export default function Hero({ authed = false }: Props) {
                 margin: "0 0 14px",
               }}
             >
-              Greater Cairo&apos;s smartest commute
+              {t("hero.tagline")}
             </p>
             <h1
               style={{
@@ -116,8 +121,8 @@ export default function Hero({ authed = false }: Props) {
                 margin: "0 0 22px",
               }}
             >
-              Go anywhere,{" "}
-              <span style={{ color: "#00C2A8" }}>on your terms.</span>
+              {t("hero.heading_start")}
+              <span style={{ color: "#00C2A8" }}>{t("hero.heading_highlight")}</span>
             </h1>
             <p
               style={{
@@ -128,8 +133,7 @@ export default function Hero({ authed = false }: Props) {
                 maxWidth: 400,
               }}
             >
-              Book private or shared rides across Greater Cairo — affordable,
-              reliable, and timed precisely to your schedule.
+              {t("hero.description")}
             </p>
 
             {/* Stats */}
@@ -149,14 +153,26 @@ export default function Hero({ authed = false }: Props) {
                   style={{
                     display: "flex",
                     flexDirection: "column",
-                    alignItems: "flex-start",
+                    alignItems: isArabic ? "flex-end" : "flex-start",
+                    textAlign: isArabic ? "right" : "left",
                     gap: 6,
-                    paddingRight: i < STATS.length - 1 ? 28 : 0,
-                    marginRight: i < STATS.length - 1 ? 28 : 0,
-                    borderRight:
-                      i < STATS.length - 1
-                        ? "1px solid rgba(255,255,255,0.12)"
-                        : "none",
+                    ...(isArabic
+                      ? {
+                          paddingLeft: i < STATS.length - 1 ? 28 : 0,
+                          marginLeft: i < STATS.length - 1 ? 28 : 0,
+                          borderLeft:
+                            i < STATS.length - 1
+                              ? "1px solid rgba(255,255,255,0.12)"
+                              : "none",
+                        }
+                      : {
+                          paddingRight: i < STATS.length - 1 ? 28 : 0,
+                          marginRight: i < STATS.length - 1 ? 28 : 0,
+                          borderRight:
+                            i < STATS.length - 1
+                              ? "1px solid rgba(255,255,255,0.12)"
+                              : "none",
+                        }),
                   }}
                   className="hero-stat"
                 >
@@ -210,7 +226,7 @@ export default function Hero({ authed = false }: Props) {
                   margin: "0 0 20px",
                 }}
               >
-                Where are you going?
+                {t("hero.where_are_you_going")}
               </h2>
 
               <form onSubmit={handleSubmit} noValidate>
@@ -255,7 +271,7 @@ export default function Hero({ authed = false }: Props) {
                     <button
                       type="button"
                       onClick={swap}
-                      aria-label="Swap pickup and dropoff locations"
+                      aria-label={t("hero.swap_aria")}
                       style={{
                         background: "#ffffff",
                         border: "1.5px solid #e8edf0",
@@ -340,7 +356,7 @@ export default function Hero({ authed = false }: Props) {
                   onMouseUp={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
                 >
                   <span style={{ color: "#ffffff", transition: "color 0.2s" }}>
-                    {authed ? "See Prices" : "Log In & See Prices"}
+                    {authed ? t("hero.see_prices") : t("hero.login_to_see")}
                   </span>
                   <ChevronRight size={18} aria-hidden="true" />
                 </button>

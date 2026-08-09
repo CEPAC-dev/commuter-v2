@@ -1,5 +1,6 @@
 "use client";
 import { LogOut } from "lucide-react";
+import { useClientLocale } from "@/lib/i18n/client";
 
 interface Props {
   open: boolean;
@@ -8,6 +9,8 @@ interface Props {
 }
 
 export default function LogoutConfirmModal({ open, onConfirm, onCancel }: Props) {
+  const { t } = useClientLocale();
+  
   if (!open) return null;
 
   return (
@@ -62,10 +65,10 @@ export default function LogoutConfirmModal({ open, onConfirm, onCancel }: Props)
             color: "#0B1E3D",
           }}
         >
-          Log out?
+          {t("logout.title")}
         </p>
         <p style={{ margin: "0 0 20px", fontSize: 14, color: "#5A6A7A" }}>
-          Are you sure you want to log out of your account?
+          {t("logout.description")}
         </p>
         <div style={{ display: "flex", gap: 10 }}>
           <button
@@ -82,9 +85,13 @@ export default function LogoutConfirmModal({ open, onConfirm, onCancel }: Props)
               fontSize: 14,
               cursor: "pointer",
               fontFamily: "inherit",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
             }}
           >
-            No
+            {t("logout.cancel")}
           </button>
           <button
             type="button"
@@ -100,9 +107,13 @@ export default function LogoutConfirmModal({ open, onConfirm, onCancel }: Props)
               fontSize: 14,
               cursor: "pointer",
               fontFamily: "inherit",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
             }}
           >
-            Yes, log out
+            {t("logout.confirm")}
           </button>
         </div>
       </div>

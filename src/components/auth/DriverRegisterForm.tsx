@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import PasswordInput from "@/components/shared/PasswordInput";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
+import { useClientLocale } from "@/lib/i18n/client";
 
 const labelStyle: React.CSSProperties = {
   fontSize: 13,
@@ -24,6 +25,8 @@ const inputStyle: React.CSSProperties = {
   color: "#0B1E3D",
   outline: "none",
   boxSizing: "border-box",
+  direction: "ltr",
+  textAlign: "left",
 };
 
 const selectStyle: React.CSSProperties = { ...inputStyle, cursor: "pointer" };
@@ -57,16 +60,17 @@ export default function DriverRegisterForm({
   setGender,
   onSuccess,
 }: Props) {
+  const { t } = useClientLocale();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   function validate(): string {
     if (!name.trim() || !phone.trim() || !password)
-      return "Name, phone and password are required.";
-    if (password.length < 8) return "Password must be at least 8 characters.";
+      return t("auth.driver.name_required");
+    if (password.length < 8) return t("auth.driver.password_too_short");
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      return "Invalid email address.";
-    if (!gender) return "Please select your gender.";
+      return t("auth.driver.invalid_email");
+    if (!gender) return t("auth.driver.gender_required");
     return "";
   }
 
@@ -88,13 +92,13 @@ export default function DriverRegisterForm({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Registration failed.");
+        setError(data.error ?? t("auth.driver.registration_failed"));
         setLoading(false);
         return;
       }
       onSuccess();
     } catch {
-      setError("Network error. Please check your connection.");
+      setError(t("auth.network_error"));
       setLoading(false);
     }
   }
@@ -104,7 +108,7 @@ export default function DriverRegisterForm({
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div>
           <label htmlFor="d-name" style={labelStyle}>
-            Full name{" "}
+            {t("auth.driver.full_name")}{" "}
             <span aria-hidden="true" style={{ color: "#e74c3c" }}>
               *
             </span>
@@ -121,34 +125,42 @@ export default function DriverRegisterForm({
         </div>
         <div>
           <label htmlFor="d-phone" style={labelStyle}>
-            Phone{" "}
+            {t("auth.driver.phone")}{" "}
             <span aria-hidden="true" style={{ color: "#e74c3c" }}>
               *
             </span>
           </label>
           <div
+            dir="ltr"
             style={{
               display: "flex",
+              flexDirection: "row",
               alignItems: "stretch",
               height: 52,
               background: "#f8f9fa",
               border: "1.5px solid #e8edf0",
               borderRadius: 12,
               overflow: "hidden",
+              direction: "ltr",
+              unicodeBidi: "isolate",
             }}
           >
             <span
+              dir="ltr"
               style={{
                 display: "flex",
+                flexDirection: "row",
                 alignItems: "center",
                 padding: "0 12px",
                 fontWeight: 600,
                 color: "#0B1E3D",
                 background: "#eef1f3",
                 borderRight: "1.5px solid #e8edf0",
+                direction: "ltr",
+                unicodeBidi: "isolate",
               }}
             >
-              +20
+              <span dir="ltr" style={{ direction: "ltr", unicodeBidi: "plaintext" }}>+20</span>
             </span>
             <input
               id="d-phone"
@@ -175,12 +187,14 @@ export default function DriverRegisterForm({
                 fontFamily: "inherit",
                 color: "#0B1E3D",
                 boxSizing: "border-box",
+                direction: "ltr",
+                textAlign: "left",
               }}
             />
           </div>
         </div>
         <PasswordInput
-          label="Password *"
+          label={t("auth.driver.password") + " *"}
           id="d-password"
           autoComplete="new-password"
           required
@@ -190,7 +204,7 @@ export default function DriverRegisterForm({
         <PasswordStrengthMeter password={password} />
         <div>
           <label htmlFor="d-gender" style={labelStyle}>
-            Gender{" "}
+            {t("auth.driver.gender")}{" "}
             <span aria-hidden="true" style={{ color: "#e74c3c" }}>
               *
             </span>
@@ -202,16 +216,16 @@ export default function DriverRegisterForm({
             onChange={(e) => setGender(e.target.value as "male" | "female")}
             style={selectStyle}
           >
-            <option value="">Select…</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
+            <option value="">{t("auth.driver.gender_select")}</option>
+            <option value="male">{t("auth.driver.gender_male")}</option>
+            <option value="female">{t("auth.driver.gender_female")}</option>
           </select>
         </div>
         <div>
           <label htmlFor="d-email" style={labelStyle}>
-            Email address{" "}
+            {t("auth.driver.email")}{" "}
             <span style={{ fontWeight: 400, color: "#5A6A7A" }}>
-              (optional)
+              {t("auth.email_optional")}
             </span>
           </label>
           <input
@@ -266,7 +280,7 @@ export default function DriverRegisterForm({
         }}
       >
         {loading && <Loader2 size={18} className="spin" aria-hidden="true" />}
-        {loading ? "Please wait…" : "Create driver account"}
+        {loading ? t("auth.driver.creating_account") : t("auth.driver.create_account")}
       </button>
     </form>
   );
