@@ -22,6 +22,15 @@ import type { StopInput, TripInput } from "@/types/forms";
 import type { PaymentStatus } from "@/types/booking";
 import { listUserTrips } from "@/lib/services/trips";
 import { Types } from "mongoose";
+import {
+  getActiveDiscountForUser,
+  getReferralDiscountAllocations,
+} from "@/lib/referral";
+import {
+  applyPromoCodeToTrip,
+  normalizePromoCode,
+  rollbackPromoCodeUsage,
+} from "@/lib/promoCode";
 
 const PRIVATE_VEHICLE_KEYS = new Set<VehicleKey>([
   "private_car",
@@ -94,6 +103,8 @@ export async function POST(req: NextRequest) {
     dates?: string[];
     trips: TripInput[];
     note?: string;
+    useReferralDiscount?: boolean;
+    promoCode?: string | null;
   };
   try {
     body = await req.json();
@@ -103,6 +114,12 @@ export async function POST(req: NextRequest) {
 
   const { trips } = body;
   const rawDates = body.dates ?? (body.date ? [body.date] : []);
+  const useReferralDiscount = body.useReferralDiscount === true;
+  const promoCodeInput =
+    typeof body.promoCode === "string" ? body.promoCode : "";
+  const promoCode = promoCodeInput.trim()
+    ? normalizePromoCode(promoCodeInput)
+    : null;
   const note =
     typeof body.note === "string" ? body.note.trim().slice(0, 1000) : "";
 
@@ -464,45 +481,171 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const perDateAmountEgp = serverTrips.reduce((sum, t) => sum + t.priceEgp, 0);
-  const amountEgp = perDateAmountEgp * dates.length;
+  const tripInstances = dates.flatMap((date) =>
+    serverTrips.map((trip, cycleIndex) => ({
+      id: new Types.ObjectId(),
+      date,
+      cycleIndex,
+      trip,
+    })),
+  );
 
-  const request = await Request.create({
-    userId: new Types.ObjectId(session.userId),
-    dates,
-    amountEgp,
-    note,
-    paymentStatus: "pending",
-    status: "pending_payment",
+  let referralAllocations: Array<{ usageId: string; discountPercentage: number }> = [];
+  if (useReferralDiscount) {
+    // Server-authoritative guard: only apply discounts if the user currently has
+    // an active referral usage and reservations are still available.
+    const activeDiscount = await getActiveDiscountForUser(session.userId);
+    if (activeDiscount) {
+      referralAllocations = await getReferralDiscountAllocations(
+        session.userId,
+        tripInstances.length,
+      );
+    }
+  }
+
+  const promoApplies: Array<{
+    success: boolean;
+    discountPercentage: number;
+    promoCodeId: string;
+    usageId: string;
+  } | null> = tripInstances.map(() => null);
+  const successfulPromoReservations: Array<{
+    promoCodeId: string;
+    usageId: string;
+  }> = [];
+  let promoFailureMessage = "";
+
+  if (promoCode) {
+    for (let i = 0; i < tripInstances.length; i += 1) {
+      const appliedPromo = await applyPromoCodeToTrip(
+        promoCode,
+        session.userId,
+        String(tripInstances[i].id),
+      );
+      if (
+        appliedPromo.success &&
+        typeof appliedPromo.discountPercentage === "number" &&
+        appliedPromo.promoCodeId &&
+        appliedPromo.usageId
+      ) {
+        promoApplies[i] = {
+          success: true,
+          discountPercentage: appliedPromo.discountPercentage,
+          promoCodeId: appliedPromo.promoCodeId,
+          usageId: appliedPromo.usageId,
+        };
+        successfulPromoReservations.push({
+          promoCodeId: appliedPromo.promoCodeId,
+          usageId: appliedPromo.usageId,
+        });
+      } else if (!promoFailureMessage) {
+        promoFailureMessage = appliedPromo.message;
+      }
+    }
+  }
+
+  const pricedTripInstances = tripInstances.map((instance, index) => {
+    const allocation = referralAllocations[index];
+    const promoApply = promoApplies[index];
+    const basePriceEgp = instance.trip.priceEgp;
+    const referralPct = allocation?.discountPercentage ?? 0;
+    const promoPct = promoApply?.discountPercentage ?? 0;
+    const totalDiscountPercentage = Math.min(100, referralPct + promoPct);
+    const priceEgp = Math.round(
+      basePriceEgp * (1 - totalDiscountPercentage / 100),
+    );
+    return {
+      ...instance,
+      basePriceEgp,
+      priceEgp,
+      allocation,
+      promoApply,
+    };
   });
 
+  const referralDiscountAppliedTrips = pricedTripInstances.reduce(
+    (count, instance) => count + (instance.allocation ? 1 : 0),
+    0,
+  );
+  const referralDiscountApplied = referralDiscountAppliedTrips > 0;
+  const promoCodeAppliedTrips = pricedTripInstances.reduce(
+    (count, instance) => count + (instance.promoApply ? 1 : 0),
+    0,
+  );
+  const promoCodeApplied = promoCodeAppliedTrips > 0;
+  const promoCodePartiallyApplied =
+    promoCodeAppliedTrips > 0 && promoCodeAppliedTrips < tripInstances.length;
+  const promoCodeUnavailable = Boolean(promoCode) && !promoCodeApplied;
+
+  const amountEgp = pricedTripInstances.reduce((sum, instance) => sum + instance.priceEgp, 0);
+  let createdRequestId: Types.ObjectId | null = null;
+
   try {
+    const request = await Request.create({
+      userId: new Types.ObjectId(session.userId),
+      dates,
+      amountEgp,
+      note,
+      paymentStatus: "pending",
+      status: "pending_payment",
+    });
+    createdRequestId = request._id;
+
     const tripDocuments = await Promise.all(
-      dates.flatMap((date) =>
-        serverTrips.map(async (trip, cycleIndex) => ({
+      pricedTripInstances.map(async (instance) => ({
+          _id: instance.id,
           tripNumber: await nextSequence("tripNumber"),
           requestId: request._id,
           userId: new Types.ObjectId(session.userId),
-          date,
-          cycleIndex,
-          ...trip,
+          date: instance.date,
+          cycleIndex: instance.cycleIndex,
+          ...instance.trip,
+          basePriceEgp: instance.basePriceEgp,
+          priceEgp: instance.priceEgp,
+          ...(instance.allocation && {
+            referralUsageId: new Types.ObjectId(instance.allocation.usageId),
+            referralDiscountPercentage: instance.allocation.discountPercentage,
+          }),
+          ...(instance.promoApply && {
+            appliedPromoCode: new Types.ObjectId(instance.promoApply.promoCodeId),
+            promoDiscountPercentage: instance.promoApply.discountPercentage,
+          }),
           paymentStatus: "pending",
           status: "pending_payment",
         })),
-      ),
     );
     await Trip.insertMany(tripDocuments);
+    return NextResponse.json(
+      {
+        bookingId: String(request._id),
+        amountEgp,
+        useReferralDiscount,
+        referralDiscountApplied,
+        referralDiscountAppliedTrips,
+        referralDiscountUnavailable:
+          useReferralDiscount && !referralDiscountApplied,
+        promoCode,
+        promoCodeApplied,
+        promoCodeAppliedTrips,
+        promoCodePartiallyApplied,
+        promoCodeUnavailable,
+        ...(promoFailureMessage ? { promoCodeMessage: promoFailureMessage } : {}),
+      },
+      { status: 201 },
+    );
   } catch (err) {
-    await Request.deleteOne({ _id: request._id });
+    if (createdRequestId) {
+      await Request.deleteOne({ _id: createdRequestId });
+    }
+    await Promise.all(
+      successfulPromoReservations.map((reservation) =>
+        rollbackPromoCodeUsage(reservation.usageId, reservation.promoCodeId),
+      ),
+    );
     console.error("Trip fan-out failed — request rolled back:", err);
     return NextResponse.json(
       { error: "Failed to create trips" },
       { status: 500 },
     );
   }
-
-  return NextResponse.json(
-    { bookingId: String(request._id), amountEgp },
-    { status: 201 },
-  );
 }

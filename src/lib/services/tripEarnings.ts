@@ -16,16 +16,17 @@ export async function settleTripEarning(tripId: string): Promise<number | null> 
   await connectDB();
 
   const trip = await Trip.findById(tripId)
-    .select("driverId priceEgp status tripNumber")
+    .select("driverId priceEgp basePriceEgp status tripNumber")
     .lean<{
       driverId?: Types.ObjectId;
       priceEgp: number;
+      basePriceEgp?: number;
       status: string;
       tripNumber?: number;
     }>();
   if (!trip || trip.status !== "completed" || !trip.driverId) return null;
 
-  const earning = driverEarningFromTrip(trip.priceEgp);
+  const earning = driverEarningFromTrip(trip.basePriceEgp ?? trip.priceEgp);
   if (earning <= 0) return null;
 
   const label = trip.tripNumber

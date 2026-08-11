@@ -1,4 +1,4 @@
-import { Schema, model, models, type InferSchemaType } from "mongoose";
+import { Schema, model, models, Types, type InferSchemaType } from "mongoose";
 
 const SavedAddressSchema = new Schema(
   {
@@ -39,6 +39,8 @@ const UserSchema = new Schema(
     },
     profilePic: { type: String, default: null },
     savedAddresses: { type: [SavedAddressSchema], default: [] },
+    referralCode: { type: String, unique: true, sparse: true, index: true },
+    referredBy: { type: Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }, // createdAt, updatedAt
 );

@@ -6,6 +6,7 @@ import { User, Phone, Mail, Check, Loader2, Camera } from "lucide-react";
 import AppHeader from "@/components/layout/AppHeader";
 import ChangePasswordSection from "@/components/shared/ChangePasswordSection";
 import SavedAddressesSection from "@/components/shared/SavedAddressesSection";
+import ReferralCard from "@/components/shared/ReferralCard";
 import type { SavedAddress } from "@/types/shared";
 import { useClientLocale } from "@/lib/i18n/client";
 
@@ -547,6 +548,8 @@ export default function ProfileClient({
         <div style={{ marginTop: 20 }}>
           <ChangePasswordSection />
         </div>
+
+        <ReferralCard />
 
         <SavedAddressesSection initialAddresses={initialSavedAddresses} />
       </main>

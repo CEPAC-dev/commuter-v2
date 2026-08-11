@@ -3,11 +3,12 @@ import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { nextSequence } from "@/models/Counter";
 import { createSession } from "@/lib/auth/session";
+import { applyReferralOnSignup, generateReferralCode } from "@/lib/referral";
 import bcrypt from "bcryptjs";
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, password, phone } = await req.json();
+    const { name, email, password, phone, referralCodeUsed } = await req.json();
 
     if (!name?.trim() || !phone?.trim() || !password)
       return NextResponse.json(
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const userNumber = await nextSequence("userNumber");
+    const referralCode = await generateReferralCode();
     const user = await User.create({
       userNumber,
       name: name.trim(),
@@ -58,14 +60,32 @@ export async function POST(req: NextRequest) {
       passwordHash,
       email: email?.trim() ? email.toLowerCase().trim() : undefined,
       role: "passenger",
+      referralCode,
     });
+
+    let referralWarning: string | undefined;
+    if (typeof referralCodeUsed === "string" && referralCodeUsed.trim()) {
+      try {
+        const referralResult = await applyReferralOnSignup(referralCodeUsed, user._id);
+        if (!referralResult.success) referralWarning = referralResult.message;
+      } catch (referralError) {
+        console.error("Referral application failed:", referralError);
+        referralWarning = "Your account was created, but the referral could not be applied.";
+      }
+    }
 
     await createSession({
       userId: String(user._id),
       email: user.email ?? "",
       role: "passenger",
     });
-    return NextResponse.json({ ok: true }, { status: 201 });
+    return NextResponse.json(
+      {
+        ok: true,
+        ...(referralWarning ? { referralWarning } : {}),
+      },
+      { status: 201 },
+    );
   } catch {
     return NextResponse.json(
       { error: "Registration failed. Please try again." },

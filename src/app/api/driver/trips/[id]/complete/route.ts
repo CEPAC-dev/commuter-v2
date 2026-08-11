@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
 import { settleTripEarning } from "@/lib/services/tripEarnings";
+import { consumeReferralForCompletedTrip } from "@/lib/referral";
 
 export async function POST(
   _req: NextRequest,
@@ -31,6 +32,7 @@ export async function POST(
   }
 
   if (trip.status === "completed") {
+    await consumeReferralForCompletedTrip(tripId);
     const balance = await settleTripEarning(tripId);
     return NextResponse.json({
       status: "completed",
@@ -49,6 +51,7 @@ export async function POST(
   trip.status = "completed";
   await trip.save();
 
+  await consumeReferralForCompletedTrip(tripId);
   const balance = await settleTripEarning(tripId);
 
   return NextResponse.json({
