@@ -12,6 +12,7 @@ import {
   Loader2,
   ArrowLeft,
   Globe,
+  TicketPercent,
 } from "lucide-react";
 import Image from "next/image";
 import DriverRegisterForm from "@/components/auth/DriverRegisterForm";
@@ -29,7 +30,8 @@ function LoginForm() {
   const [isPending, startTransition] = useTransition();
 
   const [role, setRole] = useState<Role>("passenger");
-  const [mode, setMode] = useState<Mode>("login");
+  const referralCodeFromUrl = params.get("ref")?.trim().toUpperCase() ?? "";
+  const [mode, setMode] = useState<Mode>(referralCodeFromUrl ? "register" : "login");
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
@@ -47,6 +49,7 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
   const [gender, setGender] = useState<"male" | "female" | "">("");
+  const [referralCode, setReferralCode] = useState(referralCodeFromUrl);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -63,6 +66,7 @@ function LoginForm() {
               phone: phone.trim(),
               password,
               email: email.trim(),
+              referralCodeUsed: referralCode.trim() || undefined,
             };
 
       const res = await fetch(url, {
@@ -613,6 +617,50 @@ function LoginForm() {
                       placeholder={t("auth.email_placeholder")}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {mode === "register" && (
+                <div>
+                  <label
+                    htmlFor="referral-code"
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#0B1E3D",
+                      display: "block",
+                      marginBottom: 6,
+                    }}
+                  >
+                    {t("auth.referral_code")} {" "}
+                    <span style={{ fontWeight: 400, color: "#5A6A7A" }}>
+                      {t("auth.email_optional")}
+                    </span>
+                  </label>
+                  <div
+                    style={fieldStyle}
+                    onFocusCapture={(e) =>
+                      focusField(e.currentTarget as HTMLDivElement)
+                    }
+                    onBlurCapture={(e) =>
+                      blurField(e.currentTarget as HTMLDivElement)
+                    }
+                  >
+                    <TicketPercent
+                      size={17}
+                      style={{ color: "#5A6A7A", flexShrink: 0 }}
+                      aria-hidden="true"
+                    />
+                    <input
+                      id="referral-code"
+                      type="text"
+                      autoComplete="off"
+                      placeholder="REF-XXXXXX"
+                      value={referralCode}
+                      onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
                       style={inputStyle}
                     />
                   </div>

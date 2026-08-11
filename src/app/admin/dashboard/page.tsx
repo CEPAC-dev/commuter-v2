@@ -49,6 +49,8 @@ export default async function AdminDashboardPage() {
     { label: "Manage trips", href: "/admin/trips" },
     { label: "Manage users", href: "/admin/users" },
     { label: "Manage availability", href: "/admin/availability" },
+    { label: "Referral settings", href: "/admin/referral-settings" },
+    { label: "Promo codes", href: "/admin/promo-codes" },
   ];
 
   const now = new Date();
