@@ -886,7 +886,9 @@ export async function GET(req: NextRequest) {
   ) => {
     cellIndexes.forEach((cellIndex) => {
       const cell = row.getCell(cellIndex);
-      const existingFill = cell.fill as unknown as Record<string, unknown> | undefined;
+      const existingFill = cell.fill as unknown as
+        | Record<string, unknown>
+        | undefined;
       const hasExistingColor = Boolean(existingFill?.fgColor);
       if (hasExistingColor) return;
 
@@ -960,7 +962,8 @@ export async function GET(req: NextRequest) {
           )?.endTime,
         )}. Violating request rows are red.`,
         testedSheets: "Trip_Requests, Private_Requests, Shared_Requests",
-        solution: "Adjust the request time or add driver availability covering the request.",
+        solution:
+          "Adjust the request time or add driver availability covering the request.",
         numberOfViolations: timeViolationsCount,
       });
     }
@@ -1071,9 +1074,10 @@ export async function GET(req: NextRequest) {
   };
 
   const zip = new JSZip();
-  const xlsxFileName = logsRows.length > 0
-    ? `match-data-${targetDate}-V.xlsx`
-    : `match-data-${targetDate}.xlsx`;
+  const xlsxFileName =
+    logsRows.length > 0
+      ? `match-data-${targetDate}-V.xlsx`
+      : `match-data-${targetDate}.xlsx`;
   zip.file("match-data.json", JSON.stringify(outputJson, null, 2));
   zip.file(xlsxFileName, Buffer.from(await wb.xlsx.writeBuffer()));
 

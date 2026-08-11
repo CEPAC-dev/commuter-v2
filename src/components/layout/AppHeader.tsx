@@ -12,6 +12,7 @@ import {
   History,
   Wallet,
   User,
+  Bell,
   LogOut,
   LogIn,
   CalendarPlus,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import { useClientLocale, setLocaleCookie } from "@/lib/locale.client";
 import { useTripStore } from "@/lib/store/useTripStore";
+import { getUnreadCount } from "@/lib/api/notifications";
 import LogoutConfirmModal from "@/components/shared/LogoutConfirmModal";
 
 type Variant = "landing" | "app";
@@ -64,6 +66,7 @@ export default function AppHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   function toggleLocale() {
     setLocaleCookie(locale === "ar" ? "en" : "ar");
@@ -78,6 +81,27 @@ export default function AppHeader({
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, [isLanding]);
+
+  useEffect(() => {
+    if (!authed || role === "admin") return;
+
+    let ignore = false;
+    async function loadUnreadCount() {
+      try {
+        const count = await getUnreadCount();
+        if (!ignore) setUnreadCount(count);
+      } catch (error) {
+        console.error("Failed to fetch unread notification count:", error);
+      }
+    }
+
+    loadUnreadCount();
+    const interval = window.setInterval(loadUnreadCount, 15000);
+    return () => {
+      ignore = true;
+      window.clearInterval(interval);
+    };
+  }, [authed, role]);
 
   // Solid (app) headers are always dark; landing is transparent until scrolled.
   const solid = !isLanding || scrolled;
@@ -224,6 +248,53 @@ export default function AppHeader({
                   {t(labelKey)}
                 </Link>
               ))}
+              {role !== "admin" && (
+                <Link
+                  href="/user/notifications"
+                  aria-label="Notifications"
+                  style={{
+                    position: "relative",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 38,
+                    height: 38,
+                    borderRadius: 9,
+                    color: fg,
+                    background: pathname === "/user/notifications" ? subtleBg : "transparent",
+                    border: `1px solid ${
+                      isLanding && !scrolled
+                        ? "rgba(255,255,255,0.35)"
+                        : "rgba(255,255,255,0.2)"
+                    }`,
+                    textDecoration: "none",
+                    marginLeft: 2,
+                  }}
+                >
+                  <Bell size={16} aria-hidden="true" />
+                  {unreadCount > 0 && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: -5,
+                        right: -5,
+                        minWidth: 16,
+                        height: 16,
+                        borderRadius: 999,
+                        background: "#E74C3C",
+                        color: "#fff",
+                        fontSize: 10,
+                        lineHeight: "16px",
+                        textAlign: "center",
+                        fontWeight: 700,
+                        padding: "0 4px",
+                      }}
+                    >
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                </Link>
+              )}
               <button
                 onClick={() => setShowLogoutModal(true)}
                 disabled={loggingOut}
@@ -402,6 +473,50 @@ export default function AppHeader({
                   {t(labelKey)}
                 </Link>
               ))}
+              {role !== "admin" && (
+                <Link
+                  href="/user/notifications"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    fontWeight:
+                      pathname === "/user/notifications" ||
+                      pathname.startsWith("/user/notifications/")
+                        ? 700
+                        : 500,
+                    fontSize: 15,
+                    color: "#0B1E3D",
+                    padding: "12px 14px",
+                    borderRadius: 10,
+                    background:
+                      pathname === "/user/notifications" ||
+                      pathname.startsWith("/user/notifications/")
+                        ? "#f0f4f8"
+                        : "transparent",
+                    textDecoration: "none",
+                  }}
+                >
+                  <Bell size={17} aria-hidden="true" />
+                  Notifications
+                  {unreadCount > 0 && (
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        background: "#E74C3C",
+                        color: "#fff",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        borderRadius: 10,
+                        padding: "1px 6px",
+                      }}
+                    >
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                </Link>
+              )}
               <button
                 onClick={() => setShowLogoutModal(true)}
                 disabled={loggingOut}
