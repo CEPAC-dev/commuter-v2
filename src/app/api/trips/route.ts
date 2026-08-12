@@ -29,8 +29,10 @@ import {
 } from "@/lib/referral";
 import {
   applyPromoCodeToTrip,
+  computePromoDiscountedPrice,
   normalizePromoCode,
   rollbackPromoCodeUsage,
+  type PromoDiscountType,
 } from "@/lib/promoCode";
 
 const PRIVATE_VEHICLE_KEYS = new Set<VehicleKey>([
@@ -510,7 +512,8 @@ export async function POST(req: NextRequest) {
 
   const promoApplies: Array<{
     success: boolean;
-    discountPercentage: number;
+    discountType: PromoDiscountType;
+    discountValue: number;
     promoCodeId: string;
     usageId: string;
   } | null> = tripInstances.map(() => null);
@@ -529,13 +532,15 @@ export async function POST(req: NextRequest) {
       );
       if (
         appliedPromo.success &&
-        typeof appliedPromo.discountPercentage === "number" &&
+        appliedPromo.discountType &&
+        typeof appliedPromo.discountValue === "number" &&
         appliedPromo.promoCodeId &&
         appliedPromo.usageId
       ) {
         promoApplies[i] = {
           success: true,
-          discountPercentage: appliedPromo.discountPercentage,
+          discountType: appliedPromo.discountType,
+          discountValue: appliedPromo.discountValue,
           promoCodeId: appliedPromo.promoCodeId,
           usageId: appliedPromo.usageId,
         };
@@ -554,17 +559,32 @@ export async function POST(req: NextRequest) {
     const promoApply = promoApplies[index];
     const basePriceEgp = instance.trip.priceEgp;
     const referralPct = allocation?.discountPercentage ?? 0;
-    const promoPct = promoApply?.discountPercentage ?? 0;
-    const totalDiscountPercentage = Math.min(100, referralPct + promoPct);
-    const priceEgp = Math.round(
-      basePriceEgp * (1 - totalDiscountPercentage / 100),
+
+    // Promo discount is computed as its own step so a future stacking rewrite
+    // can combine it with whatever the referral discount becomes.
+    const priceAfterReferral = Math.round(
+      basePriceEgp * (1 - referralPct / 100),
     );
+    const priceAfterPromo = promoApply
+      ? Math.round(
+          computePromoDiscountedPrice(
+            priceAfterReferral,
+            promoApply.discountType,
+            promoApply.discountValue,
+          ),
+        )
+      : priceAfterReferral;
+    const promoDiscountAmountEgp = promoApply
+      ? Math.max(0, priceAfterReferral - priceAfterPromo)
+      : 0;
+    const priceEgp = priceAfterPromo;
     return {
       ...instance,
       basePriceEgp,
       priceEgp,
       allocation,
       promoApply,
+      promoDiscountAmountEgp,
     };
   });
 
@@ -616,7 +636,9 @@ export async function POST(req: NextRequest) {
         }),
         ...(instance.promoApply && {
           appliedPromoCode: new Types.ObjectId(instance.promoApply.promoCodeId),
-          promoDiscountPercentage: instance.promoApply.discountPercentage,
+          promoDiscountType: instance.promoApply.discountType,
+          promoDiscountValue: instance.promoApply.discountValue,
+          promoDiscountAmountEgp: instance.promoDiscountAmountEgp,
         }),
         paymentStatus: "pending",
         status: "pending_payment",

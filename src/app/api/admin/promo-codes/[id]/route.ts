@@ -22,7 +22,8 @@ export async function PATCH(
 
   let body: {
     isActive?: boolean;
-    discountPercentage?: number;
+    discountType?: string;
+    discountValue?: number;
     maxUses?: number;
     unlimitedUses?: boolean;
     expiryDays?: number;
@@ -38,8 +39,13 @@ export async function PATCH(
   await connectDB();
 
   const existing = await PromoCode.findById(id)
-    .select("maxUses expiresAt")
-    .lean<{ maxUses: number | null; expiresAt: Date | null } | null>();
+    .select("maxUses expiresAt discountType discountValue")
+    .lean<{
+      maxUses: number | null;
+      expiresAt: Date | null;
+      discountType: "percentage" | "fixed";
+      discountValue: number;
+    } | null>();
 
   if (!existing) {
     return NextResponse.json({ error: "Promo code not found." }, { status: 404 });
@@ -49,19 +55,41 @@ export async function PATCH(
   if (typeof body.isActive === "boolean") {
     update.isActive = body.isActive;
   }
-  if (body.discountPercentage !== undefined) {
-    const discountPercentage = Number(body.discountPercentage);
+
+  if (body.discountType !== undefined || body.discountValue !== undefined) {
+    const nextDiscountType: "percentage" | "fixed" =
+      body.discountType === "fixed" || body.discountType === "percentage"
+        ? body.discountType
+        : existing.discountType;
+    const nextDiscountValue =
+      body.discountValue !== undefined
+        ? Number(body.discountValue)
+        : existing.discountValue;
+
+    if (!Number.isFinite(nextDiscountValue)) {
+      return NextResponse.json(
+        { error: "Discount value is required." },
+        { status: 400 },
+      );
+    }
     if (
-      !Number.isFinite(discountPercentage) ||
-      discountPercentage < 0 ||
-      discountPercentage > 100
+      nextDiscountType === "percentage" &&
+      (nextDiscountValue < 0 || nextDiscountValue > 100)
     ) {
       return NextResponse.json(
         { error: "Discount percentage must be between 0 and 100." },
         { status: 400 },
       );
     }
-    update.discountPercentage = discountPercentage;
+    if (nextDiscountType === "fixed" && nextDiscountValue <= 0) {
+      return NextResponse.json(
+        { error: "Fixed discount amount must be a positive number." },
+        { status: 400 },
+      );
+    }
+
+    update.discountType = nextDiscountType;
+    update.discountValue = nextDiscountValue;
   }
   if (body.maxUses !== undefined && body.unlimitedUses !== true) {
     const maxUses = Number(body.maxUses);
@@ -148,7 +176,7 @@ export async function PATCH(
     {
       returnDocument: "after",
       runValidators: true,
-      select: "code discountPercentage maxUses usedCount expiresAt isActive createdAt",
+      select: "code discountType discountValue maxUses usedCount expiresAt isActive createdAt",
     },
   ).lean();
 

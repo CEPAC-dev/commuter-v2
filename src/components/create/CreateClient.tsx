@@ -109,8 +109,10 @@ export default function CreateClient({ userEmail }: Props) {
   const [referralWarning, setReferralWarning] = useState("");
   const [promoCodeDraft, setPromoCodeDraft] = useState("");
   const [promoCodeValid, setPromoCodeValid] = useState(false);
-  const [promoCodeDiscountPercentage, setPromoCodeDiscountPercentage] =
-    useState(0);
+  const [promoCodeDiscountType, setPromoCodeDiscountType] = useState<
+    "percentage" | "fixed"
+  >("percentage");
+  const [promoCodeDiscountValue, setPromoCodeDiscountValue] = useState(0);
   const [promoCodeMessage, setPromoCodeMessage] = useState("");
   const [promoCodeChecking, setPromoCodeChecking] = useState(false);
   const [promoWarning, setPromoWarning] = useState("");
@@ -365,7 +367,8 @@ export default function CreateClient({ userEmail }: Props) {
     const normalized = promoCodeDraft.trim().toUpperCase();
     if (!normalized) {
       setPromoCodeValid(false);
-      setPromoCodeDiscountPercentage(0);
+      setPromoCodeDiscountType("percentage");
+      setPromoCodeDiscountValue(0);
       setPromoCodeMessage("");
       return;
     }
@@ -381,15 +384,19 @@ export default function CreateClient({ userEmail }: Props) {
       const result = await response.json();
       if (!response.ok) {
         setPromoCodeValid(false);
-        setPromoCodeDiscountPercentage(0);
+        setPromoCodeDiscountType("percentage");
+        setPromoCodeDiscountValue(0);
         setPromoCodeMessage(result.error ?? t("create.promo_check_failed"));
         return;
       }
 
       setPromoCodeValid(Boolean(result.valid));
-      setPromoCodeDiscountPercentage(
-        result.valid && typeof result.discountPercentage === "number"
-          ? result.discountPercentage
+      setPromoCodeDiscountType(
+        result.discountType === "fixed" ? "fixed" : "percentage",
+      );
+      setPromoCodeDiscountValue(
+        result.valid && typeof result.discountValue === "number"
+          ? result.discountValue
           : 0,
       );
       setPromoCodeMessage(
@@ -401,7 +408,8 @@ export default function CreateClient({ userEmail }: Props) {
       }
     } catch {
       setPromoCodeValid(false);
-      setPromoCodeDiscountPercentage(0);
+      setPromoCodeDiscountType("percentage");
+      setPromoCodeDiscountValue(0);
       setPromoCodeMessage(t("create.promo_check_failed"));
     } finally {
       setPromoCodeChecking(false);
@@ -411,7 +419,8 @@ export default function CreateClient({ userEmail }: Props) {
   function handlePromoCodeInputChange(value: string) {
     setPromoCodeDraft(value.toUpperCase());
     setPromoCodeValid(false);
-    setPromoCodeDiscountPercentage(0);
+    setPromoCodeDiscountType("percentage");
+    setPromoCodeDiscountValue(0);
     setPromoCodeMessage("");
     setPromoWarning("");
   }
@@ -655,9 +664,13 @@ export default function CreateClient({ userEmail }: Props) {
         index < appliedReferralSlots && referralDiscountPercentage != null
           ? referralDiscountPercentage
           : 0;
-      const promoPct = promoCodeValid ? promoCodeDiscountPercentage : 0;
-      const totalPct = Math.min(100, referralPct + promoPct);
-      return Math.round(price * (1 - totalPct / 100));
+      const priceAfterReferral = Math.round(price * (1 - referralPct / 100));
+      if (!promoCodeValid) return priceAfterReferral;
+      const priceAfterPromo =
+        promoCodeDiscountType === "fixed"
+          ? priceAfterReferral - promoCodeDiscountValue
+          : priceAfterReferral * (1 - promoCodeDiscountValue / 100);
+      return Math.round(Math.max(0, priceAfterPromo));
     })(),
   );
   const grandTotalEgp = discountedInstancePrices.reduce(

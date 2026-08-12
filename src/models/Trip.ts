@@ -136,11 +136,23 @@ const TripSchema = new Schema(
       index: true,
       default: null,
     },
-    promoDiscountPercentage: {
+    promoDiscountType: {
+      type: String,
+      required: false,
+      enum: ["percentage", "fixed"],
+      default: null,
+    },
+    promoDiscountValue: {
       type: Number,
       required: false,
       min: 0,
-      max: 100,
+      default: null,
+    },
+    // The actual EGP amount subtracted from the base fare by the promo code.
+    promoDiscountAmountEgp: {
+      type: Number,
+      required: false,
+      min: 0,
       default: null,
     },
     extraPassengers: { type: Number, default: 0, min: 0, max: 9 },

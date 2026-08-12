@@ -335,6 +335,8 @@ export default function VehicleSeatMap({
           borderRadius: 20,
           border: "1px solid #E9EDF2",
           padding: 18,
+          direction: "ltr",
+          unicodeBidi: "isolate",
         }}
       >
         {/* Front indicator */}
@@ -356,10 +358,13 @@ export default function VehicleSeatMap({
           {grid.rows.map((row, rIdx) => (
             <div
               key={`row-${rIdx}`}
+              dir="ltr"
               style={{
                 display: "grid",
                 gridTemplateColumns: `repeat(${row.length}, 1fr)`,
                 gap: 10,
+                direction: "ltr",
+                unicodeBidi: "isolate",
               }}
             >
               {row.map((cell) => {
@@ -368,6 +373,7 @@ export default function VehicleSeatMap({
                     <div
                       key={`driver-seat`}
                       style={{
+                        gridColumn: cell.col + 1,
                         padding: "12px 8px",
                         borderRadius: 14,
                         background: chassis.accent,
@@ -452,6 +458,7 @@ export default function VehicleSeatMap({
                       }
                     }}
                     style={{
+                      gridColumn: cell.col + 1,
                       padding: "12px 6px",
                       borderRadius: 14,
                       background: bg,

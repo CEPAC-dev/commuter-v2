@@ -5,10 +5,13 @@ import { Check, Copy, Loader2 } from "lucide-react";
 import { useClientLocale } from "@/lib/locale.client";
 import { isPromoCodeExpired } from "@/lib/promoCodeShared";
 
+type PromoDiscountType = "percentage" | "fixed";
+
 interface PromoCodeRow {
   _id: string;
   code: string;
-  discountPercentage: number;
+  discountType: PromoDiscountType;
+  discountValue: number;
   maxUses: number | null;
   usedCount: number;
   expiresAt: string | null;
@@ -18,7 +21,8 @@ interface PromoCodeRow {
 
 interface PromoLogRow {
   _id: string;
-  discountPercentage: number;
+  discountType: PromoDiscountType;
+  discountValue: number;
   createdAt: string;
   user?: { name?: string; phone?: string };
   trip?: {
@@ -27,6 +31,10 @@ interface PromoLogRow {
     pickup?: { address?: string };
     dropoff?: { address?: string };
   };
+}
+
+function formatDiscount(discountType: PromoDiscountType, discountValue: number): string {
+  return discountType === "fixed" ? `${discountValue} EGP` : `${discountValue}%`;
 }
 
 export default function PromoCodesManager() {
@@ -44,7 +52,8 @@ export default function PromoCodesManager() {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const [form, setForm] = useState({
-    discountPercentage: "",
+    discountType: "percentage" as PromoDiscountType,
+    discountValue: "",
     maxUses: "",
     customCode: "",
     unlimitedUses: false,
@@ -115,7 +124,8 @@ export default function PromoCodesManager() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          discountPercentage: Number(form.discountPercentage),
+          discountType: form.discountType,
+          discountValue: Number(form.discountValue),
           unlimitedUses,
           maxUses: unlimitedUses ? undefined : Number(form.maxUses),
           expiryDays,
@@ -128,7 +138,8 @@ export default function PromoCodesManager() {
       if (!response.ok) throw new Error(result.error ?? "Failed to create promo code.");
 
       setForm({
-        discountPercentage: "",
+        discountType: "percentage",
+        discountValue: "",
         maxUses: "",
         customCode: "",
         unlimitedUses: false,
@@ -198,14 +209,98 @@ export default function PromoCodesManager() {
     [items],
   );
 
+  const summary = useMemo(() => {
+    const total = sortedItems.length;
+    const active = sortedItems.filter((item) => item.isActive && !isPromoCodeExpired(item.expiresAt, nowMs)).length;
+    const expired = sortedItems.filter((item) => isPromoCodeExpired(item.expiresAt, nowMs)).length;
+    return { total, active, expired };
+  }, [sortedItems, nowMs]);
+
   return (
-    <section style={{ display: "grid", gap: 18 }}>
-      <form onSubmit={createCode} style={{ background: "#fff", border: "1px solid #e8edf0", borderRadius: 16, padding: 20, display: "grid", gap: 14 }}>
-        <h2 style={{ margin: 0, color: "#0B1E3D", fontSize: 18 }}>Generate promo code</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+    <section style={{ display: "grid", gap: 18, maxWidth: 1200, margin: "0 auto" }}>
+      <div
+        style={{
+          background: "linear-gradient(135deg, #0B1E3D 0%, #113465 100%)",
+          borderRadius: 18,
+          border: "1px solid rgba(255,255,255,0.08)",
+          padding: "18px 20px",
+          color: "#fff",
+          display: "grid",
+          gap: 14,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 22, letterSpacing: "-0.01em" }}>Promo Codes</h2>
+            <p style={{ margin: "6px 0 0", color: "rgba(255,255,255,0.78)", fontSize: 13 }}>
+              Create, edit, and monitor discount campaigns from one place.
+            </p>
+          </div>
+          <button type="button" onClick={() => void loadCodes()} style={{ ...secondaryButtonStyle, background: "rgba(255,255,255,0.14)", color: "#fff", borderColor: "rgba(255,255,255,0.3)" }}>
+            Refresh
+          </button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+          <div style={heroStatCardStyle}>
+            <p style={heroStatLabelStyle}>Total codes</p>
+            <p style={heroStatValueStyle}>{summary.total}</p>
+          </div>
+          <div style={heroStatCardStyle}>
+            <p style={heroStatLabelStyle}>Active now</p>
+            <p style={heroStatValueStyle}>{summary.active}</p>
+          </div>
+          <div style={heroStatCardStyle}>
+            <p style={heroStatLabelStyle}>Expired</p>
+            <p style={heroStatValueStyle}>{summary.expired}</p>
+          </div>
+        </div>
+      </div>
+
+      <form onSubmit={createCode} style={{ background: "#fff", border: "1px solid #e3ebf0", borderRadius: 18, padding: 20, display: "grid", gap: 16, boxShadow: "0 8px 22px rgba(11,30,61,0.04)" }}>
+        <div>
+          <h3 style={{ margin: 0, color: "#0B1E3D", fontSize: 18 }}>Generate promo code</h3>
+          <p style={{ margin: "6px 0 0", color: "#5A6A7A", fontSize: 13 }}>
+            Configure discount mode, usage limits, and optional expiration.
+          </p>
+        </div>
+        <div style={{ display: "grid", gap: 14, background: "#FAFCFD", border: "1px solid #E9F0F4", borderRadius: 14, padding: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
           <label style={labelStyle}>
-            Discount %
-            <input type="number" min={0} max={100} required value={form.discountPercentage} onChange={(event) => setForm((prev) => ({ ...prev, discountPercentage: event.target.value }))} style={inputStyle} />
+            {t("admin.promo.discount_type")}
+            <div style={{ display: "flex", gap: 8, height: 44, alignItems: "center" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+                <input
+                  type="radio"
+                  name="discountType"
+                  checked={form.discountType === "percentage"}
+                  onChange={() => setForm((prev) => ({ ...prev, discountType: "percentage" }))}
+                  style={{ accentColor: "#00C2A8" }}
+                />
+                {t("admin.promo.discount_type_percentage")}
+              </label>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+                <input
+                  type="radio"
+                  name="discountType"
+                  checked={form.discountType === "fixed"}
+                  onChange={() => setForm((prev) => ({ ...prev, discountType: "fixed" }))}
+                  style={{ accentColor: "#00C2A8" }}
+                />
+                {t("admin.promo.discount_type_fixed")}
+              </label>
+            </div>
+          </label>
+          <label style={labelStyle}>
+            {form.discountType === "fixed" ? "Discount amount (EGP)" : "Discount %"}
+            <input
+              type="number"
+              min={0}
+              max={form.discountType === "percentage" ? 100 : undefined}
+              required
+              value={form.discountValue}
+              onChange={(event) => setForm((prev) => ({ ...prev, discountValue: event.target.value }))}
+              style={inputStyle}
+            />
           </label>
           <label style={{ ...labelStyle, justifyContent: "end" }}>
             <span>{t("admin.promo.unlimited_uses")}</span>
@@ -242,43 +337,44 @@ export default function PromoCodesManager() {
             <input type="text" value={form.customCode} onChange={(event) => setForm((prev) => ({ ...prev, customCode: event.target.value.toUpperCase() }))} placeholder="PROMO-XXXXXX" style={inputStyle} />
           </label>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
-          <label style={labelStyle}>
-            {t("admin.promo.expiry_days")}
-            <input
-              type="number"
-              min={0}
-              value={form.expiryDays}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, expiryDays: event.target.value }))
-              }
-              style={inputStyle}
-            />
-          </label>
-          <label style={labelStyle}>
-            {t("admin.promo.expiry_hours")}
-            <input
-              type="number"
-              min={0}
-              value={form.expiryHours}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, expiryHours: event.target.value }))
-              }
-              style={inputStyle}
-            />
-          </label>
-          <label style={labelStyle}>
-            {t("admin.promo.expiry_minutes")}
-            <input
-              type="number"
-              min={0}
-              value={form.expiryMinutes}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, expiryMinutes: event.target.value }))
-              }
-              style={inputStyle}
-            />
-          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+            <label style={labelStyle}>
+              {t("admin.promo.expiry_days")}
+              <input
+                type="number"
+                min={0}
+                value={form.expiryDays}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, expiryDays: event.target.value }))
+                }
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              {t("admin.promo.expiry_hours")}
+              <input
+                type="number"
+                min={0}
+                value={form.expiryHours}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, expiryHours: event.target.value }))
+                }
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              {t("admin.promo.expiry_minutes")}
+              <input
+                type="number"
+                min={0}
+                value={form.expiryMinutes}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, expiryMinutes: event.target.value }))
+                }
+                style={inputStyle}
+              />
+            </label>
+          </div>
         </div>
         {createError ? (
           <p style={{ margin: 0, color: "#e74c3c", fontSize: 13 }}>{createError}</p>
@@ -298,10 +394,15 @@ export default function PromoCodesManager() {
         ) : null}
       </form>
 
-      <div style={{ background: "#fff", border: "1px solid #e8edf0", borderRadius: 16, overflow: "hidden" }}>
+      <div style={{ background: "#fff", border: "1px solid #e3ebf0", borderRadius: 18, overflow: "hidden", boxShadow: "0 8px 22px rgba(11,30,61,0.04)" }}>
         <div style={{ padding: "14px 16px", borderBottom: "1px solid #eef2f5", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0, color: "#0B1E3D", fontSize: 16 }}>Promo code list</h3>
-          <button type="button" onClick={() => void loadCodes()} style={secondaryButtonStyle}>Refresh</button>
+          <div>
+            <h3 style={{ margin: 0, color: "#0B1E3D", fontSize: 16 }}>Promo code list</h3>
+            <p style={{ margin: "4px 0 0", color: "#5A6A7A", fontSize: 12 }}>Inline editing is enabled for discounts, limits, and status.</p>
+          </div>
+          <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700, color: "#0B1E3D", background: "#EDF3F8", border: "1px solid #DCE7F1" }}>
+            {summary.total} total
+          </span>
         </div>
 
         {error ? <p style={{ margin: "12px 16px", color: "#e74c3c", fontSize: 13 }}>{error}</p> : null}
@@ -313,6 +414,7 @@ export default function PromoCodesManager() {
               <thead style={{ background: "#f8f9fa" }}>
                 <tr>
                   <th style={thStyle}>Code</th>
+                  <th style={thStyle}>{t("admin.promo.discount_type")}</th>
                   <th style={thStyle}>Discount</th>
                   <th style={thStyle}>Uses</th>
                   <th style={thStyle}>Expiry</th>
@@ -331,7 +433,7 @@ export default function PromoCodesManager() {
                       : t("admin.promo.inactive");
 
                   return (
-                  <tr key={item._id} style={{ borderTop: "1px solid #eef2f5" }}>
+                  <tr key={item._id} style={{ borderTop: "1px solid #eef2f5", background: item.isActive ? "#fff" : "#fcfdfe" }}>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <strong>{item.code}</strong>
@@ -341,14 +443,30 @@ export default function PromoCodesManager() {
                       </div>
                     </td>
                     <td style={tdStyle}>
-                      <InlineNumberEditor
-                        value={item.discountPercentage}
-                        min={0}
-                        max={100}
-                        onSave={async (value) => {
-                          await patchCode(item._id, { discountPercentage: value });
+                      <select
+                        value={item.discountType}
+                        onChange={async (event) => {
+                          const nextType = event.target.value as PromoDiscountType;
+                          await patchCode(item._id, {
+                            discountType: nextType,
+                            discountValue: nextType === "percentage" ? Math.min(item.discountValue, 100) : item.discountValue,
+                          });
                         }}
-                        suffix="%"
+                        style={{ height: 32, borderRadius: 8, border: "1px solid #d0d8e0", fontSize: 12, padding: "0 6px" }}
+                      >
+                        <option value="percentage">{t("admin.promo.discount_type_percentage")}</option>
+                        <option value="fixed">{t("admin.promo.discount_type_fixed")}</option>
+                      </select>
+                    </td>
+                    <td style={tdStyle}>
+                      <InlineNumberEditor
+                        value={item.discountValue}
+                        min={0}
+                        max={item.discountType === "percentage" ? 100 : undefined}
+                        onSave={async (value) => {
+                          await patchCode(item._id, { discountValue: value });
+                        }}
+                        suffix={item.discountType === "fixed" ? "EGP" : "%"}
                       />
                     </td>
                     <td style={tdStyle}>
@@ -444,8 +562,11 @@ export default function PromoCodesManager() {
       </div>
 
       {selectedCodeId ? (
-        <div style={{ background: "#fff", border: "1px solid #e8edf0", borderRadius: 16, padding: 16 }}>
+        <div style={{ background: "#fff", border: "1px solid #e3ebf0", borderRadius: 18, padding: 16, boxShadow: "0 8px 22px rgba(11,30,61,0.04)" }}>
           <h3 style={{ margin: "0 0 10px", color: "#0B1E3D", fontSize: 16 }}>Usage logs</h3>
+          <p style={{ margin: "0 0 12px", color: "#5A6A7A", fontSize: 12 }}>
+            Historical snapshots preserve the discount type and value used at booking time.
+          </p>
           {logsLoading ? (
             <p style={{ margin: 0, color: "#5A6A7A", fontSize: 13 }}>Loading logs...</p>
           ) : logs.length === 0 ? (
@@ -453,7 +574,7 @@ export default function PromoCodesManager() {
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
               {logs.map((log) => (
-                <div key={log._id} style={{ border: "1px solid #eef2f5", borderRadius: 10, padding: "10px 12px", background: "#f8f9fa" }}>
+                <div key={log._id} style={{ border: "1px solid #e8eff4", borderRadius: 12, padding: "12px 14px", background: "linear-gradient(180deg, #FAFCFD 0%, #F6F9FB 100%)" }}>
                   <p style={{ margin: 0, color: "#0B1E3D", fontWeight: 700, fontSize: 13 }}>
                     {log.user?.name ?? "Unknown user"} · {log.user?.phone ?? "No phone"}
                   </p>
@@ -464,7 +585,7 @@ export default function PromoCodesManager() {
                     {(log.trip?.pickup?.address ?? "-")} → {(log.trip?.dropoff?.address ?? "-")}
                   </p>
                   <p style={{ margin: "4px 0 0", color: "#00877A", fontSize: 12, fontWeight: 700 }}>
-                    {log.discountPercentage}% used at {new Date(log.createdAt).toLocaleString()}
+                    {formatDiscount(log.discountType, log.discountValue)} used at {new Date(log.createdAt).toLocaleString()}
                   </p>
                 </div>
               ))}
@@ -548,6 +669,29 @@ function InlineNumberEditor({
     </div>
   );
 }
+
+const heroStatCardStyle: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.18)",
+  borderRadius: 12,
+  background: "rgba(255,255,255,0.09)",
+  padding: "10px 12px",
+};
+
+const heroStatLabelStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 11,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+  fontWeight: 700,
+  color: "rgba(255,255,255,0.78)",
+};
+
+const heroStatValueStyle: React.CSSProperties = {
+  margin: "4px 0 0",
+  fontSize: 20,
+  fontWeight: 800,
+  color: "#fff",
+};
 
 const labelStyle: React.CSSProperties = {
   display: "grid",

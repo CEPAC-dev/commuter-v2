@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
@@ -330,36 +331,59 @@ export default function Hero({ authed = false }: Props) {
                   </p>
                 )}
 
-                <button
-                  type="submit"
-                  style={{
-                    marginTop: 16,
-                    width: "100%",
-                    height: 52,
-                    background: "#0B1E3D",
-                    color: "#ffffff",
-                    fontWeight: 700,
-                    fontSize: 15,
-                    border: "none",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    fontFamily: "inherit",
-                    transition: "background 0.2s",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "#00C2A8"; (e.currentTarget.querySelector("span") as HTMLElement).style.color = "#0B1E3D"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "#0B1E3D"; (e.currentTarget.querySelector("span") as HTMLElement).style.color = "#ffffff"; }}
-                  onMouseDown={(e) => { e.currentTarget.style.transform = "scale(0.98)"; }}
-                  onMouseUp={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
-                >
-                  <span style={{ color: "#ffffff", transition: "color 0.2s" }}>
-                    {authed ? t("hero.see_prices") : t("hero.login_to_see")}
-                  </span>
-                  <ChevronRight size={18} aria-hidden="true" />
-                </button>
+                {authed ? (
+                  <button
+                    type="submit"
+                    style={{
+                      marginTop: 16,
+                      width: "100%",
+                      height: 52,
+                      background: "#0B1E3D",
+                      color: "#ffffff",
+                      fontWeight: 700,
+                      fontSize: 15,
+                      border: "none",
+                      borderRadius: 12,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      fontFamily: "inherit",
+                      transition: "background 0.2s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "#00C2A8"; (e.currentTarget.querySelector("span") as HTMLElement).style.color = "#0B1E3D"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "#0B1E3D"; (e.currentTarget.querySelector("span") as HTMLElement).style.color = "#ffffff"; }}
+                    onMouseDown={(e) => { e.currentTarget.style.transform = "scale(0.98)"; }}
+                    onMouseUp={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+                  >
+                    <span style={{ color: "#ffffff", transition: "color 0.2s" }}>
+                      {t("hero.see_prices")}
+                    </span>
+                    <ChevronRight size={18} aria-hidden="true" />
+                  </button>
+                ) : (
+                  <Link
+                    href="/login?redirect=/create"
+                    style={{
+                      marginTop: 16,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "100%",
+                      height: 46,
+                      borderRadius: 12,
+                      border: "1.5px solid #E3EBF2",
+                      color: "#0B1E3D",
+                      background: "#F8FAFC",
+                      fontWeight: 700,
+                      fontSize: 14,
+                      textDecoration: "none",
+                    }}
+                  >
+                    {t("nav.log_in")}
+                  </Link>
+                )}
               </form>
             </div>
           </motion.div>

@@ -248,6 +248,8 @@ function Detail({
   );
 }
 
+
+
 import DriverRideInteractiveClient from "@/components/trips/DriverRideInteractiveClient";
 
 function DriverRideDetailView({
@@ -311,60 +313,69 @@ export default async function TripDetailPage({
       <main
         style={{ maxWidth: 640, margin: "0 auto", padding: "24px 20px 56px" }}
       >
-        {/* Summary header */}
-        <div style={{ marginBottom: 20 }}>
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#5A6A7A",
-              marginBottom: 8,
-            }}
-          >
-            <CalendarDays size={14} aria-hidden="true" />
-            {translate(locale, "my_trips.ride_number", { rideNumber: trip.tripNumber })} · {formatDate(locale, trip.date)}
-          </span>
+        {/* Hero summary card */}
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 18,
+            border: "1px solid #eef0f3",
+            boxShadow: "0 1px 3px rgba(11,30,61,0.06)",
+            padding: "18px 20px",
+            marginBottom: 16,
+          }}
+        >
           <div
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              flexWrap: "wrap",
               gap: 10,
+              marginBottom: 14,
             }}
           >
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Pill {...({ ...(PAY_PILL[paymentStatus] ?? PAY_PILL.pending), label: translate(locale, `payments.${paymentStatus}`) })} />
-              <Pill {...({ ...(STATUS_PILL[status] ?? STATUS_PILL.pending_payment), label: translate(locale, ((): string => {
-                const map: Record<string, string> = {
-                  pending_payment: "pending_payment",
-                  submitted: "upcoming",
-                  matched: "ongoing",
-                  confirmed: "upcoming",
-                  active: "ongoing",
-                  completed: "previous",
-                  cancelled: "previous",
-                  time_out: "previous",
-                };
-                return `status.${map[status] ?? "previous"}`;
-              })()) })} />
-            </div>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 13,
+                fontWeight: 700,
+                color: "#5A6A7A",
+              }}
+            >
+              <CalendarDays size={14} aria-hidden="true" />
+              {translate(locale, "my_trips.ride_number", { rideNumber: trip.tripNumber })} · {formatDate(locale, trip.date)}
+            </span>
             <span
               style={{
                 fontWeight: 900,
-                fontSize: 22,
+                fontSize: 24,
                 color: "#0B1E3D",
                 fontVariantNumeric: "tabular-nums",
+                letterSpacing: "-0.02em",
               }}
             >
               {formatEgp(locale, trip.priceEgp)}
             </span>
           </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Pill {...({ ...(PAY_PILL[paymentStatus] ?? PAY_PILL.pending), label: translate(locale, `payments.${paymentStatus}`) })} />
+            <Pill {...({ ...(STATUS_PILL[status] ?? STATUS_PILL.pending_payment), label: translate(locale, ((): string => {
+              const map: Record<string, string> = {
+                pending_payment: "pending_payment",
+                submitted: "upcoming",
+                matched: "ongoing",
+                confirmed: "upcoming",
+                active: "ongoing",
+                completed: "previous",
+                cancelled: "previous",
+                time_out: "previous",
+              };
+              return `status.${map[status] ?? "previous"}`;
+            })()) })} />
+          </div>
           {status === "completed" && !isDriver && (
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 14 }}>
               <RateTripModal tripId={id} />
             </div>
           )}
@@ -504,7 +515,6 @@ export default async function TripDetailPage({
                     plate: "",
                   }
                 }
-                showCall={trip.rideType !== "shared"}
               />
             )}
             {trip.rideType !== "shared" && (

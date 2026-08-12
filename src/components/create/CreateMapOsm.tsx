@@ -110,6 +110,20 @@ function isPointInAnyZone(point: [number, number], features: ZoneFeature[]) {
   return features.some((feature) => isPointInZone(point, feature));
 }
 
+function isLeafletMapReady(map: L.Map | null): map is L.Map {
+  if (!map) return false;
+  const internalMap = map as L.Map & {
+    _loaded?: boolean;
+    _mapPane?: HTMLElement;
+    _container?: HTMLElement;
+  };
+  return Boolean(
+    internalMap._loaded &&
+      internalMap._mapPane &&
+      internalMap._container?.isConnected,
+  );
+}
+
 interface Props {
   trips: TripData[];
   picking?: { tripId: string; field: "pickup" | "dropoff" } | null;
@@ -131,14 +145,14 @@ export default function CreateMapOsm({
   const zoneLabelMarkersRef = useRef<L.Marker[]>([]);
 
   useEffect(() => {
-    if (!map) return;
+    if (!isLeafletMapReady(map)) return;
 
     const maskLayer = L.layerGroup().addTo(map);
     const zoneLayer = L.layerGroup().addTo(map);
     let cancelled = false;
 
     const refreshZoneLabels = () => {
-      if (cancelled || !map) return;
+      if (cancelled || !isLeafletMapReady(map)) return;
       zoneLabelMarkersRef.current.forEach((marker) => marker.remove());
       zoneLabelMarkersRef.current = [];
 
@@ -163,7 +177,7 @@ export default function CreateMapOsm({
     };
 
     const refreshMask = () => {
-      if (cancelled || !map) return;
+      if (cancelled || !isLeafletMapReady(map)) return;
       maskLayer.clearLayers();
 
       const bounds = map.getBounds();
@@ -221,7 +235,7 @@ export default function CreateMapOsm({
     fetch("/geo/zone_polygon.geojson")
       .then((response) => response.json())
       .then((geojson: { features?: ZoneFeature[] }) => {
-        if (cancelled || !map) return;
+        if (cancelled || !isLeafletMapReady(map)) return;
         const features = (geojson.features ?? []).filter(
           (feature): feature is ZoneFeature =>
             feature.geometry?.type === "Polygon" ||
@@ -245,7 +259,7 @@ export default function CreateMapOsm({
     fetch("/geo/zone_centroid.geojson")
       .then((response) => response.json())
       .then((geojson) => {
-        if (cancelled || !map) return;
+        if (cancelled || !isLeafletMapReady(map)) return;
         const features = geojson.features ?? [];
         zoneLabelLocationsRef.current = features
           .map(
@@ -282,7 +296,7 @@ export default function CreateMapOsm({
   }, [map]);
 
   useEffect(() => {
-    if (!map) return;
+    if (!isLeafletMapReady(map)) return;
     const layers = L.layerGroup().addTo(map);
     const allPoints: OsmPoint[] = [];
     trips.forEach((trip, index) => {
