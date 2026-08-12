@@ -100,7 +100,10 @@ export default function CreateClient({ userEmail }: Props) {
   const [referralWarning, setReferralWarning] = useState("");
   const [promoCodeDraft, setPromoCodeDraft] = useState("");
   const [promoCodeValid, setPromoCodeValid] = useState(false);
-  const [promoCodeDiscountPercentage, setPromoCodeDiscountPercentage] = useState(0);
+  const [promoCodeDiscountType, setPromoCodeDiscountType] = useState<
+    "percentage" | "fixed"
+  >("percentage");
+  const [promoCodeDiscountValue, setPromoCodeDiscountValue] = useState(0);
   const [promoCodeMessage, setPromoCodeMessage] = useState("");
   const [promoCodeChecking, setPromoCodeChecking] = useState(false);
   const [promoWarning, setPromoWarning] = useState("");
@@ -356,7 +359,8 @@ export default function CreateClient({ userEmail }: Props) {
     const normalized = promoCodeDraft.trim().toUpperCase();
     if (!normalized) {
       setPromoCodeValid(false);
-      setPromoCodeDiscountPercentage(0);
+      setPromoCodeDiscountType("percentage");
+      setPromoCodeDiscountValue(0);
       setPromoCodeMessage("");
       return;
     }
@@ -372,15 +376,19 @@ export default function CreateClient({ userEmail }: Props) {
       const result = await response.json();
       if (!response.ok) {
         setPromoCodeValid(false);
-        setPromoCodeDiscountPercentage(0);
+        setPromoCodeDiscountType("percentage");
+        setPromoCodeDiscountValue(0);
         setPromoCodeMessage(result.error ?? t("create.promo_check_failed"));
         return;
       }
 
       setPromoCodeValid(Boolean(result.valid));
-      setPromoCodeDiscountPercentage(
-        result.valid && typeof result.discountPercentage === "number"
-          ? result.discountPercentage
+      setPromoCodeDiscountType(
+        result.discountType === "fixed" ? "fixed" : "percentage",
+      );
+      setPromoCodeDiscountValue(
+        result.valid && typeof result.discountValue === "number"
+          ? result.discountValue
           : 0,
       );
       setPromoCodeMessage(
@@ -394,7 +402,8 @@ export default function CreateClient({ userEmail }: Props) {
       }
     } catch {
       setPromoCodeValid(false);
-      setPromoCodeDiscountPercentage(0);
+      setPromoCodeDiscountType("percentage");
+      setPromoCodeDiscountValue(0);
       setPromoCodeMessage(t("create.promo_check_failed"));
     } finally {
       setPromoCodeChecking(false);
@@ -404,7 +413,8 @@ export default function CreateClient({ userEmail }: Props) {
   function handlePromoCodeInputChange(value: string) {
     setPromoCodeDraft(value.toUpperCase());
     setPromoCodeValid(false);
-    setPromoCodeDiscountPercentage(0);
+    setPromoCodeDiscountType("percentage");
+    setPromoCodeDiscountValue(0);
     setPromoCodeMessage("");
     setPromoWarning("");
   }
@@ -637,9 +647,13 @@ export default function CreateClient({ userEmail }: Props) {
         index < appliedReferralSlots && referralDiscountPercentage != null
           ? referralDiscountPercentage
           : 0;
-      const promoPct = promoCodeValid ? promoCodeDiscountPercentage : 0;
-      const totalPct = Math.min(100, referralPct + promoPct);
-      return Math.round(price * (1 - totalPct / 100));
+      const priceAfterReferral = Math.round(price * (1 - referralPct / 100));
+      if (!promoCodeValid) return priceAfterReferral;
+      const priceAfterPromo =
+        promoCodeDiscountType === "fixed"
+          ? priceAfterReferral - promoCodeDiscountValue
+          : priceAfterReferral * (1 - promoCodeDiscountValue / 100);
+      return Math.round(Math.max(0, priceAfterPromo));
     })(),
   );
   const grandTotalEgp = discountedInstancePrices.reduce(
@@ -916,82 +930,6 @@ export default function CreateClient({ userEmail }: Props) {
                   />
                 </label>
               )}
-
-              <div
-                style={{
-                  display: "grid",
-                  gap: 8,
-                  marginBottom: 10,
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #e8edf0",
-                  background: "#f8f9fa",
-                }}
-              >
-                <span style={{ fontSize: 12.5, color: "#0B1E3D", fontWeight: 700 }}>
-                  {t("create.promo_input_label")}
-                </span>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    type="text"
-                    value={promoCodeDraft}
-                    onChange={(event) =>
-                      handlePromoCodeInputChange(event.target.value)
-                    }
-                    placeholder="PROMO-XXXXXX"
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      height: 38,
-                      borderRadius: 8,
-                      border: "1.5px solid #d0d8e0",
-                      padding: "0 10px",
-                      fontSize: 13,
-                      color: "#0B1E3D",
-                      fontFamily: "inherit",
-                      textTransform: "uppercase",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleValidatePromoCode()}
-                    disabled={promoCodeChecking || !promoCodeDraft.trim()}
-                    style={{
-                      height: 38,
-                      padding: "0 12px",
-                      border: 0,
-                      borderRadius: 8,
-                      background:
-                        promoCodeChecking || !promoCodeDraft.trim()
-                          ? "#9aa8b5"
-                          : "#0B1E3D",
-                      color: "#fff",
-                      fontWeight: 700,
-                      fontSize: 12,
-                      cursor:
-                        promoCodeChecking || !promoCodeDraft.trim()
-                          ? "not-allowed"
-                          : "pointer",
-                    }}
-                  >
-                    {promoCodeChecking
-                      ? t("create.promo_checking")
-                      : t("create.promo_apply_action")}
-                  </button>
-                </div>
-                {promoCodeMessage ? (
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 12,
-                      color: promoCodeValid ? "#00877A" : "#e74c3c",
-                      fontWeight: promoCodeValid ? 700 : 600,
-                    }}
-                  >
-                    {promoCodeMessage}
-                  </p>
-                ) : null}
-              </div>
 
               {totalSavingsEgp > 0 && (
                 <p

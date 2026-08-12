@@ -8,12 +8,13 @@ import {
   ChevronRight,
   Route,
   Users,
+  Phone,
 } from "lucide-react";
 import { getServerLocale } from "@/lib/i18n/server";
 import { translate, formatDate, formatTime, formatEgp, toArabicDigits, formatDistanceKm, formatMinutes } from "@/lib/i18n";
 import { isSharedVehicle } from "@/lib/geo/stations";
 import { getSession } from "@/lib/auth/session";
-import { listUserTrips, listDriverTrips } from "@/lib/services/trips";
+import { listUserTrips, listDriverTrips, getUserTrip, type UserTripDetail } from "@/lib/services/trips";
 import { getRidesByDriver } from "@/lib/services/rideService";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import { VEHICLES } from "@/lib/config/vehicles";
@@ -114,6 +115,263 @@ function rideStatusPill(status: RideListRow["status"], locale: "en" | "ar") {
   }
   return pills.matched;
 }
+
+function driverInitials(name?: string | null): string {
+  return (name ?? "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join("");
+}
+
+function SharedSummaryCard({
+  locale,
+  driver,
+  totalPersons,
+  totalFees,
+  pickupPoint,
+  departureTime,
+  dropoffPoint,
+  arrivalTime,
+}: {
+  locale: "en" | "ar";
+  driver?: UserTripDetail["assignedDriver"] | null;
+  totalPersons: number;
+  totalFees: number;
+  pickupPoint: string;
+  departureTime: string;
+  dropoffPoint: string;
+  arrivalTime: string;
+}) {
+  const carLine = [driver?.carBrand, driver?.carModel].filter(Boolean).join(" ");
+
+  return (
+    <div
+      style={{
+        background: "linear-gradient(135deg, #F6FBFA 0%, #EEFBF8 100%)",
+        border: "1px solid #D6F5EE",
+        borderRadius: 16,
+        overflow: "hidden",
+      }}
+    >
+      {/* Driver identity row */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "14px 16px",
+        }}
+      >
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: "50%",
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#0B1E3D",
+            color: "#fff",
+            fontWeight: 800,
+            fontSize: 16,
+          }}
+          aria-hidden="true"
+        >
+          {driverInitials(driver?.name) || <Car size={18} />}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 10,
+              fontWeight: 700,
+              color: "#00806E",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            {translate(locale, "my_trips.driver_heading")}
+          </p>
+          <p
+            style={{
+              margin: "2px 0 0",
+              fontSize: 15,
+              fontWeight: 800,
+              color: "#0B1E3D",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {driver?.name ?? translate(locale, "my_trips.driver_fallback")}
+          </p>
+          {(carLine || driver?.plate) && (
+            <p
+              style={{
+                margin: "2px 0 0",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#5A6A7A",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {carLine}
+              {carLine && driver?.plate ? " · " : ""}
+              {driver?.plate ?? ""}
+            </p>
+          )}
+        </div>
+        {driver?.phone && (
+          <div
+            aria-label={translate(locale, "auth.driver.phone")}
+            style={{
+              flexShrink: 0,
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "#fff",
+              border: "1px solid #CBE9E2",
+              color: "#00806E",
+            }}
+          >
+            <Phone size={16} aria-hidden="true" />
+          </div>
+        )}
+      </div>
+
+      {/* Route timeline */}
+      <div
+        style={{
+          padding: "12px 16px",
+          borderTop: "1px solid #D6F5EE",
+          background: "rgba(255,255,255,0.55)",
+        }}
+      >
+        <div style={{ display: "flex", gap: 10 }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              paddingTop: 4,
+            }}
+            aria-hidden="true"
+          >
+            <span
+              style={{
+                width: 9,
+                height: 9,
+                borderRadius: "50%",
+                background: "#00C2A8",
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                width: 2,
+                flex: 1,
+                minHeight: 22,
+                background: "#D6F5EE",
+                margin: "3px 0",
+              }}
+            />
+            <span
+              style={{
+                width: 9,
+                height: 9,
+                borderRadius: 3,
+                background: "#E74C3C",
+                flexShrink: 0,
+              }}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 16 }}>
+            <div>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "#0B1E3D",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {pickupPoint}
+              </p>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: "#5A6A7A" }}>
+                {departureTime}
+              </p>
+            </div>
+            <div>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "#0B1E3D",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {dropoffPoint}
+              </p>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: "#5A6A7A" }}>
+                {arrivalTime}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Passengers + fare */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          padding: "10px 16px",
+          borderTop: "1px solid #D6F5EE",
+        }}
+      >
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: 12,
+            fontWeight: 600,
+            color: "#5A6A7A",
+          }}
+        >
+          <Users size={13} aria-hidden="true" />
+          {totalPersons} {totalPersons === 1 ? translate(locale, "my_trips.passenger_singular") : translate(locale, "my_trips.passenger_plural")}
+        </span>
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 800,
+            color: "#00806E",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatEgp(locale, totalFees)}
+        </span>
+      </div>
+    </div>
+  );
+}
 type DayItem =
   | { kind: "trip"; data: TripListRow }
   | { kind: "ride"; data: RideListRow };
@@ -130,6 +388,7 @@ export default async function MyTripsPage({
   if (session.role === "admin") redirect("/admin/dashboard");
 
   const isDriver = session.role === "driver";
+  const isPassenger = !isDriver;
   const params = await searchParams;
   const groupFilter =
     typeof params.group === "string" &&
@@ -155,14 +414,20 @@ export default async function MyTripsPage({
   }
 
   const driverOngoingView = isDriver && groupFilter === "ongoing";
+  const passengerOngoingView = isPassenger;
 
-  const listOptions = {
+  const passengerListOptions = {
     page,
     pageSize: PAGE_SIZE,
-    statusGroup:
-      groupFilter && groupFilter !== "upcoming"
-        ? groupFilter
-        : undefined,
+    statusGroup: groupFilter ?? "ongoing",
+    dateFrom,
+    dateTo,
+  };
+
+  const driverListOptions = {
+    page,
+    pageSize: PAGE_SIZE,
+    statusGroup: groupFilter && groupFilter !== "upcoming" ? groupFilter : undefined,
     dateFrom,
     dateTo,
   };
@@ -172,7 +437,7 @@ export default async function MyTripsPage({
   let total = 0;
 
   if (isDriver) {
-    const result = await getRidesByDriver(session.userId, listOptions);
+    const result = await getRidesByDriver(session.userId, driverListOptions);
     if (Array.isArray(result)) {
       rideRows = result;
       total = result.length;
@@ -181,7 +446,7 @@ export default async function MyTripsPage({
       total = result.total;
     }
   } else {
-    const result = await listUserTrips(session.userId, listOptions);
+    const result = await listUserTrips(session.userId, passengerListOptions);
     tripRows = result.rows;
     total = result.total;
   }
@@ -200,6 +465,18 @@ export default async function MyTripsPage({
     ? rideRows.map((ride) => ({ kind: "ride", data: ride }))
     : tripRows.map((trip) => ({ kind: "trip", data: trip }));
 
+  const sharedTripDetailsById = !isDriver
+    ? new Map(
+        (
+          await Promise.all(
+            tripRows
+              .filter((trip) => isSharedVehicle(trip.vehicleType))
+              .map(async (trip) => [trip.id, await getUserTrip(session.userId, trip.id)] as const),
+          )
+        ).filter(([, tripDetail]) => Boolean(tripDetail)),
+      )
+    : new Map<string, UserTripDetail>();
+
   for (const item of listItems) {
     const date = item.data.date;
     const last = dayGroups[dayGroups.length - 1];
@@ -207,7 +484,12 @@ export default async function MyTripsPage({
     else dayGroups.push({ date, items: [item] });
   }
 
-  const hasFilters = Boolean(groupFilter || dateFrom || dateTo);
+  const hasFilters = Boolean((isDriver ? groupFilter : undefined) || dateFrom || dateTo);
+  const hiddenGroups: Array<
+    "" | "upcoming" | "ongoing" | "previous" | "pending_payment"
+  > = isPassenger
+    ? [""]
+    : ["upcoming"];
 
   const locale = await getServerLocale();
 
@@ -221,8 +503,12 @@ export default async function MyTripsPage({
         ? translate(locale, "my_trips.total_ongoing", { total })
         : translate(locale, "my_trips.total_assigned", { total });
     } else {
-      summaryText = translate(locale, "my_trips.total_history", { total });
+      summaryText = translate(locale, "my_trips.total_ongoing", { total });
     }
+  }
+
+  if (passengerOngoingView && total === 0 && !hasFilters) {
+    summaryText = translate(locale, "my_trips.empty_ongoing");
   }
 
   return (
@@ -265,7 +551,7 @@ export default async function MyTripsPage({
           }}
         >
           <DateRangeCalendar />
-          <StatusGroupFilter hiddenGroups={isDriver ? ["upcoming"] : []} />
+          <StatusGroupFilter hiddenGroups={hiddenGroups} />
         </div>
 
         {listItems.length === 0 ? (
@@ -278,7 +564,7 @@ export default async function MyTripsPage({
                   ? driverOngoingView
                     ? translate(locale, "my_trips.empty_ongoing")
                     : translate(locale, "my_trips.empty_assigned")
-                  : translate(locale, "my_trips.empty")
+                  : translate(locale, "my_trips.empty_ongoing")
             }
             description={
               hasFilters
@@ -287,7 +573,7 @@ export default async function MyTripsPage({
                   ? driverOngoingView
                     ? translate(locale, "my_trips.empty_description_ongoing")
                     : translate(locale, "my_trips.empty_description_assigned")
-                  : translate(locale, "my_trips.empty_description")
+                  : translate(locale, "my_trips.empty_description_ongoing")
             }
             action={
               !isDriver ? (
@@ -678,6 +964,11 @@ export default async function MyTripsPage({
                     const vLabel = descriptionForVehicle(locale, trip.vehicleType);
                     const timedOut = trip.status === "time_out";
                     const hasAssignedDriver = Boolean(trip.assignedDriver);
+                    const sharedDetail = !isDriver ? sharedTripDetailsById.get(trip.id) : null;
+                    const showSharedSummary =
+                      !isDriver &&
+                      isSharedVehicle(trip.vehicleType) &&
+                      Boolean(sharedDetail?.rideDetails);
                     const needsPayment =
                       trip.paymentStatus === "pending" ||
                       trip.paymentStatus === "failed";
@@ -701,29 +992,24 @@ export default async function MyTripsPage({
                           }}
                         >
                           <div style={{ padding: "16px 18px" }}>
-                            {/* Created at */}
                             <div style={{ marginBottom: 10 }}>
                               <span
                                 style={{
                                   fontSize: 11,
                                   color: "#9aa7b4",
                                   fontWeight: 600,
-                                }}  
+                                }}
                               >
-                                {translate(locale, "my_trips.trip_number", { n: trip.tripNumber })} · {translate(locale, "my_trips.requested_label")}{" "}
-                                {toArabicDigitsIf(locale, new Date(trip.createdAt).toLocaleString(
-                                  locale === "ar" ? "ar-EG" : "en-EG",
-                                  {
-                                    month: "short",
-                                    day: "numeric",
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                  },
-                                ))}
+                                {translate(locale, "my_trips.trip_number", { n: trip.tripNumber })} · {translate(locale, "my_trips.requested_label")} {" "}
+                                {toArabicDigitsIf(locale, new Date(trip.createdAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-EG", {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                }))}
                               </span>
                             </div>
 
-                            {/* Vehicle (large) + price */}
                             <div
                               style={{
                                 display: "flex",
@@ -733,343 +1019,115 @@ export default async function MyTripsPage({
                                 marginBottom: 8,
                               }}
                             >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 8,
-                                }}
-                              >
-                                <Car
-                                  size={20}
-                                  color="#00806E"
-                                  aria-hidden="true"
-                                />
-                                <span
-                                  style={{
-                                    fontSize: 18,
-                                    fontWeight: 800,
-                                    color: "#0B1E3D",
-                                    letterSpacing: "-0.01em",
-                                  }}
-                                >
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <Car size={20} color="#00806E" aria-hidden="true" />
+                                <span style={{ fontSize: 18, fontWeight: 800, color: "#0B1E3D", letterSpacing: "-0.01em" }}>
                                   {vLabel}
                                 </span>
                               </div>
-                              <span
-                                style={{
-                                  fontWeight: 800,
-                                  fontSize: 16,
-                                  color: "#00C2A8",
-                                  fontVariantNumeric: "tabular-nums",
-                                }}
-                              >
+                              <span style={{ fontWeight: 800, fontSize: 16, color: "#00C2A8", fontVariantNumeric: "tabular-nums" }}>
                                 {formatEgp(locale, trip.priceEgp)}
                               </span>
                             </div>
 
-                            {/* Status pill */}
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
-                                flexWrap: "wrap",
-                                marginBottom: 12,
-                              }}
-                            >
-                              <Pill
-                                {...(getStatusPill(locale)[trip.status] ??
-                                  getStatusPill(locale).pending_payment)}
-                              />
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                              <Pill {...(getStatusPill(locale)[trip.status] ?? getStatusPill(locale).pending_payment)} />
                             </div>
 
-                            {/* Driver + car (ongoing only — passenger view) */}
-                            {!isDriver && hasAssignedDriver && (
-                              <div
-                                style={{
-                                  marginBottom: 12,
-                                  background:
-                                    "linear-gradient(135deg, #F6FBFA 0%, #EEFBF8 100%)",
-                                  border: "1px solid #D6F5EE",
-                                  borderRadius: 14,
-                                  overflow: "hidden",
-                                }}
-                              >
-                                {/* Driver row */}
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 12,
-                                    padding: "12px 14px",
-                                  }}
-                                >
-                                  {trip.assignedDriver?.profilePic ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      src={trip.assignedDriver.profilePic}
-                                      alt={
-                                        trip.assignedDriver?.name ?? translate(locale, "my_trips.driver_fallback")
-                                      }
-                                      style={{
-                                        width: 40,
-                                        height: 40,
-                                        borderRadius: "50%",
-                                        objectFit: "cover",
-                                        flexShrink: 0,
-                                      }}
-                                    />
-                                  ) : (
-                                    <div
-                                      style={{
-                                        width: 40,
-                                        height: 40,
-                                        borderRadius: "50%",
-                                        flexShrink: 0,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        background: "#0B1E3D",
-                                        color: "#fff",
-                                        fontWeight: 800,
-                                        fontSize: 15,
-                                      }}
-                                      aria-hidden="true"
-                                    >
-                                      {(trip.assignedDriver?.name ?? "")
-                                        .split(" ")
-                                        .filter(Boolean)
-                                        .slice(0, 2)
-                                        .map((p) => p[0]?.toUpperCase())
-                                        .join("")}
+                            {showSharedSummary ? (
+                              <div style={{ marginBottom: 12 }}>
+                                <SharedSummaryCard
+                                  locale={locale}
+                                  driver={sharedDetail?.assignedDriver ?? trip.assignedDriver}
+                                  totalPersons={sharedDetail?.rideDetails?.passengerCount ?? sharedDetail?.numberOfPassengers ?? 1}
+                                  totalFees={sharedDetail?.rideDetails?.totalCost ?? trip.bookingAmountEgp}
+                                  pickupPoint={sharedDetail?.pickupStation?.name ?? trip.pickupAddress}
+                                  departureTime={trip.pickupTime}
+                                  dropoffPoint={sharedDetail?.dropoffStation?.name ?? trip.dropoffAddress}
+                                  arrivalTime={trip.arrivalTime}
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                {!isDriver && hasAssignedDriver && (
+                                  <div style={{ marginBottom: 12, background: "linear-gradient(135deg, #F6FBFA 0%, #EEFBF8 100%)", border: "1px solid #D6F5EE", borderRadius: 14, overflow: "hidden" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px" }}>
+                                      {trip.assignedDriver?.profilePic ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                          src={trip.assignedDriver.profilePic}
+                                          alt={trip.assignedDriver?.name ?? translate(locale, "my_trips.driver_fallback")}
+                                          style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                                        />
+                                      ) : (
+                                        <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B1E3D", color: "#fff", fontWeight: 800, fontSize: 15 }} aria-hidden="true">
+                                          {(trip.assignedDriver?.name ?? "").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("")}
+                                        </div>
+                                      )}
+                                      <div style={{ minWidth: 0, flex: 1 }}>
+                                        <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#00806E", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                          {translate(locale, "my_trips.driver_heading")}
+                                        </p>
+                                        <p style={{ margin: "1px 0 0", fontSize: 14, fontWeight: 700, color: "#0B1E3D" }}>
+                                          {trip.assignedDriver?.name ?? "—"}
+                                        </p>
+                                      </div>
                                     </div>
-                                  )}
-                                  <div style={{ minWidth: 0, flex: 1 }}>
-                                    <p
-                                      style={{
-                                        margin: 0,
-                                        fontSize: 10,
-                                        fontWeight: 700,
-                                        color: "#00806E",
-                                        textTransform: "uppercase",
-                                        letterSpacing: "0.05em",
-                                      }}
-                                    >
-                                      {translate(locale, "my_trips.driver_heading")}
-                                    </p>
-                                    <p
-                                      style={{
-                                        margin: "1px 0 0",
-                                        fontSize: 14,
-                                        fontWeight: 700,
-                                        color: "#0B1E3D",
-                                      }}
-                                    >
-                                      {trip.assignedDriver?.name ?? "—"}
-                                    </p>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderTop: "1px solid #D6F5EE", background: "rgba(255,255,255,0.5)" }}>
+                                      <Car size={16} color="#00806E" style={{ flexShrink: 0 }} aria-hidden="true" />
+                                      <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+                                        {trip.assignedDriver?.carBrand ?? ""}
+                                        {trip.assignedDriver?.carBrand && trip.assignedDriver?.carModel ? " " : ""}
+                                        {trip.assignedDriver?.carModel ?? ""}
+                                        {trip.assignedDriver?.modelYear ? ` · ${trip.assignedDriver.modelYear}` : ""}
+                                      </span>
+                                      <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: 8, background: "#fff", border: "1px solid #CBE9E2", fontSize: 13, fontWeight: 800, color: "#0B1E3D", letterSpacing: "0.08em", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                                        {trip.assignedDriver?.plate ?? "—"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                                    <MapPin size={13} color="#00C2A8" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
+                                    <span style={{ fontSize: 13, color: "#0B1E3D" }}>{truncate(trip.pickupAddress)}</span>
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                                    <MapPin size={13} color="#E74C3C" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
+                                    <span style={{ fontSize: 13, color: "#0B1E3D" }}>{truncate(trip.dropoffAddress)}</span>
                                   </div>
                                 </div>
 
-                                {/* Car + plate row */}
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 10,
-                                    padding: "10px 14px",
-                                    borderTop: "1px solid #D6F5EE",
-                                    background: "rgba(255,255,255,0.5)",
-                                  }}
-                                >
-                                  <Car
-                                    size={16}
-                                    color="#00806E"
-                                    style={{ flexShrink: 0 }}
-                                    aria-hidden="true"
-                                  />
-                                  <span
-                                    style={{
-                                      fontSize: 13,
-                                      fontWeight: 600,
-                                      color: "#0B1E3D",
-                                    }}
-                                  >
-                                    {trip.assignedDriver?.carBrand ?? ""}
-                                    {trip.assignedDriver?.carBrand &&
-                                    trip.assignedDriver?.carModel
-                                      ? " "
-                                      : ""}
-                                    {trip.assignedDriver?.carModel ?? ""}
-                                    {trip.assignedDriver?.modelYear
-                                      ? ` · ${trip.assignedDriver.modelYear}`
-                                      : ""}
-                                  </span>
-                                  <span
-                                    style={{
-                                      marginLeft: "auto",
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      padding: "4px 10px",
-                                      borderRadius: 8,
-                                      background: "#fff",
-                                      border: "1px solid #CBE9E2",
-                                      fontSize: 13,
-                                      fontWeight: 800,
-                                      color: "#0B1E3D",
-                                      letterSpacing: "0.08em",
-                                      fontVariantNumeric: "tabular-nums",
-                                      whiteSpace: "nowrap",
-                                    }}
-                                  >
-                                    {trip.assignedDriver?.plate ?? "—"}
-                                  </span>
+                                <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 10, flexWrap: "wrap" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                    <Clock size={12} color="#5A6A7A" aria-hidden="true" />
+                                    <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                                      {isSharedVehicle(trip.vehicleType) ? translate(locale, "board_station_by") : translate(locale, "pickup")} <strong style={{ color: "#0B1E3D" }}>{formatTime(locale, trip.pickupTime)}</strong>
+                                    </span>
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                    <Clock size={12} color="#5A6A7A" aria-hidden="true" />
+                                    <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                                      {isSharedVehicle(trip.vehicleType) ? translate(locale, "latest_arrival_time") : translate(locale, "arrive")} <strong style={{ color: "#0B1E3D" }}>{formatTime(locale, trip.arrivalTime)}</strong>
+                                    </span>
+                                  </div>
                                 </div>
-                              </div>
+
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingTop: 10, borderTop: "1px solid #f4f6f8" }}>
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "#9aa7b4" }}>
+                                    <Route size={12} aria-hidden="true" />
+                                    {formatDistanceKm(locale, trip.distanceKm ?? 0)} · {formatMinutes(locale, trip.durationMinutes ?? 0)}
+                                  </span>
+                                  <ChevronRight size={16} color="#9aa7b4" aria-hidden="true" />
+                                </div>
+                              </>
                             )}
-
-                            {/* Pickup → Dropoff */}
-                            <div
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 6,
-                                marginBottom: 12,
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "flex-start",
-                                  gap: 8,
-                                }}
-                              >
-                                <MapPin
-                                  size={13}
-                                  color="#00C2A8"
-                                  style={{ marginTop: 2, flexShrink: 0 }}
-                                  aria-hidden="true"
-                                />
-                                <span
-                                  style={{ fontSize: 13, color: "#0B1E3D" }}
-                                >
-                                  {truncate(trip.pickupAddress)}
-                                </span>
-                              </div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "flex-start",
-                                  gap: 8,
-                                }}
-                              >
-                                <MapPin
-                                  size={13}
-                                  color="#E74C3C"
-                                  style={{ marginTop: 2, flexShrink: 0 }}
-                                  aria-hidden="true"
-                                />
-                                <span
-                                  style={{ fontSize: 13, color: "#0B1E3D" }}
-                                >
-                                  {truncate(trip.dropoffAddress)}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Times */}
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 16,
-                                marginBottom: 10,
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 5,
-                                }}
-                              >
-                                <Clock
-                                  size={12}
-                                  color="#5A6A7A"
-                                  aria-hidden="true"
-                                />
-                                <span
-                                  style={{ fontSize: 12, color: "#5A6A7A" }}
-                                >
-                                  {isSharedVehicle(trip.vehicleType) ? translate(locale, "board_station_by") : translate(locale, "pickup")}{" "}
-                                  <strong style={{ color: "#0B1E3D" }}>
-                                    {formatTime(locale, trip.pickupTime)}
-                                  </strong>
-                                </span>
-                              </div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 5,
-                                }}
-                              >
-                                <Clock
-                                  size={12}
-                                  color="#5A6A7A"
-                                  aria-hidden="true"
-                                />
-                                <span
-                                  style={{ fontSize: 12, color: "#5A6A7A" }}
-                                >
-                                  {isSharedVehicle(trip.vehicleType) ? translate(locale, "latest_arrival_time") : translate(locale, "arrive")}{" "}
-                                  <strong style={{ color: "#0B1E3D" }}>
-                                    {formatTime(locale, trip.arrivalTime)}
-                                  </strong>
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Meta: distance + duration */}
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                gap: 8,
-                                paddingTop: 10,
-                                borderTop: "1px solid #f4f6f8",
-                              }}
-                            >
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 5,
-                                  fontSize: 12,
-                                  color: "#9aa7b4",
-                                }}
-                              >
-                                <Route size={12} aria-hidden="true" />
-                                {formatDistanceKm(locale, trip.distanceKm ?? 0)} ·{" "}
-                                {formatMinutes(locale, trip.durationMinutes ?? 0)}
-                              </span>
-                              <ChevronRight
-                                size={16}
-                                color="#9aa7b4"
-                                aria-hidden="true"
-                              />
-                            </div>
                           </div>
                         </Link>
                         {!isDriver && needsPayment && (
                           <div style={{ padding: "0 18px 16px" }}>
-                            <ContinueCheckoutButton
-                              bookingId={trip.requestId}
-                              amountEgp={trip.bookingAmountEgp}
-                              walletBalance={walletBalance}
-                            />
+                            <ContinueCheckoutButton bookingId={trip.requestId} amountEgp={trip.bookingAmountEgp} walletBalance={walletBalance} />
                           </div>
                         )}
                         {!isDriver && trip.status === "completed" && (

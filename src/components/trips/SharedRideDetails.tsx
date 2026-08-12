@@ -61,7 +61,7 @@ export default function SharedRideDetails({
         },
       ]
     : [
-        { label: translate(locale, "ride.walk_to_station"), value: `${walkToKm.toFixed(2)} km · ${walkToMin} ${translate(locale, "ride.minutes_short")}` },
+        { label: translate(locale, "ride.walk_to_pickup_station"), value: `${walkToKm.toFixed(2)} km · ${walkToMin} ${translate(locale, "ride.minutes_short")}` },
         {
           label: translate(locale, "ride.ride_station_to_station"),
           value: `${distanceKm.toFixed(1)} km · ${durationMinutes} ${translate(locale, "ride.minutes_short")}`,
@@ -116,42 +116,32 @@ export default function SharedRideDetails({
               alignItems: "center",
             }}
           >
-            <div>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  color: "#5A6A7A",
-                  letterSpacing: "0.14em",
-                }}
-              >
-                {translate(locale, "ride.pickup")}
-              </p>
-                <p
-                style={{
-                  margin: "8px 0 0",
-                  fontSize: 15,
-                  fontWeight: 800,
-                  color: "#0B1E3D",
-                }}
-              >
-                {pickupStation ? pickupStation.name : pickup.address}
-              </p>
-            </div>
-            <span
+            <p
               style={{
+                margin: 0,
                 fontSize: 12,
                 fontWeight: 700,
-                color: "#007A5F",
-                background: "rgba(0,194,168,0.12)",
-                borderRadius: 9999,
-                padding: "6px 12px",
+                textTransform: "uppercase",
+                color: "#5A6A7A",
+                letterSpacing: "0.14em",
               }}
             >
-              +{extraPassengers} {translate(locale, extraPassengers === 1 ? "my_trips.passenger_singular" : "my_trips.passenger_plural")}
-            </span>
+              {translate(locale, "ride.pickup")}
+            </p>
+            {extraPassengers > 0 && (
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#007A5F",
+                  background: "rgba(0,194,168,0.12)",
+                  borderRadius: 9999,
+                  padding: "6px 12px",
+                }}
+              >
+                +{extraPassengers} {translate(locale, extraPassengers === 1 ? "my_trips.passenger_singular" : "my_trips.passenger_plural")}
+              </span>
+            )}
           </div>
 
           <div style={{ display: "grid", gap: 10 }}>
@@ -163,20 +153,20 @@ export default function SharedRideDetails({
                 value={pickup.address}
               />
             )}
+            {(pickupStation || isDriver) && (
+              <RideDetailRow
+                icon={<MapPin size={15} />}
+                color="#00C2A8"
+                  headline={translate(locale, "ride.pickup_station_label")}
+                  value={pickupStation?.name ?? translate(locale, "ride.pickup_station_fallback")}
+              />
+            )}
             <RideDetailRow
               icon={<Clock size={15} />}
               color="#00C2A8"
                 headline={translate(locale, "ride.board_by")}
               value={to12h(pickupTime)}
             />
-            {(pickupStation || isDriver) && !pickupStation?.name && (
-              <RideDetailRow
-                icon={<MapPin size={15} />}
-                color="#00C2A8"
-                  headline={translate(locale, "ride.station")}
-                  value={pickupStation?.name ?? translate(locale, "ride.pickup_station_fallback")}
-              />
-            )}
           </div>
         </div>
 

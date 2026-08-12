@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(safeLimit)
-      .select("code discountPercentage maxUses usedCount expiresAt isActive createdAt")
+      .select("code discountType discountValue maxUses usedCount expiresAt isActive createdAt")
       .lean(),
     PromoCode.countDocuments(),
   ]);
@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
   if (!auth.authorized) return auth.response;
 
   let body: {
-    discountPercentage?: number;
+    discountType?: string;
+    discountValue?: number;
     maxUses?: number;
     customCode?: string;
     unlimitedUses?: boolean;
@@ -60,7 +61,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const discountPercentage = Number(body.discountPercentage);
+  const discountType = body.discountType === "fixed" ? "fixed" : "percentage";
+  const discountValue = Number(body.discountValue);
   const unlimitedUses = body.unlimitedUses === true;
   const maxUses = Number(body.maxUses);
   const expiryDays = Number(body.expiryDays ?? 0);
@@ -69,13 +71,21 @@ export async function POST(req: NextRequest) {
   const customCode =
     typeof body.customCode === "string" ? body.customCode.trim() : "";
 
-  if (
-    !Number.isFinite(discountPercentage) ||
-    discountPercentage < 0 ||
-    discountPercentage > 100
-  ) {
+  if (!Number.isFinite(discountValue)) {
+    return NextResponse.json(
+      { error: "Discount value is required." },
+      { status: 400 },
+    );
+  }
+  if (discountType === "percentage" && (discountValue < 0 || discountValue > 100)) {
     return NextResponse.json(
       { error: "Discount percentage must be between 0 and 100." },
+      { status: 400 },
+    );
+  }
+  if (discountType === "fixed" && discountValue <= 0) {
+    return NextResponse.json(
+      { error: "Fixed discount amount must be a positive number." },
       { status: 400 },
     );
   }
@@ -123,7 +133,8 @@ export async function POST(req: NextRequest) {
   try {
     const promoCode = await PromoCode.create({
       code,
-      discountPercentage,
+      discountType,
+      discountValue,
       maxUses: resolvedMaxUses,
       expiresAt,
       usedCount: 0,
@@ -135,7 +146,8 @@ export async function POST(req: NextRequest) {
         data: {
           id: String(promoCode._id),
           code: promoCode.code,
-          discountPercentage: promoCode.discountPercentage,
+          discountType: promoCode.discountType,
+          discountValue: promoCode.discountValue,
           maxUses: promoCode.maxUses,
           usedCount: promoCode.usedCount,
           expiresAt: promoCode.expiresAt,

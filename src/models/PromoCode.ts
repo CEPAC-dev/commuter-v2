@@ -10,7 +10,14 @@ const PromoCodeSchema = new Schema(
       uppercase: true,
       trim: true,
     },
-    discountPercentage: { type: Number, required: true, min: 0, max: 100 },
+    discountType: {
+      type: String,
+      required: true,
+      enum: ["percentage", "fixed"],
+      default: "percentage",
+    },
+    // Percentage (0-100) when discountType is "percentage", flat EGP amount when "fixed".
+    discountValue: { type: Number, required: true, min: 0 },
     maxUses: { type: Number, required: false, min: 1, default: null },
     expiresAt: { type: Date, required: false, default: null, index: true },
     usedCount: { type: Number, required: true, default: 0, min: 0 },
@@ -31,6 +38,25 @@ PromoCodeSchema.pre("validate", function promoCodeLimitValidation() {
     );
   }
 
+  if (this.discountType === "percentage") {
+    if (
+      typeof this.discountValue !== "number" ||
+      this.discountValue < 0 ||
+      this.discountValue > 100
+    ) {
+      this.invalidate(
+        "discountValue",
+        "Percentage discount value must be between 0 and 100.",
+      );
+    }
+  } else if (this.discountType === "fixed") {
+    if (typeof this.discountValue !== "number" || this.discountValue <= 0) {
+      this.invalidate(
+        "discountValue",
+        "Fixed discount value must be a positive number.",
+      );
+    }
+  }
 });
 
 export type PromoCodeDoc = InferSchemaType<typeof PromoCodeSchema>;
