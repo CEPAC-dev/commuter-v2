@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = session.userId;
 
   let body: {
     date?: string;
@@ -498,10 +499,10 @@ export async function POST(req: NextRequest) {
   if (useReferralDiscount) {
     // Server-authoritative guard: only apply discounts if the user currently has
     // an active referral usage and reservations are still available.
-    const activeDiscount = await getActiveDiscountForUser(session.userId);
+    const activeDiscount = await getActiveDiscountForUser(userId);
     if (activeDiscount) {
       referralAllocations = await getReferralDiscountAllocations(
-        session.userId,
+        userId,
         tripInstances.length,
       );
     }
@@ -523,7 +524,7 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < tripInstances.length; i += 1) {
       const appliedPromo = await applyPromoCodeToTrip(
         promoCode,
-        session.userId,
+        userId,
         String(tripInstances[i].id),
       );
       if (
@@ -589,7 +590,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const request = await Request.create({
-      userId: new Types.ObjectId(session.userId),
+      userId: new Types.ObjectId(userId),
       dates,
       amountEgp,
       note,
@@ -603,7 +604,7 @@ export async function POST(req: NextRequest) {
         _id: instance.id,
         tripNumber: await nextSequence("tripNumber"),
         requestId: request._id,
-        userId: new Types.ObjectId(session.userId),
+        userId: new Types.ObjectId(userId),
         date: instance.date,
         cycleIndex: instance.cycleIndex,
         ...instance.trip,
@@ -622,6 +623,15 @@ export async function POST(req: NextRequest) {
       })),
     );
     await Trip.insertMany(tripDocuments);
+
+    await createNotification({
+      userId,
+      type: "request_created",
+      title: "Trip request received",
+      body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
+      data: { bookingId: String(request._id), amountEgp },
+    });
+
     return NextResponse.json(
       {
         bookingId: String(request._id),
@@ -657,17 +667,4 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
-
-  await createNotification({
-    userId: session.userId,
-    type: "request_created",
-    title: "Trip request received",
-    body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
-    data: { bookingId: String(request._id), amountEgp },
-  });
-
-  return NextResponse.json(
-    { bookingId: String(request._id), amountEgp },
-    { status: 201 },
-  );
 }
