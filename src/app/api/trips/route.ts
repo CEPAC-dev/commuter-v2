@@ -611,6 +611,7 @@ export async function POST(req: NextRequest) {
   try {
     const request = await Request.create({
       userId: new Types.ObjectId(userId),
+      tripIds: tripInstances.map((instance) => instance.id),
       dates,
       amountEgp,
       note,

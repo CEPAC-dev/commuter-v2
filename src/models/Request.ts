@@ -3,6 +3,12 @@ import { Schema, model, models, Types, type InferSchemaType } from "mongoose";
 const RequestSchema = new Schema(
   {
     userId: { type: Types.ObjectId, ref: "User", required: true, index: true },
+    tripIds: {
+      type: [Types.ObjectId],
+      ref: "Trip",
+      default: [],
+      index: true,
+    },
     dates: {
       type: [String],
       required: true,

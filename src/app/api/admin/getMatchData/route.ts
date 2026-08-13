@@ -661,7 +661,12 @@ export async function GET(req: NextRequest) {
 
   const routeCache = new Map<
     string,
-    { distance_km: number; duration_minutes: number }
+    {
+      distance_km: number;
+      duration_minutes: number;
+      usedDistanceFallback: boolean;
+      usedDurationFallback: boolean;
+    }
   >();
 
   async function fetchRouteMetrics(
@@ -672,7 +677,12 @@ export async function GET(req: NextRequest) {
     const cached = routeCache.get(key);
     if (cached) return cached;
     if (from.lat === to.lat && from.lng === to.lng) {
-      const same = { distance_km: 0, duration_minutes: 0 };
+      const same = {
+        distance_km: 0,
+        duration_minutes: 0,
+        usedDistanceFallback: false,
+        usedDurationFallback: false,
+      };
       routeCache.set(key, same);
       return same;
     }
@@ -686,19 +696,24 @@ export async function GET(req: NextRequest) {
       Math.round((directDistanceKm / 35) * 60),
     );
 
+    const hasRouteDistance =
+      result[0] &&
+      Number.isFinite(result[0].distance_km) &&
+      result[0].distance_km > 0;
+    const hasRouteDuration =
+      result[0] &&
+      Number.isFinite(result[0].duration_minutes) &&
+      result[0].duration_minutes > 0;
+
     const metrics = {
-      distance_km:
-        result[0] &&
-        Number.isFinite(result[0].distance_km) &&
-        result[0].distance_km > 0
-          ? Math.round(result[0].distance_km * 10) / 10
-          : Math.round(directDistanceKm * 10) / 10,
-      duration_minutes:
-        result[0] &&
-        Number.isFinite(result[0].duration_minutes) &&
-        result[0].duration_minutes > 0
-          ? result[0].duration_minutes
-          : estimatedDurationMinutes,
+      distance_km: hasRouteDistance
+        ? Math.round(result[0].distance_km * 10) / 10
+        : Math.round(directDistanceKm * 10) / 10,
+      duration_minutes: hasRouteDuration
+        ? result[0].duration_minutes
+        : estimatedDurationMinutes,
+      usedDistanceFallback: !hasRouteDistance,
+      usedDurationFallback: !hasRouteDuration,
     };
 
     routeCache.set(key, metrics);
@@ -723,7 +738,7 @@ export async function GET(req: NextRequest) {
 
   VEHICLE_LIST.forEach((vehicle, index) => {
     const rowNumber = index + 2;
-    const waitingRateFormula = `=ROUND(0.5*E${rowNumber}*50^0.8*I${rowNumber},0)`;
+    const waitingRateFormula = `=ROUND(0.5*E${rowNumber}*50*I${rowNumber},0)`;
     const additionalRateFormula = `=${vehicle.additional_rate}*E${rowNumber}`;
     const waitingRateValue =
       0.5 * vehicle.rate * Math.pow(50, 0.8) * vehicle.min_occupancy;
@@ -767,6 +782,7 @@ export async function GET(req: NextRequest) {
 
   const matrixDuration = wb.addWorksheet("Time_Skim");
   matrixDuration.getCell("A1").value = "District Id";
+  const fallbackCellColor = "FF00FFFF";
 
   stationsSheetRows.forEach((station, index) => {
     const column = index + 2;
@@ -789,10 +805,31 @@ export async function GET(req: NextRequest) {
         { lat: originStation.lat, lng: originStation.lng },
         { lat: destStation.lat, lng: destStation.lng },
       );
-      matrixDistance.getRow(rowIndex + 2).getCell(colIndex + 2).value =
-        metrics.distance_km;
-      matrixDuration.getRow(rowIndex + 2).getCell(colIndex + 2).value =
-        metrics.duration_minutes;
+      const distanceCell = matrixDistance
+        .getRow(rowIndex + 2)
+        .getCell(colIndex + 2);
+      const durationCell = matrixDuration
+        .getRow(rowIndex + 2)
+        .getCell(colIndex + 2);
+
+      distanceCell.value = metrics.distance_km;
+      durationCell.value = metrics.duration_minutes;
+
+      if (metrics.usedDistanceFallback) {
+        distanceCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: fallbackCellColor },
+        };
+      }
+
+      if (metrics.usedDurationFallback) {
+        durationCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: fallbackCellColor },
+        };
+      }
     }
   }
   styleWorksheet(matrixDistance);
