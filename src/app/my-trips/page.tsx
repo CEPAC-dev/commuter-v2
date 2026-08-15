@@ -392,15 +392,18 @@ export default async function MyTripsPage({
   const params = await searchParams;
   const groupFilter =
     typeof params.group === "string" &&
-    ["upcoming", "ongoing", "previous", "pending_payment"].includes(
+    ["all", "upcoming", "ongoing", "previous", "pending_payment"].includes(
       params.group,
     )
       ? (params.group as
+          | "all"
           | "upcoming"
           | "ongoing"
           | "previous"
           | "pending_payment")
-      : undefined;
+      : isPassenger
+        ? "ongoing"
+        : undefined;
   const dateFrom =
     typeof params.dateFrom === "string" ? params.dateFrom : undefined;
   const dateTo = typeof params.dateTo === "string" ? params.dateTo : undefined;
@@ -419,15 +422,28 @@ export default async function MyTripsPage({
   const passengerListOptions = {
     page,
     pageSize: PAGE_SIZE,
-    statusGroup: groupFilter ?? "ongoing",
+    statusGroup:
+      groupFilter === "all" || groupFilter === undefined
+        ? undefined
+        : groupFilter,
     dateFrom,
     dateTo,
   };
 
+  const passengerHasActiveStatusFilter = Boolean(
+    groupFilter &&
+      groupFilter !== "all" &&
+      groupFilter !== "ongoing" &&
+      ["upcoming", "previous", "pending_payment"].includes(groupFilter),
+  );
+
   const driverListOptions = {
     page,
     pageSize: PAGE_SIZE,
-    statusGroup: groupFilter && groupFilter !== "upcoming" ? groupFilter : undefined,
+    statusGroup:
+      groupFilter && groupFilter !== "all" && groupFilter !== "upcoming"
+        ? groupFilter
+        : undefined,
     dateFrom,
     dateTo,
   };
@@ -484,12 +500,12 @@ export default async function MyTripsPage({
     else dayGroups.push({ date, items: [item] });
   }
 
-  const hasFilters = Boolean((isDriver ? groupFilter : undefined) || dateFrom || dateTo);
+  const hasFilters = Boolean(
+    (isDriver ? groupFilter : passengerHasActiveStatusFilter) || dateFrom || dateTo,
+  );
   const hiddenGroups: Array<
-    "" | "upcoming" | "ongoing" | "previous" | "pending_payment"
-  > = isPassenger
-    ? [""]
-    : ["upcoming"];
+    "all" | "upcoming" | "ongoing" | "previous" | "pending_payment"
+  > = isPassenger ? [] : ["upcoming", "pending_payment"];
 
   const locale = await getServerLocale();
 

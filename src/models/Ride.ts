@@ -78,8 +78,8 @@ const RideRouteStopSchema = new Schema(
     waitingMinutes: { type: Number, required: false, default: 0 },
     boardingNumber: { type: Number, required: true, default: 0, min: 0 },
     alightingNumber: { type: Number, required: true, default: 0, min: 0 },
-    boarding: { type: [RideRoutePassengerSchema], default: [] },
-    alighting: { type: [RideRoutePassengerSchema], default: [] },
+    boarding: { type: Schema.Types.Mixed, default: [] },
+    alighting: { type: Schema.Types.Mixed, default: [] },
   },
   { _id: false },
 );
@@ -125,8 +125,8 @@ const RideSchema = new Schema(
     },
     // combined, ordered pickup/dropoff sequence across all passengers on this ride
     route: { type: [RideRouteStopSchema], default: [] },
-    pickupStation: { type: PointSchema, required: false },
-    dropoffStation: { type: PointSchema, required: false },
+    pickupStation: { type: StationSchema, required: false },
+    dropoffStation: { type: StationSchema, required: false },
     driverOrigin: { type: PointSchema, required: false },
     driverDestination: { type: PointSchema, required: false },
     startTime: { type: String, required: true },
