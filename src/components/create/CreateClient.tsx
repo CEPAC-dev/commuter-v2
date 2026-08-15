@@ -12,7 +12,6 @@ import {
   Route,
   Users,
   Navigation,
-  TicketPercent,
 } from "lucide-react";
 import { useTripStore } from "@/lib/store/useTripStore";
 import { useClientLocale } from "@/lib/locale.client";
@@ -98,15 +97,6 @@ export default function CreateClient({ userEmail }: Props) {
   const [bookingNote, setBookingNote] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
-  const [useReferralDiscount, setUseReferralDiscount] = useState(false);
-  const [referralDiscountAvailable, setReferralDiscountAvailable] =
-    useState(false);
-  const [referralDiscountPercentage, setReferralDiscountPercentage] = useState<
-    number | null
-  >(null);
-  const [referralDiscountTripsRemaining, setReferralDiscountTripsRemaining] =
-    useState(0);
-  const [referralWarning, setReferralWarning] = useState("");
   const [promoCodeDraft, setPromoCodeDraft] = useState("");
   const [promoCodeValid, setPromoCodeValid] = useState(false);
   const [promoCodeDiscountType, setPromoCodeDiscountType] = useState<
@@ -183,30 +173,6 @@ export default function CreateClient({ userEmail }: Props) {
         /* non-fatal */
       }
 
-      try {
-        const r = await fetch("/api/referral/discount-availability", {
-          cache: "no-store",
-        });
-        if (r.ok) {
-          const d = await r.json();
-          const info = d?.data;
-          setReferralDiscountAvailable(
-            Boolean(info?.referralDiscountAvailable),
-          );
-          setReferralDiscountPercentage(
-            typeof info?.referralDiscountPercentage === "number"
-              ? info.referralDiscountPercentage
-              : null,
-          );
-          setReferralDiscountTripsRemaining(
-            Number.isInteger(info?.referralDiscountTripsRemaining)
-              ? info.referralDiscountTripsRemaining
-              : 0,
-          );
-        }
-      } catch {
-        /* non-fatal */
-      }
     })();
   }, []);
 
@@ -265,7 +231,6 @@ export default function CreateClient({ userEmail }: Props) {
   async function handleSubmit() {
     setSubmitting(true);
     setSubmitError("");
-    setReferralWarning("");
     setPromoWarning("");
     let navigating = false;
     try {
@@ -275,7 +240,6 @@ export default function CreateClient({ userEmail }: Props) {
         body: JSON.stringify({
           dates: selectedDates,
           note: bookingNote,
-          useReferralDiscount,
           promoCode: promoCodeDraft.trim() || null,
           trips: trips.map((t) => ({
             pickup: t.pickup,
@@ -314,9 +278,6 @@ export default function CreateClient({ userEmail }: Props) {
         return;
       }
 
-      if (data?.referralDiscountUnavailable) {
-        setReferralWarning(t("create.referral_unavailable_fallback"));
-      }
       if (data?.promoCodeUnavailable) {
         setPromoWarning(
           data?.promoCodeMessage ?? t("create.promo_unavailable_fallback"),
@@ -652,24 +613,13 @@ export default function CreateClient({ userEmail }: Props) {
     (sum, price) => sum + price,
     0,
   );
-  const appliedReferralSlots =
-    useReferralDiscount &&
-    referralDiscountAvailable &&
-    referralDiscountPercentage != null
-      ? Math.min(referralDiscountTripsRemaining, baseInstancePrices.length)
-      : 0;
-  const discountedInstancePrices = baseInstancePrices.map((price, index) =>
+  const discountedInstancePrices = baseInstancePrices.map((price) =>
     (() => {
-      const referralPct =
-        index < appliedReferralSlots && referralDiscountPercentage != null
-          ? referralDiscountPercentage
-          : 0;
-      const priceAfterReferral = Math.round(price * (1 - referralPct / 100));
-      if (!promoCodeValid) return priceAfterReferral;
+      if (!promoCodeValid) return price;
       const priceAfterPromo =
         promoCodeDiscountType === "fixed"
-          ? priceAfterReferral - promoCodeDiscountValue
-          : priceAfterReferral * (1 - promoCodeDiscountValue / 100);
+          ? price - promoCodeDiscountValue
+          : price * (1 - promoCodeDiscountValue / 100);
       return Math.round(Math.max(0, priceAfterPromo));
     })(),
   );
@@ -915,135 +865,6 @@ export default function CreateClient({ userEmail }: Props) {
                   }
                 </p>
               )}
-
-              {referralDiscountAvailable &&
-                referralDiscountPercentage != null && (
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      padding: "10px 12px",
-                      borderRadius: 10,
-                      border: "1px solid #e8edf0",
-                      background: "#f8f9fa",
-                      marginBottom: 10,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <TicketPercent
-                        size={15}
-                        color="#00877A"
-                        aria-hidden="true"
-                      />
-                      <span
-                        style={{
-                          fontSize: 12.5,
-                          color: "#0B1E3D",
-                          fontWeight: 700,
-                        }}
-                      >
-                        {t("create.referral_toggle_label")} ·{" "}
-                        {t("create.referral_toggle_offer")
-                          .replace("{pct}", String(referralDiscountPercentage))
-                          .replace(
-                            "{count}",
-                            String(referralDiscountTripsRemaining),
-                          )}
-                      </span>
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={useReferralDiscount}
-                      onChange={(event) =>
-                        setUseReferralDiscount(event.target.checked)
-                      }
-                      style={{ width: 16, height: 16, accentColor: "#00C2A8" }}
-                    />
-                  </label>
-                )}
-
-              <div
-                style={{
-                  display: "grid",
-                  gap: 8,
-                  marginBottom: 10,
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #e8edf0",
-                  background: "#f8f9fa",
-                }}
-              >
-                <span
-                  style={{ fontSize: 12.5, color: "#0B1E3D", fontWeight: 700 }}
-                >
-                  {t("create.promo_input_label")}
-                </span>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    type="text"
-                    value={promoCodeDraft}
-                    onChange={(event) =>
-                      handlePromoCodeInputChange(event.target.value)
-                    }
-                    placeholder="PROMO-XXXXXX"
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      height: 38,
-                      borderRadius: 8,
-                      border: "1.5px solid #d0d8e0",
-                      padding: "0 10px",
-                      fontSize: 13,
-                      color: "#0B1E3D",
-                      fontFamily: "inherit",
-                      textTransform: "uppercase",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleValidatePromoCode()}
-                    disabled={promoCodeChecking || !promoCodeDraft.trim()}
-                    style={{
-                      height: 38,
-                      padding: "0 12px",
-                      border: 0,
-                      borderRadius: 8,
-                      background:
-                        promoCodeChecking || !promoCodeDraft.trim()
-                          ? "#9aa8b5"
-                          : "#0B1E3D",
-                      color: "#fff",
-                      fontWeight: 700,
-                      fontSize: 12,
-                      cursor:
-                        promoCodeChecking || !promoCodeDraft.trim()
-                          ? "not-allowed"
-                          : "pointer",
-                    }}
-                  >
-                    {promoCodeChecking
-                      ? t("create.promo_checking")
-                      : t("create.promo_apply_action")}
-                  </button>
-                </div>
-                {promoCodeMessage ? (
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 12,
-                      color: promoCodeValid ? "#00877A" : "#e74c3c",
-                      fontWeight: promoCodeValid ? 700 : 600,
-                    }}
-                  >
-                    {promoCodeMessage}
-                  </p>
-                ) : null}
-              </div>
 
               {totalSavingsEgp > 0 && (
                 <p
@@ -1544,79 +1365,6 @@ export default function CreateClient({ userEmail }: Props) {
                 </div>
               )}
 
-              {referralDiscountAvailable &&
-                referralDiscountPercentage != null && (
-                  <div
-                    style={{
-                      marginTop: 8,
-                      marginBottom: 8,
-                      padding: "12px 14px",
-                      borderRadius: 12,
-                      background: "#f8f9fa",
-                      border: "1px solid #eef0f3",
-                    }}
-                  >
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
-                        <TicketPercent
-                          size={16}
-                          color="#00877A"
-                          aria-hidden="true"
-                        />
-                        <span
-                          style={{
-                            fontSize: 13,
-                            color: "#0B1E3D",
-                            fontWeight: 700,
-                          }}
-                        >
-                          {t("create.referral_toggle_label")}
-                        </span>
-                      </span>
-                      <input
-                        type="checkbox"
-                        checked={useReferralDiscount}
-                        onChange={(event) =>
-                          setUseReferralDiscount(event.target.checked)
-                        }
-                        style={{
-                          width: 16,
-                          height: 16,
-                          accentColor: "#00C2A8",
-                        }}
-                      />
-                    </label>
-                    <p
-                      style={{
-                        margin: "8px 0 0",
-                        fontSize: 12,
-                        color: "#5A6A7A",
-                      }}
-                    >
-                      {t("create.referral_toggle_offer")
-                        .replace("{pct}", String(referralDiscountPercentage))
-                        .replace(
-                          "{count}",
-                          String(referralDiscountTripsRemaining),
-                        )}
-                    </p>
-                  </div>
-                )}
-
               <div
                 style={{
                   marginTop: 8,
@@ -2089,25 +1837,6 @@ export default function CreateClient({ userEmail }: Props) {
                   }}
                 >
                   {submitError}
-                </p>
-              )}
-
-              {referralWarning && (
-                <p
-                  role="status"
-                  aria-live="polite"
-                  style={{
-                    fontSize: 13,
-                    color: "#0B1E3D",
-                    background: "rgba(245,166,35,0.12)",
-                    border: "1px solid rgba(245,166,35,0.45)",
-                    borderRadius: 8,
-                    padding: "10px 14px",
-                    marginTop: 12,
-                    marginBottom: 0,
-                  }}
-                >
-                  {referralWarning}
                 </p>
               )}
 

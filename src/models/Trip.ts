@@ -120,15 +120,6 @@ const TripSchema = new Schema(
     durationMinutes: { type: Number, required: true },
     priceEgp: { type: Number, required: true },
     basePriceEgp: { type: Number, required: false, min: 0 },
-    referralDiscountPercentage: { type: Number, required: false, min: 0, max: 100 },
-    referralUsageId: {
-      type: Types.ObjectId,
-      ref: "ReferralUsage",
-      required: false,
-      index: true,
-      default: null,
-    },
-    referralUsageConsumedAt: { type: Date, default: null },
     appliedPromoCode: {
       type: Types.ObjectId,
       ref: "PromoCode",

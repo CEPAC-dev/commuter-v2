@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Check, Loader2, Save } from "lucide-react";
 
 export interface ReferralSettingsValues {
-  discountPercentage: number;
+  referrerBonusAmount: number;
+  refereeBonusAmount: number;
   maxUsersPerCode: number;
-  discountValidForTrips: number;
   isActive: boolean;
 }
 
@@ -37,9 +37,9 @@ export default function ReferralSettingsForm({ initialValues }: { initialValues:
   }
 
   const fields: Array<{ key: keyof ReferralSettingsValues; label: string; min: number; max?: number }> = [
-    { key: "discountPercentage", label: "Discount percentage", min: 0, max: 100 },
+    { key: "referrerBonusAmount", label: "Referrer bonus (EGP)", min: 0 },
+    { key: "refereeBonusAmount", label: "New user bonus (EGP)", min: 0 },
     { key: "maxUsersPerCode", label: "Maximum users per code", min: 1 },
-    { key: "discountValidForTrips", label: "Discounted trips per referral", min: 1 },
   ];
 
   return (

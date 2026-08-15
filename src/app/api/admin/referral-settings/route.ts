@@ -4,15 +4,15 @@ import { getOrCreateReferralSettings } from "@/lib/referral";
 import { ReferralSettings } from "@/models/ReferralSettings";
 
 function serializeSettings(settings: {
-  discountPercentage: number;
+  referrerBonusAmount: number;
+  refereeBonusAmount: number;
   maxUsersPerCode: number;
-  discountValidForTrips: number;
   isActive: boolean;
 }) {
   return {
-    discountPercentage: settings.discountPercentage,
+    referrerBonusAmount: settings.referrerBonusAmount,
+    refereeBonusAmount: settings.refereeBonusAmount,
     maxUsersPerCode: settings.maxUsersPerCode,
-    discountValidForTrips: settings.discountValidForTrips,
     isActive: settings.isActive,
   };
 }
@@ -36,26 +36,26 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  const discountPercentage = Number(body.discountPercentage);
+  const referrerBonusAmount = Number(body.referrerBonusAmount);
+  const refereeBonusAmount = Number(body.refereeBonusAmount);
   const maxUsersPerCode = Number(body.maxUsersPerCode);
-  const discountValidForTrips = Number(body.discountValidForTrips);
   const isActive = body.isActive;
 
-  if (!Number.isFinite(discountPercentage) || discountPercentage < 0 || discountPercentage > 100) {
+  if (!Number.isFinite(referrerBonusAmount) || referrerBonusAmount < 0) {
     return NextResponse.json(
-      { error: "Discount percentage must be between 0 and 100." },
+      { error: "Referrer bonus must be a non-negative amount." },
+      { status: 400 },
+    );
+  }
+  if (!Number.isFinite(refereeBonusAmount) || refereeBonusAmount < 0) {
+    return NextResponse.json(
+      { error: "New user bonus must be a non-negative amount." },
       { status: 400 },
     );
   }
   if (!Number.isInteger(maxUsersPerCode) || maxUsersPerCode < 1) {
     return NextResponse.json(
       { error: "Maximum users per code must be an integer of at least 1." },
-      { status: 400 },
-    );
-  }
-  if (!Number.isInteger(discountValidForTrips) || discountValidForTrips < 1) {
-    return NextResponse.json(
-      { error: "Discount-valid trips must be an integer of at least 1." },
       { status: 400 },
     );
   }
@@ -68,9 +68,9 @@ export async function PUT(req: NextRequest) {
     { singletonKey: "global" },
     {
       $set: {
-        discountPercentage,
+        referrerBonusAmount,
+        refereeBonusAmount,
         maxUsersPerCode,
-        discountValidForTrips,
         isActive,
       },
     },

@@ -1039,14 +1039,28 @@ export async function POST(req: NextRequest) {
         }
 
         const rideNumber = await nextSequence("rideNumber");
-        const firstPoint = route[0]!.point;
-        const lastPoint = route[route.length - 1]!.point;
+        const firstPoint = route[0]?.point;
+        const lastPoint = route[route.length - 1]?.point;
         const startLoc = availability.startLocation;
         const summaryForRide = summaryByTripNumber.get(availabilityNumber);
         const totalCost =
           Number(summaryForRide?.totalFees ?? 0) > 0
             ? Number(summaryForRide?.totalFees)
             : 0;
+
+        const toStationShape = (
+          point: { address?: string; lat?: number; lng?: number } | undefined,
+        ) => {
+          if (!point || typeof point.lat !== "number" || typeof point.lng !== "number") {
+            return undefined;
+          }
+          return {
+            id: Number(point.lat && point.lng ? Date.now() % 1000000 : 0) || 0,
+            lat: point.lat,
+            lng: point.lng,
+            name: point.address ?? "Station",
+          };
+        };
 
         const insertedRide = await Ride.create({
           rideNumber,
@@ -1091,8 +1105,8 @@ export async function POST(req: NextRequest) {
                   lng: startLoc.lng,
                 }
               : undefined,
-          pickupStation: firstPoint,
-          dropoffStation: lastPoint,
+          pickupStation: toStationShape(firstPoint),
+          dropoffStation: toStationShape(lastPoint),
           startTime: availability.startTime ?? "00:00",
           endTime: availability.endTime ?? "00:00",
           passengers: [],
