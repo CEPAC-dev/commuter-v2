@@ -7,9 +7,39 @@ function isValidDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+function requireAdminPassword(req: NextRequest) {
+  const expectedPassword = process.env.ADMIN_PASSWORD?.trim();
+  const providedPassword = req.headers.get("x-admin-password")?.trim();
+
+  if (!expectedPassword) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "ADMIN_PASSWORD is not configured on the server." },
+        { status: 500 },
+      ),
+    };
+  }
+
+  if (!providedPassword || providedPassword !== expectedPassword) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Invalid admin password." },
+        { status: 401 },
+      ),
+    };
+  }
+
+  return { ok: true };
+}
+
 export async function DELETE(req: NextRequest) {
   const auth = await adminAuth(req);
   if (!auth.authorized) return auth.response;
+
+  const passwordCheck = requireAdminPassword(req);
+  if (!passwordCheck.ok) return passwordCheck.response;
 
   await connectDB();
 

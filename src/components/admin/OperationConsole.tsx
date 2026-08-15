@@ -56,6 +56,10 @@ export default function OperationConsole() {
   const [ridesPurgeLoading, setRidesPurgeLoading] = useState(false);
   const [ridesPurgeTodayLoading, setRidesPurgeTodayLoading] = useState(false);
   const [ridesPurgeMessage, setRidesPurgeMessage] = useState<string | null>(null);
+  const [tripNumberDelete, setTripNumberDelete] = useState("");
+  const [tripDateDelete, setTripDateDelete] = useState("");
+  const [tripDeleteLoading, setTripDeleteLoading] = useState(false);
+  const [tripDeleteMessage, setTripDeleteMessage] = useState<string | null>(null);
 
   async function handleInspectAvailability(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -445,6 +449,31 @@ export default function OperationConsole() {
     }
   }
 
+  async function requestAdminDelete(
+    actionLabel: string,
+    url: string,
+    options: RequestInit,
+  ) {
+    const password = window.prompt(
+      `Enter ADMIN_PASSWORD to confirm ${actionLabel}.`,
+    );
+
+    if (password === null) {
+      return { canceled: true as const };
+    }
+
+    const headers = new Headers(options.headers ?? {});
+    headers.set("x-admin-password", password);
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+    const payload = await response.json().catch(() => null);
+
+    return { canceled: false as const, response, payload };
+  }
+
   async function handlePurgeRides(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setRidesPurgeLoading(true);
@@ -456,11 +485,17 @@ export default function OperationConsole() {
         target.searchParams.set("date", ridesDatePurge.trim());
       }
 
-      const response = await fetch(target.toString(), {
-        method: "DELETE",
-      });
-      const payload = await response.json().catch(() => null);
+      const result = await requestAdminDelete(
+        ridesDatePurge.trim() ? "ride deletion by date" : "full ride deletion",
+        target.toString(),
+        { method: "DELETE" },
+      );
 
+      if (result.canceled) {
+        return;
+      }
+
+      const { response, payload } = result;
       if (!response.ok) {
         throw new Error(payload?.error || "Unable to purge rides.");
       }
@@ -486,11 +521,17 @@ export default function OperationConsole() {
     setRidesPurgeMessage(null);
 
     try {
-      const response = await fetch("/api/admin/rides/purge-today", {
-        method: "DELETE",
-      });
-      const payload = await response.json().catch(() => null);
+      const result = await requestAdminDelete(
+        "today ride deletion",
+        "/api/admin/rides/purge-today",
+        { method: "DELETE" },
+      );
 
+      if (result.canceled) {
+        return;
+      }
+
+      const { response, payload } = result;
       if (!response.ok) {
         throw new Error(payload?.error || "Unable to purge today's rides.");
       }
@@ -504,6 +545,94 @@ export default function OperationConsole() {
       );
     } finally {
       setRidesPurgeTodayLoading(false);
+    }
+  }
+
+  async function handleDeleteTripRecords(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTripDeleteLoading(true);
+    setTripDeleteMessage(null);
+
+    try {
+      const action = new URLSearchParams();
+      const tripNumber = tripNumberDelete.trim();
+      const tripDate = tripDateDelete.trim();
+
+      if (!tripNumber && !tripDate) {
+        setTripDeleteMessage("Provide either a trip number or a date, or use the full delete action.");
+        setTripDeleteLoading(false);
+        return;
+      }
+
+      if (tripNumber) {
+        action.set("action", "by-trip-number");
+        action.set("tripNumber", tripNumber);
+      } else if (tripDate) {
+        action.set("action", "by-date");
+        action.set("date", tripDate);
+      }
+
+      const result = await requestAdminDelete(
+        tripNumber
+          ? `trip deletion for trip #${tripNumber}`
+          : `trip deletion for date ${tripDate}`,
+        `/api/admin/trips?${action.toString()}`,
+        { method: "DELETE" },
+      );
+
+      if (result.canceled) {
+        return;
+      }
+
+      const { response, payload } = result;
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to delete trips.");
+      }
+
+      setTripDeleteMessage(
+        `Deleted ${payload?.deletedCount ?? 0} trip(s) with action ${payload?.scope ?? action.get("action") ?? "unknown"}.`,
+      );
+      setTripNumberDelete("");
+      setTripDateDelete("");
+    } catch (error) {
+      setTripDeleteMessage(
+        error instanceof Error ? error.message : "Unable to delete trips.",
+      );
+    } finally {
+      setTripDeleteLoading(false);
+    }
+  }
+
+  async function handleDeleteAllTrips(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTripDeleteLoading(true);
+    setTripDeleteMessage(null);
+
+    try {
+      const result = await requestAdminDelete(
+        "full trip deletion",
+        "/api/admin/trips?action=all",
+        { method: "DELETE" },
+      );
+
+      if (result.canceled) {
+        return;
+      }
+
+      const { response, payload } = result;
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to delete all trips.");
+      }
+
+      setTripDeleteMessage(`Deleted ${payload?.deletedCount ?? 0} trip(s) in total.`);
+      setTripNumberDelete("");
+      setTripDateDelete("");
+    } catch (error) {
+      setTripDeleteMessage(
+        error instanceof Error ? error.message : "Unable to delete all trips.",
+      );
+    } finally {
+      setTripDeleteLoading(false);
     }
   }
 
@@ -760,6 +889,138 @@ export default function OperationConsole() {
             }}
           >
             {importMessage}
+          </p>
+        ) : null}
+      </section>
+
+      <section
+        style={{
+          background: "#ffffff",
+          border: "1px solid #E6EAEC",
+          borderRadius: 18,
+          padding: 20,
+          boxShadow: "0 10px 30px rgba(11,30,61,0.05)",
+        }}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 18,
+              fontWeight: 700,
+              color: "#0B1E3D",
+            }}
+          >
+            Trips cleanup
+          </h2>
+          <p style={{ margin: "6px 0 0", color: "#5A6A7A", fontSize: 14 }}>
+            Delete trips by trip number, delete trips for a pickup date, or clear the entire trips collection.
+          </p>
+        </div>
+
+        <form
+          onSubmit={handleDeleteTripRecords}
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+            marginBottom: 12,
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 180,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              Trip number
+            </span>
+            <input
+              value={tripNumberDelete}
+              onChange={(event) => setTripNumberDelete(event.target.value)}
+              type="number"
+              min="1"
+              placeholder="e.g. 1245"
+              style={{
+                border: "1px solid #D8E0E4",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+              }}
+            />
+          </label>
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 220,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              Pickup date
+            </span>
+            <input
+              value={tripDateDelete}
+              onChange={(event) => setTripDateDelete(event.target.value)}
+              type="date"
+              style={{
+                border: "1px solid #D8E0E4",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+              }}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={tripDeleteLoading}
+            style={{
+              border: "none",
+              borderRadius: 10,
+              background: tripDeleteLoading ? "#EFA8A8" : "#B94A48",
+              color: "#ffffff",
+              fontWeight: 700,
+              padding: "10px 16px",
+              cursor: tripDeleteLoading ? "wait" : "pointer",
+              alignSelf: "flex-end",
+            }}
+          >
+            {tripDeleteLoading ? "Deleting..." : "Delete by trip/date"}
+          </button>
+        </form>
+
+        <form onSubmit={handleDeleteAllTrips}>
+          <button
+            type="submit"
+            disabled={tripDeleteLoading}
+            style={{
+              border: "none",
+              borderRadius: 10,
+              background: tripDeleteLoading ? "#EFA8A8" : "#0B1E3D",
+              color: "#ffffff",
+              fontWeight: 700,
+              padding: "10px 16px",
+              cursor: tripDeleteLoading ? "wait" : "pointer",
+            }}
+          >
+            {tripDeleteLoading ? "Deleting all trips..." : "Delete all trips"}
+          </button>
+        </form>
+
+        {tripDeleteMessage ? (
+          <p
+            style={{
+              margin: "12px 0 0",
+              fontSize: 14,
+              color: tripDeleteMessage.includes("Deleted") ? "#00877A" : "#B94A48",
+            }}
+          >
+            {tripDeleteMessage}
           </p>
         ) : null}
       </section>

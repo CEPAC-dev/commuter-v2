@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
@@ -8,22 +8,6 @@ import { Trip } from "@/models/Trip";
 import { Ride } from "@/models/Ride";
 import { User } from "@/models/User";
 import { getDriverSummaryByUserNumber } from "@/lib/services/trips";
-import { createNotification } from "@/lib/notifications/createNotification";
-import { haversineKm } from "@/lib/geo/stations";
-
-type ImportedTripRecord = {
-  _id: unknown;
-  tripNumber: number;
-  userId?: unknown;
-  summary?: Record<string, unknown> | null;
-  details?: Record<string, unknown> | null;
-  date?: string;
-  driverId?: unknown;
-  numberOfPassengers?: number;
-  priceEgp?: number | string;
-  pickup?: unknown;
-  dropoff?: unknown;
-};
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -235,23 +219,6 @@ function normalizeRideType(value: string): "private" | "shared" {
   return "shared";
 }
 
-function normalizeVehicleType(value: string): string {
-  const normalized = normalizeLookupKey(value);
-  if (["1", "private", "privatecar"].includes(normalized)) {
-    return "private_car";
-  }
-  if (["2", "taxi", "taxi_private"].includes(normalized)) {
-    return "taxi_private";
-  }
-  if (["3", "van"].includes(normalized)) {
-    return "van_shared";
-  }
-  if (["4", "microbus"].includes(normalized)) {
-    return "microbus_shared";
-  }
-  return "private_car";
-}
-
 function isNullValue(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   return (
@@ -262,10 +229,6 @@ function isNullValue(value: string): boolean {
   );
 }
 
-function getCellValueAtColumn(row: ExcelJS.Row, columnNumber: number): string {
-  return getCellText(row.getCell(columnNumber));
-}
-
 type StopLookupEntry = {
   lat: number;
   lng: number;
@@ -273,26 +236,6 @@ type StopLookupEntry = {
   id?: number;
   name?: string;
 };
-
-function buildPointFromStopValue(
-  stopValue: string,
-  stopLookup: Map<string, StopLookupEntry>,
-) {
-  if (!stopValue) return null;
-  const point = stopLookup.get(normalizeLookupKey(stopValue));
-  if (!point) {
-    return {
-      lat: 0,
-      lng: 0,
-      address: stopValue,
-    };
-  }
-  return {
-    lat: point.lat,
-    lng: point.lng,
-    address: point.address || stopValue,
-  };
-}
 
 function buildStationFromStopValue(
   stopValue: string,
@@ -319,249 +262,6 @@ function buildStationFromStopValue(
     address: resolvedAddress,
     name: resolvedName,
   };
-}
-
-function buildRideDetailContext(
-  row: ExcelJS.Row,
-  indexes: Map<string, number>,
-  stopLookup: Map<string, StopLookupEntry>,
-) {
-  const tripNumber = parseTripNumber(getCellValue(row, indexes, "Ride_ID"));
-  const passengerNumber = parseNumber(getCellValue(row, indexes, "Pass_ID"));
-  const rideType = normalizeRideType(getCellValue(row, indexes, "Ride_Type"));
-  const seatNumber = parseNumber(getCellValue(row, indexes, "Seat"));
-  const boardingPoint = buildPointFromStopValue(
-    getCellValue(row, indexes, "Board_Stop"),
-    stopLookup,
-  );
-  const departure = normalizeTimeValue(getCellValue(row, indexes, "Departure"));
-  const stops = getCellValue(row, indexes, "Stops");
-  const alightingPoint = buildPointFromStopValue(
-    getCellValue(row, indexes, "Alight_Stop"),
-    stopLookup,
-  );
-  const arrival = normalizeTimeValue(getCellValue(row, indexes, "Arrival"));
-
-  return {
-    tripNumber,
-    passengerNumber,
-    rideType,
-    seatNumber,
-    boardingPoint,
-    departure,
-    stops,
-    alightingPoint,
-    arrival,
-  };
-}
-
-type RouteStop = {
-  point: { lat: number; lng: number; address: string } | null;
-  alighting: number;
-  boarding: number;
-  waitingMinutes?: number;
-};
-
-function splitTripRefs(raw: string): number[] {
-  if (!raw) return [];
-
-  return raw
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => Number(part))
-    .filter((value) => Number.isInteger(value));
-}
-
-function pointKey(
-  point: { lat: number; lng: number; address: string } | null | undefined,
-): string | null {
-  if (!point) return null;
-  return `${point.lat.toFixed(6)}:${point.lng.toFixed(6)}:${(point.address || "").trim().toLowerCase()}`;
-}
-
-function upsertRouteStop(
-  route: RouteStop[],
-  point: { lat: number; lng: number; address: string } | null,
-  boardingCount: number,
-  alightingCount: number,
-  waitingMinutes?: number,
-) {
-  if (!point) return;
-
-  const key = pointKey(point);
-  if (!key) return;
-
-  const existingIndex = route.findIndex((stop) => pointKey(stop.point) === key);
-  if (existingIndex >= 0) {
-    const existing = route[existingIndex];
-    if (!existing) return;
-    existing.boarding += boardingCount;
-    existing.alighting += alightingCount;
-    if (waitingMinutes != null && existing.waitingMinutes == null) {
-      existing.waitingMinutes = waitingMinutes;
-    }
-    return;
-  }
-
-  route.push({
-    point,
-    boarding: boardingCount,
-    alighting: alightingCount,
-    waitingMinutes: waitingMinutes ?? 0,
-  });
-}
-
-function buildRouteFromRow(
-  row: ExcelJS.Row,
-  indexes: Map<string, number>,
-  stopLookup: Map<string, StopLookupEntry>,
-  boardingTripNumbers: number[],
-  alightingTripNumbers: number[],
-) {
-  const detailContext = buildRideDetailContext(row, indexes, stopLookup);
-  const route: RouteStop[] = [];
-
-  const waitingValue = pickValue(row, indexes, [
-    "Waiting_Time",
-    "WaitingTime",
-    "wait",
-    "Wait",
-    "waiting",
-  ]);
-
-  const stopCandidates = Array.from(indexes.entries())
-    .filter(([header]) => {
-      const normalizedHeader = normalizeLookupKey(header);
-      return (
-        normalizedHeader.includes("stop") ||
-        normalizedHeader.includes("station") ||
-        normalizedHeader.includes("location")
-      );
-    })
-    .sort((a, b) => a[1] - b[1]);
-
-  const seenStopValues = new Set<string>();
-  for (const [header, column] of stopCandidates) {
-    const rawValue = getCellText(row.getCell(column));
-    if (!rawValue || isNullValue(rawValue)) continue;
-
-    const stopValues = rawValue
-      .split(/[;,]/)
-      .map((part) => part.trim())
-      .filter(Boolean);
-
-    for (const stopValue of stopValues) {
-      const key = normalizeLookupKey(stopValue);
-      if (!key || seenStopValues.has(key)) continue;
-      seenStopValues.add(key);
-
-      const point = buildPointFromStopValue(stopValue, stopLookup) ??
-        detailContext.boardingPoint ??
-        detailContext.alightingPoint;
-      if (!point) continue;
-
-      const boardingCount =
-        header.toLowerCase().includes("alight") || header.toLowerCase().includes("drop")
-          ? 0
-          : boardingTripNumbers.length > 0 ? boardingTripNumbers.length : 1;
-      const alightingCount =
-        header.toLowerCase().includes("alight") || header.toLowerCase().includes("drop")
-          ? alightingTripNumbers.length > 0 ? alightingTripNumbers.length : 1
-          : 0;
-
-      upsertRouteStop(
-        route,
-        point,
-        boardingCount,
-        alightingCount,
-        parseNumber(waitingValue) ?? undefined,
-      );
-    }
-  }
-
-  return route;
-}
-
-function calculateRouteDistanceKm(
-  route: Array<{
-    point: { lat: number; lng: number; address: string } | null;
-    alighting: number;
-    boarding: number;
-  }>,
-): number {
-  return route.slice(1).reduce((distance, stop, index) => {
-    const previousPoint = route[index]?.point;
-    const currentPoint = stop.point;
-    if (!previousPoint || !currentPoint) return distance;
-    return (
-      distance +
-      haversineKm(
-        previousPoint.lat,
-        previousPoint.lng,
-        currentPoint.lat,
-        currentPoint.lng,
-      )
-    );
-  }, 0);
-}
-
-function calculateMaxLoad(
-  route: Array<{ boarding: number; alighting: number }>,
-): number {
-  let passengersOnBoard = 0;
-  let maxLoad = 0;
-
-  for (const stop of route) {
-    passengersOnBoard = Math.max(0, passengersOnBoard - stop.alighting);
-    passengersOnBoard += stop.boarding;
-    maxLoad = Math.max(maxLoad, passengersOnBoard);
-  }
-
-  return maxLoad;
-}
-
-function resolvePassengerPoint(
-  point: { lat: number; lng: number; address: string; id?: number; name?: string } | null,
-  route: RouteStop[],
-  role: "pickup" | "dropoff",
-) {
-  if (point) return point;
-  const fallbackPoint =
-    role === "pickup" ? route[0]?.point ?? null : route[route.length - 1]?.point ?? null;
-  return fallbackPoint;
-}
-
-function resolvePassengerOrder(
-  point: { lat: number; lng: number; address: string; id?: number; name?: string } | null,
-  route: RouteStop[],
-  routeIndexByPointKey: Map<string, number>,
-  role: "pickup" | "dropoff",
-): number {
-  if (!point) {
-    return role === "dropoff" ? Math.max(0, route.length - 1) : 0;
-  }
-
-  const pointKeyValue = pointKey(point as { lat: number; lng: number; address: string } | null);
-  if (pointKeyValue != null) {
-    const exactOrder = routeIndexByPointKey.get(pointKeyValue);
-    if (exactOrder != null) {
-      return exactOrder;
-    }
-  }
-
-  const firstRoutePoint = route[0]?.point;
-  const lastRoutePoint = route[route.length - 1]?.point;
-  const firstKey = pointKey(firstRoutePoint);
-  const lastKey = pointKey(lastRoutePoint);
-  if (pointKeyValue && firstKey && pointKeyValue === firstKey) {
-    return 0;
-  }
-  if (pointKeyValue && lastKey && pointKeyValue === lastKey) {
-    return Math.max(0, route.length - 1);
-  }
-
-  return role === "dropoff" ? Math.max(0, route.length - 1) : 0;
 }
 
 function getWorksheetByName(
@@ -652,9 +352,137 @@ function buildStopLookup(sheet: ExcelJS.Worksheet) {
     if (stopName || entry.address) {
       map.set(normalizeLookupKey(stopName || entry.address), entry);
     }
+    // Details sheet's "Stop" cell holds the numeric Stop id â€” index by id too.
+    if (entry.id != null) {
+      map.set(String(entry.id), entry);
+    }
   }
 
   return map;
+}
+
+type AvailabilityRecord = {
+  _id: unknown;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  startLocation?: { address?: string; lat?: number; lng?: number };
+  driverId?: { _id?: unknown } | unknown;
+};
+
+async function adminGetJson<T>(
+  req: NextRequest,
+  path: string,
+): Promise<T | null> {
+  try {
+    const url = new URL(path, req.nextUrl.origin);
+    const res = await fetch(url.toString(), {
+      headers: { cookie: req.headers.get("cookie") ?? "" },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchAvailabilityByNumber(
+  req: NextRequest,
+  availabilityNumber: number,
+): Promise<AvailabilityRecord | null> {
+  const data = await adminGetJson<{ records?: AvailabilityRecord[] }>(
+    req,
+    `/api/admin/availability?availabilityNumber=${availabilityNumber}`,
+  );
+  return data?.records?.[0] ?? null;
+}
+
+type TripRecord = {
+  _id: unknown;
+  tripNumber: number;
+  userId?: unknown;
+  pickup?: { address?: string; lat?: number; lng?: number } | null;
+  dropoff?: { address?: string; lat?: number; lng?: number } | null;
+  numberOfPassengers?: number;
+  summary?: Record<string, unknown> | null;
+  details?: Record<string, unknown> | null;
+};
+
+async function fetchTripByNumber(
+  req: NextRequest,
+  tripNumber: number,
+): Promise<TripRecord | null> {
+  const data = await adminGetJson<{ trips?: TripRecord[] }>(
+    req,
+    `/api/admin/trips?tripNumber=${tripNumber}`,
+  );
+  return data?.trips?.[0] ?? null;
+}
+
+function mapCarTypeToVehicle(carType: number | null): string {
+  switch (carType) {
+    case 1:
+      return "private_car";
+    case 2:
+      return "taxi_shared";
+    case 3:
+      return "van_shared";
+    case 4:
+      return "microbus_shared";
+    default:
+      return "taxi_shared";
+  }
+}
+
+function splitCommaRefs(raw: string): number[] {
+  if (!raw || isNullValue(raw)) return [];
+  return raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => Number(part.replace(/[^0-9]/g, "")))
+    .filter((n) => Number.isFinite(n) && n > 0);
+}
+
+async function getDriverBundleByUserId(userId: unknown) {
+  if (!userId) return { driverSummary: null, driverDoc: null };
+  const user = await User.findOne({ _id: userId })
+    .select("name phone profilePic")
+    .lean<{ name?: string; phone?: string; profilePic?: string }>();
+  const driver = await Driver.findOne({ userId })
+    .select(
+      "carBrand carModel carType modelYear vehicleColor carCapacity documents plateChar1 plateChar2 plateChar3 plateDigits",
+    )
+    .lean<{
+      carBrand?: string;
+      carModel?: string;
+      carType?: string;
+      modelYear?: number;
+      vehicleColor?: string;
+      carCapacity?: number;
+      documents?: { profilePic?: string; carImage?: string };
+      plateChar1?: string;
+      plateChar2?: string;
+      plateChar3?: string;
+      plateDigits?: string;
+    }>();
+  if (!user && !driver) return { driverSummary: null, driverDoc: null };
+  return {
+    driverSummary: {
+      name: user?.name,
+      phone: user?.phone,
+      profilePicture: user?.profilePic ?? driver?.documents?.profilePic,
+      carBrand: driver?.carBrand,
+      carModel: driver?.carModel,
+      carType: driver?.carType,
+      modelYear: driver?.modelYear ? String(driver.modelYear) : undefined,
+      vehicleColor: driver?.vehicleColor,
+      carCapacity: driver?.carCapacity,
+      carImage: driver?.documents?.carImage,
+    },
+    driverDoc: driver ?? null,
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -955,728 +783,320 @@ export async function POST(req: NextRequest) {
     }
 
     if (tripsDetailsSheet) {
-      const detailsHeader = findHeaderRow(tripsDetailsSheet, [
-        "Ride_ID",
-        "Trip_Number",
-        "TripID",
-        "Availability_ID",
-        "Driver_ID",
-        "Board_Stop",
-        "Alight_Stop",
-        "Departure",
-        "Arrival",
-        "Seat",
-        "Stops",
-      ]);
-      const detailsHeaderRow =
-        detailsHeader?.row ?? tripsDetailsSheet.getRow(1);
-      const detailsIndexes =
-        detailsHeader?.indexes ?? getHeaderIndexes(detailsHeaderRow);
-      const detailsHeaders = detailsHeaderRow.values
-        ? (detailsHeaderRow.values as unknown[])
-            .slice(1)
-            .filter((value) => value != null)
-            .map((value) => String(value))
-        : [];
+      const detailsHeaderRow = tripsDetailsSheet.getRow(1);
+      // Column layout: Trip_ID(1) Driver_ID(2) Car_Type(3) then repeating
+      // [Stop, Arrival, Alighting, Boarding, Departure] blocks.
+      const TRIP_ID_COL = 1;
+      const CAR_TYPE_COL = 3;
+      const stopColumnIndexes: number[] = [];
+      detailsHeaderRow.eachCell((cell, colNumber) => {
+        if (normalizeHeader(cell.value) === "stop") {
+          stopColumnIndexes.push(colNumber);
+        }
+      });
       const detailsRows = getSheetRows(tripsDetailsSheet).filter(
         (row) => row.number > detailsHeaderRow.number,
       );
       console.log("[addMatchedData] details header", {
         rowNumber: detailsHeaderRow.number,
-        headers: detailsHeaders,
-        indexes: Array.from(detailsIndexes.entries()),
+        stopColumnIndexes,
         dataRowNumbers: detailsRows.map((row) => row.number),
       });
-      const tripPassengerLookup = new Map<number, number | null>();
-      for (const row of detailsRows) {
-        const rideIdValue = pickValue(row, detailsIndexes, [
-          "Ride_ID",
-          "RideID",
-          "Trip_Number",
-          "TripNumber",
-          "TripID",
-        ]);
-        const tripNumber = parseTripNumber(rideIdValue);
-        if (tripNumber == null) continue;
-        const passengerNumber = parseNumber(
-          pickValue(row, detailsIndexes, [
-            "Pass_ID",
-            "Passenger_ID",
-            "PassengerNumber",
-            "User_Number",
-            "UserNumber",
-          ]),
-        );
-        tripPassengerLookup.set(tripNumber, passengerNumber ?? null);
-      }
-
-      const detailEntries: Array<{
-        availabilityNumber: number;
-        tripNumber: number;
-        trip: ImportedTripRecord | null;
-        driverSummary: Awaited<ReturnType<typeof getDriverSummaryByUserNumber>>;
-        driverUser: { _id?: unknown } | null;
-        driverDoc: Record<string, unknown> | null;
-        row: ExcelJS.Row;
-        routeChunk: RouteStop[];
-        boardTripNumbers: number[];
-        alightTripNumbers: number[];
-        sourceRowNumber: number;
-        departureTime: string;
-        arrivalTime: string;
-        rideType: "private" | "shared";
-        vehicleType: string;
-        totalCost: number;
-        passengerCount: number;
-        rideSummary: Record<string, unknown> | null;
-        pickupStation: ReturnType<typeof buildStationFromStopValue>;
-        dropoffStation: ReturnType<typeof buildStationFromStopValue>;
-      }> = [];
 
       for (const row of detailsRows) {
         if (!row) continue;
 
-        const rideIdValue = pickValue(row, detailsIndexes, [
-          "Ride_ID",
-          "RideID",
-          "Trip_Number",
-          "TripNumber",
-          "TripID",
-        ]);
-        const availabilityNumberValue =
-          pickValue(row, detailsIndexes, [
-            "Trip_ID",
-            "TripID",
-            "Availability_ID",
-            "AvailabilityID",
-            "availabilityNumber",
-            "AvailabilityNumber",
-            "AvailabilityNo",
-            "Availability_No",
-            "Ride_ID",
-            "RideID",
-            "Trip_Number",
-            "TripNumber",
-            "TripID",
-          ]) || rideIdValue;
-        if (!availabilityNumberValue || !rideIdValue) {
-          console.log("[addMatchedData] details row skipped", {
+        const availabilityNumber = parseTripNumber(
+          getCellText(row.getCell(TRIP_ID_COL)),
+        );
+        if (availabilityNumber == null) continue;
+
+        const availability = await fetchAvailabilityByNumber(
+          req,
+          availabilityNumber,
+        );
+        if (!availability) {
+          console.log("[addMatchedData] no availability for row", {
             rowNumber: row.number,
-            reason: "missing Ride_ID or availability ID",
-            rideIdValue,
-            availabilityNumberValue,
+            availabilityNumber,
           });
           continue;
         }
 
-        const availabilityNumber = parseTripNumber(availabilityNumberValue);
-        const tripNumber = parseTripNumber(rideIdValue);
-        if (availabilityNumber == null || tripNumber == null) {
-          console.log("[addMatchedData] details row skipped", {
+        const driverIdRaw =
+          (availability.driverId as { _id?: unknown } | null)?._id ??
+          (availability.driverId as unknown) ??
+          null;
+        const { driverSummary, driverDoc } =
+          await getDriverBundleByUserId(driverIdRaw);
+
+        const carTypeNumber = parseNumber(
+          getCellText(row.getCell(CAR_TYPE_COL)),
+        );
+        const vehicleType = mapCarTypeToVehicle(carTypeNumber);
+        const rideType: "private" | "shared" =
+          normalizeRideType(driverSummary?.carType ?? "") === "private" ||
+          carTypeNumber === 1
+            ? "private"
+            : "shared";
+
+        type RoutePassenger = {
+          tripId: unknown;
+          userId: unknown;
+          pickup: { address: string; lat: number; lng: number };
+          dropoff: { address: string; lat: number; lng: number };
+          pickupOrder: number;
+          dropoffOrder: number;
+          numberOfPassengers: number;
+          tripCost: number;
+          seatNumber?: number;
+        };
+        type RouteEntry = {
+          point: { address: string; lat: number; lng: number };
+          arrival: string;
+          departure: string;
+          waitingMinutes: number;
+          boardingNumber: number;
+          alightingNumber: number;
+          boarding: RoutePassenger[];
+          alighting: RoutePassenger[];
+        };
+        const route: RouteEntry[] = [];
+        const boardingRefsPerStop: number[][] = [];
+        const alightingRefsPerStop: number[][] = [];
+
+        for (const stopCol of stopColumnIndexes) {
+          const stopRaw = getCellText(row.getCell(stopCol));
+          if (!stopRaw || isNullValue(stopRaw)) continue;
+
+          const stopIdKey = String(parseNumber(stopRaw) ?? stopRaw);
+          const stopEntry =
+            stopLookup.get(stopIdKey) ??
+            stopLookup.get(normalizeLookupKey(stopRaw));
+          const point = stopEntry
+            ? {
+                address: stopEntry.name || stopEntry.address || stopRaw,
+                lat: stopEntry.lat,
+                lng: stopEntry.lng,
+              }
+            : { address: stopRaw, lat: 0, lng: 0 };
+
+          const arrival = normalizeTimeValue(
+            getCellText(row.getCell(stopCol + 1)),
+          );
+          const alightingCell = getCellText(row.getCell(stopCol + 2));
+          const boardingCell = getCellText(row.getCell(stopCol + 3));
+          const departure = normalizeTimeValue(
+            getCellText(row.getCell(stopCol + 4)),
+          );
+
+          const alightingRefs = splitCommaRefs(alightingCell);
+          const boardingRefs = splitCommaRefs(boardingCell);
+
+          route.push({
+            point,
+            arrival,
+            departure,
+            waitingMinutes: 0,
+            boardingNumber: boardingRefs.length,
+            alightingNumber: alightingRefs.length,
+            boarding: [],
+            alighting: [],
+          });
+          boardingRefsPerStop.push(boardingRefs);
+          alightingRefsPerStop.push(alightingRefs);
+        }
+
+        if (route.length === 0) {
+          console.log("[addMatchedData] no route stops for row", {
             rowNumber: row.number,
-            reason: "invalid numeric ID",
-            rideIdValue,
-            availabilityNumberValue,
+            availabilityNumber,
           });
           continue;
         }
 
-        const trip = await Trip.findOne({
-          $or: [{ tripNumber }, { tripNumber: String(tripNumber) }],
-        }).lean<ImportedTripRecord>();
+        // Pass 1: assign chronological pickup/dropoff order counters across all
+        // boarding + alighting events in the row.
+        const pickupOrderByTrip = new Map<number, number>();
+        const dropoffOrderByTrip = new Map<number, number>();
+        let orderCounter = 0;
+        for (let i = 0; i < route.length; i++) {
+          for (const ref of boardingRefsPerStop[i] ?? []) {
+            orderCounter += 1;
+            pickupOrderByTrip.set(ref, orderCounter);
+          }
+          for (const ref of alightingRefsPerStop[i] ?? []) {
+            orderCounter += 1;
+            dropoffOrderByTrip.set(ref, orderCounter);
+          }
+        }
 
-        const driverNumberValue = pickValue(row, detailsIndexes, [
-          "Driver_ID",
-          "DriverID",
-          "DriverNo",
-        ]);
-        const driverSummary =
-          await getDriverSummaryByUserNumber(driverNumberValue);
-        const driverUser = driverNumberValue
-          ? await User.findOne({ userNumber: Number(driverNumberValue) })
-              .select("_id")
-              .lean<{
-                _id?: unknown;
-              }>()
-          : null;
+        // Pass 2: resolve trips and materialize passenger objects on each stop.
+        const tripRecordByNumber = new Map<number, TripRecord | null>();
+        const resolveTrip = async (
+          tripNumber: number,
+        ): Promise<TripRecord | null> => {
+          if (tripRecordByNumber.has(tripNumber)) {
+            return tripRecordByNumber.get(tripNumber) ?? null;
+          }
+          const record = await fetchTripByNumber(req, tripNumber);
+          tripRecordByNumber.set(tripNumber, record);
+          return record;
+        };
 
-        const driverDoc = driverUser?._id
-          ? await Driver.findOne({ userId: driverUser._id })
-              .select(
-                "gender carBrand carModel carType modelYear vehicleColor carCapacity documents plateChar1 plateChar2 plateChar3 plateDigits",
-              )
-              .lean<{
-                gender?: string;
-                carBrand?: string;
-                carModel?: string;
-                carType?: string;
-                modelYear?: number;
-                vehicleColor?: string;
-                carCapacity?: number;
-                documents?: { profilePic?: string; carImage?: string };
-                plateChar1?: string;
-                plateChar2?: string;
-                plateChar3?: string;
-                plateDigits?: string;
-              }>()
-          : null;
+        const buildPassenger = (
+          tripRecord: TripRecord | null,
+          tripNumber: number,
+        ): RoutePassenger | null => {
+          if (!tripRecord) return null;
+          const userIdRaw =
+            (tripRecord.userId as { _id?: unknown } | null)?._id ??
+            (tripRecord.userId as unknown) ??
+            null;
+          const pickup = tripRecord.pickup;
+          const dropoff = tripRecord.dropoff;
+          if (
+            !pickup ||
+            !dropoff ||
+            pickup.lat == null ||
+            pickup.lng == null ||
+            dropoff.lat == null ||
+            dropoff.lng == null
+          ) {
+            return null;
+          }
+          const summary = (tripRecord.summary ?? {}) as Record<string, unknown>;
+          const details = (tripRecord.details ?? {}) as Record<string, unknown>;
+          const rawSeat = details.seatNumber;
+          const seatNumber =
+            typeof rawSeat === "number"
+              ? rawSeat
+              : rawSeat != null
+                ? Number(String(rawSeat).replace(/[^0-9-]/g, ""))
+                : undefined;
+          return {
+            tripId: tripRecord._id,
+            userId: userIdRaw,
+            pickup: {
+              address: pickup.address ?? "",
+              lat: pickup.lat,
+              lng: pickup.lng,
+            },
+            dropoff: {
+              address: dropoff.address ?? "",
+              lat: dropoff.lat,
+              lng: dropoff.lng,
+            },
+            pickupOrder: pickupOrderByTrip.get(tripNumber) ?? 0,
+            dropoffOrder: dropoffOrderByTrip.get(tripNumber) ?? 0,
+            numberOfPassengers: Math.max(
+              1,
+              Number(tripRecord.numberOfPassengers ?? 1) || 1,
+            ),
+            tripCost: Number(summary.totalFees ?? 0) || 0,
+            seatNumber:
+              seatNumber != null && Number.isFinite(seatNumber)
+                ? seatNumber
+                : undefined,
+          };
+        };
 
-        const departureTime = normalizeTimeValue(
-          getCellValue(row, detailsIndexes, "Departure"),
-        );
-        const arrivalTime = normalizeTimeValue(
-          getCellValue(row, detailsIndexes, "Arrival"),
-        );
-        const tripSummary = (trip?.summary ?? {}) as Record<string, unknown>;
-        const passengerCount = Math.max(
-          1,
-          Number(trip?.numberOfPassengers ?? tripSummary.totalPersons ?? 1),
-        );
-        const totalCost = Math.max(
-          0,
-          Number(trip?.priceEgp ?? tripSummary.totalFees ?? 0) || 0,
-        );
-        const boardingTripNumbers = splitTripRefs(
-          pickValue(row, detailsIndexes, [
-            "Boarding",
-            "BoardingValue",
-            "BoardingRef",
-            "Boarding_Ref",
-            "Board",
-            "BoardingTrips",
-          ]),
-        );
-        const alightingTripNumbers = splitTripRefs(
-          pickValue(row, detailsIndexes, [
-            "Alighting",
-            "AlightingValue",
-            "AlightingRef",
-            "Alighting_Ref",
-            "Alight",
-            "AlightingTrips",
-          ]),
-        );
-        const routeChunk = buildRouteFromRow(
-          row,
-          detailsIndexes,
-          stopLookup,
-          boardingTripNumbers,
-          alightingTripNumbers,
-        );
-        const pickupStation = buildStationFromStopValue(
-          pickValue(row, detailsIndexes, [
-            "Board_Stop",
-            "BoardStop",
-            "BoardingStop",
-            "Pickup_Stop",
-            "PickupStop",
-            "Origin",
-            "StartStop",
-          ]),
-          stopLookup,
-        );
-        const dropoffStation = buildStationFromStopValue(
-          pickValue(row, detailsIndexes, [
-            "Alight_Stop",
-            "AlightStop",
-            "AlightingStop",
-            "Dropoff_Stop",
-            "DropOff_Stop",
-            "Destination",
-            "EndStop",
-          ]),
-          stopLookup,
-        );
-
-        detailEntries.push({
-          availabilityNumber,
-          tripNumber,
-          trip,
-          driverSummary,
-          driverUser,
-          driverDoc,
-          row,
-          routeChunk,
-          boardTripNumbers: boardingTripNumbers,
-          alightTripNumbers: alightingTripNumbers,
-          sourceRowNumber: row.number,
-          departureTime,
-          arrivalTime,
-          rideType: normalizeRideType(
-            pickValue(row, detailsIndexes, [
-              "Ride_Type",
-              "RideType",
-              "VehicleType",
-            ]),
-          ),
-          vehicleType: normalizeVehicleType(
-            pickValue(row, detailsIndexes, [
-              "Car_Type",
-              "CarType",
-              "VehicleType",
-            ]),
-          ),
-          totalCost,
-          passengerCount,
-          rideSummary: summaryByTripNumber.get(tripNumber) ?? null,
-          pickupStation,
-          dropoffStation,
-        });
-
-        console.log("[addMatchedData] details row", {
-          rowNumber: row.number,
-          rideId: tripNumber,
-          availabilityNumber,
-          boardStop: getCellValue(row, detailsIndexes, "Board_Stop"),
-          alightStop: getCellValue(row, detailsIndexes, "Alight_Stop"),
-          seat: getCellValue(row, detailsIndexes, "Seat"),
-          stops: getCellValue(row, detailsIndexes, "Stops"),
-          boardingTripNumbers,
-          alightingTripNumbers,
-          cells: Object.fromEntries(
-            Array.from(detailsIndexes.entries()).map(([header, column]) => [
-              header,
-              getCellValueAtColumn(row, column),
-            ]),
-          ),
-          routeChunk,
-        });
-      }
-
-      const groupedEntries = new Map<
-        number,
-        (typeof detailEntries)[number][]
-      >();
-      for (const entry of detailEntries) {
-        const group = groupedEntries.get(entry.tripNumber) ?? [];
-        group.push(entry);
-        groupedEntries.set(entry.tripNumber, group);
-      }
-
-      for (const [rideId, entries] of groupedEntries.entries()) {
-        const firstEntry = entries[0];
-        if (!firstEntry) continue;
-
-        console.log("[addMatchedData] ride group", {
-          rideId,
-          sourceRows: entries.map((entry) => entry.sourceRowNumber),
-          availabilityNumbers: entries.map((entry) => entry.availabilityNumber),
-        });
+        for (let i = 0; i < route.length; i++) {
+          const stop = route[i]!;
+          for (const ref of boardingRefsPerStop[i] ?? []) {
+            const record = await resolveTrip(ref);
+            const passenger = buildPassenger(record, ref);
+            if (passenger) stop.boarding.push(passenger);
+          }
+          for (const ref of alightingRefsPerStop[i] ?? []) {
+            const record = await resolveTrip(ref);
+            const passenger = buildPassenger(record, ref);
+            if (passenger) stop.alighting.push(passenger);
+          }
+        }
 
         const rideNumber = await nextSequence("rideNumber");
-        const route = entries.reduce<RouteStop[]>((accumulator, entry) => {
-          for (const stop of entry.routeChunk) {
-            const key = pointKey(stop.point);
-            if (!key) continue;
-            const existingIndex = accumulator.findIndex(
-              (routeStop) => pointKey(routeStop.point) === key,
-            );
-            if (existingIndex >= 0) {
-              const existing = accumulator[existingIndex];
-              if (existing) {
-                existing.boarding += stop.boarding;
-                existing.alighting += stop.alighting;
-              }
-            } else {
-              accumulator.push({ ...stop });
-            }
-          }
-          return accumulator;
-        }, []);
-
-        const routeIndexByPointKey = new Map(
-          route
-            .map((stop, index) => [pointKey(stop.point), index] as const)
-            .filter((entry): entry is [string, number] => entry[0] != null),
-        );
-
-        const passengers: Array<Record<string, unknown>> = [];
-        const passengerIndexByTripNumber = new Map<number, number>();
-
-        for (const entry of entries) {
-          const boardPointKey = pointKey(
-            entry.pickupStation as {
-              lat: number;
-              lng: number;
-              address: string;
-            } | null,
-          );
-          const alightPointKey = pointKey(
-            entry.dropoffStation as {
-              lat: number;
-              lng: number;
-              address: string;
-            } | null,
-          );
-          // keep these keys for future use / debugging only
-          void boardPointKey;
-          void alightPointKey;
-
-          const boardTripIds =
-            entry.boardTripNumbers.length > 0
-              ? entry.boardTripNumbers
-              : entry.tripNumber != null &&
-                (tripPassengerLookup.get(entry.tripNumber) != null ||
-                  entry.trip?.userId != null)
-                ? [entry.tripNumber]
-                : [];
-          for (const tripNumber of boardTripIds) {
-            const existingPassengerIndex =
-              passengerIndexByTripNumber.get(tripNumber);
-            if (existingPassengerIndex != null) {
-              const existingPassenger = passengers[existingPassengerIndex];
-              if (existingPassenger) {
-                existingPassenger.pickupOrder = resolvePassengerOrder(
-                  entry.pickupStation as { lat: number; lng: number; address: string } | null,
-                  route,
-                  routeIndexByPointKey,
-                  "pickup",
-                );
-              }
-              continue;
-            }
-
-            const resolvedTrip = await Trip.findOne({
-              $or: [{ tripNumber }, { tripNumber: String(tripNumber) }],
-            }).lean<ImportedTripRecord>();
-            const resolvedTripRecord = resolvedTrip ?? entry.trip ?? null;
-            const passengerNumber = tripPassengerLookup.get(tripNumber) ?? null;
-            const passengerUser =
-              passengerNumber != null
-                ? await User.findOne({ userNumber: passengerNumber })
-                    .select("_id userNumber")
-                    .lean<{ _id?: unknown; userNumber?: number }>()
-                : null;
-            const passengerPickupPoint = resolvePassengerPoint(
-              (entry.pickupStation as
-                | { lat: number; lng: number; address: string; id?: number; name?: string }
-                | null) ??
-              ((entry.rideSummary?.firstStop as
-                | { lat: number; lng: number; address: string; id?: number; name?: string }
-                | null) ?? null),
-              route,
-              "pickup",
-            );
-            const passengerDropoffPoint = resolvePassengerPoint(
-              (entry.dropoffStation as
-                | { lat: number; lng: number; address: string; id?: number; name?: string }
-                | null) ??
-              ((entry.rideSummary?.lastStop as
-                | { lat: number; lng: number; address: string; id?: number; name?: string }
-                | null) ?? null),
-              route,
-              "dropoff",
-            );
-            const passengerPickupOrder = resolvePassengerOrder(
-              passengerPickupPoint,
-              route,
-              routeIndexByPointKey,
-              "pickup",
-            );
-            const passengerDropoffOrder = resolvePassengerOrder(
-              passengerDropoffPoint,
-              route,
-              routeIndexByPointKey,
-              "dropoff",
-            );
-            const fallbackTripId =
-              (resolvedTripRecord?._id as unknown) ??
-              (entry.trip?._id as unknown) ??
-              null;
-            const fallbackUserId =
-              (passengerUser?._id as unknown) ??
-              (resolvedTripRecord?.userId as unknown) ??
-              (entry.trip?.userId as unknown) ??
-              null;
-            const passengerEntry = {
-              tripId: fallbackTripId,
-              tripNumber,
-              userId: fallbackUserId,
-              userNumber: passengerUser?.userNumber ?? passengerNumber ?? null,
-              pickup: passengerPickupPoint ?? null,
-              dropoff: passengerDropoffPoint ?? null,
-              pickupOrder: passengerPickupOrder,
-              dropoffOrder: passengerDropoffOrder,
-              numberOfPassengers: entry.passengerCount,
-              tripCost: entry.totalCost,
-              pickupStation: passengerPickupPoint ?? null,
-              dropoffStation: passengerDropoffPoint ?? null,
-              seatNumbers: [],
-              status: "waiting",
-            };
-            passengerIndexByTripNumber.set(tripNumber, passengers.length);
-            passengers.push(passengerEntry);
-          }
-
-          const alightTripIds =
-            entry.alightTripNumbers.length > 0
-              ? entry.alightTripNumbers
-              : entry.tripNumber != null &&
-                (tripPassengerLookup.get(entry.tripNumber) != null ||
-                  entry.trip?.userId != null)
-                ? [entry.tripNumber]
-                : [];
-          for (const tripNumber of alightTripIds) {
-            const existingPassengerIndex =
-              passengerIndexByTripNumber.get(tripNumber);
-            if (existingPassengerIndex != null) {
-              const existingPassenger = passengers[existingPassengerIndex];
-              if (existingPassenger) {
-                existingPassenger.dropoffOrder = resolvePassengerOrder(
-                  entry.dropoffStation as { lat: number; lng: number; address: string } | null,
-                  route,
-                  routeIndexByPointKey,
-                  "dropoff",
-                );
-              }
-              continue;
-            }
-
-            const resolvedTrip = await Trip.findOne({
-              $or: [{ tripNumber }, { tripNumber: String(tripNumber) }],
-            }).lean<ImportedTripRecord>();
-            const resolvedTripRecord = resolvedTrip ?? entry.trip ?? null;
-            const passengerNumber = tripPassengerLookup.get(tripNumber) ?? null;
-            const passengerUser =
-              passengerNumber != null
-                ? await User.findOne({ userNumber: passengerNumber })
-                    .select("_id userNumber")
-                    .lean<{ _id?: unknown; userNumber?: number }>()
-                : null;
-            const passengerPickupPoint = resolvePassengerPoint(
-              (entry.pickupStation as
-                | { lat: number; lng: number; address: string; id?: number; name?: string }
-                | null) ??
-              ((entry.rideSummary?.firstStop as
-                | { lat: number; lng: number; address: string; id?: number; name?: string }
-                | null) ?? null),
-              route,
-              "pickup",
-            );
-            const passengerDropoffPoint = resolvePassengerPoint(
-              (entry.dropoffStation as
-                | { lat: number; lng: number; address: string; id?: number; name?: string }
-                | null) ??
-              ((entry.rideSummary?.lastStop as
-                | { lat: number; lng: number; address: string; id?: number; name?: string }
-                | null) ?? null),
-              route,
-              "dropoff",
-            );
-            const passengerPickupOrder = resolvePassengerOrder(
-              passengerPickupPoint,
-              route,
-              routeIndexByPointKey,
-              "pickup",
-            );
-            const passengerDropoffOrder = resolvePassengerOrder(
-              passengerDropoffPoint,
-              route,
-              routeIndexByPointKey,
-              "dropoff",
-            );
-            const fallbackTripId =
-              (resolvedTripRecord?._id as unknown) ??
-              (entry.trip?._id as unknown) ??
-              null;
-            const fallbackUserId =
-              (passengerUser?._id as unknown) ??
-              (resolvedTripRecord?.userId as unknown) ??
-              (entry.trip?.userId as unknown) ??
-              null;
-            const passengerEntry = {
-              tripId: fallbackTripId,
-              tripNumber,
-              userId: fallbackUserId,
-              userNumber: passengerUser?.userNumber ?? passengerNumber ?? null,
-              pickup: passengerPickupPoint ?? null,
-              dropoff: passengerDropoffPoint ?? null,
-              pickupOrder: passengerPickupOrder,
-              dropoffOrder: passengerDropoffOrder,
-              numberOfPassengers: entry.passengerCount,
-              tripCost: entry.totalCost,
-              pickupStation: passengerPickupPoint ?? null,
-              dropoffStation: passengerDropoffPoint ?? null,
-              seatNumbers: [],
-              status: "waiting",
-            };
-            passengerIndexByTripNumber.set(tripNumber, passengers.length);
-            passengers.push(passengerEntry);
-          }
-        }
-        const pickupStation = passengers[0]?.pickupStation ?? null;
-        const dropoffStation =
-          passengers[passengers.length - 1]?.dropoffStation ?? null;
-        const totalCost = passengers.reduce(
-          (sum, passenger) => sum + Number(passenger.tripCost || 0),
-          0,
-        );
-        const rideSummary =
-          entries.find((entry) => entry.rideSummary)?.rideSummary ?? null;
-        const calculatedDistance = calculateRouteDistanceKm(route);
-        const calculatedMaxLoad = calculateMaxLoad(route);
-        const summary = rideSummary
-          ? {
-              ...rideSummary,
-              totalDistance:
-                Number(rideSummary.totalDistance) > 0
-                  ? rideSummary.totalDistance
-                  : Math.round(calculatedDistance * 100) / 100,
-              numberOfTrips:
-                Number(rideSummary.numberOfTrips) > 0
-                  ? rideSummary.numberOfTrips
-                  : entries.length,
-              maxLoad:
-                Number(rideSummary.maxLoad) > 0
-                  ? rideSummary.maxLoad
-                  : calculatedMaxLoad,
-              numberOfStops:
-                Number(rideSummary.numberOfStops) > 0
-                  ? rideSummary.numberOfStops
-                  : route.length,
-            }
-          : null;
-        console.log("[addMatchedData] ride route", {
-          rideId,
-          route: route.map((stop) => ({
-            address: stop.point?.address ?? null,
-            boarding: stop.boarding,
-            alighting: stop.alighting,
-          })),
-          summary,
-        });
-        const availabilityNumber = firstEntry.availabilityNumber;
-        const availability = await Availability.findOne({
-          availabilityNumber,
-        }).lean<{
-          _id?: unknown;
-          date?: string;
-          matched?: boolean;
-          status?: string;
-        }>();
-        const availabilityLookup =
-          availability ??
-          (firstEntry.driverUser?._id || firstEntry.trip?.driverId
-            ? await Availability.findOne({
-                driverId: firstEntry.driverUser?._id ?? firstEntry.trip?.driverId,
-                date: firstEntry.trip?.date ?? "",
-              }).lean<{
-                _id?: unknown;
-                date?: string;
-                matched?: boolean;
-                status?: string;
-              }>()
-            : null);
+        const firstPoint = route[0]!.point;
+        const lastPoint = route[route.length - 1]!.point;
+        const startLoc = availability.startLocation;
+        const summaryForRide = summaryByTripNumber.get(availabilityNumber);
+        const totalCost =
+          Number(summaryForRide?.totalFees ?? 0) > 0
+            ? Number(summaryForRide?.totalFees)
+            : 0;
 
         const insertedRide = await Ride.create({
           rideNumber,
-          availabilityId: availabilityLookup?._id ?? availability?._id ?? null,
-          driverId: firstEntry.driverUser?._id ?? null,
-          assignedDriver: firstEntry.driverSummary
+          availabilityId: availability._id,
+          driverId: driverIdRaw,
+          assignedDriver: driverSummary
             ? {
-                name: firstEntry.driverSummary.name,
-                phone: firstEntry.driverSummary.phone,
-                profilePic: firstEntry.driverSummary.profilePicture,
-                profilePicture: firstEntry.driverSummary.profilePicture,
-                carBrand: firstEntry.driverSummary.carBrand,
-                carModel: firstEntry.driverSummary.carModel,
-                carType: firstEntry.driverSummary.carType,
-                vehicleColor: firstEntry.driverSummary.vehicleColor,
-                carCapacity: firstEntry.driverSummary.carCapacity,
-                modelYear: firstEntry.driverSummary.modelYear,
-                carImage: firstEntry.driverSummary.carImage,
+                name: driverSummary.name,
+                phone: driverSummary.phone,
+                profilePic: driverSummary.profilePicture,
+                profilePicture: driverSummary.profilePicture,
+                carBrand: driverSummary.carBrand,
+                carModel: driverSummary.carModel,
+                carType: driverSummary.carType,
+                vehicleColor: driverSummary.vehicleColor,
+                carCapacity: driverSummary.carCapacity,
+                modelYear: driverSummary.modelYear,
+                carImage: driverSummary.carImage,
                 plate: [
-                  firstEntry.driverDoc?.plateChar1,
-                  firstEntry.driverDoc?.plateChar2,
-                  firstEntry.driverDoc?.plateChar3,
-                  firstEntry.driverDoc?.plateDigits,
+                  driverDoc?.plateChar1,
+                  driverDoc?.plateChar2,
+                  driverDoc?.plateChar3,
+                  driverDoc?.plateDigits,
                 ]
                   .filter(Boolean)
                   .join(" "),
-                plateChar1: firstEntry.driverDoc?.plateChar1,
-                plateChar2: firstEntry.driverDoc?.plateChar2,
-                plateChar3: firstEntry.driverDoc?.plateChar3,
-                plateDigits: firstEntry.driverDoc?.plateDigits,
+                plateChar1: driverDoc?.plateChar1,
+                plateChar2: driverDoc?.plateChar2,
+                plateChar3: driverDoc?.plateChar3,
+                plateDigits: driverDoc?.plateDigits,
               }
             : null,
-          date:
-            firstEntry.trip?.date ??
-            availabilityLookup?.date ??
-            availability?.date ??
-            "",
-          rideType: firstEntry.rideType,
-          vehicleType: firstEntry.vehicleType,
+          date: availability.date ?? "",
+          rideType,
+          vehicleType,
           route,
-          pickupStation,
-          dropoffStation,
-          startTime: firstEntry.departureTime || "00:00",
-          endTime: firstEntry.arrivalTime || "00:00",
-          passengers,
+          driverOrigin:
+            startLoc && startLoc.lat != null && startLoc.lng != null
+              ? {
+                  address: startLoc.address ?? "",
+                  lat: startLoc.lat,
+                  lng: startLoc.lng,
+                }
+              : undefined,
+          pickupStation: firstPoint,
+          dropoffStation: lastPoint,
+          startTime: availability.startTime ?? "00:00",
+          endTime: availability.endTime ?? "00:00",
+          passengers: [],
           totalCost,
-          summary,
           status: "active",
-          createdAt: new Date(),
-          updatedAt: new Date(),
         });
 
-        for (const entry of entries) {
-          if (!entry.trip) continue;
-          const tripSummary = (entry.trip.summary ?? {}) as Record<
-            string,
-            unknown
-          >;
-          const confirmedTime = normalizeTimeValue(
-            getCellValue(entry.row, detailsIndexes, "Arrival"),
-          );
-          await Availability.updateOne(
-            { _id: availabilityLookup?._id ?? availability?._id },
-            {
-              $set: {
-                matched: true,
-                rideId: insertedRide._id,
-                status: "matched",
-              },
+        await Availability.updateOne(
+          { _id: availability._id },
+          {
+            $set: {
+              matched: true,
+              rideId: insertedRide._id,
+              status: "matched",
             },
-          );
-          await Trip.collection.updateOne(
-            {
-              $or: [
-                { tripNumber: entry.tripNumber },
-                { tripNumber: String(entry.tripNumber) },
-              ],
-            },
-            {
-              $set: {
-                rideId: insertedRide._id,
-                driverId: entry.driverUser?._id ?? null,
-                details: {
-                  driver: entry.driverSummary,
-                  seatNumber: getCellValue(entry.row, detailsIndexes, "Seat"),
-                  pickupPoint: tripSummary.pickupPoint ?? null,
-                  departureTime: tripSummary.departureTime ?? null,
-                  dropoffPoint: tripSummary.dropoffPoint ?? null,
-                  arrivalTime: tripSummary.arrivalTime ?? null,
-                  stops: getCellValue(entry.row, detailsIndexes, "Stops"),
-                },
-                status: "matched",
-              },
-            },
-          );
-          if (entry.trip.userId) {
-            await createNotification({
-              userId: String(entry.trip.userId),
-              type: "trip_submitted",
-              title: "Trip matched",
-              body: `Your trip has been matched and confirmed for ${confirmedTime || "the scheduled time"}.`,
-              data: {
-                tripNumber: entry.tripNumber,
-                status: "matched",
-                confirmedTime,
-              },
-            });
-          }
-          updatedTripIds.push(String(entry.tripNumber));
-        }
+          },
+        );
+
+        updatedTripIds.push(String(availabilityNumber));
+
+        console.log("[addMatchedData] ride created", {
+          rideNumber,
+          availabilityNumber,
+          routeStops: route.length,
+          boardingRefsPerStop,
+          alightingRefsPerStop,
+        });
       }
     }
 

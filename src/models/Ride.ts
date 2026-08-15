@@ -1,5 +1,5 @@
 import { Schema, model, models, Types, type InferSchemaType } from "mongoose";
-import { PointSchema, StopSchema, StationSchema } from "./Trip";
+import { PointSchema, StationSchema } from "./Trip";
 
 export const AssignedDriverSchema = new Schema(
   {
@@ -54,6 +54,36 @@ const RidePassengerSchema = new Schema(
   { _id: false },
 );
 
+// Passenger reference embedded inside route stop boarding/alighting arrays.
+const RideRoutePassengerSchema = new Schema(
+  {
+    tripId: { type: Types.ObjectId, ref: "Trip", required: true },
+    userId: { type: Types.ObjectId, ref: "User", required: true },
+    pickup: { type: PointSchema, required: true },
+    dropoff: { type: PointSchema, required: true },
+    pickupOrder: { type: Number, required: true, min: 0 },
+    dropoffOrder: { type: Number, required: true, min: 0 },
+    numberOfPassengers: { type: Number, required: true, min: 1, default: 1 },
+    tripCost: { type: Number, required: false, default: 0 },
+    seatNumber: { type: Number, required: false },
+  },
+  { _id: false },
+);
+
+const RideRouteStopSchema = new Schema(
+  {
+    point: { type: PointSchema, required: true },
+    arrival: { type: String, required: false },
+    departure: { type: String, required: false },
+    waitingMinutes: { type: Number, required: false, default: 0 },
+    boardingNumber: { type: Number, required: true, default: 0, min: 0 },
+    alightingNumber: { type: Number, required: true, default: 0, min: 0 },
+    boarding: { type: [RideRoutePassengerSchema], default: [] },
+    alighting: { type: [RideRoutePassengerSchema], default: [] },
+  },
+  { _id: false },
+);
+
 const RideSchema = new Schema(
   {
     rideNumber: {
@@ -94,9 +124,9 @@ const RideSchema = new Schema(
       ],
     },
     // combined, ordered pickup/dropoff sequence across all passengers on this ride
-    route: { type: [StopSchema], default: [] },
-    pickupStation: { type: StationSchema, required: false },
-    dropoffStation: { type: StationSchema, required: false },
+    route: { type: [RideRouteStopSchema], default: [] },
+    pickupStation: { type: PointSchema, required: false },
+    dropoffStation: { type: PointSchema, required: false },
     driverOrigin: { type: PointSchema, required: false },
     driverDestination: { type: PointSchema, required: false },
     startTime: { type: String, required: true },
