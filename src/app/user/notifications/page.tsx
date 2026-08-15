@@ -1,15 +1,11 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Bell, CheckCheck, ArrowRight } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Notification } from "@/models/Notification";
 import AppHeader from "@/components/layout/AppHeader";
 import EmptyState from "@/components/shared/EmptyState";
-import {
-  markNotificationAsRead,
-  markAllNotificationsAsRead,
-} from "@/lib/api/notifications";
 
 export const metadata = { title: "Notifications — Commuter" };
 export const dynamic = "force-dynamic";
