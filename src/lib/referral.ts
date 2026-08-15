@@ -1,11 +1,13 @@
 import "server-only";
 import { randomBytes } from "crypto";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import { ReferralSettings } from "@/models/ReferralSettings";
 import { ReferralUsage } from "@/models/ReferralUsage";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
+import { Wallet } from "@/models/Wallet";
+import { WalletTransaction } from "@/models/WalletTransaction";
 
 const REFERRAL_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_CODE_ATTEMPTS = 10;
@@ -13,17 +15,6 @@ const MAX_CODE_ATTEMPTS = 10;
 export interface ReferralResult {
   success: boolean;
   message: string;
-}
-
-export interface ActiveReferralDiscount {
-  usageId: string;
-  discountPercentage: number;
-}
-
-export interface ReferralDiscountAvailability {
-  referralDiscountAvailable: boolean;
-  referralDiscountPercentage: number | null;
-  referralDiscountTripsRemaining: number;
 }
 
 export async function getOrCreateReferralSettings() {
@@ -90,9 +81,11 @@ export async function applyReferralOnSignup(
     const usage = await ReferralUsage.create({
       referrer: referrer._id,
       referredUser: referredUserId,
-      discountPercentage: settings.discountPercentage,
-      tripsRemaining: settings.discountValidForTrips,
-      status: settings.discountValidForTrips > 0 ? "active" : "exhausted",
+      referrerBonusAmount: settings.referrerBonusAmount,
+      refereeBonusAmount: settings.refereeBonusAmount,
+      status: "pending",
+      creditedAt: null,
+      firstTripId: null,
     });
     usageId = usage._id;
 
@@ -115,186 +108,108 @@ export async function applyReferralOnSignup(
   return { success: true, message: "Referral applied successfully." };
 }
 
-export async function getActiveDiscountForUser(
-  userId: string | Types.ObjectId,
-): Promise<ActiveReferralDiscount | null> {
-  await connectDB();
-  if (!Types.ObjectId.isValid(userId)) return null;
-
-  const usage = await ReferralUsage.findOne({
-    referrer: userId,
-    status: "active",
-    tripsRemaining: { $gt: 0 },
-  })
-    .sort({ createdAt: 1, _id: 1 })
-    .select("discountPercentage")
-    .lean();
-
-  return usage
-    ? { usageId: String(usage._id), discountPercentage: usage.discountPercentage }
-    : null;
-}
-
-export async function consumeReferralUsage(
-  usageId: string | Types.ObjectId,
+export async function creditReferralBonusIfEligible(
+  referredUserId: string,
+  tripId: string,
 ): Promise<boolean> {
-  await connectDB();
-  if (!Types.ObjectId.isValid(usageId)) return false;
+  if (!Types.ObjectId.isValid(referredUserId) || !Types.ObjectId.isValid(tripId)) {
+    return false;
+  }
 
-  const usage = await ReferralUsage.findOneAndUpdate(
-    { _id: usageId, status: "active", tripsRemaining: { $gt: 0 } },
-    [
-      {
-        $set: {
-          tripsRemaining: { $subtract: ["$tripsRemaining", 1] },
-          status: {
-            $cond: [{ $lte: ["$tripsRemaining", 1] }, "exhausted", "active"],
+  await connectDB();
+  const session = await mongoose.startSession();
+  try {
+    let credited = false;
+    await session.withTransaction(async () => {
+      const currentTrip = await Trip.findOne({
+        _id: tripId,
+        userId: referredUserId,
+        status: "completed",
+        paymentStatus: "paid",
+      })
+        .select("_id")
+        .session(session)
+        .lean();
+      if (!currentTrip) return;
+
+      const priorCompletedTrip = await Trip.findOne({
+        userId: referredUserId,
+        status: "completed",
+        paymentStatus: "paid",
+        _id: { $ne: new Types.ObjectId(tripId) },
+      })
+        .select("_id")
+        .session(session)
+        .lean();
+      if (priorCompletedTrip) return;
+
+      const usage = await ReferralUsage.findOneAndUpdate(
+        { referredUser: referredUserId, status: "pending" },
+        {
+          $set: {
+            status: "credited",
+            creditedAt: new Date(),
+            firstTripId: new Types.ObjectId(tripId),
           },
         },
-      },
-    ],
-    { returnDocument: "after" },
-  );
+        { new: true, session },
+      )
+        .select("referrer referrerBonusAmount refereeBonusAmount")
+        .lean();
+      if (!usage) return;
 
-  return Boolean(usage);
-}
+      const referrerWallet = await Wallet.findOneAndUpdate(
+        { userId: usage.referrer },
+        {
+          $inc: {
+            balanceEgp: usage.referrerBonusAmount,
+            totalCreditedEgp: usage.referrerBonusAmount,
+          },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { new: true, upsert: true, session },
+      ).lean();
+      const refereeWallet = await Wallet.findOneAndUpdate(
+        { userId: new Types.ObjectId(referredUserId) },
+        {
+          $inc: {
+            balanceEgp: usage.refereeBonusAmount,
+            totalCreditedEgp: usage.refereeBonusAmount,
+          },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { new: true, upsert: true, session },
+      ).lean();
 
-export async function getReferralDiscountAvailability(
-  userId: string | Types.ObjectId,
-): Promise<ReferralDiscountAvailability> {
-  await connectDB();
-  if (!Types.ObjectId.isValid(userId)) {
-    return {
-      referralDiscountAvailable: false,
-      referralDiscountPercentage: null,
-      referralDiscountTripsRemaining: 0,
-    };
+      await WalletTransaction.create(
+        [
+          {
+            userId: usage.referrer,
+            type: "referral_bonus",
+            amountEgp: usage.referrerBonusAmount,
+            status: "completed",
+            description: "Referral bonus",
+            balanceAfterEgp: referrerWallet?.balanceEgp ?? 0,
+            tripId: new Types.ObjectId(tripId),
+            referralUsageId: usage._id,
+          },
+          {
+            userId: new Types.ObjectId(referredUserId),
+            type: "referral_bonus",
+            amountEgp: usage.refereeBonusAmount,
+            status: "completed",
+            description: "Welcome referral bonus",
+            balanceAfterEgp: refereeWallet?.balanceEgp ?? 0,
+            tripId: new Types.ObjectId(tripId),
+            referralUsageId: usage._id,
+          },
+        ],
+        { session },
+      );
+      credited = true;
+    });
+    return credited;
+  } finally {
+    await session.endSession();
   }
-
-  const usages = await ReferralUsage.find({
-    referrer: userId,
-    status: "active",
-    tripsRemaining: { $gt: 0 },
-  })
-    .sort({ createdAt: 1, _id: 1 })
-    .select("discountPercentage tripsRemaining")
-    .lean();
-  if (usages.length === 0) {
-    return {
-      referralDiscountAvailable: false,
-      referralDiscountPercentage: null,
-      referralDiscountTripsRemaining: 0,
-    };
-  }
-
-  const usageIds = usages.map((usage) => usage._id);
-  const reservations = await Trip.aggregate<{ _id: Types.ObjectId; count: number }>([
-    {
-      $match: {
-        referralUsageId: { $in: usageIds },
-        referralUsageConsumedAt: null,
-        status: { $nin: ["cancelled", "time_out"] },
-      },
-    },
-    { $group: { _id: "$referralUsageId", count: { $sum: 1 } } },
-  ]);
-  const reservedByUsage = new Map(
-    reservations.map((reservation) => [String(reservation._id), reservation.count]),
-  );
-
-  let remaining = 0;
-  for (const usage of usages) {
-    remaining += Math.max(
-      0,
-      usage.tripsRemaining - (reservedByUsage.get(String(usage._id)) ?? 0),
-    );
-  }
-
-  return {
-    referralDiscountAvailable: remaining > 0,
-    referralDiscountPercentage: remaining > 0 ? usages[0].discountPercentage : null,
-    referralDiscountTripsRemaining: remaining,
-  };
-}
-
-export async function getReferralDiscountAllocations(
-  userId: string | Types.ObjectId,
-  tripCount: number,
-): Promise<ActiveReferralDiscount[]> {
-  await connectDB();
-  if (!Types.ObjectId.isValid(userId) || tripCount <= 0) return [];
-
-  const usages = await ReferralUsage.find({
-    referrer: userId,
-    status: "active",
-    tripsRemaining: { $gt: 0 },
-  })
-    .sort({ createdAt: 1, _id: 1 })
-    .select("discountPercentage tripsRemaining")
-    .lean();
-  if (usages.length === 0) return [];
-
-  const usageIds = usages.map((usage) => usage._id);
-  const reservations = await Trip.aggregate<{ _id: Types.ObjectId; count: number }>([
-    {
-      $match: {
-        referralUsageId: { $in: usageIds },
-        referralUsageConsumedAt: null,
-        status: { $nin: ["cancelled", "time_out"] },
-      },
-    },
-    { $group: { _id: "$referralUsageId", count: { $sum: 1 } } },
-  ]);
-  const reservedByUsage = new Map(
-    reservations.map((reservation) => [String(reservation._id), reservation.count]),
-  );
-
-  const allocations: ActiveReferralDiscount[] = [];
-  for (const usage of usages) {
-    const available = Math.max(
-      0,
-      usage.tripsRemaining - (reservedByUsage.get(String(usage._id)) ?? 0),
-    );
-    for (let index = 0; index < available && allocations.length < tripCount; index += 1) {
-      allocations.push({
-        usageId: String(usage._id),
-        discountPercentage: usage.discountPercentage,
-      });
-    }
-    if (allocations.length === tripCount) break;
-  }
-
-  return allocations;
-}
-
-export async function consumeReferralForCompletedTrip(
-  tripId: string | Types.ObjectId,
-): Promise<boolean> {
-  await connectDB();
-  if (!Types.ObjectId.isValid(tripId)) return false;
-
-  const consumedAt = new Date();
-  const trip = await Trip.findOneAndUpdate(
-    {
-      _id: tripId,
-      status: "completed",
-      paymentStatus: "paid",
-      referralUsageId: { $ne: null },
-      referralUsageConsumedAt: null,
-    },
-    { $set: { referralUsageConsumedAt: consumedAt } },
-    { returnDocument: "before" },
-  )
-    .select("referralUsageId")
-    .lean<{ referralUsageId?: Types.ObjectId | null }>();
-
-  if (!trip?.referralUsageId) return false;
-  const consumed = await consumeReferralUsage(trip.referralUsageId);
-  if (!consumed) {
-    await Trip.updateOne(
-      { _id: tripId, referralUsageConsumedAt: consumedAt },
-      { $set: { referralUsageConsumedAt: null } },
-    );
-  }
-  return consumed;
 }

@@ -14,9 +14,9 @@ export default async function AdminReferralSettingsPage() {
 
   const settings = await getOrCreateReferralSettings();
   const initialValues = {
-    discountPercentage: settings.discountPercentage,
+    referrerBonusAmount: settings.referrerBonusAmount,
+    refereeBonusAmount: settings.refereeBonusAmount,
     maxUsersPerCode: settings.maxUsersPerCode,
-    discountValidForTrips: settings.discountValidForTrips,
     isActive: settings.isActive,
   };
 

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
-import { generateReferralCode } from "@/lib/referral";
+import { generateReferralCode, getOrCreateReferralSettings } from "@/lib/referral";
 import { ReferralUsage } from "@/models/ReferralUsage";
 import { User } from "@/models/User";
+import { Wallet } from "@/models/Wallet";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -18,14 +19,12 @@ export async function GET(req: NextRequest) {
     await user.save();
   }
 
-  const [total, active, exhausted, remainingResult] = await Promise.all([
+  const [total, pending, credited, wallet, settings] = await Promise.all([
     ReferralUsage.countDocuments({ referrer: user._id }),
-    ReferralUsage.countDocuments({ referrer: user._id, status: "active" }),
-    ReferralUsage.countDocuments({ referrer: user._id, status: "exhausted" }),
-    ReferralUsage.aggregate<{ total: number }>([
-      { $match: { referrer: user._id, status: "active" } },
-      { $group: { _id: null, total: { $sum: "$tripsRemaining" } } },
-    ]),
+    ReferralUsage.countDocuments({ referrer: user._id, status: "pending" }),
+    ReferralUsage.countDocuments({ referrer: user._id, status: "credited" }),
+    Wallet.findOne({ userId: user._id }).select("balanceEgp").lean(),
+    getOrCreateReferralSettings(),
   ]);
 
   const shareUrl = new URL("/login", req.nextUrl.origin);
@@ -35,11 +34,12 @@ export async function GET(req: NextRequest) {
     data: {
       referralCode: user.referralCode,
       shareUrl: shareUrl.toString(),
+      balanceEgp: wallet?.balanceEgp ?? 0,
+      referrerBonusAmount: settings.referrerBonusAmount,
       stats: {
         total,
-        active,
-        exhausted,
-        tripsRemaining: remainingResult[0]?.total ?? 0,
+        pending,
+        credited,
       },
     },
   });

@@ -5,7 +5,7 @@ import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { getSession } from "@/lib/auth/session";
 import * as rideActions from "@/lib/services/rideActionHelpers";
-import { consumeReferralForCompletedTrip } from "@/lib/referral";
+import { creditReferralBonusIfEligible } from "@/lib/referral";
 
 interface RideRouteStop {
   address?: string;
@@ -654,7 +654,15 @@ export async function POST(
               passenger.status = "dropped_off";
               updatedPassengers = true;
               await Trip.findByIdAndUpdate(passenger.tripId, { status: "completed" });
-              await consumeReferralForCompletedTrip(String(passenger.tripId));
+              const completedTrip = await Trip.findById(passenger.tripId)
+                .select("userId")
+                .lean<{ userId: string } | null>();
+              if (completedTrip) {
+                await creditReferralBonusIfEligible(
+                  String(completedTrip.userId),
+                  String(passenger.tripId),
+                );
+              }
             }
           }
 
@@ -862,9 +870,17 @@ export async function POST(
         // Update all trip statuses to completed
         await Trip.updateMany({ rideId }, { status: "completed" });
         await Promise.all(
-          tripIds.map((completedTripId: unknown) =>
-            consumeReferralForCompletedTrip(String(completedTripId)),
-          ),
+          tripIds.map(async (completedTripId: unknown) => {
+            const completedTrip = await Trip.findById(completedTripId)
+              .select("userId")
+              .lean<{ userId: string } | null>();
+            return completedTrip
+              ? creditReferralBonusIfEligible(
+                  String(completedTrip.userId),
+                  String(completedTripId),
+                )
+              : false;
+          }),
         );
 
         result = {

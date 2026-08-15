@@ -4,15 +4,17 @@ const ReferralUsageSchema = new Schema(
   {
     referrer: { type: Types.ObjectId, ref: "User", required: true, index: true },
     referredUser: { type: Types.ObjectId, ref: "User", required: true },
-    discountPercentage: { type: Number, required: true, min: 0, max: 100 },
-    tripsRemaining: { type: Number, required: true, min: 0 },
+    referrerBonusAmount: { type: Number, required: true, min: 0 },
+    refereeBonusAmount: { type: Number, required: true, min: 0 },
     status: {
       type: String,
       required: true,
-      enum: ["active", "exhausted"],
-      default: "active",
+      enum: ["pending", "credited"],
+      default: "pending",
       index: true,
     },
+    creditedAt: { type: Date, default: null },
+    firstTripId: { type: Types.ObjectId, ref: "Trip", default: null, index: true },
   },
   { timestamps: true, collection: "referral_usages" },
 );
