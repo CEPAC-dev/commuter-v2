@@ -6,12 +6,14 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Notification } from "@/models/Notification";
 import AppHeader from "@/components/layout/AppHeader";
 import EmptyState from "@/components/shared/EmptyState";
+import { getServerLocale } from "@/lib/i18n/server";
+import { intlLocale, localeDirection, translate, type Locale } from "@/lib/i18n";
 
 export const metadata = { title: "Notifications — Commuter" };
 export const dynamic = "force-dynamic";
 
-function formatTime(value: string) {
-  return new Date(value).toLocaleString("en-EG", {
+function formatTime(value: string, locale: Locale) {
+  return new Date(value).toLocaleString(intlLocale(locale), {
     day: "numeric",
     month: "short",
     hour: "numeric",
@@ -23,6 +25,7 @@ export default async function NotificationsPage() {
   const session = await getSession();
   if (!session) redirect("/login?redirect=/user/notifications");
   if (session.role === "admin") redirect("/admin/dashboard");
+  const locale = await getServerLocale();
 
   await connectDB();
   const notifications = await Notification.find({ userId: session.userId })
@@ -31,7 +34,10 @@ export default async function NotificationsPage() {
     .lean();
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
+    <div
+      dir="ltr"
+      style={{ minHeight: "100dvh", background: "#f8f9fa", direction: "ltr" }}
+    >
       <AppHeader authed email={session.email} variant="app" backHref="/" />
       <main
         style={{ maxWidth: 640, margin: "0 auto", padding: "28px 20px 56px" }}
@@ -44,7 +50,10 @@ export default async function NotificationsPage() {
             marginBottom: 20,
           }}
         >
-          <div>
+          <div
+            dir={localeDirection(locale)}
+            style={{ textAlign: locale === "ar" ? "right" : "left" }}
+          >
             <h1
               style={{
                 margin: 0,
@@ -53,10 +62,10 @@ export default async function NotificationsPage() {
                 color: "#0B1E3D",
               }}
             >
-              Notifications
+              {translate(locale, "notifications.title")}
             </h1>
             <p style={{ margin: "4px 0 0", fontSize: 14, color: "#5A6A7A" }}>
-              Stay up to date with payment, trip, and driver updates.
+              {translate(locale, "notifications.description")}
             </p>
           </div>
           {notifications.length > 0 ? (
@@ -91,7 +100,8 @@ export default async function NotificationsPage() {
                     gap: 6,
                   }}
                 >
-                  <CheckCheck size={16} /> Mark all read
+                  <CheckCheck size={16} />
+                  {translate(locale, "notifications.mark_all_read")}
                 </span>
               </button>
             </form>
@@ -101,8 +111,8 @@ export default async function NotificationsPage() {
         {notifications.length === 0 ? (
           <EmptyState
             icon="🔔"
-            title="No notifications yet"
-            description="Payment confirmations, trip updates, and driver messages will appear here."
+            title={translate(locale, "notifications.empty_title")}
+            description={translate(locale, "notifications.empty_description")}
             action={
               <Link
                 href="/my-requests"
@@ -116,7 +126,7 @@ export default async function NotificationsPage() {
                   textDecoration: "none",
                 }}
               >
-                View requests
+                {translate(locale, "notifications.view_requests")}
               </Link>
             }
           />
@@ -165,7 +175,7 @@ export default async function NotificationsPage() {
                         color={item.isRead ? "#5A6A7A" : "#00C2A8"}
                       />
                     </div>
-                    <div>
+                    <div dir="auto" style={{ textAlign: "left" }}>
                       <div
                         style={{
                           fontSize: 15,
@@ -183,7 +193,7 @@ export default async function NotificationsPage() {
                       <div
                         style={{ fontSize: 12, color: "#9aa7b4", marginTop: 8 }}
                       >
-                        {formatTime(item.createdAt)}
+                        {formatTime(String(item.createdAt), locale)}
                       </div>
                     </div>
                   </div>
@@ -198,7 +208,7 @@ export default async function NotificationsPage() {
                         fontWeight: 700,
                       }}
                     >
-                      New
+                      {translate(locale, "notifications.new")}
                     </span>
                   ) : null}
                 </div>

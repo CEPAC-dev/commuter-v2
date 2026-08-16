@@ -11,6 +11,7 @@ import {
   markNotificationAsRead,
   type NotificationItem,
 } from "@/lib/api/notifications";
+import { useClientLocale } from "@/lib/i18n/client";
 
 const POLL_INTERVAL_MS = 10_000;
 
@@ -24,16 +25,26 @@ function notificationHref(notification: NotificationItem): string {
   return "/user/notifications";
 }
 
-function formatRelativeTime(value: string): string {
+function formatRelativeTime(
+  value: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
   const elapsedSeconds = Math.max(
     0,
     Math.floor((Date.now() - new Date(value).getTime()) / 1000),
   );
-  if (elapsedSeconds < 60) return "Just now";
-  if (elapsedSeconds < 3600) return `${Math.floor(elapsedSeconds / 60)}m ago`;
+  if (elapsedSeconds < 60) return t("notifications.just_now");
+  if (elapsedSeconds < 3600)
+    return t("notifications.minutes_ago", {
+      count: Math.floor(elapsedSeconds / 60),
+    });
   if (elapsedSeconds < 86400)
-    return `${Math.floor(elapsedSeconds / 3600)}h ago`;
-  return `${Math.floor(elapsedSeconds / 86400)}d ago`;
+    return t("notifications.hours_ago", {
+      count: Math.floor(elapsedSeconds / 3600),
+    });
+  return t("notifications.days_ago", {
+    count: Math.floor(elapsedSeconds / 86400),
+  });
 }
 
 export default function NotificationCenter({
@@ -44,6 +55,7 @@ export default function NotificationCenter({
   buttonBackground: string;
 }) {
   const router = useRouter();
+  const { t, dir } = useClientLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const knownIdsRef = useRef<Set<string> | null>(null);
   const [open, setOpen] = useState(false);
@@ -173,7 +185,7 @@ export default function NotificationCenter({
             : item,
         ),
       );
-      toast.error("Could not mark notification as read");
+      toast.error(t("notifications.mark_read_error"));
     }
   }
 
@@ -199,7 +211,7 @@ export default function NotificationCenter({
     } catch {
       setUnreadCount(previousUnreadCount);
       setNotifications(previous);
-      toast.error("Could not mark notifications as read");
+      toast.error(t("notifications.mark_all_error"));
     }
   }
 
@@ -209,7 +221,7 @@ export default function NotificationCenter({
       <button
         type="button"
         onClick={togglePopover}
-        aria-label="Notifications"
+        aria-label={t("notifications.title")}
         aria-expanded={open}
         aria-haspopup="dialog"
         className="notification-center-button"
@@ -225,34 +237,44 @@ export default function NotificationCenter({
 
       {open && (
         <section
+          dir="ltr"
           role="dialog"
-          aria-label="Recent notifications"
+          aria-label={t("notifications.recent")}
           className="notification-popover"
+          style={{ direction: "ltr" }}
         >
           <div className="notification-popover-header">
-            <div>
-              <strong>Notifications</strong>
+            <div
+              dir={dir}
+              style={{
+                direction: dir,
+                textAlign: dir === "rtl" ? "right" : "left",
+              }}
+            >
+              <strong>{t("notifications.title")}</strong>
               <span>
                 {unreadCount > 0
-                  ? `${unreadCount} unread`
-                  : "You’re all caught up"}
+                  ? t("notifications.unread", { count: unreadCount })
+                  : t("notifications.all_caught_up")}
               </span>
             </div>
             {unreadCount > 0 && (
               <button type="button" onClick={markAllRead}>
                 <CheckCheck size={15} aria-hidden="true" />
-                Mark all read
+                {t("notifications.mark_all_read")}
               </button>
             )}
           </div>
 
           <div className="notification-popover-list">
             {loading ? (
-              <div className="notification-popover-empty">Loading…</div>
+              <div className="notification-popover-empty">
+                {t("notifications.loading")}
+              </div>
             ) : notifications.length === 0 ? (
               <div className="notification-popover-empty">
                 <Bell size={22} aria-hidden="true" />
-                No notifications yet
+                {t("notifications.empty_title")}
               </div>
             ) : (
               notifications.slice(0, 3).map((notification, index) => (
@@ -271,11 +293,15 @@ export default function NotificationCenter({
                     <span className="notification-popover-icon">
                       <Bell size={15} aria-hidden="true" />
                     </span>
-                    <span className="notification-popover-copy">
+                    <span
+                      className="notification-popover-copy"
+                      dir="auto"
+                      style={{ direction: "ltr", textAlign: "left" }}
+                    >
                       <strong>{notification.title}</strong>
                       <span>{notification.body}</span>
                       <small>
-                        {formatRelativeTime(notification.createdAt)}
+                        {formatRelativeTime(notification.createdAt, t)}
                       </small>
                     </span>
                     <ChevronRight size={16} aria-hidden="true" />
@@ -285,8 +311,10 @@ export default function NotificationCenter({
                       type="button"
                       className="notification-mark-read"
                       onClick={() => markRead(notification)}
-                      title="Mark as read"
-                      aria-label={`Mark ${notification.title} as read`}
+                      title={t("notifications.mark_as_read")}
+                      aria-label={t("notifications.mark_item_as_read", {
+                        title: notification.title,
+                      })}
                     >
                       <Check size={14} aria-hidden="true" />
                     </button>
@@ -304,7 +332,7 @@ export default function NotificationCenter({
               router.push("/user/notifications");
             }}
           >
-            See all notifications
+            {t("notifications.see_all")}
             <ChevronRight size={16} aria-hidden="true" />
           </button>
         </section>

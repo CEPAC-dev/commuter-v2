@@ -9,8 +9,8 @@ export interface CarTypeConfig {
 export const CAR_TYPES: Record<CarType, CarTypeConfig> = {
   private: { key: "private", label: "Private", capacity: 4 },
   taxi: { key: "taxi", label: "Taxi", capacity: 4 },
-  van: { key: "van", label: "Van", capacity: 7 },
-  microbus: { key: "microbus", label: "Microbus", capacity: 14 },
+  van: { key: "van", label: "Van", capacity: 6 },
+  microbus: { key: "microbus", label: "Microbus", capacity: 10 },
 };
 
 export const CAR_TYPE_LIST = Object.values(CAR_TYPES);

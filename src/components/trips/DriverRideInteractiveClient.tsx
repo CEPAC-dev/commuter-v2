@@ -1001,7 +1001,7 @@ export default function DriverRideInteractiveClient({
                     <div
                       style={{
                         position: "absolute",
-                        left: 13,
+                        ...(dir === "rtl" ? { right: 13 } : { left: 13 }),
                         top: 26,
                         bottom: 0,
                         width: 2,

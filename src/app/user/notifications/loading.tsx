@@ -1,4 +1,9 @@
-export default function Loading() {
+import { translate } from "@/lib/i18n";
+import { getServerLocale } from "@/lib/i18n/server";
+
+export default async function Loading() {
+  const locale = await getServerLocale();
+
   return (
     <div
       style={{
@@ -9,7 +14,7 @@ export default function Loading() {
       }}
     >
       <div style={{ color: "#0B1E3D", fontWeight: 700 }}>
-        Loading notifications…
+        {translate(locale, "notifications.loading")}
       </div>
     </div>
   );
