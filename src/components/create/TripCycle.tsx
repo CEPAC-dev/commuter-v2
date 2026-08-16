@@ -1299,7 +1299,7 @@ export default function TripCycle({
             </option>
             {vList.map((v) => (
               <option key={v.key} value={v.key}>
-                {v.label}
+                {t(`vehicles.${v.key}`)}
               </option>
             ))}
           </select>

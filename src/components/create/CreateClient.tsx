@@ -606,8 +606,8 @@ export default function CreateClient({ userEmail }: Props) {
     (sum, t) => sum + getTripPriceForSubmission(t),
     0,
   );
-  const baseInstancePrices = selectedDates.flatMap(() =>
-    trips.map((trip) => getTripPriceForSubmission(trip)),
+  const baseInstancePrices = trips.map((trip) =>
+    getTripPriceForSubmission(trip),
   );
   const baseGrandTotalEgp = baseInstancePrices.reduce(
     (sum, price) => sum + price,
