@@ -102,9 +102,6 @@ export default function DriverCard({
           >
             {driver.name ?? t("my_trips.driver_fallback")}
           </p>
-          <p style={{ margin: "2px 0 0", fontSize: 13, color: "#5A6A7A" }}>
-            {driver.phone ?? t("my_trips.no_phone")}
-          </p>
         </div>
 
         {showCall && (

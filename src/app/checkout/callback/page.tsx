@@ -39,6 +39,9 @@ export default async function CallbackPage({
   if (!booking) redirect("/my-trips");
 
   const isPaid = booking.paymentStatus === "paid";
+  if (isPaid) {
+    redirect("/my-trips");
+  }
   const isFailed =
     booking.paymentStatus === "failed" ||
     kashierStatus === "FAILURE" ||

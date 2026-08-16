@@ -6,12 +6,12 @@ import { useClientLocale } from "@/lib/locale.client";
 export default function StatusGroupFilter({
   hiddenGroups = [],
 }: {
-  hiddenGroups?: Array<"" | "upcoming" | "ongoing" | "previous" | "pending_payment">;
+  hiddenGroups?: Array<"all" | "upcoming" | "ongoing" | "previous" | "pending_payment">;
 }) {
   const { t } = useClientLocale();
 
   const GROUPS = [
-    { value: "", label: t("filter.all") },
+    { value: "all", label: t("filter.all") },
     { value: "upcoming", label: t("status.upcoming") },
     { value: "ongoing", label: t("status.ongoing") },
     { value: "previous", label: t("status.previous") },
@@ -21,12 +21,13 @@ export default function StatusGroupFilter({
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const active = sp.get("group") ?? "";
+  const active = sp.get("group") ?? "all";
   const visibleGroups = GROUPS.filter((g) => !hiddenGroups.includes(g.value));
 
   function select(value: string) {
     const params = new URLSearchParams(sp.toString());
-    if (value) params.set("group", value);
+    if (value === "all") params.set("group", "all");
+    else if (value) params.set("group", value);
     else params.delete("group");
     params.delete("page");
     const qs = params.toString();

@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
 import { createSession } from "@/lib/auth/session";
+import { normalizeEgyptPhone } from "@/lib/auth/validation";
 import bcrypt from "bcryptjs";
 
 export async function POST(req: NextRequest) {
@@ -18,8 +19,11 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
-    const identifier = phone.trim();
-    const isEmail = identifier.includes("@");
+    const rawIdentifier = phone.trim();
+    const isEmail = rawIdentifier.includes("@");
+    const identifier = isEmail
+      ? rawIdentifier
+      : (normalizeEgyptPhone(rawIdentifier) ?? rawIdentifier);
 
     // First try exact match with phone/email AND specified role
     let user = await User.findOne(

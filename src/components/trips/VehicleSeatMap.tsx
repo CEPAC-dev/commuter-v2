@@ -227,7 +227,14 @@ export default function VehicleSeatMap({
         return normalizedStatus === "dropped_off";
       });
 
-      if (redPassenger) {
+      // A seat stays red for the station where the passenger alighted, then turns grey.
+      const alightedAtCurrentStation =
+        redPassenger &&
+        (lastConfirmedStationIndex === null ||
+          !Number(redPassenger.dropoffOrder) ||
+          Number(redPassenger.dropoffOrder) >= lastConfirmedStationIndex);
+
+      if (redPassenger && alightedAtCurrentStation) {
         seatStateBySeat.set(seat, {
           passenger: redPassenger,
           state: "red",
@@ -295,34 +302,33 @@ export default function VehicleSeatMap({
             letterSpacing: "0.04em",
           }}
         >
-          {t("vehicle_seating.title").replace("{label}", t(grid.labelKey))}
+          {t("vehicle_seating.title_plain")}
         </h3>
-        <p
-          style={{
-            margin: 0,
-            fontSize: 12,
-            color: "#5A6A7A",
-            fontWeight: 500,
-          }}
-        >
-          {isDriver
-            ? rideStarted
-              ? t("vehicle_seating.live_status_true")
-              : t("vehicle_seating.live_status_false")
-            : t("vehicle_seating.your_assigned")}
-        </p>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 800,
-            padding: "5px 14px",
-            borderRadius: 20,
-            background: chassis.accent,
-            color: "#fff",
-          }}
-        >
-          {t("vehicle_seating.seats", { count: grid.totalSeats })}
-        </span>
+        {isDriver ? (
+          rideStarted ? (
+            <p
+              style={{
+                margin: 0,
+                fontSize: 12,
+                color: "#5A6A7A",
+                fontWeight: 500,
+              }}
+            >
+              {t("vehicle_seating.live_status_true")}
+            </p>
+          ) : null
+        ) : (
+          <p
+            style={{
+              margin: 0,
+              fontSize: 12,
+              color: "#5A6A7A",
+              fontWeight: 500,
+            }}
+          >
+            {t("vehicle_seating.your_assigned")}
+          </p>
+        )}
       </div>
 
       {/* Seat Grid — locked ltr so driver/seat order never flips in Arabic */}
@@ -335,6 +341,8 @@ export default function VehicleSeatMap({
           borderRadius: 20,
           border: "1px solid #E9EDF2",
           padding: 18,
+          direction: "ltr",
+          unicodeBidi: "isolate",
         }}
       >
         {/* Front indicator */}
@@ -356,10 +364,13 @@ export default function VehicleSeatMap({
           {grid.rows.map((row, rIdx) => (
             <div
               key={`row-${rIdx}`}
+              dir="ltr"
               style={{
                 display: "grid",
                 gridTemplateColumns: `repeat(${row.length}, 1fr)`,
                 gap: 10,
+                direction: "ltr",
+                unicodeBidi: "isolate",
               }}
             >
               {row.map((cell) => {
@@ -368,6 +379,7 @@ export default function VehicleSeatMap({
                     <div
                       key={`driver-seat`}
                       style={{
+                        gridColumn: cell.col + 1,
                         padding: "12px 8px",
                         borderRadius: 14,
                         background: chassis.accent,
@@ -452,6 +464,7 @@ export default function VehicleSeatMap({
                       }
                     }}
                     style={{
+                      gridColumn: cell.col + 1,
                       padding: "12px 6px",
                       borderRadius: 14,
                       background: bg,

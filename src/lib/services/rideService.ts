@@ -32,6 +32,30 @@ type MatchResult = {
   route?: any[]; // StopSchema-compatible array optional; if absent will be calculated
 };
 
+function normalizeRoutePayload(route: any[] = []): any[] {
+  return route.map((stop) => {
+    if (!stop || typeof stop !== "object") return stop;
+    const boardingValue = stop.boarding ?? stop.boardingNumber ?? 0;
+    const alightingValue = stop.alighting ?? stop.alightingNumber ?? 0;
+    return {
+      ...stop,
+      boardingNumber: Array.isArray(boardingValue)
+        ? boardingValue.length
+        : Number.isFinite(Number(boardingValue))
+          ? Number(boardingValue)
+          : 0,
+      alightingNumber: Array.isArray(alightingValue)
+        ? alightingValue.length
+        : Number.isFinite(Number(alightingValue))
+          ? Number(alightingValue)
+          : 0,
+      boarding: Array.isArray(stop.boarding) ? stop.boarding : [],
+      alighting: Array.isArray(stop.alighting) ? stop.alighting : [],
+      waitingMinutes: Number(stop.waitingMinutes ?? 0) || 0,
+    };
+  });
+}
+
 async function createRide(matchResult: MatchResult) {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -98,7 +122,7 @@ async function createRide(matchResult: MatchResult) {
         (sum, p) => sum + (p.tripCost || 0),
         0,
       ),
-      route: matchResult.route || [],
+      route: normalizeRoutePayload(matchResult.route || []),
       ...(matchResult.rideType === "shared"
         ? {
             pickupStation: firstTrip?.pickupStation ?? undefined,
@@ -109,7 +133,9 @@ async function createRide(matchResult: MatchResult) {
 
     // if route absent, compute basic route from passengers
     if (!matchResult.route) {
-      rideDoc.route = recalculateRouteFromPassengers(passengersForRide);
+      rideDoc.route = normalizeRoutePayload(
+        recalculateRouteFromPassengers(passengersForRide),
+      );
     }
 
     await rideDoc.save({ session });
@@ -216,15 +242,29 @@ function recalculateRouteFromPassengers(passengers: any[]) {
   const stops = [];
   for (let i = 0; i <= maxIndex; i++) {
     if (indexMap[i]) {
+      const boardingCount = indexMap[i].boarding || 0;
+      const alightingCount = indexMap[i].alighting || 0;
       stops.push({
         point: indexMap[i].point,
-        boarding: indexMap[i].boarding || 0,
-        alighting: indexMap[i].alighting || 0,
+        boardingNumber: boardingCount,
+        alightingNumber: alightingCount,
+        boarding: [],
+        alighting: [],
         waitingMinutes: indexMap[i].waitingMinutes || 0,
       });
     }
   }
   return stops;
+}
+
+function routeStopCount(value: unknown): number {
+  if (Array.isArray(value)) return value.length;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 }
 
 
@@ -326,8 +366,8 @@ function mapRideToDetailView(ride: Record<string, any>): RideDetailView {
     route: (ride.route ?? []).map((stop: Record<string, any>) => ({
       address: stop.point?.address ?? "—",
       point: toGeoPoint(stop.point),
-      boarding: stop.boarding ?? 0,
-      alighting: stop.alighting ?? 0,
+      boarding: routeStopCount(stop.boarding ?? stop.boardingNumber ?? 0),
+      alighting: routeStopCount(stop.alighting ?? stop.alightingNumber ?? 0),
       waitingMinutes: stop.waitingMinutes ?? 0,
     })),
     pickupStation: toStation(ride.pickupStation),
@@ -465,8 +505,8 @@ function mapRideToListRow(ride: Record<string, any>): RideListRow {
     passengers,
     route: (ride.route ?? []).map((stop: Record<string, any>) => ({
       address: stop.point?.address ?? "—",
-      boarding: stop.boarding ?? 0,
-      alighting: stop.alighting ?? 0,
+      boarding: routeStopCount(stop.boarding ?? stop.boardingNumber ?? 0),
+      alighting: routeStopCount(stop.alighting ?? stop.alightingNumber ?? 0),
       waitingMinutes: stop.waitingMinutes ?? 0,
     })),
     pickupStation: toStation(ride.pickupStation),

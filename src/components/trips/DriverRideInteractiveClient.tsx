@@ -284,27 +284,24 @@ export default function DriverRideInteractiveClient({
   }
 
   const remainingStations = getRemainingStationsForRide(ride);
-  const remainingStationIndexSet = new Set(remainingStations.map((s) => s.stationIndex));
-
-  const hasPendingStationActions = (
-    stationIndex: number,
-    stationName: string,
-  ) => {
-    return ride.passengers.some((p) => {
-      const st = (p.status ?? "").toLowerCase();
-      const isPickup = stationMatchesPassenger(p, stationIndex, stationName, "pickup");
-      const isDropoff = stationMatchesPassenger(p, stationIndex, stationName, "dropoff");
-      return (
-        (isPickup && st === "waiting") ||
-        (isDropoff && st === "picked_up")
-      );
-    });
-  };
 
   const visibleRouteStops = routeStops.filter((stop) => {
-    if (remainingStationIndexSet.has(stop.stationIndex)) return true;
     const stopName = stop?.address ?? stop?.point?.address ?? "";
-    return hasPendingStationActions(stop.stationIndex, stopName);
+    let matchedAny = 0;
+    let matchedActive = 0;
+
+    for (const passenger of ride.passengers) {
+      const isStop =
+        stationMatchesPassenger(passenger, stop.stationIndex, stopName, "pickup") ||
+        stationMatchesPassenger(passenger, stop.stationIndex, stopName, "dropoff");
+      if (!isStop) continue;
+      matchedAny += 1;
+      const status = (passenger.status ?? "").toLowerCase();
+      if (!["no_show", "cancelled"].includes(status)) matchedActive += 1;
+    }
+
+    // Keep every station that still has a passenger; drop only the ones emptied by no-shows.
+    return matchedActive > 0 || matchedAny === 0;
   });
 
   const stationPoints = visibleRouteStops
@@ -656,6 +653,15 @@ export default function DriverRideInteractiveClient({
       setConfirmedStationIndices((prev) =>
         prev.includes(stationIndex) ? prev : [...prev, stationIndex],
       );
+
+      // Confirming a stop also starts navigation to the next station.
+      const nextStationStep = steps.find(
+        (step) =>
+          step.type === "station" &&
+          step.stationIndex > stationIndex &&
+          step.point,
+      );
+      if (nextStationStep) await handleGoToLocation(nextStationStep);
     } catch (err) {
       console.error(err);
     } finally {
@@ -1063,49 +1069,9 @@ export default function DriverRideInteractiveClient({
                         </p>
                       </div>
 
-                      {/* Go to location + Confirm passenger rides buttons */}
+                      {/* Confirm stop — also opens directions to the next station */}
                       {!isCompleted && step.type === "station" && isCurrentStep && (
                         <>
-                          <button
-                            type="button"
-                            onClick={() => handleGoToLocation(step)}
-                            disabled={
-                              loadingAction === `confirm-${step.stationIndex}` ||
-                              !step.point ||
-                              !Number.isFinite(step.point.lat) ||
-                              !Number.isFinite(step.point.lng)
-                            }
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                              padding: "6px 12px",
-                              borderRadius: 8,
-                              fontSize: 12,
-                              fontWeight: 700,
-                              border: "1px solid #0B1E3D",
-                              background: "#0B1E3D",
-                              color: "#fff",
-                              cursor:
-                                loadingAction === `confirm-${step.stationIndex}` ||
-                                !step.point ||
-                                !Number.isFinite(step.point.lat) ||
-                                !Number.isFinite(step.point.lng)
-                                  ? "not-allowed"
-                                  : "pointer",
-                              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                              opacity:
-                                loadingAction === `confirm-${step.stationIndex}` ||
-                                !step.point ||
-                                !Number.isFinite(step.point.lat) ||
-                                !Number.isFinite(step.point.lng)
-                                  ? 0.6
-                                  : 1,
-                            }}
-                          >
-                            {t("driver.go_to_location")}
-                          </button>
-
                           <button
                             type="button"
                             onClick={() =>

@@ -19,7 +19,12 @@ export interface StationOption {
   walkingMin: number;
 }
 
-const SHARED_TYPES = new Set(["taxi_shared", "van_shared", "microbus_shared"]);
+const SHARED_TYPES = new Set([
+  "taxi_shared",
+  "shared_car",
+  "van_shared",
+  "microbus_shared",
+]);
 const DEFAULT_STATION_TYPES = new Set(["1", "2", "3"]);
 const MICROBUS_STATION_TYPES = new Set(["2", "3"]);
 

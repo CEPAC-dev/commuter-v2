@@ -23,7 +23,7 @@ interface RawFeature {
 // Fully REPLACES the station points collection with the uploaded data.
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session || session.role !== "passenger") {
+  if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

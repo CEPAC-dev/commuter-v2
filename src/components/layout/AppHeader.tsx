@@ -21,6 +21,7 @@ import {
 import { useClientLocale, setLocaleCookie } from "@/lib/locale.client";
 import { useTripStore } from "@/lib/store/useTripStore";
 import LogoutConfirmModal from "@/components/shared/LogoutConfirmModal";
+import NotificationCenter from "@/components/layout/NotificationCenter";
 
 type Variant = "landing" | "app";
 type Role = "passenger" | "driver" | "admin";
@@ -193,7 +194,13 @@ export default function AppHeader({
         {/* Desktop nav */}
         <nav
           aria-label="Main navigation"
-          style={{ display: "flex", alignItems: "center", gap: 6, direction: "ltr", textAlign: "left" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            direction: "ltr",
+            textAlign: "left",
+          }}
           className="appheader-desktop"
         >
           {authed ? (
@@ -329,27 +336,39 @@ export default function AppHeader({
           </button>
         </nav>
 
-        {/* Mobile toggle */}
-        <button
-          onClick={() => setMenuOpen((o) => !o)}
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={menuOpen}
-          className="appheader-mobile-toggle"
+        <div
           style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: fg,
-            padding: 8,
-            minWidth: 44,
-            minHeight: 44,
-            display: "none",
+            display: "flex",
             alignItems: "center",
-            justifyContent: "center",
+            gap: 4,
           }}
         >
-          {menuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+          {authed && role !== "admin" && (
+            <NotificationCenter color={fg} buttonBackground={subtleBg} />
+          )}
+
+          {/* Mobile toggle */}
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            className="appheader-mobile-toggle"
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: fg,
+              padding: 8,
+              minWidth: 44,
+              minHeight: 44,
+              display: "none",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {menuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile drawer */}

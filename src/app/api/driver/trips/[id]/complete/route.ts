@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
 import { settleTripEarning } from "@/lib/services/tripEarnings";
+import { creditReferralBonusIfEligible } from "@/lib/referral";
 import { createNotification } from "@/lib/notifications/createNotification";
 
 export async function POST(
@@ -32,6 +33,7 @@ export async function POST(
   }
 
   if (trip.status === "completed") {
+    await creditReferralBonusIfEligible(String(trip.userId), tripId);
     const balance = await settleTripEarning(tripId);
     return NextResponse.json({
       status: "completed",
@@ -58,6 +60,15 @@ export async function POST(
     data: { tripId },
   });
 
+  await createNotification({
+    userId: String(trip.userId),
+    type: "trip_completed",
+    title: "Trip completed",
+    body: "Your trip has been completed. Thanks for riding with Commuter.",
+    data: { tripId },
+  });
+
+  await creditReferralBonusIfEligible(String(trip.userId), tripId);
   const balance = await settleTripEarning(tripId);
 
   return NextResponse.json({

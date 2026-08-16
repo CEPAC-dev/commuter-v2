@@ -5,11 +5,16 @@ import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { nextSequence } from "@/models/Counter";
 import { Station } from "@/models/Station";
+import { User } from "@/models/User";
 import {
   VEHICLES,
   computeTripPriceEgp,
   type VehicleKey,
 } from "@/lib/config/vehicles";
+import {
+  isVehicleAvailableInRegion,
+  normalizeRegion,
+} from "@/lib/config/regions";
 import { bookingWindow, isDateInWindow } from "@/lib/time/bookingDates";
 import { getVehicles } from "@/lib/db/getVehicles";
 import {
@@ -23,6 +28,13 @@ import type { PaymentStatus } from "@/types/booking";
 import { listUserTrips } from "@/lib/services/trips";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { Types } from "mongoose";
+import {
+  applyPromoCodeToTrip,
+  computePromoDiscountedPrice,
+  normalizePromoCode,
+  rollbackPromoCodeUsage,
+  type PromoDiscountType,
+} from "@/lib/promoCode";
 
 const PRIVATE_VEHICLE_KEYS = new Set<VehicleKey>([
   "private_car",
@@ -89,12 +101,14 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = session.userId;
 
   let body: {
     date?: string;
     dates?: string[];
     trips: TripInput[];
     note?: string;
+    promoCode?: string | null;
   };
   try {
     body = await req.json();
@@ -104,6 +118,11 @@ export async function POST(req: NextRequest) {
 
   const { trips } = body;
   const rawDates = body.dates ?? (body.date ? [body.date] : []);
+  const promoCodeInput =
+    typeof body.promoCode === "string" ? body.promoCode : "";
+  const promoCode = promoCodeInput.trim()
+    ? normalizePromoCode(promoCodeInput)
+    : null;
   const note =
     typeof body.note === "string" ? body.note.trim().slice(0, 1000) : "";
 
@@ -134,9 +153,18 @@ export async function POST(req: NextRequest) {
   }
 
   const vehiclesMap = await getVehicles();
-  const allowedVehicleSet = new Set(Object.keys(vehiclesMap));
 
   await connectDB();
+
+  const userRegionDoc = await User.findById(userId).select("region").lean<{
+    region?: string;
+  }>();
+  const userRegion = normalizeRegion(userRegionDoc?.region);
+  const allowedVehicleSet = new Set(
+    Object.keys(vehiclesMap).filter((key) =>
+      isVehicleAvailableInRegion(key, userRegion),
+    ),
+  );
   const stationDocs = await Station.find({ active: true }).lean();
   const canonicalStations: GeoStation[] = stationDocs.map((station) => ({
     id: station.objectId,
@@ -465,70 +493,170 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const weekDates = bookingWindow();
-  const isFullWeekSelection =
-    dates.length === weekDates.length &&
-    weekDates.every((day) => dates.includes(day));
-  const seventhDay = weekDates[weekDates.length - 1];
-  const amountEgp = dates.reduce((total, date) => {
-    const dayTotal = serverTrips.reduce((sum, trip) => {
-      const tripPriceForDate =
-        isFullWeekSelection && date === seventhDay
-          ? Math.round(trip.priceEgp * 0.95)
-          : trip.priceEgp;
-      return sum + tripPriceForDate;
-    }, 0);
-    return total + dayTotal;
-  }, 0);
+  const tripInstances = dates.flatMap((date) =>
+    serverTrips.map((trip, cycleIndex) => ({
+      id: new Types.ObjectId(),
+      date,
+      cycleIndex,
+      trip,
+    })),
+  );
 
-  const request = await Request.create({
-    userId: new Types.ObjectId(session.userId),
-    dates,
-    amountEgp,
-    note,
-    paymentStatus: "pending",
-    status: "pending_payment",
+  const promoApplies: Array<{
+    success: boolean;
+    discountType: PromoDiscountType;
+    discountValue: number;
+    promoCodeId: string;
+    usageId: string;
+  } | null> = tripInstances.map(() => null);
+  const successfulPromoReservations: Array<{
+    promoCodeId: string;
+    usageId: string;
+  }> = [];
+  let promoFailureMessage = "";
+
+  if (promoCode) {
+    for (let i = 0; i < tripInstances.length; i += 1) {
+      const appliedPromo = await applyPromoCodeToTrip(
+        promoCode,
+        userId,
+        String(tripInstances[i].id),
+      );
+      if (
+        appliedPromo.success &&
+        appliedPromo.discountType &&
+        typeof appliedPromo.discountValue === "number" &&
+        appliedPromo.promoCodeId &&
+        appliedPromo.usageId
+      ) {
+        promoApplies[i] = {
+          success: true,
+          discountType: appliedPromo.discountType,
+          discountValue: appliedPromo.discountValue,
+          promoCodeId: appliedPromo.promoCodeId,
+          usageId: appliedPromo.usageId,
+        };
+        successfulPromoReservations.push({
+          promoCodeId: appliedPromo.promoCodeId,
+          usageId: appliedPromo.usageId,
+        });
+      } else if (!promoFailureMessage) {
+        promoFailureMessage = appliedPromo.message;
+      }
+    }
+  }
+
+  const pricedTripInstances = tripInstances.map((instance, index) => {
+    const promoApply = promoApplies[index];
+    const basePriceEgp = instance.trip.priceEgp;
+    const priceAfterPromo = promoApply
+      ? Math.round(
+          computePromoDiscountedPrice(
+            basePriceEgp,
+            promoApply.discountType,
+            promoApply.discountValue,
+          ),
+        )
+      : basePriceEgp;
+    const promoDiscountAmountEgp = promoApply
+      ? Math.max(0, basePriceEgp - priceAfterPromo)
+      : 0;
+    const priceEgp = priceAfterPromo;
+    return {
+      ...instance,
+      basePriceEgp,
+      priceEgp,
+      promoApply,
+      promoDiscountAmountEgp,
+    };
   });
 
+  const promoCodeAppliedTrips = pricedTripInstances.reduce(
+    (count, instance) => count + (instance.promoApply ? 1 : 0),
+    0,
+  );
+  const promoCodeApplied = promoCodeAppliedTrips > 0;
+  const promoCodePartiallyApplied =
+    promoCodeAppliedTrips > 0 && promoCodeAppliedTrips < tripInstances.length;
+  const promoCodeUnavailable = Boolean(promoCode) && !promoCodeApplied;
+
+  const amountEgp = pricedTripInstances.reduce(
+    (sum, instance) => sum + instance.priceEgp,
+    0,
+  );
+  let createdRequestId: Types.ObjectId | null = null;
+
   try {
+    const request = await Request.create({
+      userId: new Types.ObjectId(userId),
+      tripIds: tripInstances.map((instance) => instance.id),
+      dates,
+      amountEgp,
+      note,
+      paymentStatus: "pending",
+      status: "pending_payment",
+    });
+    createdRequestId = request._id;
+
     const tripDocuments = await Promise.all(
-      dates.flatMap((date) =>
-        serverTrips.map(async (trip, cycleIndex) => ({
-          tripNumber: await nextSequence("tripNumber"),
-          requestId: request._id,
-          userId: new Types.ObjectId(session.userId),
-          date,
-          cycleIndex,
-          ...trip,
-          priceEgp:
-            isFullWeekSelection && date === seventhDay
-              ? Math.round(trip.priceEgp * 0.95)
-              : trip.priceEgp,
-          paymentStatus: "pending",
-          status: "pending_payment",
-        })),
-      ),
+      pricedTripInstances.map(async (instance) => ({
+        _id: instance.id,
+        tripNumber: await nextSequence("tripNumber"),
+        requestId: request._id,
+        userId: new Types.ObjectId(userId),
+        date: instance.date,
+        cycleIndex: instance.cycleIndex,
+        ...instance.trip,
+        basePriceEgp: instance.basePriceEgp,
+        priceEgp: instance.priceEgp,
+        ...(instance.promoApply && {
+          appliedPromoCode: new Types.ObjectId(instance.promoApply.promoCodeId),
+          promoDiscountType: instance.promoApply.discountType,
+          promoDiscountValue: instance.promoApply.discountValue,
+          promoDiscountAmountEgp: instance.promoDiscountAmountEgp,
+        }),
+        paymentStatus: "pending",
+        status: "pending_payment",
+      })),
     );
     await Trip.insertMany(tripDocuments);
+
+    await createNotification({
+      userId,
+      type: "request_created",
+      title: "Trip request received",
+      body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
+      data: { bookingId: String(request._id), amountEgp },
+    });
+
+    return NextResponse.json(
+      {
+        bookingId: String(request._id),
+        amountEgp,
+        promoCode,
+        promoCodeApplied,
+        promoCodeAppliedTrips,
+        promoCodePartiallyApplied,
+        promoCodeUnavailable,
+        ...(promoFailureMessage
+          ? { promoCodeMessage: promoFailureMessage }
+          : {}),
+      },
+      { status: 201 },
+    );
   } catch (err) {
-    await Request.deleteOne({ _id: request._id });
+    if (createdRequestId) {
+      await Request.deleteOne({ _id: createdRequestId });
+    }
+    await Promise.all(
+      successfulPromoReservations.map((reservation) =>
+        rollbackPromoCodeUsage(reservation.usageId, reservation.promoCodeId),
+      ),
+    );
     console.error("Trip fan-out failed — request rolled back:", err);
     return NextResponse.json(
       { error: "Failed to create trips" },
       { status: 500 },
     );
   }
-
-  await createNotification({
-    userId: session.userId,
-    type: "request_created",
-    title: "Trip request received",
-    body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
-    data: { bookingId: String(request._id), amountEgp },
-  });
-
-  return NextResponse.json(
-    { bookingId: String(request._id), amountEgp },
-    { status: 201 },
-  );
 }

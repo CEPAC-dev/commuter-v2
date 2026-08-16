@@ -1,6 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
+
+function isValidDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function requireAdminPassword(req: NextRequest) {
+  const expectedPassword = process.env.ADMIN_PASSWORD?.trim();
+  const providedPassword = req.headers.get("x-admin-password")?.trim();
+
+  if (!expectedPassword) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "ADMIN_PASSWORD is not configured on the server." },
+        { status: 500 },
+      ),
+    };
+  }
+
+  if (!providedPassword || providedPassword !== expectedPassword) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Invalid admin password." },
+        { status: 401 },
+      ),
+    };
+  }
+
+  return { ok: true };
+}
 
 const POPULATE_TRIP_REFERENCES = [
   { path: "requestId" },
@@ -63,6 +95,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await adminAuth(req);
+  if (!auth.authorized) return auth.response;
+
+  const passwordCheck = requireAdminPassword(req);
+  if (!passwordCheck.ok) return passwordCheck.response;
+
   await connectDB();
 
   const { searchParams } = new URL(req.url);
@@ -79,6 +117,14 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "tripNumber must be a number" }, { status: 400 });
     }
     filter = { tripNumber };
+  } else if (action === "by-date") {
+    const date = searchParams.get("date")?.trim();
+    if (!date || !isValidDate(date)) {
+      return NextResponse.json({ error: "date must be a valid YYYY-MM-DD string." }, { status: 400 });
+    }
+    filter = { date };
+  } else if (action === "all") {
+    filter = {};
   } else if (action === "today" || action === "not-today") {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -90,11 +136,11 @@ export async function DELETE(req: NextRequest) {
       : { $or: [{ createdAt: { $lt: todayStart } }, { createdAt: { $gte: tomorrowStart } }] };
   } else {
     return NextResponse.json(
-      { error: "action must be by-user, by-trip-number, today, or not-today" },
+      { error: "action must be by-user, by-trip-number, by-date, all, today, or not-today" },
       { status: 400 },
     );
   }
 
   const result = await Trip.deleteMany(filter);
-  return NextResponse.json({ ok: true, deletedCount: result.deletedCount });
+  return NextResponse.json({ ok: true, deletedCount: result.deletedCount ?? 0, scope: action ?? "all" });
 }

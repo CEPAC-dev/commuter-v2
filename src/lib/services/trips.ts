@@ -5,6 +5,7 @@ import { Trip } from "@/models/Trip";
 import { Request as RequestModel } from "@/models/Request";
 import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
+import { Rating } from "@/models/Rating";
 import type {
   BookingStatus,
   PaymentStatus,
@@ -398,6 +399,21 @@ export async function listUserTrips(
     requests.map((r) => [String(r._id), r.amountEgp]),
   );
 
+  const completedTripIds = rawTrips
+    .filter((trip) => trip.status === "completed")
+    .map((trip) => trip._id);
+  const ratings = completedTripIds.length
+    ? await Rating.find({ tripId: { $in: completedTripIds } })
+        .select("tripId driverRating carRating")
+        .lean<{ tripId: unknown; driverRating: number; carRating: number }[]>()
+    : [];
+  const ratingByTripId = new Map(
+    ratings.map((r) => [
+      String(r.tripId),
+      { driverRating: r.driverRating, carRating: r.carRating },
+    ]),
+  );
+
   return {
     total,
     page,
@@ -433,6 +449,7 @@ export async function listUserTrips(
       assignedDriver: trip.driverId
         ? (assignedDriverById.get(String(trip.driverId)) ?? null)
         : null,
+      rating: ratingByTripId.get(String(trip._id)) ?? null,
     })),
   };
 }
@@ -478,6 +495,7 @@ export interface UserTripDetail {
   assignedDriver?: AssignedDriver | null;
   rideId?: string;
   rideDetails?: RideDetailView | null;
+  rating?: { driverRating: number; carRating: number } | null;
 }
 
 export async function getDriverTrip(
@@ -614,6 +632,13 @@ export async function getUserTrip(
     ? await getRideById(String(trip.rideId))
     : null;
 
+  const rating =
+    trip.status === "completed"
+      ? await Rating.findOne({ tripId: trip._id })
+          .select("driverRating carRating")
+          .lean<{ driverRating: number; carRating: number } | null>()
+      : null;
+
   return {
     ...trip,
     id: String(trip._id),
@@ -621,6 +646,7 @@ export async function getUserTrip(
     seatNumbers: trip.seatNumbers ?? [],
     rideId: trip.rideId ? String(trip.rideId) : undefined,
     rideDetails,
+    rating: rating ? { driverRating: rating.driverRating, carRating: rating.carRating } : null,
     paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
     pickupStationOptions: trip.pickupStationOptions ?? [],
     dropoffStationOptions: trip.dropoffStationOptions ?? [],

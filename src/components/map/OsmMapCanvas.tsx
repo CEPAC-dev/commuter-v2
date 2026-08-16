@@ -14,7 +14,7 @@ interface OsmMapCanvasProps {
   className?: string;
   style?: React.CSSProperties;
   cursor?: string;
-  onReady?: (map: L.Map) => void;
+  onReady?: (map: L.Map | null) => void;
   onClick?: (point: OsmPoint) => void;
 }
 
@@ -33,18 +33,21 @@ export default function OsmMapCanvas({
   const mapRef = useRef<L.Map | null>(null);
   const readyRef = useRef(onReady);
   const clickRef = useRef(onClick);
+  const viewRef = useRef({ center, zoom });
 
   useEffect(() => {
     readyRef.current = onReady;
     clickRef.current = onClick;
-  }, [onReady, onClick]);
+    viewRef.current = { center, zoom };
+  });
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
+    const { center: initialCenter, zoom: initialZoom } = viewRef.current;
     const map = L.map(containerRef.current, {
-      center: [center.lat, center.lng],
-      zoom,
+      center: [initialCenter.lat, initialCenter.lng],
+      zoom: initialZoom,
       zoomControl: false,
       attributionControl: true,
     });
@@ -59,9 +62,15 @@ export default function OsmMapCanvas({
     readyRef.current?.(map);
 
     return () => {
+      // tell consumers first so their layer effects unmount before the map dies
+      readyRef.current?.(null);
       map.remove();
       mapRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    if (mapRef.current) mapRef.current.setView([center.lat, center.lng], zoom);
   }, [center.lat, center.lng, zoom]);
 
   return (
