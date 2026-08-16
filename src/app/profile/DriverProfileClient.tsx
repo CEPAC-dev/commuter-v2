@@ -583,6 +583,7 @@ export default function DriverProfileClient({
                 {t("profile.phone")}
               </label>
               <div
+                dir="ltr"
                 style={{
                   ...inputStyle,
                   padding: 0,
@@ -593,6 +594,7 @@ export default function DriverProfileClient({
                 }}
               >
                 <span
+                  dir="ltr"
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -602,6 +604,7 @@ export default function DriverProfileClient({
                     background: "#eef1f3",
                     borderRight: dir === "ltr" ? "1.5px solid #e8edf0" : undefined,
                     borderLeft: dir === "rtl" ? "1.5px solid #e8edf0" : undefined,
+                    direction: "ltr",
                   }}
                 >
                   +20
@@ -632,6 +635,7 @@ export default function DriverProfileClient({
                     color: "#0B1E3D",
                     boxSizing: "border-box",
                     textAlign: "left",
+                    direction: "ltr",
                   }}
                 />
               </div>

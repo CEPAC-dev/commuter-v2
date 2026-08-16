@@ -64,6 +64,9 @@ function rideMapPoints(ride: RideDetailView, isDriver: boolean) {
       ride.passengers[ride.passengers.length - 1] ?? firstPassenger;
 
     for (const passenger of ride.passengers) {
+      const status = String(passenger.status ?? "").toLowerCase();
+      // No-show/cancelled passengers must not keep their station on the route.
+      if (isDriver && ["no_show", "cancelled"].includes(status)) continue;
       if (passenger.pickupStation) {
         stationByKey.set(
           `${passenger.pickupStation.id}:${passenger.pickupStation.lat}:${passenger.pickupStation.lng}`,
@@ -376,7 +379,7 @@ export default async function TripDetailPage({
           </div>
           {status === "completed" && !isDriver && (
             <div style={{ marginTop: 14 }}>
-              <RateTripModal tripId={id} />
+              <RateTripModal tripId={id} initialRating={trip.rating ?? null} />
             </div>
           )}
         </div>

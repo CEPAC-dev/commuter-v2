@@ -21,7 +21,7 @@ export default function StatusGroupFilter({
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const active = sp.get("group") ?? "ongoing";
+  const active = sp.get("group") ?? "all";
   const visibleGroups = GROUPS.filter((g) => !hiddenGroups.includes(g.value));
 
   function select(value: string) {

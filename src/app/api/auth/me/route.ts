@@ -32,14 +32,17 @@ export async function PATCH(req: NextRequest) {
     const userUpdate: Record<string, unknown> = { name: name.trim() };
     if (phone !== undefined) {
       const trimmed = typeof phone === "string" ? phone.trim() : "";
+      // Allow empty phone or valid format; only validate if non-empty.
       if (trimmed && !/^\+20\d{10}$/.test(trimmed)) {
         return NextResponse.json(
-          { error: "Phone must be 10 digits after +20." },
+          { error: "Phone must be +20 followed by 10 digits." },
           { status: 400 },
         );
       }
-      userUpdate.phone = trimmed || undefined;
+      // Only update phone if explicitly provided and non-empty.
+      if (trimmed) userUpdate.phone = trimmed;
     }
+    // Save profilePic even if phone validation is skipped.
     if (
       typeof profilePic === "string" &&
       profilePic.startsWith("/assets/uploads/")

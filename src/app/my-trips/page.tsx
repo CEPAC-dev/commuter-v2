@@ -402,7 +402,7 @@ export default async function MyTripsPage({
           | "previous"
           | "pending_payment")
       : isPassenger
-        ? "ongoing"
+        ? "all"
         : undefined;
   const dateFrom =
     typeof params.dateFrom === "string" ? params.dateFrom : undefined;
@@ -1148,7 +1148,7 @@ export default async function MyTripsPage({
                         )}
                         {!isDriver && trip.status === "completed" && (
                           <div style={{ padding: "0 18px 16px" }}>
-                            <RateTripModal tripId={trip.id} />
+                            <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />
                           </div>
                         )}
                       </div>

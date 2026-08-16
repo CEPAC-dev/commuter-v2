@@ -4,6 +4,12 @@ import { User } from "@/models/User";
 import { nextSequence } from "@/models/Counter";
 import { createSession } from "@/lib/auth/session";
 import { applyReferralOnSignup, generateReferralCode } from "@/lib/referral";
+import {
+  isStrongPassword,
+  normalizeEgyptPhone,
+  PASSWORD_RULES_MESSAGE,
+  PHONE_RULES_MESSAGE,
+} from "@/lib/auth/validation";
 import bcrypt from "bcryptjs";
 
 export async function POST(req: NextRequest) {
@@ -20,6 +26,14 @@ export async function POST(req: NextRequest) {
         { error: "Password must be at least 8 characters." },
         { status: 400 },
       );
+    if (!isStrongPassword(password))
+      return NextResponse.json(
+        { error: PASSWORD_RULES_MESSAGE },
+        { status: 400 },
+      );
+    const normalizedPhone = normalizeEgyptPhone(phone);
+    if (!normalizedPhone)
+      return NextResponse.json({ error: PHONE_RULES_MESSAGE }, { status: 400 });
     if (email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return NextResponse.json(
         { error: "Invalid email address." },
@@ -29,7 +43,7 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     const existing = await User.findOne({
-      phone: phone.trim(),
+      phone: normalizedPhone,
       role: "passenger",
     }).lean();
     if (existing)
@@ -56,7 +70,7 @@ export async function POST(req: NextRequest) {
     const user = await User.create({
       userNumber,
       name: name.trim(),
-      phone: phone.trim(),
+      phone: normalizedPhone,
       passwordHash,
       email: email?.trim() ? email.toLowerCase().trim() : undefined,
       role: "passenger",

@@ -3,6 +3,11 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import PasswordInput from "@/components/shared/PasswordInput";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
+import {
+  isStrongPassword,
+  normalizeEgyptPhone,
+  toNationalDigits,
+} from "@/lib/auth/validation";
 import { useClientLocale } from "@/lib/i18n/client";
 
 const labelStyle: React.CSSProperties = {
@@ -67,7 +72,8 @@ export default function DriverRegisterForm({
   function validate(): string {
     if (!name.trim() || !phone.trim() || !password)
       return t("auth.driver.name_required");
-    if (password.length < 8) return t("auth.driver.password_too_short");
+    if (!normalizeEgyptPhone(phone)) return t("auth.phone_invalid");
+    if (!isStrongPassword(password)) return t("auth.password_weak");
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return t("auth.driver.invalid_email");
     if (!gender) return t("auth.driver.gender_required");
@@ -88,7 +94,13 @@ export default function DriverRegisterForm({
       const res = await fetch("/api/auth/signUpDriver", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, password, email, gender }),
+        body: JSON.stringify({
+          name,
+          phone: normalizeEgyptPhone(phone),
+          password,
+          email,
+          gender,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -169,10 +181,10 @@ export default function DriverRegisterForm({
               autoComplete="tel"
               placeholder="1XXXXXXXXX"
               required
-              maxLength={10}
+              maxLength={13}
               value={phone.replace(/^\+?20/, "")}
               onChange={(e) => {
-                const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                const digits = toNationalDigits(e.target.value);
                 setPhone(digits ? `+20${digits}` : "");
               }}
               style={{
@@ -202,6 +214,9 @@ export default function DriverRegisterForm({
           onChange={(e) => setPassword(e.target.value)}
         />
         <PasswordStrengthMeter password={password} />
+        <p style={{ fontSize: 12, color: "#5A6A7A", margin: 0 }}>
+          {t("auth.password_rules")}
+        </p>
         <div>
           <label htmlFor="d-gender" style={labelStyle}>
             {t("auth.driver.gender")}{" "}

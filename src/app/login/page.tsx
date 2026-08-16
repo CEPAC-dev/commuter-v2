@@ -16,6 +16,12 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import DriverRegisterForm from "@/components/auth/DriverRegisterForm";
+import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
+import {
+  isStrongPassword,
+  normalizeEgyptPhone,
+  toNationalDigits,
+} from "@/lib/auth/validation";
 import { useClientLocale, setLocaleCookie } from "@/lib/i18n/client";
 import { localeDirection } from "@/lib/i18n/config";
 
@@ -54,16 +60,27 @@ function LoginForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    const normalizedPhone = normalizeEgyptPhone(phone);
+    if (!normalizedPhone) {
+      setError(t("auth.phone_invalid"));
+      return;
+    }
+    if (mode === "register" && !isStrongPassword(password)) {
+      setError(t("auth.password_weak"));
+      return;
+    }
+
     setLoading(true);
 
     try {
       const url = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const body =
         mode === "login"
-          ? { phone: phone.trim(), password, role }
+          ? { phone: normalizedPhone, password, role }
           : {
               name: name.trim(),
-              phone: phone.trim(),
+              phone: normalizedPhone,
               password,
               email: email.trim(),
               referralCodeUsed: referralCode.trim() || undefined,
@@ -484,12 +501,10 @@ function LoginForm() {
                     autoComplete="tel"
                     placeholder="1XXXXXXXXX"
                     required
-                    maxLength={10}
+                    maxLength={13}
                     value={phone.replace(/^\+?20/, "")}
                     onChange={(e) => {
-                      const digits = e.target.value
-                        .replace(/\D/g, "")
-                        .slice(0, 10);
+                      const digits = toNationalDigits(e.target.value);
                       setPhone(digits ? `+20${digits}` : "");
                     }}
                     style={{ ...inputStyle, padding: "0 14px" }}
@@ -565,16 +580,19 @@ function LoginForm() {
                   </button>
                 </div>
                 {mode === "register" && (
-                  <p
-                    style={{
-                      fontSize: 12,
-                      color: "#5A6A7A",
-                      marginTop: 5,
-                      marginBottom: 0,
-                    }}
-                  >
-                    {t("auth.password_min_chars")}
-                  </p>
+                  <>
+                    <PasswordStrengthMeter password={password} />
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: "#5A6A7A",
+                        marginTop: 5,
+                        marginBottom: 0,
+                      }}
+                    >
+                      {t("auth.password_rules")}
+                    </p>
+                  </>
                 )}
               </div>
 

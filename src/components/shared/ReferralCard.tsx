@@ -135,26 +135,6 @@ export default function ReferralCard() {
               {copied ? <Check size={18} /> : <Copy size={18} />}
             </button>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginTop: 12 }}>
-            <div style={{ padding: 12, borderRadius: 10, background: "#f8f9fa" }}>
-              <strong style={{ display: "block", color: "#00877A", fontSize: 18 }}>{data.balanceEgp} EGP</strong>
-              <span style={{ color: "#5A6A7A", fontSize: 12 }}>{t("referral.balance")}</span>
-            </div>
-            <div style={{ padding: 12, borderRadius: 10, background: "#f8f9fa" }}>
-              <strong style={{ display: "block", color: "#0B1E3D", fontSize: 18 }}>{data.stats.credited}</strong>
-              <span style={{ color: "#5A6A7A", fontSize: 12 }}>{t("referral.credited")}</span>
-            </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginTop: 10 }}>
-            <div style={{ padding: 12, borderRadius: 10, background: "#f8f9fa" }}>
-              <strong style={{ display: "block", color: "#0B1E3D", fontSize: 18 }}>{data.stats.pending}</strong>
-              <span style={{ color: "#5A6A7A", fontSize: 12 }}>{t("referral.pending")}</span>
-            </div>
-            <div style={{ padding: 12, borderRadius: 10, background: "#f8f9fa" }}>
-              <strong style={{ display: "block", color: "#0B1E3D", fontSize: 18 }}>{data.referrerBonusAmount} EGP</strong>
-              <span style={{ color: "#5A6A7A", fontSize: 12 }}>{t("referral.bonus_per_friend")}</span>
-            </div>
-          </div>
           <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
             <button type="button" onClick={copyLink} style={buttonStyle("#0B1E3D")}>
               {copied ? <Check size={16} /> : <Copy size={16} />}

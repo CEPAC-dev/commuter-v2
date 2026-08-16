@@ -6,6 +6,8 @@ import { Star, X } from "lucide-react";
 
 interface RateTripModalProps {
   tripId: string;
+  /** Existing rating, if the trip was already rated. */
+  initialRating?: { driverRating: number; carRating: number } | null;
   /** Called after a successful submit; use to update local UI (e.g. hide the button). */
   onRated?: () => void;
 }
@@ -66,7 +68,7 @@ function StarPicker({
   );
 }
 
-export default function RateTripModal({ tripId, onRated }: RateTripModalProps) {
+export default function RateTripModal({ tripId, initialRating, onRated }: RateTripModalProps) {
   const [open, setOpen] = useState(false);
   const [driverRating, setDriverRating] = useState(0);
   const [carRating, setCarRating] = useState(0);
@@ -74,6 +76,7 @@ export default function RateTripModal({ tripId, onRated }: RateTripModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [rated, setRated] = useState(initialRating ?? null);
   const { t } = useClientLocale();
 
   useEffect(() => {
@@ -97,6 +100,7 @@ export default function RateTripModal({ tripId, onRated }: RateTripModalProps) {
       });
       if (!res.ok) throw new Error("Failed to submit rating");
       setDone(true);
+      setRated({ driverRating, carRating });
       onRated?.();
       setTimeout(() => setOpen(false), 1200);
     } catch {
@@ -108,31 +112,52 @@ export default function RateTripModal({ tripId, onRated }: RateTripModalProps) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen(true);
-        }}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "10px 16px",
-          background: "#fff",
-          color: "#0B1E3D",
-          border: "1.5px solid #0B1E3D",
-          borderRadius: 12,
-          fontSize: 13,
-          fontWeight: 700,
-          cursor: "pointer",
-          fontFamily: "inherit",
-        }}
-      >
-        <Star size={15} aria-hidden="true" />
-        {t("rate_trip.button")}
-      </button>
+      {rated ? (
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 16px",
+            background: "#E8F8F5",
+            color: "#00806E",
+            border: "1.5px solid #00C2A8",
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 700,
+            fontFamily: "inherit",
+          }}
+        >
+          <Star size={15} fill="#F5A623" color="#F5A623" aria-hidden="true" />
+          {t("rate_trip.rated")} · {((rated.driverRating + rated.carRating) / 2).toFixed(1)}
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(true);
+          }}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 16px",
+            background: "#fff",
+            color: "#0B1E3D",
+            border: "1.5px solid #0B1E3D",
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          <Star size={15} aria-hidden="true" />
+          {t("rate_trip.button")}
+        </button>
+      )}
 
       {open && (
         <div

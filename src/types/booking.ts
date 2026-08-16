@@ -120,6 +120,7 @@ export interface TripListRow {
     modelYear?: string;
     plate?: string;
   } | null;
+  rating?: { driverRating: number; carRating: number } | null;
 }
 
 /** Trip summary nested inside a booking card (/my-requests). */

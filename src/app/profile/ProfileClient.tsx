@@ -60,7 +60,6 @@ export default function ProfileClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
-          phone: phone.trim(),
           profilePic: uploadData.path,
         }),
       });
@@ -366,6 +365,7 @@ export default function ProfileClient({
               {t("profile.phone_number")}
             </label>
             <div
+              dir="ltr"
               style={{
                 width: "100%",
                 height: 48,
@@ -378,10 +378,14 @@ export default function ProfileClient({
                 background: "#fff",
                 boxSizing: "border-box",
                 transition: "border-color 0.15s",
+                direction: "ltr",
               }}
               className="phone-field"
+              onFocusCapture={(e) => (e.currentTarget.style.borderColor = "#00C2A8")}
+              onBlurCapture={(e) => (e.currentTarget.style.borderColor = "#d0d8e0")}
             >
               <span
+                dir="ltr"
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -392,6 +396,7 @@ export default function ProfileClient({
                   background: "#eef1f3",
                   borderRight: "1.5px solid #d0d8e0",
                   flexShrink: 0,
+                  direction: "ltr",
                 }}
               >
                 <Phone size={15} color="#9aa8b5" aria-hidden="true" />
@@ -423,6 +428,8 @@ export default function ProfileClient({
                   fontFamily: "inherit",
                   color: "#0B1E3D",
                   boxSizing: "border-box",
+                  direction: "ltr",
+                  textAlign: "left",
                 }}
               />
             </div>

@@ -66,7 +66,7 @@ export default function LocationPickerMapOsm({
   );
 
   useEffect(() => {
-    if (!map) return;
+    if (!map || !map.getPane("markerPane")) return;
     const layer = L.layerGroup().addTo(map);
     if (marker && Number.isFinite(marker.lat) && Number.isFinite(marker.lng)) {
       const pin = L.marker([marker.lat, marker.lng], {
