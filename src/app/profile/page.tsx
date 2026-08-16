@@ -47,6 +47,7 @@ export default async function ProfilePage() {
       initialName={profile.name}
       email={profile.email}
       initialPhone={profile.phone}
+      initialRegion={profile.region}
       initialProfilePic={profile.profilePic}
       initialSavedAddresses={profile.savedAddresses}
     />

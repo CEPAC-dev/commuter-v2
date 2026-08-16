@@ -109,6 +109,7 @@ const TripSchema = new Schema(
         "private_car",
         "taxi_private",
         "taxi_shared",
+        "shared_car",
         "van_shared",
         "microbus_shared",
       ],

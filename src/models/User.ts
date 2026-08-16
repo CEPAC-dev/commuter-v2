@@ -38,12 +38,31 @@ const UserSchema = new Schema(
       trim: true,
     },
     profilePic: { type: String, default: null },
+    // null = never chosen/detected yet; the client detects it from geolocation.
+    region: {
+      type: String,
+      default: null,
+      enum: ["EG", "SA", null],
+      index: true,
+    },
     savedAddresses: { type: [SavedAddressSchema], default: [] },
     referralCode: { type: String, unique: true, sparse: true, index: true },
     referredBy: { type: Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }, // createdAt, updatedAt
 );
+
+const existingUserModel = models.User;
+if (existingUserModel && !existingUserModel.schema.path("region")) {
+  existingUserModel.schema.add({
+    region: {
+      type: String,
+      default: null,
+      enum: ["EG", "SA", null],
+      index: true,
+    },
+  });
+}
 
 // Same phone/email may exist once per role (one person can hold a passenger
 // account and a separate driver account).

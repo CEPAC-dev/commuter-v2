@@ -4,12 +4,14 @@ import type { UserRole } from "@/lib/auth/session";
 import { Driver } from "@/models/Driver";
 import { User } from "@/models/User";
 import type { SavedAddress } from "@/types/shared";
+import { isRegionKey, type RegionKey } from "@/lib/config/regions";
 
 interface ProfileUser {
   userNumber: number;
   name: string;
   email: string;
   phone: string;
+  region: RegionKey | null;
   savedAddresses: SavedAddress[];
 }
 
@@ -48,13 +50,14 @@ export async function getProfile(
   await connectDB();
 
   const user = await User.findById(userId)
-    .select("userNumber name email phone profilePic savedAddresses")
+    .select("userNumber name email phone profilePic region savedAddresses")
     .lean<{
       userNumber: number;
       name: string;
       email: string;
       phone?: string;
       profilePic?: string | null;
+      region?: string;
       savedAddresses?: SavedAddress[];
     }>();
   if (!user) return null;
@@ -64,6 +67,7 @@ export async function getProfile(
     name: user.name,
     email: user.email,
     phone: user.phone ?? "",
+    region: isRegionKey(user.region) ? user.region : null,
     savedAddresses: serializeAddresses(user.savedAddresses),
   };
   if (role !== "driver")

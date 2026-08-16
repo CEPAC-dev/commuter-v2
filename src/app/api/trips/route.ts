@@ -5,11 +5,16 @@ import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { nextSequence } from "@/models/Counter";
 import { Station } from "@/models/Station";
+import { User } from "@/models/User";
 import {
   VEHICLES,
   computeTripPriceEgp,
   type VehicleKey,
 } from "@/lib/config/vehicles";
+import {
+  isVehicleAvailableInRegion,
+  normalizeRegion,
+} from "@/lib/config/regions";
 import { bookingWindow, isDateInWindow } from "@/lib/time/bookingDates";
 import { getVehicles } from "@/lib/db/getVehicles";
 import {
@@ -148,9 +153,18 @@ export async function POST(req: NextRequest) {
   }
 
   const vehiclesMap = await getVehicles();
-  const allowedVehicleSet = new Set(Object.keys(vehiclesMap));
 
   await connectDB();
+
+  const userRegionDoc = await User.findById(userId).select("region").lean<{
+    region?: string;
+  }>();
+  const userRegion = normalizeRegion(userRegionDoc?.region);
+  const allowedVehicleSet = new Set(
+    Object.keys(vehiclesMap).filter((key) =>
+      isVehicleAvailableInRegion(key, userRegion),
+    ),
+  );
   const stationDocs = await Station.find({ active: true }).lean();
   const canonicalStations: GeoStation[] = stationDocs.map((station) => ({
     id: station.objectId,

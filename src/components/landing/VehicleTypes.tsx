@@ -2,6 +2,7 @@
 import { motion } from "motion/react";
 import { Car, CarFront, Users, Truck, Bus } from "lucide-react";
 import { VEHICLE_LIST } from "@/lib/config/vehicles";
+import { DEFAULT_REGION, vehiclesForRegion } from "@/lib/config/regions";
 import type { VehicleKey } from "@/lib/config/vehicles";
 
 const ICONS: Record<
@@ -15,6 +16,7 @@ const ICONS: Record<
   private_car: Car,
   taxi_private: CarFront,
   taxi_shared: Users,
+  shared_car: Users,
   van_shared: Truck,
   microbus_shared: Bus,
 };
@@ -23,6 +25,7 @@ const PALETTE: Record<VehicleKey, { color: string; bg: string }> = {
   private_car: { color: "#0B1E3D", bg: "rgba(11,30,61,0.07)" },
   taxi_private: { color: "#1C3557", bg: "rgba(28,53,87,0.07)" },
   taxi_shared: { color: "#00C2A8", bg: "rgba(0,194,168,0.09)" },
+  shared_car: { color: "#00A38F", bg: "rgba(0,163,143,0.09)" },
   van_shared: { color: "#F5A623", bg: "rgba(245,166,35,0.10)" },
   microbus_shared: { color: "#5A6A7A", bg: "rgba(90,106,122,0.08)" },
 };
@@ -80,7 +83,7 @@ export default function VehicleTypes() {
           }}
           className="vehicles-grid"
         >
-          {VEHICLE_LIST.map((v, i) => {
+          {vehiclesForRegion(VEHICLE_LIST, DEFAULT_REGION).map((v, i) => {
             const Icon = ICONS[v.key];
             const { color, bg } = PALETTE[v.key];
             return (
