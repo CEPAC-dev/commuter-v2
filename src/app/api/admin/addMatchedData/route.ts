@@ -68,6 +68,26 @@ function normalizeTimeValue(value: unknown): string {
   return trimmed;
 }
 
+function parseWaitingMinutes(value: string): number {
+  if (!value || isNullValue(value)) return 0;
+
+  const durationMatch = value.trim().match(/^(\d+):(\d{2})(?::\d{2})?$/);
+  if (durationMatch) {
+    const hours = Number(durationMatch[1]);
+    const minutes = Number(durationMatch[2]);
+    return minutes <= 59 ? hours * 60 + minutes : 0;
+  }
+
+  const numericValue = Number(value);
+  if (Number.isFinite(numericValue) && numericValue >= 0) {
+    return numericValue <= 1
+      ? Math.round(numericValue * 24 * 60)
+      : Math.round(numericValue);
+  }
+
+  return 0;
+}
+
 function getHeaderIndexes(headerRow: ExcelJS.Row): Map<string, number> {
   const map = new Map<string, number>();
   headerRow.eachCell((cell, colNumber) => {
@@ -785,7 +805,7 @@ export async function POST(req: NextRequest) {
     if (tripsDetailsSheet) {
       const detailsHeaderRow = tripsDetailsSheet.getRow(1);
       // Column layout: Trip_ID(1) Driver_ID(2) Car_Type(3) then repeating
-      // [Stop, Arrival, Alighting, Boarding, Departure] blocks.
+      // [Stop, Arrival, Alighting, Boarding, Waiting, Departure] blocks.
       const TRIP_ID_COL = 1;
       const CAR_TYPE_COL = 3;
       const stopColumnIndexes: number[] = [];
@@ -886,8 +906,11 @@ export async function POST(req: NextRequest) {
           );
           const alightingCell = getCellText(row.getCell(stopCol + 2));
           const boardingCell = getCellText(row.getCell(stopCol + 3));
-          const departure = normalizeTimeValue(
+          const waitingMinutes = parseWaitingMinutes(
             getCellText(row.getCell(stopCol + 4)),
+          );
+          const departure = normalizeTimeValue(
+            getCellText(row.getCell(stopCol + 5)),
           );
 
           const alightingRefs = splitCommaRefs(alightingCell);
@@ -897,7 +920,7 @@ export async function POST(req: NextRequest) {
             point,
             arrival,
             departure,
-            waitingMinutes: 0,
+            waitingMinutes,
             boardingNumber: boardingRefs.length,
             alightingNumber: alightingRefs.length,
             boarding: [],

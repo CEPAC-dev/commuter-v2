@@ -4,6 +4,7 @@ import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
 import { getSession } from "@/lib/auth/session";
 import { carTypeToCapacity, type CarType } from "@/lib/config/driver";
+import { isRegionKey } from "@/lib/config/regions";
 import { getProfile } from "@/lib/services/profile";
 
 export async function GET() {
@@ -25,11 +26,17 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { name, phone, profilePic } = body;
+    const { name, phone, profilePic, region } = body;
     if (!name?.trim())
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
 
     const userUpdate: Record<string, unknown> = { name: name.trim() };
+    if (region !== undefined) {
+      if (!isRegionKey(region)) {
+        return NextResponse.json({ error: "Invalid region." }, { status: 400 });
+      }
+      userUpdate.region = region;
+    }
     if (phone !== undefined) {
       const trimmed = typeof phone === "string" ? phone.trim() : "";
       // Allow empty phone or valid format; only validate if non-empty.
@@ -51,9 +58,17 @@ export async function PATCH(req: NextRequest) {
     }
 
     await connectDB();
+
+    if (region === undefined) {
+      await User.collection.updateMany(
+        { region: { $exists: false } },
+        { $set: { region: null } },
+      );
+    }
+
     const user = await User.findByIdAndUpdate(session.userId, userUpdate, {
       returnDocument: "after",
-      select: "name email phone role profilePic",
+      select: "name email phone role profilePic region",
     }).lean();
 
     if (!user)

@@ -4,6 +4,7 @@ export type VehicleKey =
   | "private_car"
   | "taxi_private"
   | "taxi_shared"
+  | "shared_car"
   | "van_shared"
   | "microbus_shared";
 export type RideType = "private" | "shared";
@@ -14,8 +15,8 @@ export interface VehicleConfig {
   rate: number; // EGP per km
   additional_rate: number; // EGP per km for extra passengers
   ride: RideType;
-  vehicle_type: number; // 1=private car, 2=taxi, 3=van, 4=microbus
-  trip_type: number; // 1=private, 2=taxi_private, 3=taxi_shared, 4=van_shared, 5=microbus_shared
+  vehicle_type: number; // 1=private car, 2=taxi, 3=van, 4=microbus, 5=shared car
+  trip_type: number; // 1=private, 2=taxi_private, 3=taxi_shared, 4=van_shared, 5=microbus_shared, 6=shared_car
   buffer: number; // minutes subtracted before the pickup window
   window: number; // width of the pickup window in minutes
   capacity: number; // max seats (integer, placeholder until user edits)
@@ -69,6 +70,21 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     occupancy: 3,
     min_occupancy: 2,
     minimum_charge: 50, // EGP minimum charge for shared taxi rides
+  },
+  shared_car: {
+    key: "shared_car",
+    label: "Shared Car",
+    rate: 9,
+    additional_rate: 0.5,
+    ride: "shared",
+    vehicle_type: 5,
+    trip_type: 6,
+    buffer: 30,
+    window: 20,
+    capacity: 3,
+    occupancy: 3,
+    min_occupancy: 2,
+    minimum_charge: 60,
   },
   van_shared: {
     key: "van_shared",
@@ -137,7 +153,7 @@ export function waitingCostEgp(
 
 /** Max extra passengers allowed per vehicle type */
 export function maxExtraPassengers(key: VehicleKey | ""): number {
-  if (key === "taxi_shared") return 2;
+  if (key === "taxi_shared" || key === "shared_car") return 2;
   if (key === "van_shared") return 4;
   if (key === "microbus_shared") return 9;
   return 2; // private_car, taxi_private, taxi_shared, or unset
@@ -159,7 +175,7 @@ export function finalPrice(
   const r = (factor: number) => Math.round(basePrice + basePrice * factor);
 
   if (vehicle?.ride === "shared") {
-    if (vehicleType === "taxi_shared") {
+    if (vehicleType === "taxi_shared" || vehicleType === "shared_car") {
       if (n === 1) return r(0.5);
       if (n === 2) return r(1);
       return basePrice;

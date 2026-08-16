@@ -1,20 +1,27 @@
 ﻿"use client";
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Phone, Mail, Check, Loader2, Camera } from "lucide-react";
+import { User, Phone, Mail, Check, Loader2, Camera, Globe } from "lucide-react";
 import AppHeader from "@/components/layout/AppHeader";
 import ChangePasswordSection from "@/components/shared/ChangePasswordSection";
 import SavedAddressesSection from "@/components/shared/SavedAddressesSection";
 import ReferralCard from "@/components/shared/ReferralCard";
 import type { SavedAddress } from "@/types/shared";
 import { useClientLocale } from "@/lib/i18n/client";
+import {
+  DEFAULT_REGION,
+  REGION_LIST,
+  regionFromCoordinates,
+  type RegionKey,
+} from "@/lib/config/regions";
 
 interface Props {
   userNumber: number;
   initialName: string;
   email: string;
   initialPhone: string;
+  initialRegion: RegionKey | null;
   initialProfilePic?: string | null;
   initialSavedAddresses: SavedAddress[];
 }
@@ -24,6 +31,7 @@ export default function ProfileClient({
   initialName,
   email,
   initialPhone,
+  initialRegion,
   initialProfilePic,
   initialSavedAddresses,
 }: Props) {
@@ -31,12 +39,50 @@ export default function ProfileClient({
   const { t, dir } = useClientLocale();
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
+  const [region, setRegion] = useState<RegionKey>(
+    initialRegion ?? DEFAULT_REGION,
+  );
+  const [detectingRegion, setDetectingRegion] = useState(false);
   const [profilePic, setProfilePic] = useState(initialProfilePic ?? null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  // No region stored yet → derive it once from the browser's location fix.
+  useEffect(() => {
+    if (initialRegion || !navigator.geolocation) return;
+    setDetectingRegion(true);
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        const detected = regionFromCoordinates(
+          coords.latitude,
+          coords.longitude,
+        );
+        if (detected) {
+          setRegion(detected);
+          try {
+            await fetch("/api/auth/me", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: initialName,
+                region: detected,
+              }),
+            });
+            router.refresh();
+          } catch {
+            /* non-fatal */
+          }
+        }
+        setDetectingRegion(false);
+      },
+      () => setDetectingRegion(false),
+      { timeout: 8000 },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handlePicChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -91,7 +137,11 @@ export default function ProfileClient({
       const res = await fetch("/api/auth/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), phone: phone.trim() }),
+        body: JSON.stringify({
+          name: name.trim(),
+          phone: phone.trim(),
+          region,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -433,6 +483,67 @@ export default function ProfileClient({
                 }}
               />
             </div>
+          </div>
+
+          {/* Region */}
+          <div>
+            <label
+              htmlFor="p-region"
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#0B1E3D",
+                display: "block",
+                marginBottom: 6,
+              }}
+            >
+              {t("profile.region")}
+            </label>
+            <div style={{ position: "relative" }}>
+              <Globe
+                size={15}
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: 14,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#9aa8b5",
+                  pointerEvents: "none",
+                }}
+              />
+              <select
+                id="p-region"
+                value={region}
+                onChange={(e) => setRegion(e.target.value as RegionKey)}
+                style={{
+                  width: "100%",
+                  height: 48,
+                  paddingLeft: 38,
+                  paddingRight: 14,
+                  border: "1.5px solid #d0d8e0",
+                  borderRadius: 10,
+                  fontSize: 15,
+                  color: "#0B1E3D",
+                  fontFamily: "inherit",
+                  background: "#fff",
+                  outline: "none",
+                  boxSizing: "border-box",
+                  cursor: "pointer",
+                }}
+              >
+                {REGION_LIST.map((r) => (
+                  <option key={r.key} value={r.key}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p style={{ fontSize: 12, color: "#9aa8b5", margin: "5px 0 0 2px" }}>
+              {detectingRegion
+                ? t("profile.region_detecting")
+                : t("profile.region_note")}
+            </p>
           </div>
 
           {error && (

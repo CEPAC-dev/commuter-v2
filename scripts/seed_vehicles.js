@@ -42,6 +42,19 @@ const VEHICLES = {
     min_occupancy: 2,
     sortOrder: 2,
   },
+  shared_car: {
+    key: "shared_car",
+    label: "Shared Car",
+    rate: 9,
+    ride: "shared",
+    buffer: 30,
+    window: 20,
+    capacity: 3,
+    occupancy: 3,
+    min_occupancy: 2,
+    minimum_charge: 60,
+    sortOrder: 3,
+  },
   van_shared: {
     key: "van_shared",
     label: "Van",
@@ -52,7 +65,7 @@ const VEHICLES = {
     capacity: 7,
     occupancy: 0,
     min_occupancy: 3,
-    sortOrder: 3,
+    sortOrder: 4,
   },
   microbus_shared: {
     key: "microbus_shared",
@@ -64,7 +77,7 @@ const VEHICLES = {
     capacity: 14,
     occupancy: 0,
     min_occupancy: 5,
-    sortOrder: 4,
+    sortOrder: 5,
   },
 };
 

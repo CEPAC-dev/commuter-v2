@@ -31,9 +31,15 @@ import type { SavedAddress } from "@/types/shared";
 import { haversineKm } from "@/lib/geo/stations";
 import type { Station } from "@/lib/geo/stations";
 import { computeTripPriceForSelection } from "@/lib/config/vehicles";
+import {
+  DEFAULT_REGION,
+  vehiclesForRegion,
+  type RegionKey,
+} from "@/lib/config/regions";
 
 interface Props {
   userEmail: string;
+  region?: RegionKey;
   onAddressSaved?: (saved: SavedAddress) => void;
 }
 
@@ -80,7 +86,10 @@ function clampDrawerHeight(vh: number): number {
   return Math.max(MOBILE_DRAWER_MIN_VH, Math.min(MOBILE_DRAWER_MAX_VH, vh));
 }
 
-export default function CreateClient({ userEmail }: Props) {
+export default function CreateClient({
+  userEmail,
+  region = DEFAULT_REGION,
+}: Props) {
   const { pickup, dropoff } = useTripStore();
   const [mounted, setMounted] = useState(false);
   const [selectedDates, setSelectedDates] = useState<string[]>([
@@ -764,9 +773,10 @@ export default function CreateClient({ userEmail }: Props) {
                     stations={stations}
                     minArrivalTime={minArrivalTime}
                     vehiclesMap={vehiclesMap ?? undefined}
-                    vehicleList={
-                      vehiclesMap ? Object.values(vehiclesMap) : undefined
-                    }
+                    vehicleList={vehiclesForRegion(
+                      vehiclesMap ? Object.values(vehiclesMap) : VEHICLE_LIST,
+                      region,
+                    )}
                     onStopErrorChange={(error) =>
                       handleTripStopErrorChange(trip.id, error)
                     }
