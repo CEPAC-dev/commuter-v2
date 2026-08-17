@@ -134,6 +134,9 @@ const RideSchema = new Schema(
     endTime: { type: String, required: true },
     passengers: { type: [RidePassengerSchema], default: [] },
     totalCost: { type: Number, required: true, default: 0 },
+    additionalFees: { type: Number, required: false, default: 0 },
+    kmRate: { type: Number, required: false, default: 0 },
+    hrRate: { type: Number, required: false, default: 0 },
     status: {
       type: String,
       required: true,

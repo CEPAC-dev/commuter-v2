@@ -263,7 +263,6 @@ function buildStationFromStopValue(
 ) {
   if (!stopValue) return null;
   const entry = stopLookup.get(normalizeLookupKey(stopValue));
-  console.log("[buildStationFromStopValue] stopValue", { stopValue, entry });
   const resolvedName = entry?.name || entry?.address || stopValue || "Unknown";
   const resolvedAddress = entry?.address || stopValue || resolvedName;
   if (!entry) {
@@ -636,6 +635,30 @@ export async function POST(req: NextRequest) {
         "TotalAmount",
         "NetAmount",
       ]);
+      const additionalFeesValue = pickValue(row, summaryIndexes, [
+        "Additional_Fees",
+        "AdditionalFees",
+        "Add_Fees",
+        "AddFees",
+        "extra_fees",
+        "ExtraFees",
+      ]);
+      const kmRateValue = pickValue(row, summaryIndexes, [
+        "KmRate",
+        "KMRate",
+        "kmRate",
+        "KM_Rate",
+        "RateKm",
+        "KilometerRate",
+      ]);
+      const hrRateValue = pickValue(row, summaryIndexes, [
+        "HrRate",
+        "HRRate",
+        "hrRate",
+        "HR_Rate",
+        "RateHr",
+        "HourlyRate",
+      ]);
       const totalDistanceValue = pickValue(row, summaryIndexes, [
         "Trip_Dist",
         "TripDist",
@@ -740,10 +763,19 @@ export async function POST(req: NextRequest) {
       const firstStop = buildStationFromStopValue(firstStopValue, stopLookup);
       const lastStop = buildStationFromStopValue(lastStopValue, stopLookup);
 
+      const tripFees = Math.round(parseNumber(totalFeesValue) ?? 0);
+      const additionalFees = Math.round(parseNumber(additionalFeesValue) ?? 0);
+      const kmRate = Number(parseNumber(kmRateValue) ?? 0);
+      const hrRate = Number(parseNumber(hrRateValue) ?? 0);
+      const totalCost = tripFees + additionalFees;
+
       const summary = {
         driver: driverSummary,
         totalPersons: parseNumber(totalPersonsValue),
-        totalFees: Math.round(parseNumber(totalFeesValue) ?? 0),
+        totalFees: totalCost,
+        additionalFees,
+        kmRate,
+        hrRate,
         pickupPoint: pickUpStopPoint
           ? {
               lat: pickUpStopPoint.lat,
@@ -764,7 +796,10 @@ export async function POST(req: NextRequest) {
         arrivalTime: normalizeTimeValue(arrivalValue),
       };
       const rideSummary = {
-        totalFees: Math.round(parseNumber(totalFeesValue) ?? 0),
+        totalFees: totalCost,
+        additionalFees,
+        kmRate,
+        hrRate,
         totalPersons: parseNumber(totalPersonsValue),
         boarding: parseNumber(boardingValue),
         alighting: parseNumber(alightingValue),
@@ -783,6 +818,9 @@ export async function POST(req: NextRequest) {
         tripNumber,
         values: {
           totalFeesValue,
+          additionalFeesValue,
+          kmRateValue,
+          hrRateValue,
           totalPersonsValue,
           totalDistanceValue,
           numberOfTripsValue,
@@ -895,7 +933,7 @@ export async function POST(req: NextRequest) {
             stopLookup.get(normalizeLookupKey(stopRaw));
           const point = stopEntry
             ? {
-                address: stopEntry.name || stopEntry.address || stopRaw,
+                address: stopEntry.address || stopEntry.name || stopRaw,
                 lat: stopEntry.lat,
                 lng: stopEntry.lng,
               }
@@ -906,6 +944,7 @@ export async function POST(req: NextRequest) {
           );
           const alightingCell = getCellText(row.getCell(stopCol + 2));
           const boardingCell = getCellText(row.getCell(stopCol + 3));
+          console.log({ boardingCell });
           const waitingMinutes = parseWaitingMinutes(
             getCellText(row.getCell(stopCol + 4)),
           );
@@ -915,6 +954,7 @@ export async function POST(req: NextRequest) {
 
           const alightingRefs = splitCommaRefs(alightingCell);
           const boardingRefs = splitCommaRefs(boardingCell);
+          console.log({ boardingRefs });
 
           route.push({
             point,
@@ -1047,11 +1087,21 @@ export async function POST(req: NextRequest) {
           Number(summaryForRide?.totalFees ?? 0) > 0
             ? Number(summaryForRide?.totalFees)
             : 0;
+        const additionalFees =
+          Number(summaryForRide?.additionalFees ?? 0) > 0
+            ? Number(summaryForRide?.additionalFees)
+            : 0;
+        const kmRate = Number(summaryForRide?.kmRate ?? 0);
+        const hrRate = Number(summaryForRide?.hrRate ?? 0);
 
         const toStationShape = (
           point: { address?: string; lat?: number; lng?: number } | undefined,
         ) => {
-          if (!point || typeof point.lat !== "number" || typeof point.lng !== "number") {
+          if (
+            !point ||
+            typeof point.lat !== "number" ||
+            typeof point.lng !== "number"
+          ) {
             return undefined;
           }
           return {
@@ -1111,8 +1161,96 @@ export async function POST(req: NextRequest) {
           endTime: availability.endTime ?? "00:00",
           passengers: [],
           totalCost,
+          additionalFees,
+          kmRate,
+          hrRate,
           status: "active",
         });
+
+        const matchedTripIds = Array.from(
+          new Set(
+            route.flatMap((stop) => [
+              ...stop.boarding.map((passenger) => passenger.tripId),
+              ...stop.alighting.map((passenger) => passenger.tripId),
+            ]),
+          ),
+        ).filter(
+          (tripId): tripId is string =>
+            typeof tripId === "string" && tripId.trim() !== "",
+        );
+
+        if (matchedTripIds.length > 0) {
+          const tripDocs = await Trip.find({ _id: { $in: matchedTripIds } })
+            .select("_id tripNumber summary details")
+            .lean<{
+              _id: unknown;
+              tripNumber: number;
+              summary?: Record<string, unknown>;
+              details?: Record<string, unknown>;
+            }[]>();
+
+          const tripWrites = tripDocs.map((tripDoc) => {
+            const tripNumber = Number(tripDoc.tripNumber);
+            const importedSummary = summaryByTripNumber.get(tripNumber) ?? {};
+            const matchedPassenger = route
+              .flatMap((stop) => [...stop.boarding, ...stop.alighting])
+              .find(
+                (passenger) =>
+                  String(passenger.tripId) === String(tripDoc._id),
+              );
+
+            return {
+              updateOne: {
+                filter: { _id: tripDoc._id },
+                update: {
+                  $set: {
+                    rideId: insertedRide._id,
+                    status: "matched",
+                    summary: {
+                      ...(typeof tripDoc.summary === "object" && tripDoc.summary
+                        ? tripDoc.summary
+                        : {}),
+                      ...((importedSummary as Record<string, unknown>) ?? {}),
+                    },
+                    details: {
+                      ...(typeof tripDoc.details === "object" && tripDoc.details
+                        ? tripDoc.details
+                        : {}),
+                      rideId: insertedRide._id,
+                      rideNumber: insertedRide.rideNumber,
+                      availabilityId: availability._id,
+                      tripNumber,
+                      date: availability.date ?? "",
+                      startTime: availability.startTime ?? "00:00",
+                      endTime: availability.endTime ?? "00:00",
+                      pickupOrder: matchedPassenger?.pickupOrder ?? 0,
+                      dropoffOrder: matchedPassenger?.dropoffOrder ?? 0,
+                      numberOfPassengers:
+                        matchedPassenger?.numberOfPassengers ?? 1,
+                      tripCost: matchedPassenger?.tripCost ?? 0,
+                      seatNumber: matchedPassenger?.seatNumber ?? null,
+                      route: route.map((stop) => ({
+                        point: stop.point,
+                        arrival: stop.arrival,
+                        departure: stop.departure,
+                        waitingMinutes: stop.waitingMinutes,
+                        boardingNumber: stop.boardingNumber,
+                        alightingNumber: stop.alightingNumber,
+                        boardingRefs: stop.boarding.map((p) => p.tripId),
+                        alightingRefs: stop.alighting.map((p) => p.tripId),
+                      })),
+                      matchedAt: new Date().toISOString(),
+                    },
+                  },
+                },
+              },
+            };
+          });
+
+          if (tripWrites.length > 0) {
+            await Trip.bulkWrite(tripWrites);
+          }
+        }
 
         await Availability.updateOne(
           { _id: availability._id },
@@ -1127,13 +1265,13 @@ export async function POST(req: NextRequest) {
 
         updatedTripIds.push(String(availabilityNumber));
 
-        console.log("[addMatchedData] ride created", {
-          rideNumber,
-          availabilityNumber,
-          routeStops: route.length,
-          boardingRefsPerStop,
-          alightingRefsPerStop,
-        });
+        // console.log("[addMatchedData] ride created", {
+        //   rideNumber,
+        //   availabilityNumber,
+        //   routeStops: route.length,
+        //   boardingRefsPerStop,
+        //   alightingRefsPerStop,
+        // });
       }
     }
 
