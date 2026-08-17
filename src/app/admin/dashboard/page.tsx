@@ -6,6 +6,7 @@ import { Trip } from "@/models/Trip";
 import { Ride } from "@/models/Ride";
 import { Availability } from "@/models/Availability";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
+import LanguageToggle from "@/components/layout/LanguageToggle";
 import MatchRideForm from "@/components/admin/MatchRideForm";
 import { ShieldCheck, Users, Route, CalendarClock, ArrowUpRight, Car } from "lucide-react";
 
@@ -220,6 +221,7 @@ export default async function AdminDashboardPage() {
             <p className="mono" style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5A6A7A" }}>{stamp}</p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <LanguageToggle />
             <a href="/admin/operation" className="top-link">
               Operation <ArrowUpRight size={15} />
             </a>

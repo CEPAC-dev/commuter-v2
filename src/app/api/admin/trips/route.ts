@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isValidObjectId } from "mongoose";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
+import { User } from "@/models/User";
 
 function isValidDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-function requireAdminPassword(req: NextRequest) {
+function requireAdminPassword(rawPassword: string | null | undefined) {
   const expectedPassword = process.env.ADMIN_PASSWORD?.trim();
-  const providedPassword = req.headers.get("x-admin-password")?.trim();
+  const providedPassword = rawPassword?.trim();
 
   if (!expectedPassword) {
     return {
@@ -36,12 +38,15 @@ function requireAdminPassword(req: NextRequest) {
 
 const POPULATE_TRIP_REFERENCES = [
   { path: "requestId" },
-  { path: "userId", select: "name email phone role" },
+  { path: "userId", select: "name email phone role userNumber" },
   { path: "driverId", select: "name email phone role" },
   { path: "rideId" },
 ];
 
 export async function GET(req: NextRequest) {
+  const auth = await adminAuth(req);
+  if (!auth.authorized) return auth.response;
+
   await connectDB();
 
   const { searchParams } = new URL(req.url);
@@ -66,6 +71,43 @@ export async function GET(req: NextRequest) {
     query.tripNumber = parsedTripNumber;
   }
 
+  // Search box accepts a trip id, a user id, or a trip number.
+  const search = searchParams.get("q")?.trim();
+  if (search) {
+    const empty = NextResponse.json({
+      trips: [],
+      totalCount: 0,
+      page: safePage,
+      limit: safeLimit,
+    });
+    const searchBy = searchParams.get("searchBy") ?? "tripNumber";
+    const asNumber = /^\d+$/.test(search) ? Number.parseInt(search, 10) : null;
+    if (asNumber === null) return empty;
+
+    if (searchBy === "userNumber") {
+      const user = await User.findOne({ userNumber: asNumber })
+        .select("_id")
+        .lean<{ _id: unknown }>();
+      if (!user) return empty;
+      query.userId = user._id;
+    } else {
+      query.tripNumber = asNumber;
+    }
+  }
+
+  const dateFrom = searchParams.get("dateFrom")?.trim();
+  const dateTo = searchParams.get("dateTo")?.trim();
+  const hasFrom = Boolean(dateFrom && isValidDate(dateFrom));
+  const hasTo = Boolean(dateTo && isValidDate(dateTo));
+  if (hasFrom || hasTo) {
+    const rangeStart = hasFrom ? dateFrom : dateTo;
+    const rangeEnd = hasTo ? dateTo : dateFrom;
+    query.date = {
+      $gte: rangeStart,
+      $lte: rangeEnd,
+    };
+  }
+
   const createdAtFrom = searchParams.get("createdAtFrom");
   const createdAtTo = searchParams.get("createdAtTo");
   if (createdAtFrom || createdAtTo) {
@@ -76,8 +118,7 @@ export async function GET(req: NextRequest) {
   }
 
   const [trips, totalCount] = await Promise.all([
-    Trip.find()
-      .find(query)
+    Trip.find(query)
       .sort({ date: -1, pickupTime: -1 })
       .skip(skip)
       .limit(safeLimit)
@@ -98,7 +139,15 @@ export async function DELETE(req: NextRequest) {
   const auth = await adminAuth(req);
   if (!auth.authorized) return auth.response;
 
-  const passwordCheck = requireAdminPassword(req);
+  const body = (await req.json().catch(() => null)) as {
+    password?: unknown;
+    ids?: unknown;
+  } | null;
+
+  const passwordCheck = requireAdminPassword(
+    req.headers.get("x-admin-password") ??
+      (typeof body?.password === "string" ? body.password : null),
+  );
   if (!passwordCheck.ok) return passwordCheck.response;
 
   await connectDB();
@@ -107,7 +156,20 @@ export async function DELETE(req: NextRequest) {
   const action = searchParams.get("action");
   let filter: Record<string, unknown>;
 
-  if (action === "by-user") {
+  if (action === "by-ids") {
+    const ids = Array.isArray(body?.ids)
+      ? body.ids.filter(
+          (id): id is string => typeof id === "string" && isValidObjectId(id),
+        )
+      : [];
+    if (ids.length === 0) {
+      return NextResponse.json(
+        { error: "ids must be a non-empty array of trip ids" },
+        { status: 400 },
+      );
+    }
+    filter = { _id: { $in: ids } };
+  } else if (action === "by-user") {
     const userId = searchParams.get("userId");
     if (!userId) return NextResponse.json({ error: "userId is required" }, { status: 400 });
     filter = { userId };
@@ -136,7 +198,7 @@ export async function DELETE(req: NextRequest) {
       : { $or: [{ createdAt: { $lt: todayStart } }, { createdAt: { $gte: tomorrowStart } }] };
   } else {
     return NextResponse.json(
-      { error: "action must be by-user, by-trip-number, by-date, all, today, or not-today" },
+      { error: "action must be by-ids, by-user, by-trip-number, by-date, all, today, or not-today" },
       { status: 400 },
     );
   }
