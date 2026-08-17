@@ -341,9 +341,12 @@ function StationOptions({
             <strong style={{ fontSize: 13 }}>
               {option.name}
               {option.direction ? ` (${option.direction})` : ""}
+              {" - "}
+              {option.zones}
             </strong>
             <span style={{ marginLeft: "auto", color: "#5A6A7A" }}>
-              {formatDistanceKm(locale, option.distanceKm)} · ~{formatMinutes(locale, option.walkingMin)}
+              {formatDistanceKm(locale, option.distanceKm)} · ~
+              {formatMinutes(locale, option.walkingMin)}
             </span>
           </label>
         );
@@ -888,9 +891,7 @@ export default function TripCycle({
       return;
     }
     if (isOutsideMorningWindow(nextArrivalTime)) {
-      setTimeError(
-        t("create.arrival_window_error"),
-      );
+      setTimeError(t("create.arrival_window_error"));
       onChange({ ...data, arrivalTime: "", pickupTime: "" });
       return;
     }
@@ -905,9 +906,7 @@ export default function TripCycle({
       return;
     }
     if (isOutsideMorningWindow(nextPickupTime)) {
-      setTimeError(
-        t("create.pickup_window_error"),
-      );
+      setTimeError(t("create.pickup_window_error"));
       set("pickupTime", "");
       return;
     }
@@ -969,8 +968,7 @@ export default function TripCycle({
         data.dropoff.lat,
         data.dropoff.lng,
       );
-    if (dist < 0.5)
-      return t("create.min_distance_error");
+    if (dist < 0.5) return t("create.min_distance_error");
     return null;
   })();
 
@@ -1360,7 +1358,9 @@ export default function TripCycle({
                     style={pickBtnStyle(picking === "pickup")}
                   >
                     <MapPin size={13} aria-hidden="true" />
-                    {picking === "pickup" ? t("create.click_map") : t("create.pick_from_map")}
+                    {picking === "pickup"
+                      ? t("create.click_map")
+                      : t("create.pick_from_map")}
                   </button>
                 )}
               </div>
@@ -1384,7 +1384,8 @@ export default function TripCycle({
                   >
                     <span aria-hidden="true">↪</span>
                     <span>
-                      {t("create.station")}: <strong>{data.pickupStation.name}</strong>
+                      {t("create.station")}:{" "}
+                      <strong>{data.pickupStation.name}</strong>
                       {data.walkingMinToStation != null
                         ? ` (~${data.walkingMinToStation} min walk)`
                         : ""}
@@ -1392,7 +1393,10 @@ export default function TripCycle({
                   </div>
                 )}
               <StationOptions
-                label={t("create.pickup_station_for_trip").replace("{tripNumber}", String(index + 1))}
+                label={t("create.pickup_station_for_trip").replace(
+                  "{tripNumber}",
+                  String(index + 1),
+                )}
                 options={data.pickupStationOptions}
                 selectedId={data.pickupStation?.id}
                 onSelect={(stationId) => selectStation("pickup", stationId)}
@@ -1450,7 +1454,9 @@ export default function TripCycle({
                   style={pickBtnStyle(picking === "dropoff")}
                 >
                   <MapPin size={13} aria-hidden="true" />
-                  {picking === "dropoff" ? t("create.click_map") : t("create.pick_from_map")}
+                  {picking === "dropoff"
+                    ? t("create.click_map")
+                    : t("create.pick_from_map")}
                 </button>
               )}
               {isSharedVehicle(data.vehicleType) &&
@@ -1472,7 +1478,8 @@ export default function TripCycle({
                   >
                     <span aria-hidden="true">↪</span>
                     <span>
-                      {t("create.station")}: <strong>{data.dropoffStation.name}</strong>
+                      {t("create.station")}:{" "}
+                      <strong>{data.dropoffStation.name}</strong>
                       {data.walkingMinFromStation != null
                         ? ` (~${data.walkingMinFromStation} min walk)`
                         : ""}
@@ -1480,7 +1487,10 @@ export default function TripCycle({
                   </div>
                 )}
               <StationOptions
-                label={t("create.dropoff_station_for_trip").replace("{tripNumber}", String(index + 1))}
+                label={t("create.dropoff_station_for_trip").replace(
+                  "{tripNumber}",
+                  String(index + 1),
+                )}
                 options={data.dropoffStationOptions}
                 selectedId={data.dropoffStation?.id}
                 onSelect={(stationId) => selectStation("dropoff", stationId)}
@@ -1559,7 +1569,7 @@ export default function TripCycle({
                     style={{ color: "#F5A623" }}
                     aria-hidden="true"
                   />
-                 {t("latest_arrival_time")} {" "}
+                  {t("latest_arrival_time")}{" "}
                   <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                     *
                   </span>
@@ -1626,7 +1636,11 @@ export default function TripCycle({
                     gap: 4,
                   }}
                 >
-                  ⚠ {t("create.must_be_after_previous_trip").replace("{time}", formatTime(locale, minArrivalTime))}
+                  ⚠{" "}
+                  {t("create.must_be_after_previous_trip").replace(
+                    "{time}",
+                    formatTime(locale, minArrivalTime),
+                  )}
                 </p>
               ) : (
                 <p
@@ -1819,7 +1833,10 @@ export default function TripCycle({
                   +
                 </button>
                 <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                  {t("create.you_plus_passengers").replace("{n}", String(data.extraPassengers ?? 0))}
+                  {t("create.you_plus_passengers").replace(
+                    "{n}",
+                    String(data.extraPassengers ?? 0),
+                  )}
                 </span>
               </div>
 
@@ -1845,7 +1862,10 @@ export default function TripCycle({
                         marginBottom: 6,
                       }}
                     >
-                      {t("create.passenger_label").replace("{n}", String(idx + 1))}
+                      {t("create.passenger_label").replace(
+                        "{n}",
+                        String(idx + 1),
+                      )}
                     </span>
                     <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                       <button
@@ -1973,7 +1993,9 @@ export default function TripCycle({
         {isPrivate && (
           <>
             <div>
-              <label style={labelStyle}>{t("create.number_of_passengers")}</label>
+              <label style={labelStyle}>
+                {t("create.number_of_passengers")}
+              </label>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <button
                   type="button"
@@ -2022,7 +2044,10 @@ export default function TripCycle({
                   +
                 </button>
                 <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                  {t("create.up_to_including_you").replace("{max}", String(vMap[data.vehicleType as VehicleKey].occupancy))}
+                  {t("create.up_to_including_you").replace(
+                    "{max}",
+                    String(vMap[data.vehicleType as VehicleKey].occupancy),
+                  )}
                 </span>
               </div>
             </div>
@@ -2063,7 +2088,9 @@ export default function TripCycle({
                   style={pickBtnStyle(picking === "pickup")}
                 >
                   <MapPin size={13} aria-hidden="true" />
-                  {picking === "pickup" ? t("create.click_map") : t("create.pick_from_map")}
+                  {picking === "pickup"
+                    ? t("create.click_map")
+                    : t("create.pick_from_map")}
                 </button>
               )}
             </div>
@@ -2102,7 +2129,10 @@ export default function TripCycle({
                       }}
                     >
                       <strong style={{ fontSize: 13, color: "#0B1E3D" }}>
-                        {t("create.stop_label").replace("{n}", String(stopIndex + 1))}
+                        {t("create.stop_label").replace(
+                          "{n}",
+                          String(stopIndex + 1),
+                        )}
                       </strong>
                       <button
                         type="button"
@@ -2112,7 +2142,10 @@ export default function TripCycle({
                             data.stops.filter((item) => item.id !== stop.id),
                           )
                         }
-                        aria-label={t("create.remove_stop_aria").replace("{n}", String(stopIndex + 1))}
+                        aria-label={t("create.remove_stop_aria").replace(
+                          "{n}",
+                          String(stopIndex + 1),
+                        )}
                         style={{
                           border: "none",
                           background: "none",
@@ -2229,7 +2262,9 @@ export default function TripCycle({
                   style={pickBtnStyle(picking === "dropoff")}
                 >
                   <MapPin size={13} aria-hidden="true" />
-                  {picking === "dropoff" ? t("create.click_map") : t("create.pick_from_map")}
+                  {picking === "dropoff"
+                    ? t("create.click_map")
+                    : t("create.pick_from_map")}
                 </button>
               )}
               {locationError && (
@@ -2261,7 +2296,8 @@ export default function TripCycle({
                   aria-hidden="true"
                 />
                 <span>
-                  {formatDistanceKm(locale, data.distanceKm)} · {formatMinutes(locale, data.durationMinutes)}
+                  {formatDistanceKm(locale, data.distanceKm)} ·{" "}
+                  {formatMinutes(locale, data.durationMinutes)}
                 </span>
               </div>
             )}

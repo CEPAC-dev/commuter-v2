@@ -181,7 +181,6 @@ export default function CreateClient({
       } catch {
         /* non-fatal */
       }
-
     })();
   }, []);
 
@@ -210,6 +209,47 @@ export default function CreateClient({
       setPicking(null);
     },
     [picking],
+  );
+
+  const handleStationSelect = useCallback(
+    (tripId: string, field: "pickup" | "dropoff", stationId: number) => {
+      setTrips((previousTrips) =>
+        previousTrips.map((trip) => {
+          if (trip.id !== tripId) return trip;
+          const options =
+            field === "pickup"
+              ? trip.pickupStationOptions
+              : trip.dropoffStationOptions;
+          const station = options.find((option) => option.id === stationId);
+          if (!station) return trip;
+
+          const selectedStation = {
+            id: station.id,
+            lat: station.lat,
+            lng: station.lng,
+            name: station.name,
+            direction: station.direction,
+            stationType: station.stationType,
+          };
+          return {
+            ...trip,
+            pickupStation:
+              field === "pickup" ? selectedStation : trip.pickupStation,
+            dropoffStation:
+              field === "dropoff" ? selectedStation : trip.dropoffStation,
+            distanceKm: null,
+            durationMinutes: null,
+            priceEgp: null,
+            pickupTime: "",
+            routeCoordinates: null,
+            routeLegs: [],
+            baseDistanceKm: null,
+            passengerDetourKm: null,
+          };
+        }),
+      );
+    },
+    [],
   );
 
   const handleTripStopErrorChange = useCallback(
@@ -952,6 +992,7 @@ export default function CreateClient({
             trips={trips}
             picking={picking}
             onMapPick={handleMapPick}
+            onStationSelect={handleStationSelect}
             onCancelPick={() => setPicking(null)}
           />
         </main>
