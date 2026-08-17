@@ -5,6 +5,8 @@ const StationSchema = new Schema(
     objectId: { type: Number, required: true }, // source OBJECTID / feature id
     name: { type: String, default: "", trim: true },
     direction: { type: String, default: "", trim: true },
+    zones: { type: String, default: "", trim: true },
+    description: { type: String, default: "", trim: true },
     landmark: { type: String, default: "", trim: true },
     stationType: { type: String, default: "", trim: true },
     lat: { type: Number, required: true },

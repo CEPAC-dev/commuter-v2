@@ -3,6 +3,9 @@ export interface Station {
   name: string;
   direction?: string;
   stationType: string;
+  zones?: string;
+  description?: string;
+  landmark?: string;
   lat: number;
   lng: number;
   popupInfo: string;
@@ -15,6 +18,9 @@ export interface StationOption {
   stationType: string;
   lat: number;
   lng: number;
+  zones: string;
+  description?: string;
+  landmark?: string;
   distanceKm: number;
   walkingMin: number;
 }
@@ -87,6 +93,9 @@ export function findNearestStations(
         stationType: station.stationType,
         lat: station.lat,
         lng: station.lng,
+        zones: station.zones ?? "",
+        description: station.description,
+        landmark: station.landmark,
         distanceKm: Math.round(distanceKm * 100) / 100,
         walkingMin: walkingMinutes(distanceKm),
       };
@@ -102,7 +111,10 @@ export function findNearestStation(
   stations: Station[],
   selectedVehicleType?: string | null,
 ): Station | null {
-  const filteredStations = filterStationsByVehicle(stations, selectedVehicleType);
+  const filteredStations = filterStationsByVehicle(
+    stations,
+    selectedVehicleType,
+  );
   if (!filteredStations.length) return null;
   let nearest = filteredStations[0];
   let minDist = haversineKm(
