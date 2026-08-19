@@ -19,6 +19,7 @@ type StationRecord = {
 
 export default function OperationConsole() {
   const [matchDate, setMatchDate] = useState("");
+  const [matrixProvider, setMatrixProvider] = useState("osrm");
   const [availabilityDate, setAvailabilityDate] = useState("");
   const [loadingMatchData, setLoadingMatchData] = useState(false);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
@@ -202,6 +203,7 @@ export default function OperationConsole() {
       if (matchDate.trim()) {
         target.searchParams.set("date", matchDate.trim());
       }
+      target.searchParams.set("matrixProvider", matrixProvider);
 
       const response = await fetch(target.toString());
       if (!response.ok) {
@@ -724,6 +726,32 @@ export default function OperationConsole() {
                 fontSize: 14,
               }}
             />
+          </label>
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 220,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              Matrix API calculator
+            </span>
+            <select
+              value={matrixProvider}
+              onChange={(event) => setMatrixProvider(event.target.value)}
+              style={{
+                border: "1px solid #D8E0E4",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+                background: "#ffffff",
+              }}
+            >
+              <option value="osrm">OSRM</option>
+              <option value="openrouteservice">OpenRouteService</option>
+            </select>
           </label>
           <button
             type="submit"

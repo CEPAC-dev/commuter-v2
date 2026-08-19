@@ -8,7 +8,10 @@ import { Driver } from "@/models/Driver";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { Station } from "@/models/Station";
-import { fetchDirectionsTable } from "@/app/api/directions/route";
+import {
+  fetchDirectionsMatrix,
+  isMatrixProvider,
+} from "@/app/api/directions/route";
 import { haversineKm } from "@/lib/geo/stations";
 import { VEHICLE_LIST } from "@/lib/config/vehicles";
 
@@ -328,6 +331,10 @@ export async function GET(req: NextRequest) {
 
   const requestedDate = req.nextUrl.searchParams.get("date")?.trim();
   const targetDate = requestedDate || getTomorrowDate();
+  const requestedMatrixProvider = req.nextUrl.searchParams.get("matrixProvider");
+  const matrixProvider = isMatrixProvider(requestedMatrixProvider)
+    ? requestedMatrixProvider
+    : "osrm";
 
   const privateTrips = await Trip.find({
     date: targetDate,
@@ -659,7 +666,10 @@ export async function GET(req: NextRequest) {
     .map((id) => stationMap.get(id) ?? syntheticStationMap.get(id))
     .filter((station): station is StationInfo => Boolean(station));
 
-  const directionsTable = await fetchDirectionsTable(stationsSheetRows);
+  const directionsTable = await fetchDirectionsMatrix(
+    matrixProvider,
+    stationsSheetRows,
+  );
   const skimMetrics = stationsSheetRows.map((originStation, rowIndex) =>
     stationsSheetRows.map((destStation, colIndex) => {
       if (
