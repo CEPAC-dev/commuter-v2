@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import { VEHICLES } from "@/lib/config/vehicles";
 import { Ride } from "@/models/Ride";
@@ -6,6 +7,7 @@ import { Trip } from "@/models/Trip";
 import { getSession } from "@/lib/auth/session";
 import * as rideActions from "@/lib/services/rideActionHelpers";
 import { creditReferralBonusIfEligible } from "@/lib/referral";
+import { normalizeSharedRidePassengers } from "@/lib/services/sharedRideManifest";
 
 interface RideRouteStop {
   address?: string;
@@ -33,6 +35,15 @@ interface RideDocLike {
   driverId?: string;
   rideType?: string;
   status?: string;
+}
+
+function materializeSharedRidePassengers(ride: {
+  rideType?: string;
+  toObject(): Record<string, unknown>;
+  set(path: string, value: unknown): void;
+}) {
+  if (ride.rideType !== "shared") return;
+  ride.set("passengers", normalizeSharedRidePassengers(ride.toObject()));
 }
 
 interface RideLogLike {
@@ -490,13 +501,16 @@ export async function POST(
     } = body;
 
     const driverId = ride.driverId;
-    const tripIds = (ride.passengers ?? [])
+    const actionPassengers = normalizeSharedRidePassengers(
+      ride as Record<string, unknown>,
+    ) as unknown as RidePassengerLike[];
+    const tripIds = actionPassengers
       .map((passenger: RidePassengerLike) =>
         typeof passenger.tripId === "object" && passenger.tripId !== null && "_id" in (passenger.tripId as object)
           ? (passenger.tripId as { _id: unknown })._id
           : passenger.tripId,
       )
-      .filter(Boolean);
+      .filter(Boolean) as (string | Types.ObjectId)[];
 
     let result: Record<string, unknown> = { success: false };
 
@@ -508,6 +522,7 @@ export async function POST(
         const originLoc = metadata?.currentLocation ?? null;
         const rideDoc = await Ride.findById(rideId);
         if (rideDoc) {
+          materializeSharedRidePassengers(rideDoc);
           rideDoc.status = "active";
           if (originLoc) {
             rideDoc.driverOrigin = originLoc;
@@ -550,7 +565,15 @@ export async function POST(
 
         const currentRideDoc = await Ride.findById(rideId);
         let remainingStations: Array<{ stationIndex: number; stationName: string }> = [];
-        if (currentRideDoc && currentRideDoc.passengers) {
+        if (currentRideDoc) {
+          materializeSharedRidePassengers(currentRideDoc);
+          const routeLength = Array.isArray(currentRideDoc.route)
+            ? currentRideDoc.route.length
+            : 0;
+          // Ride terminus: anyone still on board must alight here, even if their
+          // recorded dropoffOrder doesn't match due to bad import data.
+          // stationIndex from the client is 1-based (route index + 1).
+          const isLastStation = routeLength > 0 && stationIndex === routeLength;
           const confirmations = Array.isArray(metadata?.confirmations)
             ? metadata.confirmations.filter(
                 (entry: { tripId?: unknown; status?: string }) =>
@@ -648,7 +671,7 @@ export async function POST(
             );
 
             if (
-              isDropoff &&
+              (isDropoff || isLastStation) &&
               (passenger.status === "on_board" || passenger.status === "picked_up")
             ) {
               passenger.status = "dropped_off";

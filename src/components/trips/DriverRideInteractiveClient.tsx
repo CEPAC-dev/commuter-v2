@@ -358,24 +358,18 @@ export default function DriverRideInteractiveClient({
     waitingMinutes?: number;
   };
 
+  // Manifest counts stay stable after confirmation; only no-show/cancellation reduces them.
   const getStationCounts = (stationIndex: number, stationName: string) => {
-    const boarding = ride.passengers.reduce((count, passenger) => {
-      const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
-      if (normalizedStatus !== "waiting") return count;
-      return stationMatchesPassenger(passenger, stationIndex, stationName, "pickup")
-        ? count + 1
-        : count;
-    }, 0);
+    const tally = (direction: "pickup" | "dropoff") =>
+      ride.passengers.reduce((count, passenger) => {
+        const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
+        if (["no_show", "cancelled"].includes(normalizedStatus)) return count;
+        return stationMatchesPassenger(passenger, stationIndex, stationName, direction)
+          ? count + (passenger.numberOfPassengers || 1)
+          : count;
+      }, 0);
 
-    const alighting = ride.passengers.reduce((count, passenger) => {
-      const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
-      if (!["picked_up", "on_board"].includes(normalizedStatus)) return count;
-      return stationMatchesPassenger(passenger, stationIndex, stationName, "dropoff")
-        ? count + 1
-        : count;
-    }, 0);
-
-    return { boarding, alighting };
+    return { boarding: tally("pickup"), alighting: tally("dropoff") };
   };
 
   const steps: StepItem[] = [
@@ -595,6 +589,10 @@ export default function DriverRideInteractiveClient({
         );
       }
 
+      const isLastStation =
+        visibleRouteStops.length > 0 &&
+        stationIndex === visibleRouteStops[visibleRouteStops.length - 1].stationIndex;
+
       const nextPassengers = ride.passengers.map((passenger) => {
         const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
         if (["dropped_off", "no_show", "cancelled"].includes(normalizedStatus)) {
@@ -637,7 +635,7 @@ export default function DriverRideInteractiveClient({
         }
 
         if (
-          isDropoffStation &&
+          (isDropoffStation || isLastStation) &&
           ["on_board", "picked_up"].includes(passenger.status ?? "")
         ) {
           return { ...passenger, status: "dropped_off" };

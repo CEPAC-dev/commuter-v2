@@ -1084,7 +1084,6 @@ export async function POST(req: NextRequest) {
         const rideNumber = await nextSequence("rideNumber");
         const firstPoint = route[0]?.point;
         const lastPoint = route[route.length - 1]?.point;
-        const startLoc = availability.startLocation;
         const summaryForRide = summaryByTripNumber.get(
           String(availabilityNumber),
         );
@@ -1152,14 +1151,6 @@ export async function POST(req: NextRequest) {
           rideType,
           vehicleType,
           route,
-          driverOrigin:
-            startLoc && startLoc.lat != null && startLoc.lng != null
-              ? {
-                  address: startLoc.address ?? "",
-                  lat: startLoc.lat,
-                  lng: startLoc.lng,
-                }
-              : undefined,
           pickupStation: toStationShape(firstPoint),
           dropoffStation: toStationShape(lastPoint),
           startTime: availability.startTime ?? "00:00",
@@ -1169,7 +1160,7 @@ export async function POST(req: NextRequest) {
           additionalFees,
           kmRate,
           hrRate,
-          status: "active",
+          status: "matched",
         });
 
         const matchedTripIds = Array.from(

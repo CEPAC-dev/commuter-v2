@@ -5,6 +5,10 @@ import { Trip, type TripDoc } from "../../models/Trip";
 import { Availability, type AvailabilityDoc } from "../../models/Availability";
 import type { RideDetailView, RideListRow, RideStatus } from "@/types/booking";
 import type { GeoPoint, StationSelection } from "@/types/geo";
+import {
+  getSharedRouteStopCounts,
+  normalizeSharedRidePassengers,
+} from "@/lib/services/sharedRideManifest";
 
 type MatchResult = {
   availabilityId: Types.ObjectId | string;
@@ -257,18 +261,6 @@ function recalculateRouteFromPassengers(passengers: any[]) {
   return stops;
 }
 
-function routeStopCount(value: unknown): number {
-  if (Array.isArray(value)) return value.length;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-}
-
-
-
 function toGeoPoint(
   raw: Record<string, unknown> | null | undefined,
 ): GeoPoint | null {
@@ -316,36 +308,7 @@ function toStation(
 function getRidePassengers(
   ride: Record<string, unknown>,
 ): Record<string, unknown>[] {
-  const directPassengers = Array.isArray(ride.passengers) ? ride.passengers : [];
-  if (directPassengers.length > 0) {
-    return directPassengers.filter(
-      (passenger): passenger is Record<string, unknown> =>
-        Boolean(passenger) && typeof passenger === "object",
-    );
-  }
-
-  const passengersByTripId = new Map<string, Record<string, unknown>>();
-  for (const stop of Array.isArray(ride.route) ? ride.route : []) {
-    if (!stop || typeof stop !== "object") continue;
-    const routeStop = stop as Record<string, unknown>;
-    for (const passenger of [
-      ...(Array.isArray(routeStop.boarding) ? routeStop.boarding : []),
-      ...(Array.isArray(routeStop.alighting) ? routeStop.alighting : []),
-    ]) {
-      if (!passenger || typeof passenger !== "object") continue;
-      const routePassenger = passenger as Record<string, unknown>;
-      if (!routePassenger.tripId) continue;
-      const tripId = String(routePassenger.tripId);
-      if (!passengersByTripId.has(tripId)) {
-        passengersByTripId.set(tripId, routePassenger);
-      }
-    }
-  }
-
-  return [...passengersByTripId.values()].sort(
-    (left, right) =>
-      Number(left.pickupOrder ?? 0) - Number(right.pickupOrder ?? 0),
-  );
+  return normalizeSharedRidePassengers(ride);
 }
 
 function mapPassengerRow(p: Record<string, any>, index = 0, array: Record<string, any>[] = []) {
@@ -399,13 +362,16 @@ function mapRideToDetailView(ride: Record<string, any>): RideDetailView {
       0,
     ),
     passengers,
-    route: (ride.route ?? []).map((stop: Record<string, any>) => ({
-      address: stop.point?.address ?? "—",
-      point: toGeoPoint(stop.point),
-      boarding: routeStopCount(stop.boarding ?? stop.boardingNumber ?? 0),
-      alighting: routeStopCount(stop.alighting ?? stop.alightingNumber ?? 0),
-      waitingMinutes: stop.waitingMinutes ?? 0,
-    })),
+    route: (ride.route ?? []).map((stop: Record<string, any>) => {
+      const counts = getSharedRouteStopCounts(stop);
+      return {
+        address: stop.point?.address ?? "—",
+        point: toGeoPoint(stop.point),
+        boarding: counts.boarding,
+        alighting: counts.alighting,
+        waitingMinutes: stop.waitingMinutes ?? 0,
+      };
+    }),
     pickupStation: toStation(ride.pickupStation),
     dropoffStation: toStation(ride.dropoffStation),
     driverOrigin: toGeoPoint(ride.driverOrigin),
@@ -553,12 +519,15 @@ function mapRideToListRow(ride: Record<string, any>): RideListRow {
       0,
     ),
     passengers,
-    route: (ride.route ?? []).map((stop: Record<string, any>) => ({
-      address: stop.point?.address ?? "—",
-      boarding: routeStopCount(stop.boarding ?? stop.boardingNumber ?? 0),
-      alighting: routeStopCount(stop.alighting ?? stop.alightingNumber ?? 0),
-      waitingMinutes: stop.waitingMinutes ?? 0,
-    })),
+    route: (ride.route ?? []).map((stop: Record<string, any>) => {
+      const counts = getSharedRouteStopCounts(stop);
+      return {
+        address: stop.point?.address ?? "—",
+        boarding: counts.boarding,
+        alighting: counts.alighting,
+        waitingMinutes: stop.waitingMinutes ?? 0,
+      };
+    }),
     pickupStation: toStation(ride.pickupStation),
     dropoffStation: toStation(ride.dropoffStation),
     createdAt:

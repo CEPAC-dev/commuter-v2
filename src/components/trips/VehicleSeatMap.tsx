@@ -304,20 +304,7 @@ export default function VehicleSeatMap({
         >
           {t("vehicle_seating.title_plain")}
         </h3>
-        {isDriver ? (
-          rideStarted ? (
-            <p
-              style={{
-                margin: 0,
-                fontSize: 12,
-                color: "#5A6A7A",
-                fontWeight: 500,
-              }}
-            >
-              {t("vehicle_seating.live_status_true")}
-            </p>
-          ) : null
-        ) : (
+        {!isDriver && (
           <p
             style={{
               margin: 0,
