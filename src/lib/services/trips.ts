@@ -231,15 +231,6 @@ export async function listDriverTrips(
           driverId?: unknown;
           assignedDriver?: AssignedDriver | null;
           date: string;
-          assignedDriver?: {
-            name?: string;
-            phone?: string;
-            profilePic?: string;
-            carBrand?: string;
-            carModel?: string;
-            modelYear?: string;
-            plate?: string;
-          } | null;
           paymentStatus: string;
           status: string;
           vehicleType: string;
@@ -320,7 +311,7 @@ export async function listDriverTrips(
         ? (trip.assignedDriver ??
           assignedDriverById.get(String(trip.driverId)) ??
           null)
-        : trip.assignedDriver ?? null,
+        : (trip.assignedDriver ?? null),
     })),
   };
 }
@@ -658,7 +649,9 @@ export async function getUserTrip(
     seatNumbers: trip.seatNumbers ?? [],
     rideId: trip.rideId ? String(trip.rideId) : undefined,
     rideDetails,
-    rating: rating ? { driverRating: rating.driverRating, carRating: rating.carRating } : null,
+    rating: rating
+      ? { driverRating: rating.driverRating, carRating: rating.carRating }
+      : null,
     paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
     pickupStationOptions: trip.pickupStationOptions ?? [],
     dropoffStationOptions: trip.dropoffStationOptions ?? [],
