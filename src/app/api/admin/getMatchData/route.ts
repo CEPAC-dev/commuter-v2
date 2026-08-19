@@ -8,7 +8,7 @@ import { Driver } from "@/models/Driver";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { Station } from "@/models/Station";
-import { fetchDirections } from "@/app/api/directions/route";
+import { fetchDirectionsTable } from "@/app/api/directions/route";
 import { haversineKm } from "@/lib/geo/stations";
 import { VEHICLE_LIST } from "@/lib/config/vehicles";
 
@@ -659,66 +659,51 @@ export async function GET(req: NextRequest) {
     .map((id) => stationMap.get(id) ?? syntheticStationMap.get(id))
     .filter((station): station is StationInfo => Boolean(station));
 
-  const routeCache = new Map<
-    string,
-    {
-      distance_km: number;
-      duration_minutes: number;
-      usedDistanceFallback: boolean;
-      usedDurationFallback: boolean;
-    }
-  >();
+  const directionsTable = await fetchDirectionsTable(stationsSheetRows);
+  const skimMetrics = stationsSheetRows.map((originStation, rowIndex) =>
+    stationsSheetRows.map((destStation, colIndex) => {
+      if (
+        originStation.lat === destStation.lat &&
+        originStation.lng === destStation.lng
+      ) {
+        return {
+          distance_km: 0,
+          duration_minutes: 0,
+          usedDistanceFallback: false,
+          usedDurationFallback: false,
+        };
+      }
 
-  async function fetchRouteMetrics(
-    from: { lat: number; lng: number },
-    to: { lat: number; lng: number },
-  ) {
-    const key = `${from.lat},${from.lng}->${to.lat},${to.lng}`;
-    const cached = routeCache.get(key);
-    if (cached) return cached;
-    if (from.lat === to.lat && from.lng === to.lng) {
-      const same = {
-        distance_km: 0,
-        duration_minutes: 0,
-        usedDistanceFallback: false,
-        usedDurationFallback: false,
+      const directDistanceKm = haversineKm(
+        originStation.lat,
+        originStation.lng,
+        destStation.lat,
+        destStation.lng,
+      );
+      const estimatedDurationMinutes = Math.max(
+        1,
+        Math.round((directDistanceKm / 35) * 60),
+      );
+      const routeDistanceKm = directionsTable?.distancesKm[rowIndex]?.[colIndex];
+      const routeDurationMinutes =
+        directionsTable?.durationsMinutes[rowIndex]?.[colIndex];
+      const hasRouteDistance =
+        typeof routeDistanceKm === "number" && routeDistanceKm > 0;
+      const hasRouteDuration =
+        typeof routeDurationMinutes === "number" && routeDurationMinutes > 0;
+
+      return {
+        distance_km: hasRouteDistance
+          ? routeDistanceKm
+          : Math.round(directDistanceKm * 10) / 10,
+        duration_minutes: hasRouteDuration
+          ? routeDurationMinutes
+          : estimatedDurationMinutes,
+        usedDistanceFallback: !hasRouteDistance,
+        usedDurationFallback: !hasRouteDuration,
       };
-      routeCache.set(key, same);
-      return same;
-    }
-
-    const origin = `${from.lat},${from.lng}`;
-    const dest = `${to.lat},${to.lng}`;
-    const result = await fetchDirections(origin, dest);
-    const directDistanceKm = haversineKm(from.lat, from.lng, to.lat, to.lng);
-    const estimatedDurationMinutes = Math.max(
-      1,
-      Math.round((directDistanceKm / 35) * 60),
-    );
-
-    const hasRouteDistance =
-      result[0] &&
-      Number.isFinite(result[0].distance_km) &&
-      result[0].distance_km > 0;
-    const hasRouteDuration =
-      result[0] &&
-      Number.isFinite(result[0].duration_minutes) &&
-      result[0].duration_minutes > 0;
-
-    const metrics = {
-      distance_km: hasRouteDistance
-        ? Math.round(result[0].distance_km * 10) / 10
-        : Math.round(directDistanceKm * 10) / 10,
-      duration_minutes: hasRouteDuration
-        ? result[0].duration_minutes
-        : estimatedDurationMinutes,
-      usedDistanceFallback: !hasRouteDistance,
-      usedDurationFallback: !hasRouteDuration,
-    };
-
-    routeCache.set(key, metrics);
-    return metrics;
-  }
+    }),
+  );
 
   const wb = new ExcelJS.Workbook();
 
@@ -799,12 +784,7 @@ export async function GET(req: NextRequest) {
 
   for (let rowIndex = 0; rowIndex < stationsSheetRows.length; rowIndex++) {
     for (let colIndex = 0; colIndex < stationsSheetRows.length; colIndex++) {
-      const originStation = stationsSheetRows[rowIndex];
-      const destStation = stationsSheetRows[colIndex];
-      const metrics = await fetchRouteMetrics(
-        { lat: originStation.lat, lng: originStation.lng },
-        { lat: destStation.lat, lng: destStation.lng },
-      );
+      const metrics = skimMetrics[rowIndex][colIndex];
       const distanceCell = matrixDistance
         .getRow(rowIndex + 2)
         .getCell(colIndex + 2);
@@ -1096,17 +1076,11 @@ export async function GET(req: NextRequest) {
     sharedRideRequests: sharedRows,
     availability: availabilityRows,
     stations: stationsSheetRows,
-    stationMatrixDistance: stationsSheetRows.map((origin) =>
-      stationsSheetRows.map((dest) => {
-        const key = `${origin.lat},${origin.lng}->${dest.lat},${dest.lng}`;
-        return routeCache.get(key)?.distance_km ?? 0;
-      }),
+    stationMatrixDistance: skimMetrics.map((row) =>
+      row.map((metrics) => metrics.distance_km),
     ),
-    stationMatrixDuration: stationsSheetRows.map((origin) =>
-      stationsSheetRows.map((dest) => {
-        const key = `${origin.lat},${origin.lng}->${dest.lat},${dest.lng}`;
-        return routeCache.get(key)?.duration_minutes ?? 0;
-      }),
+    stationMatrixDuration: skimMetrics.map((row) =>
+      row.map((metrics) => metrics.duration_minutes),
     ),
   };
 
