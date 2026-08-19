@@ -313,6 +313,41 @@ function toStation(
   };
 }
 
+function getRidePassengers(
+  ride: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const directPassengers = Array.isArray(ride.passengers) ? ride.passengers : [];
+  if (directPassengers.length > 0) {
+    return directPassengers.filter(
+      (passenger): passenger is Record<string, unknown> =>
+        Boolean(passenger) && typeof passenger === "object",
+    );
+  }
+
+  const passengersByTripId = new Map<string, Record<string, unknown>>();
+  for (const stop of Array.isArray(ride.route) ? ride.route : []) {
+    if (!stop || typeof stop !== "object") continue;
+    const routeStop = stop as Record<string, unknown>;
+    for (const passenger of [
+      ...(Array.isArray(routeStop.boarding) ? routeStop.boarding : []),
+      ...(Array.isArray(routeStop.alighting) ? routeStop.alighting : []),
+    ]) {
+      if (!passenger || typeof passenger !== "object") continue;
+      const routePassenger = passenger as Record<string, unknown>;
+      if (!routePassenger.tripId) continue;
+      const tripId = String(routePassenger.tripId);
+      if (!passengersByTripId.has(tripId)) {
+        passengersByTripId.set(tripId, routePassenger);
+      }
+    }
+  }
+
+  return [...passengersByTripId.values()].sort(
+    (left, right) =>
+      Number(left.pickupOrder ?? 0) - Number(right.pickupOrder ?? 0),
+  );
+}
+
 function mapPassengerRow(p: Record<string, any>, index = 0, array: Record<string, any>[] = []) {
   let seatNumbers: number[] = Array.isArray(p.seatNumbers) && p.seatNumbers.length > 0 ? p.seatNumbers : [];
   if (seatNumbers.length === 0) {
@@ -341,7 +376,8 @@ function mapPassengerRow(p: Record<string, any>, index = 0, array: Record<string
 }
 
 function mapRideToDetailView(ride: Record<string, any>): RideDetailView {
-  const passengers = (ride.passengers ?? []).map((p: Record<string, any>, i: number, arr: Record<string, any>[]) => ({
+  const ridePassengers = getRidePassengers(ride);
+  const passengers = ridePassengers.map((p: Record<string, any>, i: number, arr: Record<string, any>[]) => ({
     ...mapPassengerRow(p, i, arr),
     pickup: toGeoPoint(p.pickup),
     dropoff: toGeoPoint(p.dropoff),
@@ -396,7 +432,11 @@ async function getDriverRide(
   if (!ride) {
     ride = await Ride.findOne({
       driverId: driverOid,
-      "passengers.tripId": lookupId,
+      $or: [
+        { "passengers.tripId": lookupId },
+        { "route.boarding.tripId": lookupId },
+        { "route.alighting.tripId": lookupId },
+      ],
     }).lean();
   }
 
@@ -405,7 +445,8 @@ async function getDriverRide(
   const { User } = await import("@/models/User");
   const { Station } = await import("@/models/Station");
 
-  const userIds = (ride.passengers ?? [])
+  const ridePassengers = getRidePassengers(ride as Record<string, any>);
+  const userIds = ridePassengers
     .map((p: any) => p.userId)
     .filter(Boolean);
   const users = await User.find({ _id: { $in: userIds } })
@@ -417,9 +458,17 @@ async function getDriverRide(
   const stationIds: number[] = [];
   if (ride.pickupStation?.id) stationIds.push(ride.pickupStation.id);
   if (ride.dropoffStation?.id) stationIds.push(ride.dropoffStation.id);
-  for (const p of ride.passengers ?? []) {
-    if (p.pickupStation?.id) stationIds.push(p.pickupStation.id);
-    if (p.dropoffStation?.id) stationIds.push(p.dropoffStation.id);
+  for (const p of ridePassengers) {
+    const passengerStations = p as {
+      pickupStation?: { id?: number };
+      dropoffStation?: { id?: number };
+    };
+    if (passengerStations.pickupStation?.id) {
+      stationIds.push(passengerStations.pickupStation.id);
+    }
+    if (passengerStations.dropoffStation?.id) {
+      stationIds.push(passengerStations.dropoffStation.id);
+    }
   }
 
   const stationDocs = stationIds.length > 0
@@ -444,7 +493,7 @@ async function getDriverRide(
     ...ride,
     pickupStation: enrichStation(ride.pickupStation),
     dropoffStation: enrichStation(ride.dropoffStation),
-    passengers: (ride.passengers ?? []).map((p: any) => ({
+    passengers: ridePassengers.map((p: any) => ({
       ...p,
       pickupStation: enrichStation(p.pickupStation),
       dropoffStation: enrichStation(p.dropoffStation),
@@ -483,8 +532,9 @@ export interface ListDriverRidesOptions {
 }
 
 function mapRideToListRow(ride: Record<string, any>): RideListRow {
-  const passengers = (ride.passengers ?? []).map((p: Record<string, any>) =>
-    mapPassengerRow(p),
+  const ridePassengers = getRidePassengers(ride);
+  const passengers = ridePassengers.map((p: Record<string, any>, index: number) =>
+    mapPassengerRow(p, index, ridePassengers),
   );
 
   return {

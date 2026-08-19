@@ -5,8 +5,9 @@ import { Notification } from "@/models/Notification";
 
 export async function GET() {
   const session = await getSession();
-  if (!session)
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   await connectDB();
   const count = await Notification.countDocuments({
@@ -14,5 +15,5 @@ export async function GET() {
     isRead: false,
   });
 
-  return NextResponse.json({ success: true, count });
+  return NextResponse.json({ count });
 }

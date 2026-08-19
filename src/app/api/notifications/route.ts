@@ -3,61 +3,44 @@ import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Notification } from "@/models/Notification";
 
+const PAGE_SIZE = 20;
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
-  if (!session)
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const { searchParams } = new URL(req.url);
-  const page = Math.max(1, Number(searchParams.get("page") || 1));
-  const pageSize = 12;
+  const pageParam = Number.parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10);
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
   await connectDB();
+  const filter = { userId: session.userId };
   const [items, total] = await Promise.all([
-    Notification.find({ userId: session.userId })
+    Notification.find(filter)
       .sort({ createdAt: -1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
+      .skip((page - 1) * PAGE_SIZE)
+      .limit(PAGE_SIZE)
       .lean(),
-    Notification.countDocuments({ userId: session.userId }),
+    Notification.countDocuments(filter),
   ]);
-
-  const data = items.map((item) => ({
-    id: String(item._id),
-    type: item.type,
-    title: item.title,
-    body: item.body,
-    data: item.data ?? {},
-    isRead: Boolean(item.isRead),
-    readAt: item.readAt ? new Date(item.readAt).toISOString() : null,
-    createdAt: new Date(item.createdAt).toISOString(),
-  }));
 
   return NextResponse.json({
     success: true,
-    data,
+    data: items.map((item) => ({
+      id: String(item._id),
+      type: item.type,
+      title: item.title,
+      body: item.body,
+      data: item.data ?? {},
+      isRead: Boolean(item.isRead),
+      readAt: item.readAt?.toISOString?.() ?? null,
+      createdAt: item.createdAt?.toISOString?.() ?? new Date().toISOString(),
+    })),
     meta: {
       currentPage: page,
-      lastPage: Math.max(1, Math.ceil(total / pageSize)),
+      lastPage: Math.max(1, Math.ceil(total / PAGE_SIZE)),
       total,
     },
   });
-}
-
-export async function PATCH(req: NextRequest) {
-  const session = await getSession();
-  if (!session)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { pathname } = new URL(req.url);
-  const id = pathname.split("/").filter(Boolean).pop();
-  if (!id) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
-
-  await connectDB();
-  await Notification.findOneAndUpdate(
-    { _id: id, userId: session.userId },
-    { isRead: true, readAt: new Date() },
-  );
-
-  return NextResponse.json({ success: true });
 }
