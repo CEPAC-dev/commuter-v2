@@ -1624,6 +1624,18 @@ export default function TripCycle({
                   ⚠ {timeError}
                 </p>
               )}
+              {data.arrivalTime && (
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "#A56A00",
+                    margin: "6px 0 0",
+                    fontWeight: 600,
+                  }}
+                >
+                  Appointments are subject to change by 10 minutes.
+                </p>
+              )}
               {arrivalTooEarly && minArrivalTime ? (
                 <p
                   role="alert"
@@ -1711,6 +1723,18 @@ export default function TripCycle({
                         : t("create.calculating")}
                   </span>
                 </div>
+              )}
+              {data.pickupTime && (
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "#A56A00",
+                    margin: "6px 0 0",
+                    fontWeight: 600,
+                  }}
+                >
+                  Appointments are subject to change by 10 minutes.
+                </p>
               )}
               {/* {isSharedVehicle(data.vehicleType) &&
                 data.pickupTime &&

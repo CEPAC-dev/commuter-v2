@@ -4,6 +4,25 @@ import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
 
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const auth = await adminAuth(req);
+  if (!auth.authorized) return auth.response;
+
+  await connectDB();
+  const { id } = await params;
+  const user = await User.findById(id)
+    .select("userNumber name phone profilePic")
+    .lean();
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ data: user });
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },

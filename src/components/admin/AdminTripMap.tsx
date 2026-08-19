@@ -8,11 +8,13 @@ export type TripMapPoint = {
   lat: number;
   lng: number;
   label: string;
-  kind: "pickup" | "dropoff" | "station";
+  kind: "pickup" | "dropoff" | "station" | "stop";
+  order?: number;
 };
 
-function markerHtml(color: string, ring: string) {
-  return `<span style="display:block;width:16px;height:16px;border-radius:50%;background:${color};border:3px solid ${ring};box-shadow:0 2px 6px rgba(11,30,61,0.35)"></span>`;
+function markerHtml(color: string, ring: string, order?: number) {
+  const label = order == null ? "" : String(order);
+  return `<span style="display:flex;width:22px;height:22px;border-radius:50%;background:${color};border:3px solid ${ring};box-shadow:0 2px 6px rgba(11,30,61,0.35);align-items:center;justify-content:center;color:#fff;font:700 10px/1 sans-serif">${label}</span>`;
 }
 
 export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
@@ -48,22 +50,22 @@ export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
         L.marker([point.lat, point.lng], {
           icon: L.divIcon({
             className: "",
-            html: markerHtml(color, "#ffffff"),
-            iconSize: [16, 16],
-            iconAnchor: [8, 8],
+            html: markerHtml(color, "#ffffff", point.order),
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
           }),
         })
           .addTo(map)
           .bindTooltip(point.label, { direction: "top", offset: [0, -10] });
       });
 
-      const pickup = points.find((p) => p.kind === "pickup");
-      const dropoff = points.find((p) => p.kind === "dropoff");
-      if (pickup && dropoff) {
-        const fallbackRoute: [number, number][] = [
-          [pickup.lat, pickup.lng],
-          [dropoff.lat, dropoff.lng],
-        ];
+      if (points.length > 1) {
+        const [origin, ...remainingPoints] = points;
+        const destination = remainingPoints.pop();
+        if (!origin || !destination) return;
+        const fallbackRoute = points.map(
+          (point) => [point.lat, point.lng] as [number, number],
+        );
         const routeLine = L.polyline(fallbackRoute, {
           color: MAP_COLORS.route,
           weight: 4,
@@ -72,9 +74,17 @@ export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
         }).addTo(map);
 
         const params = new URLSearchParams({
-          origin: `${pickup.lat},${pickup.lng}`,
-          dest: `${dropoff.lat},${dropoff.lng}`,
+          origin: `${origin.lat},${origin.lng}`,
+          dest: `${destination.lat},${destination.lng}`,
         });
+        if (remainingPoints.length) {
+          params.set(
+            "waypoints",
+            remainingPoints
+              .map((point) => `${point.lat},${point.lng}`)
+              .join("|"),
+          );
+        }
         void fetch(`/api/directions?${params.toString()}`)
           .then(async (response) => {
             if (!response.ok) return [];

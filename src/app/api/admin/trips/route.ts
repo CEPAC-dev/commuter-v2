@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
+import "@/models/Request";
+import "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 
@@ -53,11 +55,22 @@ export async function GET(req: NextRequest) {
   const page = Number.parseInt(searchParams.get("page") ?? "1", 10);
   const limit = Number.parseInt(searchParams.get("limit") ?? "20", 10);
   const safePage = Number.isFinite(page) && page > 0 ? page : 1;
-  const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 20;
+  const safeLimit =
+    Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 20;
   const skip = (safePage - 1) * safeLimit;
   const query: Record<string, unknown> = {};
 
-  for (const field of ["userId", "driverId", "requestId", "rideId", "date", "vehicleType", "rideType", "paymentStatus", "status"]) {
+  for (const field of [
+    "userId",
+    "driverId",
+    "requestId",
+    "rideId",
+    "date",
+    "vehicleType",
+    "rideType",
+    "paymentStatus",
+    "status",
+  ]) {
     const value = searchParams.get(field);
     if (value) query[field] = value;
   }
@@ -66,7 +79,10 @@ export async function GET(req: NextRequest) {
   if (tripNumber) {
     const parsedTripNumber = Number.parseInt(tripNumber, 10);
     if (!Number.isFinite(parsedTripNumber)) {
-      return NextResponse.json({ error: "tripNumber must be a number" }, { status: 400 });
+      return NextResponse.json(
+        { error: "tripNumber must be a number" },
+        { status: 400 },
+      );
     }
     query.tripNumber = parsedTripNumber;
   }
@@ -171,18 +187,31 @@ export async function DELETE(req: NextRequest) {
     filter = { _id: { $in: ids } };
   } else if (action === "by-user") {
     const userId = searchParams.get("userId");
-    if (!userId) return NextResponse.json({ error: "userId is required" }, { status: 400 });
+    if (!userId)
+      return NextResponse.json(
+        { error: "userId is required" },
+        { status: 400 },
+      );
     filter = { userId };
   } else if (action === "by-trip-number") {
-    const tripNumber = Number.parseInt(searchParams.get("tripNumber") ?? "", 10);
+    const tripNumber = Number.parseInt(
+      searchParams.get("tripNumber") ?? "",
+      10,
+    );
     if (!Number.isFinite(tripNumber)) {
-      return NextResponse.json({ error: "tripNumber must be a number" }, { status: 400 });
+      return NextResponse.json(
+        { error: "tripNumber must be a number" },
+        { status: 400 },
+      );
     }
     filter = { tripNumber };
   } else if (action === "by-date") {
     const date = searchParams.get("date")?.trim();
     if (!date || !isValidDate(date)) {
-      return NextResponse.json({ error: "date must be a valid YYYY-MM-DD string." }, { status: 400 });
+      return NextResponse.json(
+        { error: "date must be a valid YYYY-MM-DD string." },
+        { status: 400 },
+      );
     }
     filter = { date };
   } else if (action === "all") {
@@ -193,16 +222,29 @@ export async function DELETE(req: NextRequest) {
     const tomorrowStart = new Date(todayStart);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const todayFilter = { $gte: todayStart, $lt: tomorrowStart };
-    filter = action === "today"
-      ? { createdAt: todayFilter }
-      : { $or: [{ createdAt: { $lt: todayStart } }, { createdAt: { $gte: tomorrowStart } }] };
+    filter =
+      action === "today"
+        ? { createdAt: todayFilter }
+        : {
+            $or: [
+              { createdAt: { $lt: todayStart } },
+              { createdAt: { $gte: tomorrowStart } },
+            ],
+          };
   } else {
     return NextResponse.json(
-      { error: "action must be by-ids, by-user, by-trip-number, by-date, all, today, or not-today" },
+      {
+        error:
+          "action must be by-ids, by-user, by-trip-number, by-date, all, today, or not-today",
+      },
       { status: 400 },
     );
   }
 
   const result = await Trip.deleteMany(filter);
-  return NextResponse.json({ ok: true, deletedCount: result.deletedCount ?? 0, scope: action ?? "all" });
+  return NextResponse.json({
+    ok: true,
+    deletedCount: result.deletedCount ?? 0,
+    scope: action ?? "all",
+  });
 }
