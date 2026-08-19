@@ -156,6 +156,7 @@ export const ar: Record<MessageKey, string> = {
     "vehicle_seating.title_plain": "مخطط مقاعد المركبة",
     "vehicle_seating.front": "الأمام",
     "vehicle_seating.seats": "{count} مقعد",
+    "vehicle_seating.live_status_true": "حالة المقاعد المباشرة: فارغ، صعود (أخضر)، داخل المركبة / نزول (أحمر)",
     "vehicle_seating.live_status_false": "ستظل جميع المقاعد فارغة حتى تبدأ الرحلة",
     "vehicle_seating.your_assigned": "موقع مقعدك المخصص على المخطط",
     "vehicle_seating.seat": "المقعد {n}",
