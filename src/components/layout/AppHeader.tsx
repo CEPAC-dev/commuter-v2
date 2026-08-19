@@ -197,81 +197,123 @@ export default function AppHeader({
           style={{
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 6,
             direction: "ltr",
             textAlign: "left",
+            flex: 1,
           }}
           className="appheader-desktop"
         >
-          {authed ? (
-            <>
-              {NAV_LINKS.map(({ href, labelKey }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  style={{
-                    fontWeight: isActive(href) ? 700 : 500,
-                    fontSize: 14,
-                    color: fg,
-                    textDecoration: "none",
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    background: isActive(href) ? subtleBg : "transparent",
-                    transition: "color 0.2s, background 0.2s",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = subtleBg;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = isActive(href)
-                      ? subtleBg
-                      : "transparent";
-                  }}
-                >
-                  {t(labelKey)}
-                </Link>
-              ))}
-              <button
-                onClick={() => setShowLogoutModal(true)}
-                disabled={loggingOut}
-                aria-label="Log out"
+          {authed &&
+            NAV_LINKS.map(({ href, labelKey }) => (
+              <Link
+                key={href}
+                href={href}
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  marginLeft: 4,
-                  background: "transparent",
-                  border: `1.5px solid ${
-                    isLanding && !scrolled
-                      ? "rgba(255,255,255,0.5)"
-                      : "rgba(255,255,255,0.25)"
-                  }`,
-                  borderRadius: 8,
-                  cursor: loggingOut ? "not-allowed" : "pointer",
+                  fontWeight: isActive(href) ? 700 : 500,
+                  fontSize: 14,
                   color: fg,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  fontFamily: "inherit",
+                  textDecoration: "none",
                   padding: "8px 12px",
-                  minHeight: 36,
-                  transition: "all 0.15s",
+                  borderRadius: 8,
+                  background: isActive(href) ? subtleBg : "transparent",
+                  transition: "color 0.2s, background 0.2s",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#e74c3c";
-                  e.currentTarget.style.color = "#ff6b5b";
+                  e.currentTarget.style.background = subtleBg;
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor =
-                    isLanding && !scrolled
-                      ? "rgba(255,255,255,0.5)"
-                      : "rgba(255,255,255,0.25)";
-                  e.currentTarget.style.color = fg;
+                  e.currentTarget.style.background = isActive(href)
+                    ? subtleBg
+                    : "transparent";
                 }}
               >
-                <LogOut size={14} aria-hidden="true" />
-                {t("nav.log_out")}
-              </button>
-            </>
+                {t(labelKey)}
+              </Link>
+            ))}
+        </nav>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: 8,
+            minWidth: authed ? 260 : 200,
+          }}
+        >
+          {authed && role !== "admin" && (
+            <NotificationCenter color={fg} buttonBackground={subtleBg} />
+          )}
+
+          <button
+            onClick={toggleLocale}
+            aria-label="Switch language"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "transparent",
+              border: `1.5px solid ${
+                isLanding && !scrolled
+                  ? "rgba(255,255,255,0.5)"
+                  : "rgba(255,255,255,0.25)"
+              }`,
+              borderRadius: 8,
+              cursor: "pointer",
+              color: fg,
+              fontSize: 13,
+              fontWeight: 700,
+              fontFamily: "inherit",
+              padding: "8px 12px",
+              minHeight: 36,
+            }}
+          >
+            <Globe size={14} aria-hidden="true" />
+            {locale === "ar" ? "EN" : "AR"}
+          </button>
+
+          {authed ? (
+            <button
+              onClick={() => setShowLogoutModal(true)}
+              disabled={loggingOut}
+              aria-label="Log out"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "transparent",
+                border: `1.5px solid ${
+                  isLanding && !scrolled
+                    ? "rgba(255,255,255,0.5)"
+                    : "rgba(255,255,255,0.25)"
+                }`,
+                borderRadius: 8,
+                cursor: loggingOut ? "not-allowed" : "pointer",
+                color: fg,
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: "inherit",
+                padding: "8px 12px",
+                minHeight: 36,
+                transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "#e74c3c";
+                e.currentTarget.style.color = "#ff6b5b";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor =
+                  isLanding && !scrolled
+                    ? "rgba(255,255,255,0.5)"
+                    : "rgba(255,255,255,0.25)";
+                e.currentTarget.style.color = fg;
+              }}
+            >
+              <LogOut size={14} aria-hidden="true" />
+              {t("nav.log_out")}
+            </button>
           ) : (
             <Link
               href="/login"
@@ -306,45 +348,6 @@ export default function AppHeader({
               <LogIn size={15} aria-hidden="true" />
               {t("nav.log_in")}
             </Link>
-          )}
-          <button
-            onClick={toggleLocale}
-            aria-label="Switch language"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              marginLeft: 4,
-              background: "transparent",
-              border: `1.5px solid ${
-                isLanding && !scrolled
-                  ? "rgba(255,255,255,0.5)"
-                  : "rgba(255,255,255,0.25)"
-              }`,
-              borderRadius: 8,
-              cursor: "pointer",
-              color: fg,
-              fontSize: 13,
-              fontWeight: 700,
-              fontFamily: "inherit",
-              padding: "8px 12px",
-              minHeight: 36,
-            }}
-          >
-            <Globe size={14} aria-hidden="true" />
-            {locale === "ar" ? "EN" : "AR"}
-          </button>
-        </nav>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-          }}
-        >
-          {authed && role !== "admin" && (
-            <NotificationCenter color={fg} buttonBackground={subtleBg} />
           )}
 
           {/* Mobile toggle */}

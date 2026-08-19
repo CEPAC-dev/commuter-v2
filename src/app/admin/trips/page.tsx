@@ -238,12 +238,20 @@ export default function AdminTripsPage() {
         if (filters.dateTo) params.set("dateTo", filters.dateTo);
 
         const res = await fetch(`/api/admin/trips?${params.toString()}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to load trips");
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+          trips?: TripRow[];
+          totalCount?: number;
+        } | null;
+        if (!res.ok) {
+          throw new Error(
+            data?.error ?? `Failed to load trips (HTTP ${res.status})`,
+          );
+        }
         if (!active) return;
         setError(null);
-        setTrips(data.trips ?? []);
-        setTotalCount(data.totalCount ?? 0);
+        setTrips(data?.trips ?? []);
+        setTotalCount(data?.totalCount ?? 0);
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : "Failed to load trips");

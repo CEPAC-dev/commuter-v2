@@ -751,11 +751,13 @@ async function cancelRide(rideId: string | Types.ObjectId, reason?: string) {
     await ride.save({ session });
 
     // unlink trips
-    const tripIds = ride.passengers.map((p: any) => p.tripId);
-    const seats = ride.passengers.reduce(
-      (s: number, p: any) => s + (p.numberOfPassengers || 1),
-      0,
-    );
+    const tripIds = [...new Set([
+      ...ride.passengers.map((passenger: any) => String(passenger.tripId)),
+      ...ride.route.flatMap((stop: any) => [
+        ...(Array.isArray(stop.boarding) ? stop.boarding : []),
+        ...(Array.isArray(stop.alighting) ? stop.alighting : []),
+      ]).map((passenger: any) => String(passenger.tripId)),
+    ].filter((tripId) => Types.ObjectId.isValid(tripId)))];
 
     await Trip.updateMany(
       { _id: { $in: tripIds } },

@@ -572,7 +572,7 @@ export async function POST(req: NextRequest) {
       (row) => row.number > summaryHeaderRow.number,
     );
     const updatedTripIds: string[] = [];
-    const summaryByTripNumber = new Map<number, Record<string, unknown>>();
+    const summaryByTripNumber = new Map<string, Record<string, unknown>>();
 
     console.log("[addMatchedData] summary header", {
       rowNumber: summaryHeaderRow.number,
@@ -833,9 +833,12 @@ export async function POST(req: NextRequest) {
         foundTrip: Boolean(trip),
       });
 
-      summaryByTripNumber.set(tripNumber, rideSummary);
+      summaryByTripNumber.set(String(tripNumber), rideSummary);
       if (trip) {
-        await Trip.collection.updateOne({ tripNumber }, { $set: { summary } });
+        await Trip.collection.updateOne(
+          { $or: [{ tripNumber }, { tripNumber: String(tripNumber) }] },
+          { $set: { summary } },
+        );
         updatedTripIds.push(String(trip.tripNumber));
       }
     }
@@ -1082,7 +1085,9 @@ export async function POST(req: NextRequest) {
         const firstPoint = route[0]?.point;
         const lastPoint = route[route.length - 1]?.point;
         const startLoc = availability.startLocation;
-        const summaryForRide = summaryByTripNumber.get(availabilityNumber);
+        const summaryForRide = summaryByTripNumber.get(
+          String(availabilityNumber),
+        );
         const totalCost =
           Number(summaryForRide?.totalFees ?? 0) > 0
             ? Number(summaryForRide?.totalFees)
@@ -1175,8 +1180,8 @@ export async function POST(req: NextRequest) {
             ]),
           ),
         ).filter(
-          (tripId): tripId is string =>
-            typeof tripId === "string" && tripId.trim() !== "",
+          (tripId): tripId is string | { toString(): string } =>
+            tripId != null && String(tripId).trim() !== "",
         );
 
         if (matchedTripIds.length > 0) {
@@ -1184,14 +1189,17 @@ export async function POST(req: NextRequest) {
             .select("_id tripNumber summary details")
             .lean<{
               _id: unknown;
-              tripNumber: number;
+              tripNumber: number | string;
               summary?: Record<string, unknown>;
               details?: Record<string, unknown>;
             }[]>();
 
           const tripWrites = tripDocs.map((tripDoc) => {
             const tripNumber = Number(tripDoc.tripNumber);
-            const importedSummary = summaryByTripNumber.get(tripNumber) ?? {};
+            const importedSummary =
+              summaryByTripNumber.get(String(tripDoc.tripNumber)) ??
+              summaryByTripNumber.get(String(tripNumber)) ??
+              {};
             const matchedPassenger = route
               .flatMap((stop) => [...stop.boarding, ...stop.alighting])
               .find(
@@ -1206,6 +1214,8 @@ export async function POST(req: NextRequest) {
                   $set: {
                     rideId: insertedRide._id,
                     status: "matched",
+                    driverId: driverIdRaw,
+                    assignedDriver: insertedRide.assignedDriver,
                     summary: {
                       ...(typeof tripDoc.summary === "object" && tripDoc.summary
                         ? tripDoc.summary

@@ -27,6 +27,7 @@ import Pagination from "@/components/shared/Pagination";
 import type { BookingStatus, RideListRow, TripListRow } from "@/types/booking";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import RateTripModal from "@/components/trips/RateTripModal";
+import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 
 export const metadata = { title: "My trips — Commuter" };
 export const dynamic = "force-dynamic";
@@ -463,6 +464,7 @@ export default async function MyTripsPage({
     }
   } else {
     const result = await listUserTrips(session.userId, passengerListOptions);
+    console.log("Fetched trips", result);
     tripRows = result.rows;
     total = result.total;
   }
@@ -1048,6 +1050,13 @@ export default async function MyTripsPage({
 
                             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                               <Pill {...(getStatusPill(locale)[trip.status] ?? getStatusPill(locale).pending_payment)} />
+                              {trip.status === "matched" && (
+                                <MatchedTripCountdown
+                                  date={trip.date}
+                                  pickupTime={trip.pickupTime}
+                                  locale={locale}
+                                />
+                              )}
                             </div>
 
                             {showSharedSummary ? (
@@ -1068,10 +1077,10 @@ export default async function MyTripsPage({
                                 {!isDriver && hasAssignedDriver && (
                                   <div style={{ marginBottom: 12, background: "linear-gradient(135deg, #F6FBFA 0%, #EEFBF8 100%)", border: "1px solid #D6F5EE", borderRadius: 14, overflow: "hidden" }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px" }}>
-                                      {trip.assignedDriver?.profilePic ? (
+                                      {(trip.assignedDriver?.profilePicture ?? trip.assignedDriver?.profilePic) ? (
                                         // eslint-disable-next-line @next/next/no-img-element
                                         <img
-                                          src={trip.assignedDriver.profilePic}
+                                          src={trip.assignedDriver.profilePicture ?? trip.assignedDriver.profilePic ?? ""}
                                           alt={trip.assignedDriver?.name ?? translate(locale, "my_trips.driver_fallback")}
                                           style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
                                         />
