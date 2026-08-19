@@ -324,6 +324,7 @@ function mapPassengerRow(p: Record<string, any>, index = 0, array: Record<string
 
   return {
     tripId: String(p.tripId),
+    userId: p.userId ? String(p.userId) : undefined,
     pickupAddress: p.pickup?.address ?? "—",
     dropoffAddress: p.dropoff?.address ?? "—",
     pickupOrder: p.pickupOrder ?? 0,

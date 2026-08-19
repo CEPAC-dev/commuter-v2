@@ -19,6 +19,7 @@ interface RideRouteStop {
 
 interface RidePassengerLike {
   tripId?: string | { toString(): string } | null;
+  userId?: string | { toString(): string } | null;
   status?: string | null;
   pickupOrder?: number | null;
   dropoffOrder?: number | null;
@@ -35,6 +36,23 @@ interface RideDocLike {
   driverId?: string;
   rideType?: string;
   status?: string;
+}
+
+// Appends an audit entry directly on the ride document (saved with the caller's .save()).
+function pushRideLog(
+  rideDoc: { logs?: { push(entry: unknown): void } },
+  entry: {
+    action: string;
+    tripId?: unknown;
+    userId?: unknown;
+    stationIndex?: number;
+    stationName?: string;
+    previousStatus?: string;
+    newStatus?: string;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  rideDoc.logs?.push({ ...entry, createdAt: new Date() });
 }
 
 function materializeSharedRidePassengers(ride: {
@@ -531,6 +549,10 @@ export async function POST(
             passenger.status = "waiting";
             passenger.seatNumbers = [];
           }
+          pushRideLog(rideDoc, {
+            action: "ride_started",
+            metadata: { currentLocation: originLoc },
+          });
           await rideDoc.save();
         }
 
@@ -647,6 +669,15 @@ export async function POST(
               passenger.status = "no_show";
               passenger.seatNumbers = [];
               updatedPassengers = true;
+              pushRideLog(currentRideDoc, {
+                action: "no_show",
+                tripId: passenger.tripId,
+                userId: passenger.userId,
+                stationIndex,
+                stationName,
+                previousStatus: "waiting",
+                newStatus: "no_show",
+              });
             } else if (confirmationStatus === "arrived") {
               passenger.status = "boarding";
               let seat = 1;
@@ -658,6 +689,16 @@ export async function POST(
               passenger.seatNumbers = [seat];
               updatedPassengers = true;
               await Trip.findByIdAndUpdate(passenger.tripId, { status: "active" });
+              pushRideLog(currentRideDoc, {
+                action: "boarding",
+                tripId: passenger.tripId,
+                userId: passenger.userId,
+                stationIndex,
+                stationName,
+                previousStatus: "waiting",
+                newStatus: "boarding",
+                metadata: { seat },
+              });
             }
           }
 
@@ -674,8 +715,18 @@ export async function POST(
               (isDropoff || isLastStation) &&
               (passenger.status === "on_board" || passenger.status === "picked_up")
             ) {
+              const previousStatus = passenger.status;
               passenger.status = "dropped_off";
               updatedPassengers = true;
+              pushRideLog(currentRideDoc, {
+                action: "dropped_off",
+                tripId: passenger.tripId,
+                userId: passenger.userId,
+                stationIndex,
+                stationName,
+                previousStatus,
+                newStatus: "dropped_off",
+              });
               await Trip.findByIdAndUpdate(passenger.tripId, { status: "completed" });
               const completedTrip = await Trip.findById(passenger.tripId)
                 .select("userId")
@@ -686,6 +737,36 @@ export async function POST(
                   String(passenger.tripId),
                 );
               }
+            }
+          }
+
+          // 4b. A rider's duplicate trip record should alight alongside the one that just matched.
+          const droppedOffUserIds = new Set(
+            currentRideDoc.passengers
+              .filter((passenger: RidePassengerLike) => passenger.status === "dropped_off")
+              .map((passenger: RidePassengerLike) => passenger.userId?.toString?.())
+              .filter((id: string | undefined): id is string => Boolean(id)),
+          );
+          for (const passenger of currentRideDoc.passengers) {
+            const userId = passenger.userId?.toString?.();
+            if (
+              userId &&
+              droppedOffUserIds.has(userId) &&
+              ["on_board", "picked_up", "boarding"].includes(passenger.status ?? "")
+            ) {
+              const previousStatus = passenger.status;
+              passenger.status = "dropped_off";
+              updatedPassengers = true;
+              pushRideLog(currentRideDoc, {
+                action: "dropped_off_linked",
+                tripId: passenger.tripId,
+                userId: passenger.userId,
+                stationIndex,
+                stationName,
+                previousStatus,
+                newStatus: "dropped_off",
+              });
+              await Trip.findByIdAndUpdate(passenger.tripId, { status: "completed" });
             }
           }
 
@@ -830,8 +911,17 @@ export async function POST(
             (p: RidePassengerLike) => p.tripId?.toString?.() === tripId.toString(),
           );
           if (passenger) {
+            const previousStatus = passenger.status;
             passenger.status = "no_show";
             passenger.seatNumbers = [];
+            pushRideLog(currentRideDocNoShow, {
+              action: "no_show",
+              tripId: passenger.tripId,
+              userId: passenger.userId,
+              previousStatus,
+              newStatus: "no_show",
+              metadata: { reason: metadata?.reason },
+            });
             await currentRideDocNoShow.save();
           }
         }
@@ -888,6 +978,13 @@ export async function POST(
         await Ride.findByIdAndUpdate(rideId, {
           status: "completed",
           ...(destLoc ? { driverDestination: destLoc } : {}),
+          $push: {
+            logs: {
+              action: "ride_completed",
+              metadata: { currentLocation: destLoc },
+              createdAt: new Date(),
+            },
+          },
         });
 
         // Update all trip statuses to completed

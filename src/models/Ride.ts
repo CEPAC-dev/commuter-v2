@@ -70,6 +70,22 @@ const RideRoutePassengerSchema = new Schema(
   { _id: false },
 );
 
+// Append-only audit trail of every driver action/status change on this ride.
+const RideLogEntrySchema = new Schema(
+  {
+    action: { type: String, required: true },
+    tripId: { type: Types.ObjectId, ref: "Trip", required: false },
+    userId: { type: Types.ObjectId, ref: "User", required: false },
+    stationIndex: { type: Number, required: false },
+    stationName: { type: String, required: false },
+    previousStatus: { type: String, required: false },
+    newStatus: { type: String, required: false },
+    metadata: { type: Schema.Types.Mixed, required: false, default: {} },
+    createdAt: { type: Date, required: true, default: () => new Date() },
+  },
+  { _id: false },
+);
+
 const RideRouteStopSchema = new Schema(
   {
     point: { type: PointSchema, required: true },
@@ -137,6 +153,8 @@ const RideSchema = new Schema(
     additionalFees: { type: Number, required: false, default: 0 },
     kmRate: { type: Number, required: false, default: 0 },
     hrRate: { type: Number, required: false, default: 0 },
+    // Audit trail of every action/status change made on this ride.
+    logs: { type: [RideLogEntrySchema], default: [] },
     status: {
       type: String,
       required: true,
