@@ -39,6 +39,7 @@ const WalletTransactionSchema = new Schema(
     // ── Kashier (topup + withdrawal) ──
     kashierSessionId: { type: String },
     kashierOrderId: { type: String },
+    kashierTransactionIds: { type: [String], default: [] },
     kashierPayoutId: { type: String },
 
     // ── Withdrawal destination (masked for display) ──
@@ -46,6 +47,14 @@ const WalletTransactionSchema = new Schema(
     payoutDestination: { type: String },
   },
   { timestamps: true },
+);
+
+WalletTransactionSchema.index(
+  { userId: 1, type: 1, tripId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { type: "earning", tripId: { $exists: true } },
+  },
 );
 
 export type WalletTransactionDoc = InferSchemaType<

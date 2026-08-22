@@ -3,8 +3,12 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
+import { adminAuth } from "@/lib/middleware/adminAuth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await adminAuth(req);
+  if (!auth.authorized) return auth.response;
+
   try {
     await connectDB();
 
@@ -24,7 +28,10 @@ export async function GET() {
     ]);
 
     return NextResponse.json({ data: { availabilities, drivers, trips } });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Failed to load matching options" }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : "Failed to load matching options";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

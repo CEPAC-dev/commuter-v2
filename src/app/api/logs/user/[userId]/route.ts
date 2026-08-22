@@ -26,17 +26,15 @@ export async function GET(
     await connectDB();
 
     const { userId } = await params;
+    if (session.role !== "admin" && session.userId !== userId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 },
+      );
+    }
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get("limit") || "100");
     const skip = parseInt(searchParams.get("skip") || "0");
-
-    // Users can only view their own logs (unless admin)
-    // if (session.user?.id !== userId && session.user?.role !== "admin") {
-    //   return NextResponse.json(
-    //     { success: false, error: "Forbidden" },
-    //     { status: 403 }
-    //   );
-    // }
 
     const logs = await Log.find({ userId })
       .sort({ createdAt: -1 })

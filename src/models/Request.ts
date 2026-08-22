@@ -28,6 +28,7 @@ const RequestSchema = new Schema(
     },
     kashierSessionId: { type: String },
     kashierOrderId: { type: String },
+    kashierTransactionIds: { type: [String], default: [] },
     paidAt: { type: Date },
     status: {
       type: String,
