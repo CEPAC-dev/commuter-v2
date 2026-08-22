@@ -335,6 +335,22 @@ export async function GET(req: NextRequest) {
   const matrixProvider = isMatrixProvider(requestedMatrixProvider)
     ? requestedMatrixProvider
     : "osrm";
+  const requestedValhallaCosting = req.nextUrl.searchParams.get(
+    "valhallaCosting",
+  );
+  const valhallaCosting =
+    requestedValhallaCosting === "taxi" || requestedValhallaCosting === "bus"
+      ? requestedValhallaCosting
+      : "auto";
+  const requestedValhallaDateTimeType = req.nextUrl.searchParams.get(
+    "valhallaDateTimeType",
+  );
+  const valhallaDateTimeType =
+    requestedValhallaDateTimeType === "depart_at" ||
+    requestedValhallaDateTimeType === "arrive_by"
+      ? requestedValhallaDateTimeType
+      : "current";
+  const valhallaDateTime = req.nextUrl.searchParams.get("valhallaDateTime")?.trim();
 
   const privateTrips = await Trip.find({
     date: targetDate,
@@ -669,6 +685,13 @@ export async function GET(req: NextRequest) {
   const directionsTable = await fetchDirectionsMatrix(
     matrixProvider,
     stationsSheetRows,
+    {
+      valhalla: {
+        costing: valhallaCosting,
+        dateTimeType: valhallaDateTimeType,
+        dateTime: valhallaDateTime || undefined,
+      },
+    },
   );
   const skimMetrics = stationsSheetRows.map((originStation, rowIndex) =>
     stationsSheetRows.map((destStation, colIndex) => {

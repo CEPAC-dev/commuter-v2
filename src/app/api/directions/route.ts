@@ -11,14 +11,25 @@ export interface DirectionsTableResult {
   durationsMinutes: Array<Array<number | null>>;
 }
 
-export type MatrixProvider = "osrm" | "openrouteservice";
+export type MatrixProvider = "osrm" | "openrouteservice" | "valhalla";
+export type ValhallaDateTimeType = "current" | "depart_at" | "arrive_by";
+
+export interface MatrixOptions {
+  valhalla?: {
+    costing: "auto" | "taxi" | "bus";
+    dateTimeType: ValhallaDateTimeType;
+    dateTime?: string;
+  };
+}
 
 type MatrixPoint = { lat: number; lng: number };
 
 export function isMatrixProvider(
   value: string | null,
 ): value is MatrixProvider {
-  return value === "osrm" || value === "openrouteservice";
+  return (
+    value === "osrm" || value === "openrouteservice" || value === "valhalla"
+  );
 }
 
 export async function fetchOsrmDirectionsTable(
@@ -111,13 +122,84 @@ export async function fetchOpenRouteServiceMatrix(
   };
 }
 
+export async function fetchValhallaMatrix(
+  points: MatrixPoint[],
+  options: NonNullable<MatrixOptions["valhalla"]>,
+): Promise<DirectionsTableResult | null> {
+  if (points.length < 2) return null;
+
+  const baseUrl = process.env.VALHALLA_URL?.replace(/\/+$/, "");
+  if (!baseUrl) return null;
+
+  const dateTimeType =
+    options.dateTimeType === "depart_at"
+      ? 1
+      : options.dateTimeType === "arrive_by"
+        ? 2
+        : 0;
+  const dateTime =
+    dateTimeType === 0
+      ? { type: dateTimeType }
+      : { type: dateTimeType, value: options.dateTime };
+
+  const res = await fetch(`${baseUrl}/sources_to_targets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sources: points.map(({ lat, lng }) => ({ lat, lon: lng })),
+      targets: points.map(({ lat, lng }) => ({ lat, lon: lng })),
+      costing: options.costing,
+      units: "kilometers",
+      date_time: dateTime,
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as {
+    sources_to_targets?: Array<
+      Array<{ distance?: number; time?: number | null } | null>
+    >;
+  };
+  const matrix = data.sources_to_targets;
+  if (!matrix || matrix.length !== points.length) return null;
+
+  return {
+    distancesKm: matrix.map((row) =>
+      row.map((cell) =>
+        typeof cell?.distance === "number" && cell.distance > 0
+          ? Math.round(cell.distance * 10) / 10
+          : null,
+      ),
+    ),
+    durationsMinutes: matrix.map((row) =>
+      row.map((cell) =>
+        typeof cell?.time === "number" && cell.time > 0
+          ? Math.round(cell.time / 60)
+          : null,
+      ),
+    ),
+  };
+}
+
 export function fetchDirectionsMatrix(
   provider: MatrixProvider,
   points: MatrixPoint[],
+  options: MatrixOptions = {},
 ): Promise<DirectionsTableResult | null> {
-  return provider === "openrouteservice"
-    ? fetchOpenRouteServiceMatrix(points)
-    : fetchOsrmDirectionsTable(points);
+  if (provider === "openrouteservice") {
+    return fetchOpenRouteServiceMatrix(points);
+  }
+
+  if (provider === "valhalla") {
+    return fetchValhallaMatrix(points, {
+      costing: "auto",
+      dateTimeType: "current",
+      ...options.valhalla,
+    });
+  }
+
+  return fetchOsrmDirectionsTable(points);
 }
 
 /** Fetch driving directions from OSRM without exposing provider credentials. */

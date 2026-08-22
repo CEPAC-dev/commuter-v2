@@ -29,7 +29,7 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   private_car: {
     key: "private_car",
     label: "Private car",
-    rate: 12,
+    rate: 8,
     additional_rate: 0.25, // EGP per km for extra passengers
     ride: "private",
     vehicle_type: 1,
@@ -44,7 +44,7 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   taxi_private: {
     key: "taxi_private",
     label: "Private Taxi",
-    rate: 10,
+    rate: 6,
     additional_rate: 0.25, // EGP per km for extra passengers
     ride: "private",
     vehicle_type: 2,
@@ -59,7 +59,7 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   taxi_shared: {
     key: "taxi_shared",
     label: "Shared Taxi",
-    rate: 8,
+    rate: 5,
     additional_rate: 0.5, // EGP per km for extra passengers
     ride: "shared",
     vehicle_type: 2,
@@ -74,7 +74,7 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   shared_car: {
     key: "shared_car",
     label: "Shared Car",
-    rate: 9,
+    rate: 5,
     additional_rate: 0.5,
     ride: "shared",
     vehicle_type: 5,
@@ -89,7 +89,7 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   van_shared: {
     key: "van_shared",
     label: "Van",
-    rate: 7,
+    rate: 4,
     additional_rate: 0.5, // EGP per km for extra passengers
     ride: "shared",
     vehicle_type: 3,
@@ -104,15 +104,15 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   microbus_shared: {
     key: "microbus_shared",
     label: "Microbus",
-    rate: 4,
+    rate: 3,
     additional_rate: 0.5, // EGP per km for extra passengers
     ride: "shared",
     vehicle_type: 4,
     trip_type: 5,
     buffer: 45,
     window: 30,
-    capacity: 10,
-    occupancy: 10,
+    capacity: 9,
+    occupancy: 9,
     min_occupancy: 8,
     minimum_charge: 50, // EGP minimum charge for microbus rides
   },
