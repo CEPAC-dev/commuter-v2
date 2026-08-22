@@ -1,4 +1,4 @@
-import { MapPin, Users, Clock, Route as RouteIcon } from "lucide-react";
+import { MapPin, Clock, Route as RouteIcon } from "lucide-react";
 import { RideDetailRow, TripStatBlock } from "@/components/trips/TripDetailParts";
 import type { GeoPoint, StationSelection } from "@/types/geo";
 import type { StationOption } from "@/lib/services/trips";

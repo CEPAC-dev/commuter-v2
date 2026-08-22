@@ -231,15 +231,6 @@ export async function listDriverTrips(
           driverId?: unknown;
           assignedDriver?: AssignedDriver | null;
           date: string;
-          assignedDriver?: {
-            name?: string;
-            phone?: string;
-            profilePic?: string;
-            carBrand?: string;
-            carModel?: string;
-            modelYear?: string;
-            plate?: string;
-          } | null;
           paymentStatus: string;
           status: string;
           vehicleType: string;

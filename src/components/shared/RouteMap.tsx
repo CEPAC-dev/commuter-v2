@@ -104,6 +104,8 @@ export default function RouteMap({
 
   useEffect(() => {
     if (!ok) {
+      // Clear path when inputs invalid
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPathCoords(null);
       return;
     }

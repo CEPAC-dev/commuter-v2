@@ -138,15 +138,6 @@ function pickBtnStyle(active: boolean): React.CSSProperties {
   };
 }
 
-/** Render "HH:MM" 24h as 12h am/pm */
-function to12h(hhmm: string): string {
-  if (!hhmm) return "";
-  const [h, m] = hhmm.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-
 function formatWaitDuration(minutes: number): string {
   const safeMinutes = Number.isFinite(minutes) ? Math.max(0, minutes) : 0;
   return `${String(Math.floor(safeMinutes / 60)).padStart(2, "0")}:${String(safeMinutes % 60).padStart(2, "0")}`;

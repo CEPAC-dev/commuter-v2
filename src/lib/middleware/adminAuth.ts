@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 
-export async function adminAuth(_req: NextRequest) {
+export async function adminAuth() {
   const session = await getSession();
   if (!session) {
     return {

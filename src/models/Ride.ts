@@ -54,22 +54,6 @@ const RidePassengerSchema = new Schema(
   { _id: false },
 );
 
-// Passenger reference embedded inside route stop boarding/alighting arrays.
-const RideRoutePassengerSchema = new Schema(
-  {
-    tripId: { type: Types.ObjectId, ref: "Trip", required: true },
-    userId: { type: Types.ObjectId, ref: "User", required: true },
-    pickup: { type: PointSchema, required: true },
-    dropoff: { type: PointSchema, required: true },
-    pickupOrder: { type: Number, required: true, min: 0 },
-    dropoffOrder: { type: Number, required: true, min: 0 },
-    numberOfPassengers: { type: Number, required: true, min: 1, default: 1 },
-    tripCost: { type: Number, required: false, default: 0 },
-    seatNumber: { type: Number, required: false },
-  },
-  { _id: false },
-);
-
 // Append-only audit trail of every driver action/status change on this ride.
 const RideLogEntrySchema = new Schema(
   {

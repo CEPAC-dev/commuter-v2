@@ -32,6 +32,8 @@ export default function AgeGateInput({ value, onChange, error }: AgeGateInputPro
   const [valid, setValid] = useState(false);
 
   useEffect(() => {
+    // Validate and compute age from day/month/year inputs
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!day || !month || !year) {
       setAgeError('');
       setValid(false);

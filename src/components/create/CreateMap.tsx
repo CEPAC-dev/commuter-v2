@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSON, LayerGroup, Map as LeafletMap } from "leaflet";
 import type { TripData } from "./TripCycle";
 import { reverseGeocode, formatDisplayName } from "@/lib/nominatim";
@@ -88,7 +88,7 @@ export default function CreateMap({
       .then((r) => r.json())
       .then((fc) => {
         if (cancelled) return;
-        const labels: ZoneLabel[] = fc.features.map((feature: any) => {
+        const labels: ZoneLabel[] = fc.features.map((feature: { id: unknown; properties?: { NO?: number; NAME?: string }; geometry: { coordinates: [number, number] } }) => {
           const idStr = String(feature.id);
           const noMatch = idStr.match(/\d+/);
           return {

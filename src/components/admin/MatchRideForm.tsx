@@ -186,7 +186,10 @@ export default function MatchRideForm({
       .filter((p) => validTripIds.has(p.tripId))
       .concat(newPoints);
 
+    // Recompute ordered points from selection
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOrderedPoints(updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTripIds, trips]);
 
   function movePoint(index: number, direction: "up" | "down") {
@@ -208,7 +211,7 @@ export default function MatchRideForm({
     });
   }
 
-  function updatePassengerInput(tripId: string, field: keyof PassengerInput, value: any) {
+  function updatePassengerInput(tripId: string, field: keyof PassengerInput, value: string | number | number[]) {
     setPassengerInputs((current) => ({
       ...current,
       [tripId]: {
@@ -567,7 +570,7 @@ export default function MatchRideForm({
                                 const startSeat = Number(e.target.value);
                                 const count = input.numberOfPassengers || 1;
                                 const seats = startSeat ? Array.from({ length: count }, (_, i) => startSeat + i) : [];
-                                updatePassengerInput(tripId, "seatNumbers" as any, seats);
+                                updatePassengerInput(tripId, "seatNumbers", seats);
                               }}
                               className="field"
                             >

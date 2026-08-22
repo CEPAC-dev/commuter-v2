@@ -12,7 +12,7 @@ import type { Types } from "mongoose";
 export async function logPaymentInitiated(
   tripId: Types.ObjectId | string,
   userId: Types.ObjectId | string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -32,7 +32,7 @@ export async function logPaymentInitiated(
 export async function logPaymentCompleted(
   tripId: Types.ObjectId | string,
   userId: Types.ObjectId | string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -53,7 +53,7 @@ export async function logPaymentFailed(
   tripId: Types.ObjectId | string,
   userId: Types.ObjectId | string,
   reason?: string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -74,7 +74,7 @@ export async function logDriverAccepted(
   tripId: Types.ObjectId | string,
   userId: Types.ObjectId | string,
   driverId: Types.ObjectId | string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -98,7 +98,7 @@ export async function logDriverRejected(
   userId: Types.ObjectId | string,
   driverId: Types.ObjectId | string,
   reason?: string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -122,7 +122,7 @@ export async function logDriverCancelled(
   userId: Types.ObjectId | string,
   driverId: Types.ObjectId | string,
   reason?: string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -145,7 +145,7 @@ export async function logUserCancelled(
   tripId: Types.ObjectId | string,
   userId: Types.ObjectId | string,
   reason?: string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -167,7 +167,7 @@ export async function logTripMatched(
   tripId: Types.ObjectId | string,
   userId: Types.ObjectId | string,
   driverId: Types.ObjectId | string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -189,7 +189,7 @@ export async function logTripStarted(
   tripId: Types.ObjectId | string,
   userId: Types.ObjectId | string,
   driverId: Types.ObjectId | string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -212,7 +212,7 @@ export async function logTripCompleted(
   tripId: Types.ObjectId | string,
   userId: Types.ObjectId | string,
   driverId: Types.ObjectId | string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -233,7 +233,7 @@ export async function logTripCompleted(
 export async function logTripTimeout(
   tripId: Types.ObjectId | string,
   userId: Types.ObjectId | string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -253,7 +253,7 @@ export async function logTripTimeout(
 export async function logTripCreated(
   tripId: Types.ObjectId | string,
   userId: Types.ObjectId | string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -280,7 +280,7 @@ export async function logCustomAction(
   driverId?: Types.ObjectId | string | null,
   actorType?: "system" | "user" | "driver" | "admin",
   actorId?: Types.ObjectId | string | null,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,

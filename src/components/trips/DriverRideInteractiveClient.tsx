@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   CalendarDays,
   Users,
@@ -177,7 +177,7 @@ export default function DriverRideInteractiveClient({
       )}&destination=${encodeURIComponent(destination)}&travelmode=driving`;
 
       window.open(mapsUrl, "_blank");
-    } catch (error) {
+    } catch {
       setNavigationErrorByStation((prev) => ({
         ...prev,
         [step.stationIndex]: t("navigation.unable_get_location"),
@@ -366,19 +366,6 @@ export default function DriverRideInteractiveClient({
           confirmedStationIndices.includes(step.stationIndex),
         );
 
-  const [lastActiveStationIndex, setLastActiveStationIndex] = useState<number | null>(
-    activeStationIndex,
-  );
-
-  useEffect(() => {
-    if (!rideStarted) {
-      setLastActiveStationIndex(activeStationIndex);
-      return;
-    }
-
-    setLastActiveStationIndex(activeStationIndex);
-  }, [activeStationIndex, lastActiveStationIndex, rideStarted]);
-
   // Helper for reverse geocoding location name
   const fetchLocationName = async (lat: number, lng: number, fallback: string): Promise<string> => {
     try {
@@ -451,8 +438,6 @@ export default function DriverRideInteractiveClient({
   const handleConfirmStation = async (
     stationIndex: number,
     stationName: string,
-    stationStepIndex: number,
-    boardingCount: number,
   ) => {
     const stationKey = String(stationIndex);
     const selections = stationSelections[stationKey] ?? {};
@@ -1069,7 +1054,7 @@ export default function DriverRideInteractiveClient({
                           <button
                             type="button"
                             onClick={() =>
-                              handleConfirmStation(step.stationIndex, step.name, index, step.boarding)
+                              handleConfirmStation(step.stationIndex, step.name)
                             }
                             disabled={
                               loadingAction === `confirm-${step.stationIndex}` ||

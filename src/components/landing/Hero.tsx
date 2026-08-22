@@ -13,6 +13,17 @@ interface Props {
   authed?: boolean;
 }
 
+const InputSkeleton = () => (
+  <div
+    style={{
+      height: 52,
+      background: "#f8f9fa",
+      borderRadius: 10,
+      border: "1.5px solid #e8edf0",
+    }}
+  />
+);
+
 export default function Hero({ authed = false }: Props) {
   const router = useRouter();
   const { t, locale } = useClientLocale();
@@ -22,6 +33,7 @@ export default function Hero({ authed = false }: Props) {
   const [error, setError] = useState("");
 
   // Prevent sessionStorage hydration mismatch
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true); }, []);
 
   // Build stats dynamically from translations
@@ -30,9 +42,6 @@ export default function Hero({ authed = false }: Props) {
     { label: t("hero.stats.fully_covered"), value: t("hero.stats.coverage_value") },
     { label: t("hero.stats.from"), value: t("hero.stats.price_value") },
   ] as const;
-
-  // Prevent sessionStorage hydration mismatch
-  useEffect(() => { setMounted(true); }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,17 +52,6 @@ export default function Hero({ authed = false }: Props) {
     setError("");
     router.push("/create");
   }
-
-  const InputSkeleton = () => (
-    <div
-      style={{
-        height: 52,
-        background: "#f8f9fa",
-        borderRadius: 10,
-        border: "1.5px solid #e8edf0",
-      }}
-    />
-  );
 
   return (
     <section

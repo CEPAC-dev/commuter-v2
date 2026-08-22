@@ -1,4 +1,4 @@
-import { bookingWindow } from "@/lib/time/bookingDates";
+import { bookingWindow } from "../time/bookingDates.ts";
 
 export type VehicleKey =
   | "private_car"

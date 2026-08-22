@@ -69,6 +69,8 @@ export default function LocationPickerMap({
     lat && lng ? { lat: parseFloat(lat), lng: parseFloat(lng) } : null;
 
   useEffect(() => {
+    // Sync query with name prop
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuery(name);
   }, [name]);
 

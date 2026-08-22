@@ -15,7 +15,7 @@ export interface CreateLogInput {
   stationName?: string | null;
   boardingCount?: number | null;
   alightingCount?: number | null;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   actorType?: "system" | "user" | "driver" | "admin";
   actorId?: Types.ObjectId | string | null;
 }
@@ -114,7 +114,7 @@ export async function getTripLogs(
  * Get logs by filter criteria
  */
 export async function getLogs(
-  filter: Record<string, any>,
+  filter: Record<string, unknown>,
   limit = 50,
   skip = 0,
 ) {

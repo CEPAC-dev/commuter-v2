@@ -134,10 +134,7 @@ export default function VehicleSeatMap({
   vehicleType = "taxi_shared",
   isDriver = false,
   assignedSeatNumbers = [],
-  activeStationIndex = null,
   rideStarted = false,
-  confirmedStationIndices = [],
-  stationSelections = {},
 }: Props) {
   const vType = ride?.vehicleType ?? vehicleType;
   const grid = getVehicleSeatGrid(vType);
