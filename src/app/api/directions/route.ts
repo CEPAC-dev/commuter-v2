@@ -11,7 +11,11 @@ export interface DirectionsTableResult {
   durationsMinutes: Array<Array<number | null>>;
 }
 
-export type MatrixProvider = "osrm" | "openrouteservice" | "valhalla";
+export type MatrixProvider =
+  | "osrm"
+  | "openrouteservice"
+  | "valhalla"
+  | "graphhopper";
 export type ValhallaDateTimeType = "current" | "depart_at" | "arrive_by";
 
 export interface MatrixOptions {
@@ -28,7 +32,10 @@ export function isMatrixProvider(
   value: string | null,
 ): value is MatrixProvider {
   return (
-    value === "osrm" || value === "openrouteservice" || value === "valhalla"
+    value === "osrm" ||
+    value === "openrouteservice" ||
+    value === "valhalla" ||
+    value === "graphhopper"
   );
 }
 
@@ -57,14 +64,14 @@ export async function fetchOsrmDirectionsTable(
   return {
     distancesKm: data.distances.map((row) =>
       row.map((distance) =>
-        typeof distance === "number" && distance > 0
+        typeof distance === "number" && distance >= 0
           ? Math.round((distance / 1000) * 10) / 10
           : null,
       ),
     ),
     durationsMinutes: data.durations.map((row) =>
       row.map((duration) =>
-        typeof duration === "number" && duration > 0
+        typeof duration === "number" && duration >= 0
           ? Math.round(duration / 60)
           : null,
       ),
@@ -182,6 +189,56 @@ export async function fetchValhallaMatrix(
   };
 }
 
+export async function fetchGraphHopperMatrix(
+  points: MatrixPoint[],
+): Promise<DirectionsTableResult | null> {
+  if (points.length < 2) return null;
+
+  const selfHostedUrl = process.env.GRAPHHOPPER_URL?.replace(/\/+$/, "");
+  const apiKey = process.env.GRAPHHOPPER_API_KEY;
+  const url = selfHostedUrl
+    ? `${selfHostedUrl}/matrix`
+    : apiKey
+      ? `https://graphhopper.com/api/1/matrix?key=${encodeURIComponent(apiKey)}`
+      : null;
+  if (!url) return null;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      points: points.map(({ lat, lng }) => [lng, lat]),
+      profile: "car",
+      out_arrays: ["distances", "times"],
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as {
+    distances?: Array<Array<number | null>>;
+    times?: Array<Array<number | null>>;
+  };
+  if (!data.distances || !data.times) return null;
+
+  return {
+    distancesKm: data.distances.map((row) =>
+      row.map((distance) =>
+        typeof distance === "number" && distance > 0
+          ? Math.round((distance / 1000) * 10) / 10
+          : null,
+      ),
+    ),
+    durationsMinutes: data.times.map((row) =>
+      row.map((duration) =>
+        typeof duration === "number" && duration > 0
+          ? Math.round(duration / 60)
+          : null,
+      ),
+    ),
+  };
+}
+
 export function fetchDirectionsMatrix(
   provider: MatrixProvider,
   points: MatrixPoint[],
@@ -197,6 +254,10 @@ export function fetchDirectionsMatrix(
       dateTimeType: "current",
       ...options.valhalla,
     });
+  }
+
+  if (provider === "graphhopper") {
+    return fetchGraphHopperMatrix(points);
   }
 
   return fetchOsrmDirectionsTable(points);

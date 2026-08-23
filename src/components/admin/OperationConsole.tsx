@@ -762,6 +762,7 @@ export default function OperationConsole() {
               <option value="osrm">OSRM</option>
               <option value="openrouteservice">OpenRouteService</option>
               <option value="valhalla">Valhalla</option>
+              <option value="graphhopper">GraphHopper</option>
             </select>
           </label>
           {matrixProvider === "valhalla" ? (
@@ -774,7 +775,9 @@ export default function OperationConsole() {
                   minWidth: 160,
                 }}
               >
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
                   Valhalla costing
                 </span>
                 <select
@@ -801,12 +804,16 @@ export default function OperationConsole() {
                   minWidth: 160,
                 }}
               >
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
                   Traffic time
                 </span>
                 <select
                   value={valhallaDateTimeType}
-                  onChange={(event) => setValhallaDateTimeType(event.target.value)}
+                  onChange={(event) =>
+                    setValhallaDateTimeType(event.target.value)
+                  }
                   style={{
                     border: "1px solid #D8E0E4",
                     borderRadius: 10,
@@ -829,12 +836,16 @@ export default function OperationConsole() {
                     minWidth: 220,
                   }}
                 >
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+                  <span
+                    style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                  >
                     Traffic date and time
                   </span>
                   <input
                     value={valhallaDateTime}
-                    onChange={(event) => setValhallaDateTime(event.target.value)}
+                    onChange={(event) =>
+                      setValhallaDateTime(event.target.value)
+                    }
                     type="datetime-local"
                     required
                     style={{
