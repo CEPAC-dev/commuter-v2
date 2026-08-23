@@ -10,8 +10,11 @@ import { queryKashierPayoutStatus } from "@/lib/payments/kashierPayout";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { Types } from "mongoose";
 
-function verifySignature(p: Record<string, string>, sig: string): boolean {
-  const secret = process.env.KASHIER_SECRET_KEY!;
+function verifySignature(
+  p: Record<string, string>,
+  sig: string,
+  secret: string,
+): boolean {
   const data = `${p.merchantId}${p.orderId}${p.transactionId}${p.amount}${p.currency}${p.paymentStatus}`;
   const expected = createHmac("sha256", secret).update(data).digest("hex");
   try {
@@ -34,20 +37,45 @@ export async function POST(req: NextRequest) {
 
   const bookingId = body.merchantOrderId ?? body.orderId;
   const amount = body.amount;
+  const currency = body.currency;
+  const merchantId = body.merchantId;
+  const transactionId = body.transactionId;
   const paymentStatus = body.paymentStatus ?? body.status;
   const sig = body.signature || req.headers.get("x-kashier-signature") || "";
+  const webhookSecret = process.env.KASHIER_SECRET_KEY;
+  const expectedMerchantId = process.env.KASHIER_MERCHANT_ID;
 
-  if (!bookingId || !amount || !paymentStatus) {
+  if (
+    !bookingId ||
+    !amount ||
+    !currency ||
+    !merchantId ||
+    !transactionId ||
+    !paymentStatus ||
+    !sig
+  ) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
-  if (sig && process.env.KASHIER_SECRET_KEY && !verifySignature(body, sig)) {
+  if (!webhookSecret || !expectedMerchantId) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  }
+
+  if (!verifySignature(body, sig, webhookSecret)) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  }
+
+  if (merchantId !== expectedMerchantId || currency.toUpperCase() !== "EGP") {
+    return NextResponse.json({ error: "Invalid payment details" }, { status: 400 });
   }
 
   await connectDB();
 
   const orderId = bookingId; // merchantOrderId = Booking _id OR WalletTransaction _id
+  const receivedAmount = Number(amount);
+  if (!Number.isFinite(receivedAmount)) {
+    return NextResponse.json({ error: "Invalid payment details" }, { status: 400 });
+  }
 
   // Route by record type: wallet top-ups are settled (and credited) separately.
   if (Types.ObjectId.isValid(orderId)) {
@@ -56,6 +84,19 @@ export async function POST(req: NextRequest) {
       type: "topup",
     });
     if (topup) {
+      if (receivedAmount !== topup.amountEgp) {
+        return NextResponse.json({ error: "Invalid payment details" }, { status: 400 });
+      }
+      const claimed = await WalletTransaction.findOneAndUpdate(
+        {
+          _id: topup._id,
+          kashierTransactionIds: { $ne: transactionId },
+        },
+        { $addToSet: { kashierTransactionIds: transactionId } },
+      );
+      if (!claimed) {
+        return NextResponse.json({ error: "Transaction already processed" }, { status: 400 });
+      }
       // Re-query Kashier (source of truth) and credit once if paid.
       await verifyAndSettleTopup(orderId);
       return NextResponse.json({ received: true });
@@ -66,6 +107,19 @@ export async function POST(req: NextRequest) {
       type: "withdrawal",
     });
     if (withdrawal) {
+      if (receivedAmount !== withdrawal.amountEgp) {
+        return NextResponse.json({ error: "Invalid payment details" }, { status: 400 });
+      }
+      const claimed = await WalletTransaction.findOneAndUpdate(
+        {
+          _id: withdrawal._id,
+          kashierTransactionIds: { $ne: transactionId },
+        },
+        { $addToSet: { kashierTransactionIds: transactionId } },
+      );
+      if (!claimed) {
+        return NextResponse.json({ error: "Transaction already processed" }, { status: 400 });
+      }
       const payoutId = withdrawal.kashierPayoutId;
       if (payoutId) {
         const outcome = await queryKashierPayoutStatus(payoutId);
@@ -88,13 +142,38 @@ export async function POST(req: NextRequest) {
     "completed",
   ].includes(st);
 
+  const booking = Types.ObjectId.isValid(orderId)
+    ? await Request.findById(orderId).select("amountEgp").lean<{ amountEgp: number }>()
+    : null;
+  if (!booking || receivedAmount !== booking.amountEgp) {
+    return NextResponse.json({ error: "Invalid payment details" }, { status: 400 });
+  }
+
   // Conditional update — only settle if still unsettled (race-safe vs wallet path)
   const settled = await Request.findOneAndUpdate(
-    { _id: orderId, paymentStatus: { $in: ["pending", "failed"] } },
+    {
+      _id: orderId,
+      paymentStatus: { $in: ["pending", "failed"] },
+      kashierTransactionIds: { $ne: transactionId },
+    },
     paid
-      ? { paymentStatus: "paid", status: "submitted", paidAt: new Date() }
-      : { paymentStatus: "failed" },
+      ? {
+          $set: {
+            paymentStatus: "paid",
+            status: "submitted",
+            paidAt: new Date(),
+          },
+          $addToSet: { kashierTransactionIds: transactionId },
+        }
+      : {
+          $set: { paymentStatus: "failed" },
+          $addToSet: { kashierTransactionIds: transactionId },
+        },
   );
+
+  if (!settled) {
+    return NextResponse.json({ error: "Transaction already processed" }, { status: 400 });
+  }
 
   // Sync Trips only when Request was actually updated (idempotent guard).
   if (settled && paid) {

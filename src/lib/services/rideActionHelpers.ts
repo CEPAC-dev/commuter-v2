@@ -13,7 +13,7 @@ export async function logRideStarted(
   rideId: Types.ObjectId | string,
   tripIds: (Types.ObjectId | string)[],
   driverId: Types.ObjectId | string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   // Log for each trip in the ride
   const promises = tripIds.map((tripId) =>
@@ -43,7 +43,7 @@ export async function logStationArrived(
   driverId: Types.ObjectId | string,
   stationIndex: number,
   stationName: string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   // Log for each trip in the ride
   const promises = tripIds.map((tripId) =>
@@ -77,7 +77,7 @@ export async function logBoardingAlighting(
   stationName: string,
   boardingCount: number,
   alightingCount: number,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -105,7 +105,7 @@ export async function logPickupArrived(
   tripId: Types.ObjectId | string,
   driverId: Types.ObjectId | string,
   pickupAddress: string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -130,7 +130,7 @@ export async function logPassengerPickedUp(
   tripId: Types.ObjectId | string,
   driverId: Types.ObjectId | string,
   passengerCount: number,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -155,7 +155,7 @@ export async function logNoShow(
   tripId: Types.ObjectId | string,
   driverId: Types.ObjectId | string,
   reason?: string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -180,7 +180,7 @@ export async function logStopPointArrived(
   driverId: Types.ObjectId | string,
   stationIndex: number,
   stationName: string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   return await createLog({
     tripId,
@@ -205,7 +205,7 @@ export async function logRideCompleted(
   rideId: Types.ObjectId | string,
   tripIds: (Types.ObjectId | string)[],
   driverId: Types.ObjectId | string,
-  metadata?: Record<string, any>,
+  metadata?: Record<string, unknown>,
 ) {
   // Log for each trip in the ride
   const promises = tripIds.map((tripId) =>

@@ -34,6 +34,8 @@ export function useClientLocale(initialLocale?: Locale) {
 
   useEffect(() => {
     const current = getLocaleFromCookie();
+    // Hydration initialization from cookie
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocale(current);
     notifyLocaleChange(current);
   }, []);

@@ -35,6 +35,7 @@ type RidePassengerDetail = {
   pickupOrder?: number;
   dropoffOrder?: number;
   numberOfPassengers: number;
+  status?: string;
   user?: {
     userNumber?: number;
     name?: string;
@@ -297,6 +298,12 @@ export default function AdminRidesPage() {
   const [detail, setDetail] = useState<RideRow | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [passengerActionTripId, setPassengerActionTripId] = useState<
+    string | null
+  >(null);
+  const [passengerActionError, setPassengerActionError] = useState<
+    string | null
+  >(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(
     null,
@@ -556,6 +563,7 @@ export default function AdminRidesPage() {
     setDetailId(id);
     setDetail(null);
     setDetailError(null);
+    setPassengerActionError(null);
     setDetailLoading(true);
   }
 
@@ -565,6 +573,45 @@ export default function AdminRidesPage() {
     setDetailError(null);
   }
 
+  async function markPassengerStatus(
+    tripId: string,
+    status: "no_show" | "waiting",
+  ) {
+    if (!detailId) return;
+    setPassengerActionTripId(tripId);
+    setPassengerActionError(null);
+    try {
+      const res = await fetch(`/api/admin/rides/${detailId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tripId, status }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Unable to update passenger status.");
+      }
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              passengerDetails: current.passengerDetails?.map((passenger) =>
+                passenger.tripId === tripId
+                  ? { ...passenger, status }
+                  : passenger,
+              ),
+            }
+          : current,
+      );
+    } catch (err) {
+      setPassengerActionError(
+        err instanceof Error
+          ? err.message
+          : "Unable to update passenger status.",
+      );
+    } finally {
+      setPassengerActionTripId(null);
+    }
+  }
   useEffect(() => {
     if (!detailId) return;
     let active = true;
@@ -1655,52 +1702,136 @@ export default function AdminRidesPage() {
                       Each passenger is listed once with their boarding and
                       alighting order.
                     </p>
+                    {passengerActionError ? (
+                      <p
+                        role="alert"
+                        style={{
+                          margin: "0 0 8px",
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: "rgba(231,76,60,0.08)",
+                          color: "#C0392B",
+                          fontSize: 12,
+                        }}
+                      >
+                        {passengerActionError}
+                      </p>
+                    ) : null}
                     {detail.passengerDetails?.length ? (
-                      detail.passengerDetails.map((passenger) => (
-                        <div className="passenger-row" key={passenger.userId}>
-                          <span className="passenger-avatar">
-                            {passenger.user?.profilePic ? (
-                              <img src={passenger.user.profilePic} alt="" />
-                            ) : (
-                              initials(passenger.user?.name)
-                            )}
-                          </span>
-                          <div style={{ minWidth: 0 }}>
-                            <strong
+                      detail.passengerDetails.map((passenger) => {
+                        const isNoShow = passenger.status === "no_show";
+                        const isBusy =
+                          passengerActionTripId === passenger.tripId;
+                        return (
+                          <div
+                            className="passenger-row"
+                            key={passenger.userId}
+                            style={
+                              isNoShow
+                                ? {
+                                    background: "rgba(231,76,60,0.06)",
+                                    borderRadius: 10,
+                                  }
+                                : undefined
+                            }
+                          >
+                            <span className="passenger-avatar">
+                              {passenger.user?.profilePic ? (
+                                <img src={passenger.user.profilePic} alt="" />
+                              ) : (
+                                initials(passenger.user?.name)
+                              )}
+                            </span>
+                            <div style={{ minWidth: 0 }}>
+                              <strong
+                                style={{
+                                  display: "block",
+                                  overflow: "hidden",
+                                  color: isNoShow ? "#C0392B" : "#0B1E3D",
+                                  fontSize: 13,
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {passenger.user?.name ?? "Unknown passenger"}
+                              </strong>
+                              <span style={{ color: "#5A6A7A", fontSize: 12 }}>
+                                {passenger.user?.userNumber != null
+                                  ? `User #${passenger.user.userNumber}`
+                                  : "User number unavailable"}
+                                {passenger.user?.phone
+                                  ? ` · ${passenger.user.phone}`
+                                  : ""}
+                              </span>
+                              {isNoShow ? (
+                                <span
+                                  style={{
+                                    display: "block",
+                                    color: "#C0392B",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  No show
+                                </span>
+                              ) : null}
+                            </div>
+                            <div
                               style={{
-                                display: "block",
-                                overflow: "hidden",
-                                color: "#0B1E3D",
-                                fontSize: 13,
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "flex-end",
+                                gap: 6,
                               }}
                             >
-                              {passenger.user?.name ?? "Unknown passenger"}
-                            </strong>
-                            <span style={{ color: "#5A6A7A", fontSize: 12 }}>
-                              {passenger.user?.userNumber != null
-                                ? `User #${passenger.user.userNumber}`
-                                : "User number unavailable"}
-                              {passenger.user?.phone
-                                ? ` · ${passenger.user.phone}`
-                                : ""}
-                            </span>
+                              <span
+                                className="mono"
+                                style={{
+                                  color: "#5A6A7A",
+                                  fontSize: 11,
+                                  textAlign: "right",
+                                }}
+                              >
+                                Board {passenger.pickupOrder ?? "—"}
+                                <br />
+                                Alight {passenger.dropoffOrder ?? "—"}
+                              </span>
+                              {passenger.tripId ? (
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    markPassengerStatus(
+                                      passenger.tripId as string,
+                                      isNoShow ? "waiting" : "no_show",
+                                    )
+                                  }
+                                  style={{
+                                    padding: "4px 10px",
+                                    borderRadius: 999,
+                                    border: isNoShow
+                                      ? "1px solid #27AE60"
+                                      : "1px solid rgba(231,76,60,0.35)",
+                                    background: "#fff",
+                                    color: isNoShow ? "#196F3D" : "#C0392B",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    cursor: isBusy ? "not-allowed" : "pointer",
+                                    opacity: isBusy ? 0.6 : 1,
+                                  }}
+                                >
+                                  {isBusy
+                                    ? "Saving..."
+                                    : isNoShow
+                                      ? "Restore"
+                                      : "Mark no-show"}
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
-                          <span
-                            className="mono"
-                            style={{
-                              color: "#5A6A7A",
-                              fontSize: 11,
-                              textAlign: "right",
-                            }}
-                          >
-                            Board {passenger.pickupOrder ?? "—"}
-                            <br />
-                            Alight {passenger.dropoffOrder ?? "—"}
-                          </span>
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
                       <p
                         style={{

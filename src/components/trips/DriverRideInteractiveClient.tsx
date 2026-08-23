@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   CalendarDays,
   Users,
@@ -68,66 +68,6 @@ function stationMatchesPassenger(
   const normalizedStationName = normalizeStationValue(stationName);
   const normalizedReferenceName = normalizeStationValue(stationReference.value);
   return Boolean(normalizedStationName) && normalizedStationName === normalizedReferenceName;
-}
-
-function getRemainingStationsForRide(ride: RideDetailView) {
-  const route = Array.isArray(ride?.route) ? ride.route : [];
-  const remainingStationKeys = new Set<number>();
-
-  for (const passenger of ride?.passengers ?? []) {
-    const status = String(passenger?.status ?? "waiting").toLowerCase();
-
-    if (status === "waiting") {
-      const pickupReference = getPassengerStationReference(passenger, "pickup");
-      if (!pickupReference) {
-        continue;
-      }
-
-      for (const [index, stop] of route.entries()) {
-        const stationIndex = index + 1;
-        const stationName = stop?.address ?? stop?.point?.address ?? null;
-        if (
-          (pickupReference.type === "order" && stationIndex === pickupReference.value) ||
-          (pickupReference.type === "name" &&
-            normalizeStationValue(stationName) === normalizeStationValue(pickupReference.value))
-        ) {
-          remainingStationKeys.add(stationIndex);
-        }
-      }
-    }
-
-    if (["picked_up", "boarding", "on_board"].includes(status)) {
-      const dropoffReference = getPassengerStationReference(passenger, "dropoff");
-      if (!dropoffReference) {
-        continue;
-      }
-
-      for (const [index, stop] of route.entries()) {
-        const stationIndex = index + 1;
-        const stationName = stop?.address ?? stop?.point?.address ?? null;
-        if (
-          (dropoffReference.type === "order" && stationIndex === dropoffReference.value) ||
-          (dropoffReference.type === "name" &&
-            normalizeStationValue(stationName) === normalizeStationValue(dropoffReference.value))
-        ) {
-          remainingStationKeys.add(stationIndex);
-        }
-      }
-    }
-  }
-
-  return route
-    .map((stop, index) => {
-      const stationIndex = index + 1;
-      if (!remainingStationKeys.has(stationIndex)) {
-        return null;
-      }
-      return {
-        stationIndex,
-        stationName: stop?.address ?? `Station ${stationIndex}`,
-      };
-    })
-    .filter(Boolean) as Array<{ stationIndex: number; stationName: string }>;
 }
 
 function Detail({
@@ -237,7 +177,7 @@ export default function DriverRideInteractiveClient({
       )}&destination=${encodeURIComponent(destination)}&travelmode=driving`;
 
       window.open(mapsUrl, "_blank");
-    } catch (error) {
+    } catch {
       setNavigationErrorByStation((prev) => ({
         ...prev,
         [step.stationIndex]: t("navigation.unable_get_location"),
@@ -283,26 +223,8 @@ export default function DriverRideInteractiveClient({
       .map((stop, index) => ({ ...stop, stationIndex: index + 1 }));
   }
 
-  const remainingStations = getRemainingStationsForRide(ride);
-
-  const visibleRouteStops = routeStops.filter((stop) => {
-    const stopName = stop?.address ?? stop?.point?.address ?? "";
-    let matchedAny = 0;
-    let matchedActive = 0;
-
-    for (const passenger of ride.passengers) {
-      const isStop =
-        stationMatchesPassenger(passenger, stop.stationIndex, stopName, "pickup") ||
-        stationMatchesPassenger(passenger, stop.stationIndex, stopName, "dropoff");
-      if (!isStop) continue;
-      matchedAny += 1;
-      const status = (passenger.status ?? "").toLowerCase();
-      if (!["no_show", "cancelled"].includes(status)) matchedActive += 1;
-    }
-
-    // Keep every station that still has a passenger; drop only the ones emptied by no-shows.
-    return matchedActive > 0 || matchedAny === 0;
-  });
+  // Keep every station in view; no-shows are marked in place, never dropped.
+  const visibleRouteStops = routeStops;
 
   const stationPoints = visibleRouteStops
     .map((r) => r.point)
@@ -359,11 +281,19 @@ export default function DriverRideInteractiveClient({
   };
 
   // Manifest counts stay stable after confirmation; only no-show/cancellation reduces them.
+  // One rider can appear as several trip records; a no-show on any applies to all of them.
+  const noShowUserIds = new Set(
+    ride.passengers
+      .filter((p) => ["no_show", "cancelled"].includes(p.status?.toLowerCase?.() ?? ""))
+      .map((p) => p.userId)
+      .filter((id): id is string => Boolean(id)),
+  );
   const getStationCounts = (stationIndex: number, stationName: string) => {
     const tally = (direction: "pickup" | "dropoff") =>
       ride.passengers.reduce((count, passenger) => {
         const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
         if (["no_show", "cancelled"].includes(normalizedStatus)) return count;
+        if (passenger.userId && noShowUserIds.has(passenger.userId)) return count;
         return stationMatchesPassenger(passenger, stationIndex, stationName, direction)
           ? count + (passenger.numberOfPassengers || 1)
           : count;
@@ -417,29 +347,24 @@ export default function DriverRideInteractiveClient({
   ];
 
   const stationSteps = steps.filter((step) => step.type === "station");
+  // Only stations with real boarding/alighting demand require a stop.
+  const actionableStationSteps = stationSteps.filter(
+    (step) => step.boarding > 0 || step.alighting > 0,
+  );
   const activeStationIndex = rideStarted && !isCompleted
-    ? remainingStations[0]?.stationIndex ?? null
+    ? (actionableStationSteps.find(
+        (step) => !confirmedStationIndices.includes(step.stationIndex),
+      )?.stationIndex ?? null)
     : null;
   const activeStepIndex = steps.findIndex(
     (step) => step.type === "station" && step.stationIndex === activeStationIndex,
   );
   const allStationsConfirmed =
-    stationSteps.length === 0
+    actionableStationSteps.length === 0
       ? true
-      : confirmedStationIndices.length === stationSteps.length;
-
-  const [lastActiveStationIndex, setLastActiveStationIndex] = useState<number | null>(
-    activeStationIndex,
-  );
-
-  useEffect(() => {
-    if (!rideStarted) {
-      setLastActiveStationIndex(activeStationIndex);
-      return;
-    }
-
-    setLastActiveStationIndex(activeStationIndex);
-  }, [activeStationIndex, lastActiveStationIndex, rideStarted]);
+      : actionableStationSteps.every((step) =>
+          confirmedStationIndices.includes(step.stationIndex),
+        );
 
   // Helper for reverse geocoding location name
   const fetchLocationName = async (lat: number, lng: number, fallback: string): Promise<string> => {
@@ -504,13 +429,15 @@ export default function DriverRideInteractiveClient({
     setConfirmedStationIndices([]);
     setStationSelections({});
     setLoadingAction(null);
+
+    // Auto-navigate to the first actionable station as soon as the ride starts.
+    const firstStationStep = actionableStationSteps[0];
+    if (firstStationStep) await handleGoToLocation(firstStationStep);
   };
 
   const handleConfirmStation = async (
     stationIndex: number,
     stationName: string,
-    stationStepIndex: number,
-    boardingCount: number,
   ) => {
     const stationKey = String(stationIndex);
     const selections = stationSelections[stationKey] ?? {};
@@ -593,6 +520,18 @@ export default function DriverRideInteractiveClient({
         visibleRouteStops.length > 0 &&
         stationIndex === visibleRouteStops[visibleRouteStops.length - 1].stationIndex;
 
+      // A rider's duplicate trip record should alight alongside the one that matched this stop.
+      const droppedOffUserIdsAtThisStation = new Set(
+        ride.passengers
+          .filter(
+            (passenger) =>
+              ["on_board", "picked_up"].includes(passenger.status ?? "") &&
+              stationMatchesPassenger(passenger, stationIndex, stationName, "dropoff"),
+          )
+          .map((passenger) => passenger.userId)
+          .filter((id): id is string => Boolean(id)),
+      );
+
       const nextPassengers = ride.passengers.map((passenger) => {
         const normalizedStatus = passenger.status?.toLowerCase?.() ?? "";
         if (["dropped_off", "no_show", "cancelled"].includes(normalizedStatus)) {
@@ -604,44 +543,50 @@ export default function DriverRideInteractiveClient({
         const isPickupStation = stationMatchesPassenger(passenger, stationIndex, stationName, "pickup");
         const isDropoffStation = stationMatchesPassenger(passenger, stationIndex, stationName, "dropoff");
 
-        if (
-          (passenger.status === "boarding" || passenger.status === "picked_up") &&
-          !isPickupStation
-        ) {
-          return { ...passenger, status: "on_board" };
+        // Apply every transition in sequence (not early-return) so a passenger whose
+        // pickup was the previous station can still alight here in the same pass.
+        let nextStatus = passenger.status;
+        let nextSeatNumbers = passenger.seatNumbers;
+
+        // 1. Anyone already boarding/picked up who isn't boarding here is now fully on board.
+        if ((nextStatus === "boarding" || nextStatus === "picked_up") && !isPickupStation) {
+          nextStatus = "on_board";
         }
 
-        if (
-          passenger.status === "dropped_off" &&
-          !isDropoffStation &&
-          (passenger.seatNumbers?.length ?? 0) > 0
-        ) {
-          return { ...passenger, seatNumbers: [] };
+        // 2. Clear a stale red seat once its station has passed.
+        if (nextStatus === "dropped_off" && !isDropoffStation && (nextSeatNumbers?.length ?? 0) > 0) {
+          nextSeatNumbers = [];
         }
 
+        // 3. Process this station's pickup confirmations.
         if (isPickupStation && confirmationStatus === "no_show") {
-          return { ...passenger, status: "no_show", seatNumbers: [] };
+          nextStatus = "no_show";
+          nextSeatNumbers = [];
+        } else if (isPickupStation && confirmationStatus === "arrived") {
+          nextStatus = "boarding";
+          nextSeatNumbers =
+            nextSeatNumbers && nextSeatNumbers.length > 0 ? nextSeatNumbers : [getNextSeatNumber()];
         }
 
-        if (isPickupStation && confirmationStatus === "arrived") {
-          return {
-            ...passenger,
-            status: "boarding",
-            seatNumbers:
-              passenger.seatNumbers && passenger.seatNumbers.length > 0
-                ? passenger.seatNumbers
-                : [getNextSeatNumber()],
-          };
+        // 4. Anyone on board reaching their dropoff (or the ride's last stop) alights here.
+        if ((isDropoffStation || isLastStation) && ["on_board", "picked_up"].includes(nextStatus ?? "")) {
+          nextStatus = "dropped_off";
         }
 
+        // 4b. A rider's duplicate trip record should alight alongside the one that just matched.
         if (
-          (isDropoffStation || isLastStation) &&
-          ["on_board", "picked_up"].includes(passenger.status ?? "")
+          passenger.userId &&
+          droppedOffUserIdsAtThisStation.has(passenger.userId) &&
+          ["on_board", "picked_up", "boarding"].includes(nextStatus ?? "")
         ) {
-          return { ...passenger, status: "dropped_off" };
+          nextStatus = "dropped_off";
         }
 
-        return passenger;
+        if (nextStatus === passenger.status && nextSeatNumbers === passenger.seatNumbers) {
+          return passenger;
+        }
+
+        return { ...passenger, status: nextStatus, seatNumbers: nextSeatNumbers };
       });
 
       setRide((prevRide) => ({
@@ -652,12 +597,10 @@ export default function DriverRideInteractiveClient({
         prev.includes(stationIndex) ? prev : [...prev, stationIndex],
       );
 
-      // Confirming a stop also starts navigation to the next station.
-      const nextStationStep = steps.find(
-        (step) =>
-          step.type === "station" &&
-          step.stationIndex > stationIndex &&
-          step.point,
+      // Confirming a stop also starts navigation to the next actionable station,
+      // skipping any stop that has nothing to do (e.g. emptied by a no-show).
+      const nextStationStep = actionableStationSteps.find(
+        (step) => step.stationIndex > stationIndex && step.point,
       );
       if (nextStationStep) await handleGoToLocation(nextStationStep);
     } catch (err) {
@@ -960,6 +903,10 @@ export default function DriverRideInteractiveClient({
                       if (!["waiting", "boarding", "on_board", "picked_up"].includes(normalizedStatus)) {
                         return false;
                       }
+                      // A no-show on any of this rider's duplicate trip records excludes them all.
+                      if (passenger.userId && noShowUserIds.has(passenger.userId)) {
+                        return false;
+                      }
                       return (
                         stationMatchesPassenger(passenger, step.stationIndex, step.name, "pickup") ||
                         stationMatchesPassenger(passenger, step.stationIndex, step.name, "dropoff")
@@ -974,9 +921,28 @@ export default function DriverRideInteractiveClient({
               );
               const alightingPassengersForStation = passengersForStation.filter(
                 (passenger) =>
-                  passenger.status === "picked_up" &&
+                  ["picked_up", "on_board", "boarding"].includes(passenger.status ?? "") &&
                   stationMatchesPassenger(passenger, step.stationIndex, step.name, "dropoff"),
               );
+              // No-shows stay visible at their pickup station instead of disappearing.
+              const noShowPassengersForStation =
+                step.type === "station"
+                  ? ride.passengers.filter(
+                      (passenger) =>
+                        passenger.status === "no_show" &&
+                        stationMatchesPassenger(passenger, step.stationIndex, step.name, "pickup"),
+                    )
+                  : [];
+              // Passengers expected to alight here who never boarded (already excluded from Alighting).
+              const noShowAlightingForStation =
+                step.type === "station"
+                  ? ride.passengers.filter(
+                      (passenger) =>
+                        (passenger.status === "no_show" ||
+                          (passenger.userId && noShowUserIds.has(passenger.userId))) &&
+                        stationMatchesPassenger(passenger, step.stationIndex, step.name, "dropoff"),
+                    )
+                  : [];
               const requiresPassengerSelections = boardingPassengersForStation.length > 0;
               const isDecisionComplete =
                 passengersForStation.length === 0 ||
@@ -984,6 +950,8 @@ export default function DriverRideInteractiveClient({
                 boardingPassengersForStation.every((passenger) =>
                   Boolean(stationSelectionsForStep[passenger.tripId]),
                 );
+              const hasNoShowAtStation =
+                noShowPassengersForStation.length > 0 || noShowAlightingForStation.length > 0;
 
               return (
                 <div
@@ -1027,7 +995,20 @@ export default function DriverRideInteractiveClient({
                     {index + 1}
                   </span>
 
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      ...(hasNoShowAtStation
+                        ? {
+                            background: "rgba(231,76,60,0.08)",
+                            border: "1px solid #F5C6CB",
+                            borderRadius: 10,
+                            padding: 10,
+                          }
+                        : {}),
+                    }}
+                  >
                     <div
                       style={{
                         display: "flex",
@@ -1073,7 +1054,7 @@ export default function DriverRideInteractiveClient({
                           <button
                             type="button"
                             onClick={() =>
-                              handleConfirmStation(step.stationIndex, step.name, index, step.boarding)
+                              handleConfirmStation(step.stationIndex, step.name)
                             }
                             disabled={
                               loadingAction === `confirm-${step.stationIndex}` ||
@@ -1182,6 +1163,58 @@ export default function DriverRideInteractiveClient({
                         </span>
                       )}
                     </div>
+
+                    {noShowAlightingForStation.length > 0 && (
+                      <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                        {noShowAlightingForStation.map((passenger) => (
+                          <div
+                            key={`no-show-alighting-${passenger.tripId}`}
+                            style={{
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              background: "#FFEBEE",
+                              border: "1px solid #F5C6CB",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: "#C0392B",
+                            }}
+                          >
+                            {t("driver.no_show_alighting_note", {
+                              name:
+                                passenger.passengerName ??
+                                t("driver.passenger_fallback", { n: passenger.pickupOrder ?? 1 }),
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {noShowPassengersForStation.length > 0 && (
+                      <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                        {noShowPassengersForStation.map((passenger) => (
+                          <div
+                            key={passenger.tripId}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 8,
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              background: "#FFEBEE",
+                              border: "1px solid #F5C6CB",
+                            }}
+                          >
+                            <span style={{ fontSize: 12, fontWeight: 700, color: "#C0392B" }}>
+                              {passenger.passengerName ?? t("driver.passenger_fallback", { n: passenger.pickupOrder ?? 1 })}
+                            </span>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: "#C0392B" }}>
+                              {t("driver.no_show")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {step.type === "station" && isCurrentStep && (boardingPassengersForStation.length > 0 || alightingPassengersForStation.length > 0) && (
                       <div

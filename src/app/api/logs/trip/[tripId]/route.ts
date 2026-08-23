@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Log } from "@/models/Log";
+import { Trip } from "@/models/Trip";
+import { getSession } from "@/lib/auth/session";
 
 /**
  * GET /api/logs/trip/:tripId
@@ -14,9 +16,29 @@ export async function GET(
   { params }: { params: Promise<{ tripId: string }> },
 ) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
+
     await connectDB();
 
     const { tripId } = await params;
+    if (session.role !== "admin") {
+      const ownedTrip = await Trip.exists({
+        _id: tripId,
+        $or: [{ userId: session.userId }, { driverId: session.userId }],
+      });
+      if (!ownedTrip) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden" },
+          { status: 403 },
+        );
+      }
+    }
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get("limit") || "100");
     const skip = parseInt(searchParams.get("skip") || "0");

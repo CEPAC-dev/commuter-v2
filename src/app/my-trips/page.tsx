@@ -266,9 +266,9 @@ function SharedSummaryCard({
         </div>
 
         {driver?.phone && (
-          <a
-            href={`tel:${driver.phone}`}
+          <div
             aria-label={translate(locale, "auth.driver.phone")}
+            title={driver.phone}
             style={{
               flexShrink: 0,
               width: 36,
@@ -279,12 +279,12 @@ function SharedSummaryCard({
               justifyContent: "center",
               background: "#00C2A8",
               color: "#0B1E3D",
-              textDecoration: "none",
               boxShadow: "0 2px 6px rgba(0,194,168,0.25)",
+              userSelect: "none",
             }}
           >
             <Phone size={15} aria-hidden="true" />
-          </a>
+          </div>
         )}
       </div>
 

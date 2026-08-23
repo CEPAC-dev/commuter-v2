@@ -1,17 +1,17 @@
 declare module "resend" {
   export class Resend {
     constructor(apiKey?: string);
-    emails: { send(opts: any): Promise<any> };
+    emails: { send(opts: unknown): Promise<unknown> };
   }
   export default Resend;
 }
 
 declare module "nodemailer" {
-  const nodemailer: any;
+  const nodemailer: unknown;
   export default nodemailer;
 }
 
 declare module "nodemailer/lib/mailer" {
-  const t: any;
+  const t: unknown;
   export default t;
 }

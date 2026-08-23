@@ -120,12 +120,15 @@ export default function NotificationCenter({
   }
 
   useEffect(() => {
+    // Initial load and polling
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadNotifications(false);
     const interval = window.setInterval(
       () => loadNotifications(true),
       POLL_INTERVAL_MS,
     );
     return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

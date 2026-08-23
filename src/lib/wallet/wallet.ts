@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/db/mongoose";
 import { Wallet } from "@/models/Wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 
 /** Ensure a wallet doc exists for the user and return it. */
 export async function getOrCreateWallet(userId: string) {
@@ -110,35 +110,60 @@ export async function creditDriverEarning(
   await connectDB();
   const uid = new Types.ObjectId(userId);
   const tripOid = new Types.ObjectId(opts.tripId);
+  const session = await mongoose.startSession();
+  let balance: number | null = null;
 
-  const existing = await WalletTransaction.findOne({
-    userId: uid,
-    type: "earning",
-    tripId: tripOid,
-    status: "completed",
-  });
-  if (existing) return existing.balanceAfterEgp ?? null;
+  try {
+    await session.withTransaction(async () => {
+      const [ledger] = await WalletTransaction.create(
+        [{
+          userId: uid,
+          type: "earning",
+          amountEgp,
+          status: "pending",
+          description: opts.description,
+          tripId: tripOid,
+        }],
+        { session },
+      );
 
-  const wallet = await Wallet.findOneAndUpdate(
-    { userId: uid },
-    {
-      $inc: { balanceEgp: amountEgp, totalCreditedEgp: amountEgp },
-      $set: { lastTransactionAt: new Date() },
-    },
-    { new: true, upsert: true },
-  );
+      const wallet = await Wallet.findOneAndUpdate(
+        { userId: uid },
+        {
+          $inc: { balanceEgp: amountEgp, totalCreditedEgp: amountEgp },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { new: true, upsert: true, session },
+      );
 
-  await WalletTransaction.create({
-    userId: uid,
-    type: "earning",
-    amountEgp,
-    status: "completed",
-    description: opts.description,
-    balanceAfterEgp: wallet.balanceEgp,
-    tripId: tripOid,
-  });
-
-  return wallet.balanceEgp;
+      const settled = await WalletTransaction.findOneAndUpdate(
+        { _id: ledger._id, status: "pending" },
+        { $set: { status: "completed", balanceAfterEgp: wallet.balanceEgp } },
+        { new: true, session },
+      );
+      if (!settled) throw new Error("Earning ledger claim failed");
+      balance = wallet.balanceEgp;
+    });
+    return balance;
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === 11000
+    ) {
+      const existing = await WalletTransaction.findOne({
+        userId: uid,
+        type: "earning",
+        tripId: tripOid,
+        status: "completed",
+      }).select("balanceAfterEgp");
+      return existing?.balanceAfterEgp ?? null;
+    }
+    throw error;
+  } finally {
+    await session.endSession();
+  }
 }
 
 /** Reserve funds for a driver withdrawal (pending until Kashier confirms). */
@@ -200,27 +225,37 @@ export async function refundWithdrawal(
   transactionId: string,
 ): Promise<boolean> {
   await connectDB();
+  const session = await mongoose.startSession();
+  let refunded = false;
 
-  const tx = await WalletTransaction.findOne({
-    _id: transactionId,
-    type: "withdrawal",
-    status: "pending",
-  });
-  if (!tx) return false;
+  try {
+    await session.withTransaction(async () => {
+      const tx = await WalletTransaction.findOneAndUpdate(
+        { _id: transactionId, type: "withdrawal", status: "pending" },
+        { $set: { status: "failed" } },
+        { new: true, session },
+      );
+      if (!tx) return;
 
-  const wallet = await Wallet.findOneAndUpdate(
-    { userId: tx.userId },
-    {
-      $inc: { balanceEgp: tx.amountEgp, totalDebitedEgp: -tx.amountEgp },
-      $set: { lastTransactionAt: new Date() },
-    },
-    { returnDocument: "after" },
-  );
-  if (!wallet) return false;
+      const wallet = await Wallet.findOneAndUpdate(
+        { userId: tx.userId },
+        {
+          $inc: { balanceEgp: tx.amountEgp, totalDebitedEgp: -tx.amountEgp },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { new: true, session },
+      );
+      if (!wallet) throw new Error("Withdrawal wallet not found");
 
-  await WalletTransaction.findByIdAndUpdate(tx._id, {
-    status: "failed",
-    balanceAfterEgp: wallet.balanceEgp,
-  });
-  return true;
+      await WalletTransaction.updateOne(
+        { _id: tx._id, status: "failed" },
+        { $set: { balanceAfterEgp: wallet.balanceEgp } },
+        { session },
+      );
+      refunded = true;
+    });
+    return refunded;
+  } finally {
+    await session.endSession();
+  }
 }

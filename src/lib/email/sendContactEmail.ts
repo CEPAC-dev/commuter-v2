@@ -1,7 +1,7 @@
 import "server-only";
 import nodemailer from "nodemailer";
 import { Resend } from "resend";
-type Transporter = any;
+import type { Transporter as NodemailerTransporter } from "nodemailer";
 import { SUPPORT_EMAIL } from "@/lib/config/site";
 
 interface ContactPayload {
@@ -35,9 +35,9 @@ function getContactAddresses() {
   return { to, from };
 }
 
-let devTransporter: Transporter | null = null;
+let devTransporter: NodemailerTransporter | null = null;
 
-async function getDevTransporter(): Promise<Transporter> {
+async function getDevTransporter(): Promise<NodemailerTransporter> {
   if (!devTransporter) {
     const account = await nodemailer.createTestAccount();
     devTransporter = nodemailer.createTransport({

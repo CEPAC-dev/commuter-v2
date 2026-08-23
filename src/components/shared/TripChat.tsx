@@ -74,6 +74,8 @@ export default function TripChat({ tripId, role }: TripChatProps) {
 
   useEffect(() => {
     if (!open) return;
+    // Initial fetch when opened
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMessages();
     // Poll every 5 seconds for real-time feel
     pollRef.current = setInterval(fetchMessages, 5000);

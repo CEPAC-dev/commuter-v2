@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import Link from "next/link";
@@ -34,6 +33,8 @@ export default function UserNavbar() {
   const { name: authName, logout, profilePhoto } = useAuth();
 
   useEffect(() => {
+    // Sync with auth context name
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (authName) setUserName(authName);
   }, [authName]);
 

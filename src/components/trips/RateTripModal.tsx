@@ -81,6 +81,8 @@ export default function RateTripModal({ tripId, initialRating, onRated }: RateTr
 
   useEffect(() => {
     if (!open) return;
+    // Reset error when modal opens
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
   }, [open]);
 

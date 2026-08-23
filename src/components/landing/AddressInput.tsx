@@ -46,6 +46,8 @@ export default function AddressInput({
   const listId = `${id ?? "addr"}-list`;
 
   useEffect(() => {
+    // Sync query with value prop changes
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuery(value ? formatDisplayName(value.address) : "");
   }, [value]);
 

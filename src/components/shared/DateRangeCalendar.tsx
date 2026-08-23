@@ -44,7 +44,7 @@ function toKey(d: Date): string {
 }
 
 export default function DateRangeCalendar() {
-  const { locale, t: translate } = useClientLocale();
+  const { t: translate } = useClientLocale();
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();

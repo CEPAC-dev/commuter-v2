@@ -8,6 +8,7 @@ import { Trip } from "@/models/Trip";
 import { Ride } from "@/models/Ride";
 import { User } from "@/models/User";
 import { getDriverSummaryByUserNumber } from "@/lib/services/trips";
+import { adminAuth } from "@/lib/middleware/adminAuth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -505,6 +506,9 @@ async function getDriverBundleByUserId(userId: unknown) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await adminAuth(req);
+  if (!auth.authorized) return auth.response;
+
   try {
     await connectDB();
 

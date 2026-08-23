@@ -134,10 +134,7 @@ export default function VehicleSeatMap({
   vehicleType = "taxi_shared",
   isDriver = false,
   assignedSeatNumbers = [],
-  activeStationIndex = null,
   rideStarted = false,
-  confirmedStationIndices = [],
-  stationSelections = {},
 }: Props) {
   const vType = ride?.vehicleType ?? vehicleType;
   const grid = getVehicleSeatGrid(vType);
@@ -145,11 +142,6 @@ export default function VehicleSeatMap({
   const { t, dir, locale } = useClientLocale();
 
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
-
-  const lastConfirmedStationIndex =
-    confirmedStationIndices.length > 0
-      ? Math.max(...confirmedStationIndices)
-      : null;
 
   const seatStateBySeat = new Map<
     number,
@@ -161,93 +153,54 @@ export default function VehicleSeatMap({
   >();
 
   if (ride?.passengers) {
+    // Server clears seatNumbers once a rider's stop has passed, so a dropped_off
+    // rider still holding a seat is one who alighted at the latest stop.
     const seatPassengers = new Map<number, RidePassengerDetail[]>();
-    let currentSeat = 1;
 
     for (const p of ride.passengers) {
       const normalizedStatus = p.status?.toLowerCase?.() ?? "";
-      const seatNumbers = Array.isArray(p.seatNumbers) ? p.seatNumbers : [];
+      const seats = (Array.isArray(p.seatNumbers) ? p.seatNumbers : []).filter(
+        (seat): seat is number => typeof seat === "number" && Number.isFinite(seat),
+      );
+
       const shouldShowPassenger =
         rideStarted &&
         ride.status !== "completed" &&
-        (["boarding", "on_board", "picked_up"].includes(normalizedStatus) ||
-          (normalizedStatus === "dropped_off" && seatNumbers.length > 0));
+        seats.length > 0 &&
+        ["boarding", "on_board", "picked_up", "dropped_off"].includes(normalizedStatus);
 
-      if (!shouldShowPassenger) {
-        continue;
-      }
-
-      let seats = p.seatNumbers ?? [];
-      if (!seats || seats.length === 0) {
-        const count = p.numberOfPassengers || 1;
-        seats = Array.from({ length: count }, (_, idx) => currentSeat + idx);
-        currentSeat += count;
-      } else {
-        currentSeat = Math.max(currentSeat, Math.max(...seats) + 1);
-      }
+      if (!shouldShowPassenger) continue;
 
       for (const seat of seats) {
-        if (typeof seat !== "number" || !Number.isFinite(seat)) continue;
-        const existing = seatPassengers.get(seat) ?? [];
-        seatPassengers.set(seat, [...existing, p]);
+        seatPassengers.set(seat, [...(seatPassengers.get(seat) ?? []), p]);
       }
     }
 
+    // Ordered so a newly boarding rider takes over a seat just vacated by an alighted one.
+    const seatRules = [
+      { state: "green" as const, label: "boarding", match: (s: string) => s === "boarding" },
+      {
+        state: "blue" as const,
+        label: "on_board",
+        match: (s: string) => s === "on_board" || s === "picked_up",
+      },
+      { state: "red" as const, label: "alighted", match: (s: string) => s === "dropped_off" },
+    ];
+
     for (const [seat, passengers] of seatPassengers.entries()) {
-      const greenPassenger = passengers.find((p) => {
-        const normalizedStatus = p.status?.toLowerCase?.() ?? "";
-        return normalizedStatus === "boarding";
-      });
+      const hit = seatRules
+        .map((rule) => ({
+          rule,
+          passenger: passengers.find((p) => rule.match(p.status?.toLowerCase?.() ?? "")),
+        }))
+        .find((entry) => entry.passenger);
 
-      if (greenPassenger) {
-        seatStateBySeat.set(seat, {
-          passenger: greenPassenger,
-          state: "green",
-          label: "boarding",
-        });
-        continue;
-      }
-
-      const bluePassenger = passengers.find((p) => {
-        const normalizedStatus = p.status?.toLowerCase?.() ?? "";
-        return normalizedStatus === "on_board" || normalizedStatus === "picked_up";
-      });
-
-      if (bluePassenger) {
-        seatStateBySeat.set(seat, {
-          passenger: bluePassenger,
-          state: "blue",
-          label: "on_board",
-        });
-        continue;
-      }
-
-      const redPassenger = passengers.find((p) => {
-        const normalizedStatus = p.status?.toLowerCase?.() ?? "";
-        return normalizedStatus === "dropped_off";
-      });
-
-      // A seat stays red for the station where the passenger alighted, then turns grey.
-      const alightedAtCurrentStation =
-        redPassenger &&
-        (lastConfirmedStationIndex === null ||
-          !Number(redPassenger.dropoffOrder) ||
-          Number(redPassenger.dropoffOrder) >= lastConfirmedStationIndex);
-
-      if (redPassenger && alightedAtCurrentStation) {
-        seatStateBySeat.set(seat, {
-          passenger: redPassenger,
-          state: "red",
-          label: "alighted",
-        });
-        continue;
-      }
-
-      seatStateBySeat.set(seat, {
-        passenger: undefined,
-        state: "grey",
-        label: "empty",
-      });
+      seatStateBySeat.set(
+        seat,
+        hit?.passenger
+          ? { passenger: hit.passenger, state: hit.rule.state, label: hit.rule.label }
+          : { passenger: undefined, state: "grey", label: "empty" },
+      );
     }
   }
 

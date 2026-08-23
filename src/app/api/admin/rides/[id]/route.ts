@@ -3,17 +3,10 @@ import { isValidObjectId } from "mongoose";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { cancelRide } from "@/lib/services/rideService";
+import { normalizeSharedRidePassengers } from "@/lib/services/sharedRideManifest";
 import "@/models/Availability";
 import { Ride } from "@/models/Ride";
 import { User } from "@/models/User";
-
-type RoutePassenger = {
-  userId?: unknown;
-  tripId?: unknown;
-  pickupOrder?: number;
-  dropoffOrder?: number;
-  numberOfPassengers?: number;
-};
 
 function toObjectIdString(value: unknown) {
   const id = String(value ?? "");
@@ -42,6 +35,11 @@ export async function GET(
     return NextResponse.json({ error: "Ride not found" }, { status: 404 });
   }
 
+  // Derives station-relative order (not raw import order) and preserves live status.
+  const manifestPassengers = normalizeSharedRidePassengers(
+    ride as unknown as Record<string, unknown>,
+  );
+
   const passengerByUserId = new Map<
     string,
     {
@@ -50,47 +48,22 @@ export async function GET(
       pickupOrder?: number;
       dropoffOrder?: number;
       numberOfPassengers: number;
+      status: string;
     }
   >();
-  const addPassenger = (
-    passenger: RoutePassenger,
-    type: "boarding" | "alighting",
-    stopOrder?: number,
-  ) => {
+  for (const passenger of manifestPassengers) {
     const userId = toObjectIdString(passenger.userId);
-    if (!userId) return;
-    const existing = passengerByUserId.get(userId) ?? {
+    if (!userId) continue;
+    passengerByUserId.set(userId, {
       userId,
-      numberOfPassengers: passenger.numberOfPassengers ?? 1,
-    };
-    const tripId = toObjectIdString(passenger.tripId);
-    if (tripId) existing.tripId ??= tripId;
-    if (type === "boarding") {
-      existing.pickupOrder ??= passenger.pickupOrder ?? stopOrder;
-    } else {
-      existing.dropoffOrder ??= passenger.dropoffOrder ?? stopOrder;
-    }
-    passengerByUserId.set(userId, existing);
-  };
-
-  const rideRecord = ride as unknown as {
-    passengers?: RoutePassenger[];
-    route?: Array<{
-      boarding?: RoutePassenger[];
-      alighting?: RoutePassenger[];
-    }>;
-  };
-  for (const passenger of rideRecord.passengers ?? []) {
-    addPassenger(passenger, "boarding");
-    addPassenger(passenger, "alighting");
-  }
-  for (const [index, stop] of (rideRecord.route ?? []).entries()) {
-    for (const passenger of stop.boarding ?? []) {
-      addPassenger(passenger, "boarding", index + 1);
-    }
-    for (const passenger of stop.alighting ?? []) {
-      addPassenger(passenger, "alighting", index + 1);
-    }
+      tripId: toObjectIdString(passenger.tripId) ?? undefined,
+      pickupOrder:
+        typeof passenger.pickupOrder === "number" ? passenger.pickupOrder : undefined,
+      dropoffOrder:
+        typeof passenger.dropoffOrder === "number" ? passenger.dropoffOrder : undefined,
+      numberOfPassengers: Number(passenger.numberOfPassengers ?? 1),
+      status: typeof passenger.status === "string" ? passenger.status : "waiting",
+    });
   }
 
   const passengerIds = [...passengerByUserId.keys()];
@@ -126,6 +99,77 @@ export async function GET(
       passengerDetails,
     },
   });
+}
+
+/**
+ * PATCH /api/admin/rides/:id
+ * Body: { tripId: string, status: "no_show" | "waiting" }
+ * Lets an admin mark a shared-ride passenger as a no-show (or restore them),
+ * recomputing the shared manifest first so the update lands on the right record.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const auth = await adminAuth(req);
+  if (!auth.authorized) return auth.response;
+
+  const { id } = await params;
+  await connectDB();
+
+  const body = (await req.json().catch(() => null)) as
+    | { tripId?: string; status?: string }
+    | null;
+  const tripId = body?.tripId;
+  const nextStatus = body?.status;
+
+  if (!tripId || !["no_show", "waiting"].includes(nextStatus ?? "")) {
+    return NextResponse.json(
+      { error: "tripId and a valid status ('no_show' or 'waiting') are required" },
+      { status: 400 },
+    );
+  }
+
+  const rideDoc = await Ride.findById(id);
+  if (!rideDoc) {
+    return NextResponse.json({ error: "Ride not found" }, { status: 404 });
+  }
+
+  if (rideDoc.rideType === "shared") {
+    rideDoc.set(
+      "passengers",
+      normalizeSharedRidePassengers(rideDoc.toObject() as Record<string, unknown>),
+    );
+  }
+
+  const passenger = (rideDoc.passengers ?? []).find(
+    (p: { tripId?: unknown }) => String(p.tripId) === String(tripId),
+  );
+  if (!passenger) {
+    return NextResponse.json(
+      { error: "Passenger not found on this ride" },
+      { status: 404 },
+    );
+  }
+
+  const previousStatus = passenger.status;
+  passenger.status = nextStatus as string;
+  if (nextStatus === "no_show") {
+    passenger.seatNumbers = [];
+  }
+  rideDoc.logs?.push({
+    action: nextStatus === "no_show" ? "no_show" : "restored",
+    tripId: passenger.tripId,
+    userId: passenger.userId,
+    previousStatus,
+    newStatus: nextStatus,
+    metadata: { source: "admin" },
+    createdAt: new Date(),
+  });
+
+  await rideDoc.save();
+
+  return NextResponse.json({ ok: true, status: passenger.status });
 }
 
 export async function DELETE(
