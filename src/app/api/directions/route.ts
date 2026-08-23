@@ -194,13 +194,7 @@ export async function fetchGraphHopperMatrix(
 ): Promise<DirectionsTableResult | null> {
   if (points.length < 2) return null;
 
-  const selfHostedUrl = process.env.GRAPHHOPPER_URL?.replace(/\/+$/, "");
-  const apiKey = process.env.GRAPHHOPPER_API_KEY;
-  const url = selfHostedUrl
-    ? `${selfHostedUrl}/matrix`
-    : apiKey
-      ? `https://graphhopper.com/api/1/matrix?key=${encodeURIComponent(apiKey)}`
-      : null;
+  const url = process.env.GRAPHHOPPER_URL?.trim();
   if (!url) return null;
 
   const res = await fetch(url, {

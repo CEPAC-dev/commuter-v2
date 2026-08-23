@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
 
-export async function GET(req: NextRequest) {
-  const auth = await adminAuth(req);
+export async function GET() {
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();

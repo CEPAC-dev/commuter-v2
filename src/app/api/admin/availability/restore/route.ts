@@ -8,7 +8,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const formData = await req.formData();
