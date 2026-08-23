@@ -17,7 +17,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;
@@ -58,11 +58,16 @@ export async function GET(
       userId,
       tripId: toObjectIdString(passenger.tripId) ?? undefined,
       pickupOrder:
-        typeof passenger.pickupOrder === "number" ? passenger.pickupOrder : undefined,
+        typeof passenger.pickupOrder === "number"
+          ? passenger.pickupOrder
+          : undefined,
       dropoffOrder:
-        typeof passenger.dropoffOrder === "number" ? passenger.dropoffOrder : undefined,
+        typeof passenger.dropoffOrder === "number"
+          ? passenger.dropoffOrder
+          : undefined,
       numberOfPassengers: Number(passenger.numberOfPassengers ?? 1),
-      status: typeof passenger.status === "string" ? passenger.status : "waiting",
+      status:
+        typeof passenger.status === "string" ? passenger.status : "waiting",
     });
   }
 
@@ -111,21 +116,25 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;
   await connectDB();
 
-  const body = (await req.json().catch(() => null)) as
-    | { tripId?: string; status?: string }
-    | null;
+  const body = (await req.json().catch(() => null)) as {
+    tripId?: string;
+    status?: string;
+  } | null;
   const tripId = body?.tripId;
   const nextStatus = body?.status;
 
   if (!tripId || !["no_show", "waiting"].includes(nextStatus ?? "")) {
     return NextResponse.json(
-      { error: "tripId and a valid status ('no_show' or 'waiting') are required" },
+      {
+        error:
+          "tripId and a valid status ('no_show' or 'waiting') are required",
+      },
       { status: 400 },
     );
   }
@@ -138,7 +147,9 @@ export async function PATCH(
   if (rideDoc.rideType === "shared") {
     rideDoc.set(
       "passengers",
-      normalizeSharedRidePassengers(rideDoc.toObject() as Record<string, unknown>),
+      normalizeSharedRidePassengers(
+        rideDoc.toObject() as Record<string, unknown>,
+      ),
     );
   }
 
@@ -176,7 +187,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;

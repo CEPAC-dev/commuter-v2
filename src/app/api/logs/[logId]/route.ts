@@ -59,7 +59,7 @@ export async function DELETE(
   { params }: { params: Promise<{ logId: string }> },
 ) {
   try {
-    const auth = await adminAuth(request);
+    const auth = await adminAuth();
     if (!auth.authorized) return auth.response;
 
     await connectDB();

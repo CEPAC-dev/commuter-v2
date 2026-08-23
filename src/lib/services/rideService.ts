@@ -106,7 +106,8 @@ function normalizeRoutePayload(route: unknown[] = []): unknown[] {
     if (!stop || typeof stop !== "object") return stop;
     const routeStop = stop as UnknownRecord;
     const boardingValue = routeStop.boarding ?? routeStop.boardingNumber ?? 0;
-    const alightingValue = routeStop.alighting ?? routeStop.alightingNumber ?? 0;
+    const alightingValue =
+      routeStop.alighting ?? routeStop.alightingNumber ?? 0;
     return {
       ...routeStop,
       boardingNumber: Array.isArray(boardingValue)
@@ -157,7 +158,10 @@ async function createRide(matchResult: MatchResult) {
         seats = Array.from({ length: count }, (_, i) => currentSeatCounter + i);
         currentSeatCounter += count;
       } else {
-        currentSeatCounter = Math.max(currentSeatCounter, Math.max(...seats) + 1);
+        currentSeatCounter = Math.max(
+          currentSeatCounter,
+          Math.max(...seats) + 1,
+        );
       }
       return {
         tripId: p.tripId,
@@ -261,7 +265,11 @@ async function getNextSequence(name: string, session: mongoose.ClientSession) {
   let nextSeq = doc?.seq ?? 1;
   if (nextSeq <= maxSeq) {
     nextSeq = maxSeq + 1;
-    await coll.updateOne({ _id: name }, { $set: { seq: nextSeq } }, { session });
+    await coll.updateOne(
+      { _id: name },
+      { $set: { seq: nextSeq } },
+      { session },
+    );
   }
   return nextSeq;
 }
@@ -490,9 +498,7 @@ async function getDriverRide(
   const { Station } = await import("@/models/Station");
 
   const ridePassengers = getRidePassengers(ride as Record<string, unknown>);
-  const userIds = ridePassengers
-    .map((p) => p.userId)
-    .filter(Boolean);
+  const userIds = ridePassengers.map((p) => p.userId).filter(Boolean);
   const users = await User.find({ _id: { $in: userIds } })
     .select("name phone")
     .lean<{ _id: unknown; name?: string; phone?: string }[]>();
@@ -515,17 +521,18 @@ async function getDriverRide(
     }
   }
 
-  const stationDocs = stationIds.length > 0
-    ? await Station.find({ objectId: { $in: stationIds } }).lean<
-        Array<{
-          objectId: number;
-          name?: string;
-          direction?: string;
-          landmark?: string;
-          stationType?: string;
-        }>
-      >()
-    : [];
+  const stationDocs =
+    stationIds.length > 0
+      ? await Station.find({ objectId: { $in: stationIds } }).lean<
+          Array<{
+            objectId: number;
+            name?: string;
+            direction?: string;
+            landmark?: string;
+            stationType?: string;
+          }>
+        >()
+      : [];
   const stationById = new Map(stationDocs.map((s) => [s.objectId, s]));
 
   const enrichStation = (value: unknown): unknown => {
@@ -550,7 +557,8 @@ async function getDriverRide(
       ...p,
       pickupStation: enrichStation(p.pickupStation),
       dropoffStation: enrichStation(p.dropoffStation),
-      passengerName: userById.get(String(p.userId))?.name ?? `Passenger #${p.pickupOrder}`,
+      passengerName:
+        userById.get(String(p.userId))?.name ?? `Passenger #${p.pickupOrder}`,
     })),
   };
 
@@ -586,8 +594,9 @@ export interface ListDriverRidesOptions {
 
 function mapRideToListRow(ride: Record<string, unknown>): RideListRow {
   const ridePassengers = getRidePassengers(ride);
-  const passengers = ridePassengers.map((p: Record<string, unknown>, index: number) =>
-    mapPassengerRow(p, index, ridePassengers),
+  const passengers = ridePassengers.map(
+    (p: Record<string, unknown>, index: number) =>
+      mapPassengerRow(p, index, ridePassengers),
   );
 
   return {
@@ -668,7 +677,9 @@ async function getRidesByDriver(
     return {
       total,
       page,
-      rows: rides.map((ride) => mapRideToListRow(ride as Record<string, unknown>)),
+      rows: rides.map((ride) =>
+        mapRideToListRow(ride as Record<string, unknown>),
+      ),
     };
   }
 
@@ -713,7 +724,17 @@ async function updatePassengerStatusInRide(
 
 async function addPassengerToRide(
   rideId: string | Types.ObjectId,
-  passenger: { tripId: Types.ObjectId | string; userId?: Types.ObjectId | string; pickup: GeoPoint; dropoff: GeoPoint; pickupOrder: number; dropoffOrder: number; numberOfPassengers: number; tripCost: number; seatNumbers?: number[] },
+  passenger: {
+    tripId: Types.ObjectId | string;
+    userId?: Types.ObjectId | string;
+    pickup: GeoPoint;
+    dropoff: GeoPoint;
+    pickupOrder: number;
+    dropoffOrder: number;
+    numberOfPassengers: number;
+    tripCost: number;
+    seatNumbers?: number[];
+  },
 ) {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -776,6 +797,7 @@ async function addPassengerToRide(
 async function removePassengerFromRide(
   rideId: string | Types.ObjectId,
   tripId: string | Types.ObjectId,
+  _reason?: string,
 ) {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -851,7 +873,7 @@ async function getRideByPassengerIncluded(
   return Ride.find(q).sort({ date: -1, startTime: 1 }).lean();
 }
 
-async function cancelRide(rideId: string | Types.ObjectId) {
+async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -870,18 +892,24 @@ async function cancelRide(rideId: string | Types.ObjectId) {
       tripId?: unknown;
     }>;
     const rideRoute = ride.route as unknown as unknown[];
-    const tripIds = [...new Set([
-      ...ridePassengers.map((passenger) => String(passenger.tripId)),
-      ...rideRoute.flatMap((stop: unknown) => {
-        const s = stop as { boarding?: unknown[]; alighting?: unknown[] };
-        return [
-          ...(Array.isArray(s.boarding) ? s.boarding : []),
-          ...(Array.isArray(s.alighting) ? s.alighting : []),
-        ];
-      }).map((passenger: unknown) =>
-        String((passenger as { tripId?: unknown }).tripId),
+    const tripIds = [
+      ...new Set(
+        [
+          ...ridePassengers.map((passenger) => String(passenger.tripId)),
+          ...rideRoute
+            .flatMap((stop: unknown) => {
+              const s = stop as { boarding?: unknown[]; alighting?: unknown[] };
+              return [
+                ...(Array.isArray(s.boarding) ? s.boarding : []),
+                ...(Array.isArray(s.alighting) ? s.alighting : []),
+              ];
+            })
+            .map((passenger: unknown) =>
+              String((passenger as { tripId?: unknown }).tripId),
+            ),
+        ].filter((tripId) => Types.ObjectId.isValid(tripId)),
       ),
-    ].filter((tripId) => Types.ObjectId.isValid(tripId)))];
+    ];
 
     await Trip.updateMany(
       { _id: { $in: tripIds } },

@@ -9,7 +9,7 @@ function isValidDate(value: unknown): value is string {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();
@@ -30,7 +30,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           ok: true,
-          message: "Source and target dates are the same; no changes were applied.",
+          message:
+            "Source and target dates are the same; no changes were applied.",
           availabilityCount: 0,
           tripCount: 0,
         },
@@ -49,7 +50,8 @@ export async function POST(req: NextRequest) {
       tripCount: tripResult.modifiedCount ?? 0,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to shift dates.";
+    const message =
+      error instanceof Error ? error.message : "Unable to shift dates.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

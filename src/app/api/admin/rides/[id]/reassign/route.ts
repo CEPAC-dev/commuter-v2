@@ -11,7 +11,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;
@@ -83,7 +83,10 @@ export async function PATCH(
 
   // `details` is a Mixed field that defaults to null — seed it before writing a dotted path.
   await Trip.updateMany(
-    { rideId: ride._id, $or: [{ details: null }, { details: { $exists: false } }] },
+    {
+      rideId: ride._id,
+      $or: [{ details: null }, { details: { $exists: false } }],
+    },
     { $set: { details: {} } },
   );
   await Trip.updateMany(
