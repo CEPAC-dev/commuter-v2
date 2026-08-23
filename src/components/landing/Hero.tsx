@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { ArrowUpDown, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useTripStore } from "@/lib/store/useTripStore";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import AddressInput from "./AddressInput";
@@ -29,7 +29,7 @@ export default function Hero({ authed = false }: Props) {
   const { t, locale } = useClientLocale();
   const isArabic = locale === "ar";
   const [mounted, setMounted] = useState(false);
-  const { pickup, dropoff, setPickup, setDropoff, swap } = useTripStore();
+  const { pickup, dropoff, setPickup, setDropoff } = useTripStore();
   const [error, setError] = useState("");
 
   // Prevent sessionStorage hydration mismatch
@@ -86,8 +86,8 @@ export default function Hero({ authed = false }: Props) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 64,
+            gridTemplateColumns: "minmax(0, 1.2fr) minmax(360px, 0.8fr)",
+            gap: 48,
             alignItems: "center",
           }}
           className="hero-grid"
@@ -115,8 +115,8 @@ export default function Hero({ authed = false }: Props) {
                 fontSize: "clamp(38px, 5vw, 62px)",
                 fontWeight: 900,
                 color: "#ffffff",
-                lineHeight: 1.08,
-                letterSpacing: "-0.035em",
+                lineHeight: isArabic ? 1.25 : 1.08,
+                letterSpacing: isArabic ? 0 : "-0.035em",
                 margin: "0 0 22px",
               }}
             >
@@ -137,12 +137,13 @@ export default function Hero({ authed = false }: Props) {
 
             {/* Stats */}
             <div
+              dir={isArabic ? "rtl" : "ltr"}
               style={{
                 display: "flex",
                 alignItems: "stretch",
                 gap: 0,
                 marginTop: 40,
-                flexWrap: "wrap",
+                flexWrap: "nowrap",
               }}
               className="hero-stats"
             >
@@ -152,7 +153,9 @@ export default function Hero({ authed = false }: Props) {
                   style={{
                     display: "flex",
                     flexDirection: "column",
-                    alignItems: isArabic ? "flex-end" : "flex-start",
+                    flex: 1,
+                    minWidth: 0,
+                    alignItems: "flex-start",
                     textAlign: isArabic ? "right" : "left",
                     gap: 6,
                     ...(isArabic
@@ -176,8 +179,9 @@ export default function Hero({ authed = false }: Props) {
                   className="hero-stat"
                 >
                   <span
+                    dir={isArabic ? "rtl" : "ltr"}
                     style={{
-                      fontSize: "clamp(15px, 2.2vw, 20px)",
+                      fontSize: "clamp(14px, 1.6vw, 17px)",
                       fontWeight: 800,
                       letterSpacing: "-0.01em",
                       textTransform: "capitalize",
@@ -188,6 +192,7 @@ export default function Hero({ authed = false }: Props) {
                     {label}
                   </span>
                   <span
+                    dir={isArabic ? "rtl" : "ltr"}
                     style={{
                       fontSize: 13,
                       fontWeight: 500,
@@ -243,7 +248,7 @@ export default function Hero({ authed = false }: Props) {
                     <InputSkeleton />
                   )}
 
-                  {/* Connector + swap */}
+                  {/* Connector */}
                   <div
                     style={{
                       height: 36,
@@ -267,35 +272,6 @@ export default function Hero({ authed = false }: Props) {
                           "repeating-linear-gradient(to bottom, #d0d8e0 0px, #d0d8e0 4px, transparent 4px, transparent 8px)",
                       }}
                     />
-                    <button
-                      type="button"
-                      onClick={swap}
-                      aria-label={t("hero.swap_aria")}
-                      style={{
-                        background: "#ffffff",
-                        border: "1.5px solid #e8edf0",
-                        borderRadius: 8,
-                        width: 36,
-                        height: 36,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "pointer",
-                        color: "#5A6A7A",
-                        transition: "border-color 0.15s, color 0.15s",
-                        flexShrink: 0,
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = "#00C2A8";
-                        e.currentTarget.style.color = "#00C2A8";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = "#e8edf0";
-                        e.currentTarget.style.color = "#5A6A7A";
-                      }}
-                    >
-                      <ArrowUpDown size={15} />
-                    </button>
                   </div>
 
                   {/* Dropoff */}
@@ -399,11 +375,16 @@ export default function Hero({ authed = false }: Props) {
           }
           .hero-stat {
             border-right: none !important;
+            border-left: none !important;
+            margin-left: 0 !important;
             margin-right: 0 !important;
+            padding-left: 0 !important;
             padding-right: 0 !important;
+            flex: none !important;
             min-width: calc(50% - 12px);
           }
           .hero-stats {
+            flex-wrap: wrap !important;
             gap: 20px 24px !important;
           }
         }

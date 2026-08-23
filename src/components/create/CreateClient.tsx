@@ -760,9 +760,7 @@ export default function CreateClient({
               >
                 {t("create.book_a_ride_heading")}
               </h1>
-              <p style={{ fontSize: 13, color: "#5A6A7A", margin: 0 }}>
-                {t("create.fill_trip_details")}
-              </p>
+            
             </div>
 
             <DatePicker value={selectedDates} onChange={setSelectedDates} />
