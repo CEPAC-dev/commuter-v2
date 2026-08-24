@@ -43,7 +43,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;
@@ -67,7 +67,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;
@@ -217,7 +217,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(_req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;

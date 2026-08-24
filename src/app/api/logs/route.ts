@@ -19,7 +19,7 @@ import { adminAuth } from "@/lib/middleware/adminAuth";
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await adminAuth(request);
+    const auth = await adminAuth();
     if (!auth.authorized) return auth.response;
 
     await connectDB();

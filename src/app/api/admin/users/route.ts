@@ -4,7 +4,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();

@@ -103,7 +103,7 @@ function getTomorrowDate() {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();
@@ -280,7 +280,8 @@ export async function GET(req: NextRequest) {
       const originStation = orderedStations[rowIndex];
       const destStation = orderedStations[colIndex];
       const durationMin = await getDurationMin(originStation, destStation);
-      durationSheet.getRow(rowIndex + 3).getCell(colIndex + 3).value = durationMin;
+      durationSheet.getRow(rowIndex + 3).getCell(colIndex + 3).value =
+        durationMin;
     }
   }
 

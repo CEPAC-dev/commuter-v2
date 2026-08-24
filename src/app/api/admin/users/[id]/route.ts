@@ -8,7 +8,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();
@@ -27,7 +27,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   try {

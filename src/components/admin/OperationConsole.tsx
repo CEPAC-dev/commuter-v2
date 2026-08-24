@@ -19,6 +19,10 @@ type StationRecord = {
 
 export default function OperationConsole() {
   const [matchDate, setMatchDate] = useState("");
+  const [matrixProvider, setMatrixProvider] = useState("osrm");
+  const [valhallaCosting, setValhallaCosting] = useState("auto");
+  const [valhallaDateTimeType, setValhallaDateTimeType] = useState("current");
+  const [valhallaDateTime, setValhallaDateTime] = useState("");
   const [availabilityDate, setAvailabilityDate] = useState("");
   const [loadingMatchData, setLoadingMatchData] = useState(false);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
@@ -201,6 +205,14 @@ export default function OperationConsole() {
       const target = new URL("/api/admin/getMatchData", window.location.origin);
       if (matchDate.trim()) {
         target.searchParams.set("date", matchDate.trim());
+      }
+      target.searchParams.set("matrixProvider", matrixProvider);
+      if (matrixProvider === "valhalla") {
+        target.searchParams.set("valhallaCosting", valhallaCosting);
+        target.searchParams.set("valhallaDateTimeType", valhallaDateTimeType);
+        if (valhallaDateTimeType !== "current" && valhallaDateTime) {
+          target.searchParams.set("valhallaDateTime", valhallaDateTime);
+        }
       }
 
       const response = await fetch(target.toString());
@@ -725,6 +737,129 @@ export default function OperationConsole() {
               }}
             />
           </label>
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 220,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              Matrix API calculator
+            </span>
+            <select
+              value={matrixProvider}
+              onChange={(event) => setMatrixProvider(event.target.value)}
+              style={{
+                border: "1px solid #D8E0E4",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+                background: "#ffffff",
+              }}
+            >
+              <option value="osrm">OSRM</option>
+              <option value="openrouteservice">OpenRouteService</option>
+              <option value="valhalla">Valhalla</option>
+              <option value="graphhopper">GraphHopper</option>
+              <option value="traveltime">TravelTime</option>
+            </select>
+          </label>
+          {matrixProvider === "valhalla" ? (
+            <>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 160,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Valhalla costing
+                </span>
+                <select
+                  value={valhallaCosting}
+                  onChange={(event) => setValhallaCosting(event.target.value)}
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="taxi">Taxi</option>
+                  <option value="bus">Bus</option>
+                </select>
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 160,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Traffic time
+                </span>
+                <select
+                  value={valhallaDateTimeType}
+                  onChange={(event) =>
+                    setValhallaDateTimeType(event.target.value)
+                  }
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="current">Current time</option>
+                  <option value="depart_at">Depart at</option>
+                  <option value="arrive_by">Arrive by</option>
+                </select>
+              </label>
+              {valhallaDateTimeType !== "current" ? (
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    minWidth: 220,
+                  }}
+                >
+                  <span
+                    style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                  >
+                    Traffic date and time
+                  </span>
+                  <input
+                    value={valhallaDateTime}
+                    onChange={(event) =>
+                      setValhallaDateTime(event.target.value)
+                    }
+                    type="datetime-local"
+                    required
+                    style={{
+                      border: "1px solid #D8E0E4",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      fontSize: 14,
+                    }}
+                  />
+                </label>
+              ) : null}
+            </>
+          ) : null}
           <button
             type="submit"
             disabled={loadingMatchData}

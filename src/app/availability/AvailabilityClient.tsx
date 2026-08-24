@@ -35,6 +35,7 @@ interface AvailabilityRecord {
   endLocation: Point;
   startTime: string;
   endTime: string;
+  status: string;
 }
 
 const NEXT_DAYS = Array.from({ length: 7 }, (_, i) => {

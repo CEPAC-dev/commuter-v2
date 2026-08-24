@@ -11,10 +11,13 @@ function getTodayDateString() {
   return `${year}-${month}-${day}`;
 }
 
-async function purgeExpiredAvailability() {
+async function closeExpiredAvailability() {
   await connectDB();
   const today = getTodayDateString();
-  await Availability.deleteMany({ date: { $lt: today } });
+  await Availability.updateMany(
+    { date: { $lt: today }, status: { $ne: "closed" } },
+    { $set: { status: "closed" } },
+  );
 }
 
 export interface AvailabilityRecord {
@@ -25,12 +28,13 @@ export interface AvailabilityRecord {
   endLocation: GeoPoint;
   startTime: string;
   endTime: string;
+  status: string;
 }
 
 export async function listDriverAvailability(
   driverId: string,
 ): Promise<AvailabilityRecord[]> {
-  await purgeExpiredAvailability();
+  await closeExpiredAvailability();
   await connectDB();
   const records = await Availability.find({ driverId }).sort({ date: 1 }).lean<
     {
@@ -41,6 +45,7 @@ export async function listDriverAvailability(
       endLocation: GeoPoint;
       startTime: string;
       endTime: string;
+      status: string;
     }[]
   >();
 
@@ -52,5 +57,6 @@ export async function listDriverAvailability(
     endLocation: record.endLocation,
     startTime: record.startTime,
     endTime: record.endTime,
+    status: record.status,
   }));
 }

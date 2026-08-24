@@ -46,7 +46,7 @@ const POPULATE_TRIP_REFERENCES = [
 ];
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();
@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const body = (await req.json().catch(() => null)) as {

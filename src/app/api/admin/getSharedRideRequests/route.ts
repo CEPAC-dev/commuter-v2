@@ -52,7 +52,7 @@ function getTomorrowDate() {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();
