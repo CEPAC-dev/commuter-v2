@@ -68,7 +68,7 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     window: 20,
     capacity: 3,
     occupancy: 3,
-    min_occupancy: 2,
+    min_occupancy: 1.5,
     minimum_charge: 50, // EGP minimum charge for shared taxi rides
   },
   shared_car: {
@@ -98,7 +98,7 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     window: 25,
     capacity: 5,
     occupancy: 5,
-    min_occupancy: 4,
+    min_occupancy: 2,
     minimum_charge: 50, // EGP minimum charge for van rides
   },
   microbus_shared: {
@@ -113,7 +113,7 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     window: 30,
     capacity: 9,
     occupancy: 9,
-    min_occupancy: 8,
+    min_occupancy: 3,
     minimum_charge: 50, // EGP minimum charge for microbus rides
   },
 };

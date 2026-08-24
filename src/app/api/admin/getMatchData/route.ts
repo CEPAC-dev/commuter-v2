@@ -331,13 +331,13 @@ export async function GET(req: NextRequest) {
 
   const requestedDate = req.nextUrl.searchParams.get("date")?.trim();
   const targetDate = requestedDate || getTomorrowDate();
-  const requestedMatrixProvider = req.nextUrl.searchParams.get("matrixProvider");
+  const requestedMatrixProvider =
+    req.nextUrl.searchParams.get("matrixProvider");
   const matrixProvider = isMatrixProvider(requestedMatrixProvider)
     ? requestedMatrixProvider
     : "osrm";
-  const requestedValhallaCosting = req.nextUrl.searchParams.get(
-    "valhallaCosting",
-  );
+  const requestedValhallaCosting =
+    req.nextUrl.searchParams.get("valhallaCosting");
   const valhallaCosting =
     requestedValhallaCosting === "taxi" || requestedValhallaCosting === "bus"
       ? requestedValhallaCosting
@@ -350,7 +350,9 @@ export async function GET(req: NextRequest) {
     requestedValhallaDateTimeType === "arrive_by"
       ? requestedValhallaDateTimeType
       : "current";
-  const valhallaDateTime = req.nextUrl.searchParams.get("valhallaDateTime")?.trim();
+  const valhallaDateTime = req.nextUrl.searchParams
+    .get("valhallaDateTime")
+    ?.trim();
 
   const privateTrips = await Trip.find({
     date: targetDate,
@@ -693,6 +695,16 @@ export async function GET(req: NextRequest) {
       },
     },
   );
+  console.log(
+    "[Admin matrix] Provider result",
+    JSON.stringify({
+      provider: matrixProvider,
+      pointCount: stationsSheetRows.length,
+      receivedTable: directionsTable !== null,
+      distanceRows: directionsTable?.distancesKm.length ?? 0,
+      durationRows: directionsTable?.durationsMinutes.length ?? 0,
+    }),
+  );
   const skimMetrics = stationsSheetRows.map((originStation, rowIndex) =>
     stationsSheetRows.map((destStation, colIndex) => {
       if (
@@ -704,6 +716,8 @@ export async function GET(req: NextRequest) {
           duration_minutes: 0,
           usedDistanceFallback: false,
           usedDurationFallback: false,
+          usedGraphHopperDistance: false,
+          usedGraphHopperDuration: false,
         };
       }
 
@@ -717,7 +731,8 @@ export async function GET(req: NextRequest) {
         1,
         Math.round((directDistanceKm / 35) * 60),
       );
-      const routeDistanceKm = directionsTable?.distancesKm[rowIndex]?.[colIndex];
+      const routeDistanceKm =
+        directionsTable?.distancesKm[rowIndex]?.[colIndex];
       const routeDurationMinutes =
         directionsTable?.durationsMinutes[rowIndex]?.[colIndex];
       const hasRouteDistance =
@@ -734,7 +749,32 @@ export async function GET(req: NextRequest) {
           : estimatedDurationMinutes,
         usedDistanceFallback: !hasRouteDistance,
         usedDurationFallback: !hasRouteDuration,
+        usedGraphHopperDistance:
+          matrixProvider === "graphhopper" && hasRouteDistance,
+        usedGraphHopperDuration:
+          matrixProvider === "graphhopper" && hasRouteDuration,
       };
+    }),
+  );
+  const fallbackSummary = skimMetrics.reduce(
+    (summary, row) => {
+      for (const metrics of row) {
+        if (metrics.usedDistanceFallback) summary.distanceCells += 1;
+        if (metrics.usedDurationFallback) summary.durationCells += 1;
+      }
+      return summary;
+    },
+    { distanceCells: 0, durationCells: 0 },
+  );
+  console.log(
+    "[Admin matrix] Fallback summary",
+    JSON.stringify({
+      provider: matrixProvider,
+      ...fallbackSummary,
+      reason:
+        directionsTable === null
+          ? "provider returned no matrix"
+          : "provider matrix contained missing or non-positive cells",
     }),
   );
 
@@ -756,7 +796,7 @@ export async function GET(req: NextRequest) {
 
   VEHICLE_LIST.forEach((vehicle, index) => {
     const rowNumber = index + 2;
-    const waitingRateFormula = `=ROUND(0.5*E${rowNumber}*50*I${rowNumber},0)`;
+    const waitingRateFormula = `=ROUND(0.5*E${rowNumber}*30*I${rowNumber},0)`;
     const additionalRateFormula = `=${vehicle.additional_rate}*E${rowNumber}`;
     const waitingRateValue =
       0.5 * vehicle.rate * Math.pow(50, 0.8) * vehicle.min_occupancy;
@@ -801,6 +841,7 @@ export async function GET(req: NextRequest) {
   const matrixDuration = wb.addWorksheet("Time_Skim");
   matrixDuration.getCell("A1").value = "District Id";
   const fallbackCellColor = "FF00FFFF";
+  const graphHopperCellColor = "FF00B050";
 
   stationsSheetRows.forEach((station, index) => {
     const column = index + 2;
@@ -834,6 +875,12 @@ export async function GET(req: NextRequest) {
           pattern: "solid",
           fgColor: { argb: fallbackCellColor },
         };
+      } else if (metrics.usedGraphHopperDistance) {
+        distanceCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: graphHopperCellColor },
+        };
       }
 
       if (metrics.usedDurationFallback) {
@@ -841,6 +888,12 @@ export async function GET(req: NextRequest) {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: fallbackCellColor },
+        };
+      } else if (metrics.usedGraphHopperDuration) {
+        durationCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: graphHopperCellColor },
         };
       }
     }

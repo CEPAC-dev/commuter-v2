@@ -15,7 +15,8 @@ export type MatrixProvider =
   | "osrm"
   | "openrouteservice"
   | "valhalla"
-  | "graphhopper";
+  | "graphhopper"
+  | "traveltime";
 export type ValhallaDateTimeType = "current" | "depart_at" | "arrive_by";
 
 export interface MatrixOptions {
@@ -27,6 +28,7 @@ export interface MatrixOptions {
 }
 
 type MatrixPoint = { lat: number; lng: number };
+const GRAPHHOPPER_GROUP_SIZE = 10;
 
 export function isMatrixProvider(
   value: string | null,
@@ -35,7 +37,8 @@ export function isMatrixProvider(
     value === "osrm" ||
     value === "openrouteservice" ||
     value === "valhalla" ||
-    value === "graphhopper"
+    value === "graphhopper" ||
+    value === "traveltime"
   );
 }
 
@@ -192,40 +195,169 @@ export async function fetchValhallaMatrix(
 export async function fetchGraphHopperMatrix(
   points: MatrixPoint[],
 ): Promise<DirectionsTableResult | null> {
+  if (points.length < 2) {
+    console.warn("[GraphHopper matrix] Skipped: fewer than two points.");
+    return null;
+  }
+
+  const baseUrl = process.env.GRAPHHOPPER_URL?.trim().replace(/\/+$/, "");
+  if (!baseUrl) {
+    console.error("[GraphHopper matrix] Skipped: GRAPHHOPPER_URL is unset.");
+    return null;
+  }
+
+  const url = `${baseUrl}/matrix`;
+  const groups = Array.from(
+    { length: Math.ceil(points.length / GRAPHHOPPER_GROUP_SIZE) },
+    (_, index) => {
+      const start = index * GRAPHHOPPER_GROUP_SIZE;
+      return points.slice(start, start + GRAPHHOPPER_GROUP_SIZE).map((point, offset) => ({
+        point,
+        originalIndex: start + offset,
+      }));
+    },
+  );
+  const distancesKm = Array.from({ length: points.length }, () =>
+    Array<number | null>(points.length).fill(null),
+  );
+  const durationsMinutes = Array.from({ length: points.length }, () =>
+    Array<number | null>(points.length).fill(null),
+  );
+
+  for (let firstGroupIndex = 0; firstGroupIndex < groups.length; firstGroupIndex++) {
+    for (
+      let secondGroupIndex = firstGroupIndex;
+      secondGroupIndex < groups.length;
+      secondGroupIndex++
+    ) {
+      const requestPoints =
+        firstGroupIndex === secondGroupIndex
+          ? groups[firstGroupIndex]
+          : [...groups[firstGroupIndex], ...groups[secondGroupIndex]];
+      const payload = {
+        points: requestPoints.map(({ point }) => [point.lng, point.lat]),
+        profile: "car",
+      };
+      console.log(
+        "[GraphHopper matrix] Request",
+        JSON.stringify({
+          url,
+          batch: `${firstGroupIndex + 1}-${secondGroupIndex + 1}`,
+          pointCount: requestPoints.length,
+          payload,
+        }),
+      );
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const errorBody = await res.text();
+        console.error(
+          `[GraphHopper matrix] Batch ${firstGroupIndex + 1}-${secondGroupIndex + 1} ${res.status} ${res.statusText}: ${errorBody}`,
+        );
+        continue;
+      }
+
+      const data = (await res.json()) as {
+        distances?: Array<Array<number | null>>;
+        times?: Array<Array<number | null>>;
+      };
+      if (
+        !data.distances ||
+        !data.times ||
+        data.distances.length !== requestPoints.length ||
+        data.times.length !== requestPoints.length
+      ) {
+        console.error(
+          `[GraphHopper matrix] Batch ${firstGroupIndex + 1}-${secondGroupIndex + 1} returned invalid dimensions.`,
+        );
+        continue;
+      }
+
+      requestPoints.forEach(({ originalIndex: originIndex }, rowIndex) => {
+        requestPoints.forEach(({ originalIndex: destinationIndex }, colIndex) => {
+          const distance = data.distances?.[rowIndex]?.[colIndex];
+          const duration = data.times?.[rowIndex]?.[colIndex];
+          distancesKm[originIndex][destinationIndex] =
+            typeof distance === "number" && distance >= 0
+              ? Math.round((distance / 1000) * 10) / 10
+              : null;
+          durationsMinutes[originIndex][destinationIndex] =
+            typeof duration === "number" && duration >= 0
+              ? Math.round(duration / 60)
+              : null;
+        });
+      });
+    }
+  }
+
+  console.log(
+    "[GraphHopper matrix] Completed",
+    JSON.stringify({ pointCount: points.length, batchCount: (groups.length * (groups.length + 1)) / 2 }),
+  );
+  return { distancesKm, durationsMinutes };
+}
+
+export async function fetchTravelTimeMatrix(
+  points: MatrixPoint[],
+): Promise<DirectionsTableResult | null> {
   if (points.length < 2) return null;
 
-  const url = process.env.GRAPHHOPPER_URL?.trim();
-  if (!url) return null;
+  const baseUrl = process.env.TRAVELTIME_URL?.trim().replace(/\/+$/, "");
+  if (!baseUrl) {
+    console.error("[TravelTime matrix] Skipped: TRAVELTIME_URL is unset.");
+    return null;
+  }
 
-  const res = await fetch(url, {
+  const serviceApiKey = process.env.TRAVELTIME_SERVICE_API_KEY?.trim();
+  const response = await fetch(`${baseUrl}/matrix`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(serviceApiKey ? { "X-Service-Key": serviceApiKey } : {}),
+    },
     body: JSON.stringify({
       points: points.map(({ lat, lng }) => [lng, lat]),
-      profile: "car",
-      out_arrays: ["distances", "times"],
     }),
     cache: "no-store",
   });
-  if (!res.ok) return null;
+  if (!response.ok) {
+    const detail = await response.text();
+    console.error(
+      `[TravelTime matrix] ${response.status} ${response.statusText}: ${detail}`,
+    );
+    return null;
+  }
 
-  const data = (await res.json()) as {
+  const data = (await response.json()) as {
     distances?: Array<Array<number | null>>;
     times?: Array<Array<number | null>>;
   };
-  if (!data.distances || !data.times) return null;
+  if (
+    !data.distances ||
+    !data.times ||
+    data.distances.length !== points.length ||
+    data.times.length !== points.length
+  ) {
+    console.error("[TravelTime matrix] Invalid matrix dimensions.");
+    return null;
+  }
 
   return {
     distancesKm: data.distances.map((row) =>
       row.map((distance) =>
-        typeof distance === "number" && distance > 0
+        typeof distance === "number" && distance >= 0
           ? Math.round((distance / 1000) * 10) / 10
           : null,
       ),
     ),
     durationsMinutes: data.times.map((row) =>
       row.map((duration) =>
-        typeof duration === "number" && duration > 0
+        typeof duration === "number" && duration >= 0
           ? Math.round(duration / 60)
           : null,
       ),
@@ -252,6 +384,10 @@ export function fetchDirectionsMatrix(
 
   if (provider === "graphhopper") {
     return fetchGraphHopperMatrix(points);
+  }
+
+  if (provider === "traveltime") {
+    return fetchTravelTimeMatrix(points);
   }
 
   return fetchOsrmDirectionsTable(points);

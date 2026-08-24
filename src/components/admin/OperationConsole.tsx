@@ -763,6 +763,7 @@ export default function OperationConsole() {
               <option value="openrouteservice">OpenRouteService</option>
               <option value="valhalla">Valhalla</option>
               <option value="graphhopper">GraphHopper</option>
+              <option value="traveltime">TravelTime</option>
             </select>
           </label>
           {matrixProvider === "valhalla" ? (
