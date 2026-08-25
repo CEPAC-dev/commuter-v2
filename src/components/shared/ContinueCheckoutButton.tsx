@@ -20,38 +20,32 @@ export default function ContinueCheckoutButton({
   const [loading, setLoading] = useState<"card" | "wallet" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canAfford = walletBalance >= amountEgp;
+  const walletAvail = Math.max(0, walletBalance);
+  const walletPortion = Math.min(walletAvail, amountEgp);
+  const cardPortion = Math.max(0, amountEgp - walletPortion);
+  const walletCoversAll = walletPortion >= amountEgp && amountEgp > 0;
+  const walletEnabled = walletAvail > 0;
 
-  async function payByCard() {
-    setLoading("card");
+  async function submit(useWallet: boolean) {
+    setLoading(useWallet ? "wallet" : "card");
     setError(null);
     try {
       const res = await fetch("/api/payments/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to create session");
-      window.location.href = data.sessionUrl;
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-      setLoading(null);
-    }
-  }
-
-  async function payByWallet() {
-    setLoading("wallet");
-    setError(null);
-    try {
-      const res = await fetch("/api/payments/wallet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId }),
+        body: JSON.stringify({ bookingId, useWallet }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Payment failed");
-      router.push(`/checkout/callback?bookingId=${bookingId}`);
+      if (data.walletOnly && data.redirect) {
+        router.push(data.redirect);
+        return;
+      }
+      if (data.sessionUrl) {
+        window.location.href = data.sessionUrl;
+        return;
+      }
+      throw new Error("Unexpected response");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setLoading(null);
@@ -158,7 +152,7 @@ export default function ContinueCheckoutButton({
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {/* Card — Kashier */}
               <button
-                onClick={payByCard}
+                onClick={() => submit(false)}
                 disabled={loading !== null}
                 style={{
                   display: "flex",
@@ -200,28 +194,30 @@ export default function ContinueCheckoutButton({
                     Card
                   </p>
                   <p style={{ margin: "3px 0 0", fontSize: 13, color: "#5A6A7A" }}>
-                    {loading === "card" ? "Redirecting…" : "Pay via Kashier"}
+                    {loading === "card"
+                      ? "Redirecting…"
+                      : `Pay via Kashier · ${amountEgp} EGP`}
                   </p>
                 </div>
               </button>
 
               {/* Wallet */}
               <button
-                onClick={canAfford ? payByWallet : undefined}
-                disabled={loading !== null || !canAfford}
+                onClick={walletEnabled ? () => submit(true) : undefined}
+                disabled={loading !== null || !walletEnabled}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 14,
                   padding: "16px 18px",
                   background: loading === "wallet" ? "#f0faf9" : "#fff",
-                  border: `2px solid ${canAfford ? "#00C2A8" : "#dde3ea"}`,
+                  border: `2px solid ${walletEnabled ? "#00C2A8" : "#dde3ea"}`,
                   borderRadius: 14,
                   cursor:
-                    loading !== null || !canAfford ? "not-allowed" : "pointer",
+                    loading !== null || !walletEnabled ? "not-allowed" : "pointer",
                   textAlign: "left",
                   opacity:
-                    (loading !== null && loading !== "wallet") || !canAfford
+                    (loading !== null && loading !== "wallet") || !walletEnabled
                       ? 0.45
                       : 1,
                   transition: "opacity 0.15s",
@@ -250,19 +246,27 @@ export default function ContinueCheckoutButton({
                       color: "#0B1E3D",
                     }}
                   >
-                    Wallet
+                    {walletCoversAll
+                      ? "Wallet"
+                      : walletEnabled
+                        ? "Wallet + Card"
+                        : "Wallet"}
                   </p>
                   <p
                     style={{
                       margin: "3px 0 0",
                       fontSize: 13,
-                      color: canAfford ? "#5A6A7A" : "#E74C3C",
-                      fontWeight: !canAfford ? 600 : 400,
+                      color: walletEnabled ? "#5A6A7A" : "#E74C3C",
+                      fontWeight: !walletEnabled ? 600 : 400,
                     }}
                   >
                     {loading === "wallet"
                       ? "Processing…"
-                      : `Balance: ${walletBalance} EGP${!canAfford ? " · Insufficient" : ""}`}
+                      : !walletEnabled
+                        ? `Balance: ${walletBalance} EGP · No funds`
+                        : walletCoversAll
+                          ? `Balance: ${walletBalance} EGP`
+                          : `${walletPortion} EGP wallet + ${cardPortion} EGP card`}
                   </p>
                 </div>
               </button>

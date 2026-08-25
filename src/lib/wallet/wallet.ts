@@ -290,7 +290,12 @@ export async function reserveWallet(
       status: "active",
       $expr: {
         $gte: [
-          { $subtract: ["$balanceEgp", "$reservedBalanceEgp"] },
+          {
+            $subtract: [
+              { $ifNull: ["$balanceEgp", 0] },
+              { $ifNull: ["$reservedBalanceEgp", 0] },
+            ],
+          },
           amountEgp,
         ],
       },

@@ -1766,6 +1766,46 @@ export default function CreateClient({
                       {t("create.payment_method_label")}
                     </span>
 
+                    {/* Card — always active */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        padding: "12px 14px",
+                        borderRadius: 12,
+                        border: "1.5px solid #0B1E3D",
+                        background: "rgba(11,30,61,0.04)",
+                        marginBottom: 10,
+                      }}
+                    >
+                      <span>
+                        <span
+                          style={{
+                            display: "block",
+                            fontSize: 14,
+                            fontWeight: 700,
+                            color: "#0B1E3D",
+                          }}
+                        >
+                          Card
+                        </span>
+                        <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                          Pay via Kashier
+                        </span>
+                      </span>
+                      <strong
+                        style={{
+                          fontSize: 14,
+                          color: "#0B1E3D",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {formatEgp(locale, cardPortion)}
+                      </strong>
+                    </div>
+
                     <label
                       style={{
                         display: "flex",
