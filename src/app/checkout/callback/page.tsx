@@ -31,17 +31,17 @@ export default async function CallbackPage({
   }
 
   // Active verification — query Kashier directly and settle the booking.
-  // Don't rely on the webhook alone (may be delayed or fail to deliver).
-  await verifyAndSettleBooking(bookingId, session.userId);
+  // Skip when booking is already paid (e.g. wallet-only path with no Kashier session).
+  const prelim = await getBookingStatus(session.userId, bookingId);
+  if (prelim && prelim.paymentStatus !== "paid") {
+    await verifyAndSettleBooking(bookingId, session.userId);
+  }
 
   const booking = await getBookingStatus(session.userId, bookingId);
 
   if (!booking) redirect("/my-trips");
 
   const isPaid = booking.paymentStatus === "paid";
-  if (isPaid) {
-    redirect("/my-trips");
-  }
   const isFailed =
     booking.paymentStatus === "failed" ||
     kashierStatus === "FAILURE" ||
