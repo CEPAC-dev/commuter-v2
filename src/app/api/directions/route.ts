@@ -18,12 +18,17 @@ export type MatrixProvider =
   | "graphhopper"
   | "traveltime";
 export type ValhallaDateTimeType = "current" | "depart_at" | "arrive_by";
+export type TravelTimeTransportation = "driving" | "walking" | "cycling";
 
 export interface MatrixOptions {
   valhalla?: {
     costing: "auto" | "taxi" | "bus";
     dateTimeType: ValhallaDateTimeType;
     dateTime?: string;
+  };
+  travelTime?: {
+    transportation: TravelTimeTransportation;
+    departureTime: string;
   };
 }
 
@@ -304,6 +309,7 @@ export async function fetchGraphHopperMatrix(
 
 export async function fetchTravelTimeMatrix(
   points: MatrixPoint[],
+  options: NonNullable<MatrixOptions["travelTime"]>,
 ): Promise<DirectionsTableResult | null> {
   if (points.length < 2) return null;
 
@@ -322,6 +328,8 @@ export async function fetchTravelTimeMatrix(
     },
     body: JSON.stringify({
       points: points.map(({ lat, lng }) => [lng, lat]),
+      transportation: options.transportation,
+      departureTime: options.departureTime,
     }),
     cache: "no-store",
   });
@@ -387,7 +395,11 @@ export function fetchDirectionsMatrix(
   }
 
   if (provider === "traveltime") {
-    return fetchTravelTimeMatrix(points);
+    return fetchTravelTimeMatrix(points, {
+      transportation: "driving",
+      departureTime: new Date().toISOString(),
+      ...options.travelTime,
+    });
   }
 
   return fetchOsrmDirectionsTable(points);
@@ -457,10 +469,18 @@ export async function fetchDirections(
 export async function GET(req: NextRequest) {
   const origin = req.nextUrl.searchParams.get("origin");
   const dest = req.nextUrl.searchParams.get("dest");
+  const wps = req.nextUrl.searchParams.get("waypoints");
+
+  console.log("[api/directions] request payload", {
+    url: req.url,
+    origin,
+    dest,
+    waypoints: wps,
+  });
+
   if (!origin || !dest)
     return NextResponse.json({ error: "missing origin/dest" }, { status: 400 });
 
-  const wps = req.nextUrl.searchParams.get("waypoints");
   const result = await fetchDirections(origin, dest, wps ?? undefined);
   return NextResponse.json(result);
 }
