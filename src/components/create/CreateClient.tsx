@@ -99,8 +99,9 @@ export default function CreateClient({
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [payMethod, setPayMethod] = useState<"card" | "wallet">("card");
+  const [useWallet, setUseWallet] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletAvailable, setWalletAvailable] = useState<number | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [bookingNote, setBookingNote] = useState("");
@@ -168,6 +169,9 @@ export default function CreateClient({
         if (r.ok) {
           const d = await r.json();
           setWalletBalance(d.balanceEgp);
+          setWalletAvailable(
+            typeof d.availableEgp === "number" ? d.availableEgp : d.balanceEgp,
+          );
         }
       } catch {
         /* non-fatal */
@@ -335,28 +339,11 @@ export default function CreateClient({
         setPromoWarning(t("create.promo_partially_applied"));
       }
 
-      // ── Wallet payment ──
-      if (payMethod === "wallet") {
-        const walletRes = await fetch("/api/payments/wallet", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bookingId: data.bookingId }),
-        });
-        const walletData = await walletRes.json();
-        if (!walletRes.ok) {
-          setSubmitError(walletData.error ?? t("create.wallet_payment_failed"));
-          return;
-        }
-        navigating = true;
-        window.location.href = `/checkout/callback?bookingId=${data.bookingId}`;
-        return;
-      }
-
-      // ── Card payment (Kashier) ──
+      // ── Mixed payment: single call handles wallet-only, mixed, and card-only ──
       const payRes = await fetch("/api/payments/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: data.bookingId }),
+        body: JSON.stringify({ bookingId: data.bookingId, useWallet }),
       });
       const payData = await payRes.json();
       if (!payRes.ok) {
@@ -364,7 +351,10 @@ export default function CreateClient({
         return;
       }
       navigating = true;
-      // Full redirect (not router.push) so the browser leaves the SPA entirely
+      if (payData.walletOnly && payData.redirect) {
+        window.location.href = payData.redirect;
+        return;
+      }
       window.location.href = payData.sessionUrl;
     } catch {
       setSubmitError(t("create.network_error_retry"));
@@ -1754,10 +1744,14 @@ export default function CreateClient({
                 </span>
               </div>
 
-              {/* Payment method */}
+              {/* Payment split — wallet portion + card portion */}
               {(() => {
-                const walletEnough =
-                  walletBalance !== null && walletBalance >= grandTotalEgp;
+                const avail = walletAvailable ?? 0;
+                const walletPortion = useWallet
+                  ? Math.min(grandTotalEgp, avail)
+                  : 0;
+                const cardPortion = grandTotalEgp - walletPortion;
+                const walletDisabled = avail <= 0;
                 return (
                   <div>
                     <span
@@ -1771,63 +1765,25 @@ export default function CreateClient({
                     >
                       {t("create.payment_method_label")}
                     </span>
-                    <div style={{ display: "flex", gap: 10 }}>
-                      <button
-                        type="button"
-                        onClick={() => setPayMethod("card")}
-                        style={{
-                          flex: 1,
-                          padding: "12px 14px",
-                          borderRadius: 12,
-                          border:
-                            payMethod === "card"
-                              ? "1.5px solid #00C2A8"
-                              : "1.5px solid #eef0f3",
-                          background:
-                            payMethod === "card"
-                              ? "rgba(0,194,168,0.08)"
-                              : "#fff",
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                          textAlign: "left",
-                        }}
-                      >
-                        <span
-                          style={{
-                            display: "block",
-                            fontSize: 14,
-                            fontWeight: 700,
-                            color: "#0B1E3D",
-                          }}
-                        >
-                          {t("create.pay_card")}
-                        </span>
-                        <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                          {t("create.pay_via_kashier")}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => walletEnough && setPayMethod("wallet")}
-                        disabled={!walletEnough}
-                        style={{
-                          flex: 1,
-                          padding: "12px 14px",
-                          borderRadius: 12,
-                          border:
-                            payMethod === "wallet"
-                              ? "1.5px solid #00C2A8"
-                              : "1.5px solid #eef0f3",
-                          background:
-                            payMethod === "wallet"
-                              ? "rgba(0,194,168,0.08)"
-                              : "#fff",
-                          cursor: walletEnough ? "pointer" : "not-allowed",
-                          opacity: walletEnough ? 1 : 0.55,
-                          fontFamily: "inherit",
-                          textAlign: "left",
-                        }}
-                      >
+
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        padding: "12px 14px",
+                        borderRadius: 12,
+                        border: useWallet
+                          ? "1.5px solid #00C2A8"
+                          : "1.5px solid #eef0f3",
+                        background: useWallet ? "rgba(0,194,168,0.08)" : "#fff",
+                        cursor: walletDisabled ? "not-allowed" : "pointer",
+                        opacity: walletDisabled ? 0.55 : 1,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <span>
                         <span
                           style={{
                             display: "block",
@@ -1841,14 +1797,92 @@ export default function CreateClient({
                         <span style={{ fontSize: 12, color: "#5A6A7A" }}>
                           {walletBalance === null
                             ? t("create.loading_balance")
-                            : t("create.wallet_balance_label").replace(
+                            : `${t("create.wallet_balance_label").replace(
                                 "{amount}",
                                 formatEgp(locale, walletBalance),
-                              )}
+                              )}${
+                                walletAvailable !== null &&
+                                walletAvailable !== walletBalance
+                                  ? ` · ${formatEgp(locale, walletAvailable)} available`
+                                  : ""
+                              }`}
                         </span>
-                      </button>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={useWallet}
+                        disabled={walletDisabled}
+                        onChange={(e) => setUseWallet(e.target.checked)}
+                        style={{
+                          width: 18,
+                          height: 18,
+                          accentColor: "#00C2A8",
+                          cursor: walletDisabled ? "not-allowed" : "pointer",
+                        }}
+                      />
+                    </label>
+
+                    <div
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: 12,
+                        background: "#f8f9fa",
+                        border: "1.5px solid #eef0f3",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                        fontSize: 13,
+                        color: "#0B1E3D",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <span>Trip total</span>
+                        <strong style={{ fontVariantNumeric: "tabular-nums" }}>
+                          {formatEgp(locale, grandTotalEgp)}
+                        </strong>
+                      </div>
+                      {walletPortion > 0 && (
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            color: "#00877A",
+                          }}
+                        >
+                          <span>Paid from wallet</span>
+                          <strong
+                            style={{ fontVariantNumeric: "tabular-nums" }}
+                          >
+                            −{formatEgp(locale, walletPortion)}
+                          </strong>
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          borderTop: "1px solid #e5e9ee",
+                          paddingTop: 6,
+                          marginTop: 2,
+                        }}
+                      >
+                        <span>
+                          {cardPortion === 0
+                            ? "Wallet covers the total"
+                            : "Pay by card (Kashier)"}
+                        </span>
+                        <strong style={{ fontVariantNumeric: "tabular-nums" }}>
+                          {formatEgp(locale, cardPortion)}
+                        </strong>
+                      </div>
                     </div>
-                    {walletBalance !== null && !walletEnough && (
+
+                    {walletBalance !== null && walletDisabled && (
                       <p
                         style={{
                           fontSize: 12,
@@ -1856,10 +1890,6 @@ export default function CreateClient({
                           margin: "8px 0 0",
                         }}
                       >
-                        {t("create.wallet_insufficient").replace(
-                          "{amount}",
-                          formatEgp(locale, grandTotalEgp),
-                        )}{" "}
                         <Link
                           href="/wallet"
                           style={{ color: "#00C2A8", fontWeight: 600 }}

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
-import { reconcilePendingTopups } from "@/lib/payments/kashier";
+import {
+  reconcilePendingTopups,
+  reconcileStaleReservations,
+} from "@/lib/payments/kashier";
 
 export async function POST() {
   const session = await getSession();
@@ -8,5 +11,8 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const credited = await reconcilePendingTopups(session.userId);
-  return NextResponse.json({ credited });
+  const { released, settled } = await reconcileStaleReservations(
+    session.userId,
+  );
+  return NextResponse.json({ credited, released, settled });
 }

@@ -21,7 +21,19 @@ const WalletTransactionSchema = new Schema(
     type: {
       type: String,
       required: true,
-      enum: ["topup", "payment", "refund", "earning", "referral_bonus", "withdrawal"],
+      enum: [
+        "topup",
+        "payment",
+        "refund",
+        "earning",
+        "referral_bonus",
+        "withdrawal",
+        // Mixed-payment reservation lifecycle.
+        "payment_reserved",
+        "payment_released",
+        "payment_captured",
+        "payment_refund_partial",
+      ],
     },
     amountEgp: { type: Number, required: true, min: 0 },
     status: {
@@ -33,8 +45,18 @@ const WalletTransactionSchema = new Schema(
     description: { type: String, required: true },
     balanceAfterEgp: { type: Number },
     bookingId: { type: Types.ObjectId, ref: "Booking" },
+    paymentId: {
+      type: Types.ObjectId,
+      ref: "Payment",
+      index: true,
+      sparse: true,
+    },
     tripId: { type: Types.ObjectId, ref: "Trip" },
-    referralUsageId: { type: Types.ObjectId, ref: "ReferralUsage", index: true },
+    referralUsageId: {
+      type: Types.ObjectId,
+      ref: "ReferralUsage",
+      index: true,
+    },
 
     // ── Kashier (topup + withdrawal) ──
     kashierSessionId: { type: String },
@@ -56,6 +78,12 @@ WalletTransactionSchema.index(
     partialFilterExpression: { type: "earning", tripId: { $exists: true } },
   },
 );
+
+// Admin ledger read patterns.
+WalletTransactionSchema.index({ createdAt: -1 });
+WalletTransactionSchema.index({ type: 1, status: 1, createdAt: -1 });
+WalletTransactionSchema.index({ userId: 1, createdAt: -1 });
+WalletTransactionSchema.index({ kashierOrderId: 1 });
 
 export type WalletTransactionDoc = InferSchemaType<
   typeof WalletTransactionSchema

@@ -35,6 +35,11 @@ export async function GET() {
 
   return NextResponse.json({
     balanceEgp: wallet.balanceEgp,
+    reservedBalanceEgp: wallet.reservedBalanceEgp ?? 0,
+    availableEgp: Math.max(
+      0,
+      (wallet.balanceEgp ?? 0) - (wallet.reservedBalanceEgp ?? 0),
+    ),
     status: wallet.status,
     role: session.role,
     transactions,

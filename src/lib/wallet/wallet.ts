@@ -25,6 +25,8 @@ export async function creditWallet(
     description: string;
     transactionId?: string;
     type?: "topup" | "refund";
+    paymentId?: string;
+    bookingId?: string;
   } = {
     description: "Wallet top-up",
   },
@@ -55,6 +57,12 @@ export async function creditWallet(
       status: "completed",
       description: opts.description,
       balanceAfterEgp: wallet.balanceEgp,
+      paymentId: opts.paymentId
+        ? new Types.ObjectId(opts.paymentId)
+        : undefined,
+      bookingId: opts.bookingId
+        ? new Types.ObjectId(opts.bookingId)
+        : undefined,
     });
   }
 
@@ -116,14 +124,16 @@ export async function creditDriverEarning(
   try {
     await session.withTransaction(async () => {
       const [ledger] = await WalletTransaction.create(
-        [{
-          userId: uid,
-          type: "earning",
-          amountEgp,
-          status: "pending",
-          description: opts.description,
-          tripId: tripOid,
-        }],
+        [
+          {
+            userId: uid,
+            type: "earning",
+            amountEgp,
+            status: "pending",
+            description: opts.description,
+            tripId: tripOid,
+          },
+        ],
         { session },
       );
 
@@ -258,4 +268,152 @@ export async function refundWithdrawal(
   } finally {
     await session.endSession();
   }
+}
+
+/**
+ * Reserve wallet funds for an in-flight mixed payment. Atomic: succeeds only
+ * when `balanceEgp - reservedBalanceEgp >= amount`. Writes a
+ * `payment_reserved` ledger row (status: pending) so the reservation is
+ * auditable. Returns the ledger row id + available balance after reserve.
+ */
+export async function reserveWallet(
+  userId: string,
+  amountEgp: number,
+  opts: { description: string; paymentId: string; bookingId?: string },
+): Promise<{ transactionId: string; availableEgp: number } | null> {
+  await connectDB();
+  const uid = new Types.ObjectId(userId);
+
+  const wallet = await Wallet.findOneAndUpdate(
+    {
+      userId: uid,
+      status: "active",
+      $expr: {
+        $gte: [
+          { $subtract: ["$balanceEgp", "$reservedBalanceEgp"] },
+          amountEgp,
+        ],
+      },
+    },
+    {
+      $inc: { reservedBalanceEgp: amountEgp },
+      $set: { lastTransactionAt: new Date() },
+    },
+    { new: true },
+  );
+  if (!wallet) return null;
+
+  const tx = await WalletTransaction.create({
+    userId: uid,
+    type: "payment_reserved",
+    amountEgp,
+    status: "pending",
+    description: opts.description,
+    balanceAfterEgp: wallet.balanceEgp,
+    paymentId: new Types.ObjectId(opts.paymentId),
+    bookingId: opts.bookingId ? new Types.ObjectId(opts.bookingId) : undefined,
+  });
+
+  return {
+    transactionId: String(tx._id),
+    availableEgp: wallet.balanceEgp - wallet.reservedBalanceEgp,
+  };
+}
+
+/**
+ * Capture (finalize) a wallet reservation. Debits balanceEgp AND decrements
+ * reservedBalanceEgp in one atomic op, then writes a `payment_captured` row.
+ * Idempotent when guarded by the reservation ledger row (updated to
+ * `completed`). Returns the new balance.
+ */
+export async function captureReservation(
+  reservationTxId: string,
+  opts: { description: string; paymentId: string; bookingId?: string },
+): Promise<number | null> {
+  await connectDB();
+
+  const reservation = await WalletTransaction.findOneAndUpdate(
+    { _id: reservationTxId, type: "payment_reserved", status: "pending" },
+    { $set: { status: "completed" } },
+    { new: true },
+  );
+  if (!reservation) return null;
+
+  const wallet = await Wallet.findOneAndUpdate(
+    { userId: reservation.userId },
+    {
+      $inc: {
+        balanceEgp: -reservation.amountEgp,
+        reservedBalanceEgp: -reservation.amountEgp,
+        totalDebitedEgp: reservation.amountEgp,
+      },
+      $set: { lastTransactionAt: new Date() },
+    },
+    { new: true },
+  );
+  if (!wallet) {
+    // Restore reservation row for retry.
+    await WalletTransaction.updateOne(
+      { _id: reservationTxId },
+      { $set: { status: "pending" } },
+    );
+    return null;
+  }
+
+  const captureTx = await WalletTransaction.create({
+    userId: reservation.userId,
+    type: "payment_captured",
+    amountEgp: reservation.amountEgp,
+    status: "completed",
+    description: opts.description,
+    balanceAfterEgp: wallet.balanceEgp,
+    paymentId: new Types.ObjectId(opts.paymentId),
+    bookingId: opts.bookingId ? new Types.ObjectId(opts.bookingId) : undefined,
+  });
+
+  return wallet.balanceEgp;
+
+  // captureTx id can be looked up by callers via paymentId if needed.
+  void captureTx;
+}
+
+/**
+ * Release a wallet reservation (Kashier failed/cancelled/expired). Decrements
+ * reservedBalanceEgp; balanceEgp is unaffected. Writes `payment_released`.
+ */
+export async function releaseReservation(
+  reservationTxId: string,
+  opts: { description: string; paymentId: string; bookingId?: string },
+): Promise<boolean> {
+  await connectDB();
+
+  const reservation = await WalletTransaction.findOneAndUpdate(
+    { _id: reservationTxId, type: "payment_reserved", status: "pending" },
+    { $set: { status: "failed" } },
+    { new: true },
+  );
+  if (!reservation) return false;
+
+  const wallet = await Wallet.findOneAndUpdate(
+    { userId: reservation.userId },
+    {
+      $inc: { reservedBalanceEgp: -reservation.amountEgp },
+      $set: { lastTransactionAt: new Date() },
+    },
+    { new: true },
+  );
+  if (!wallet) return false;
+
+  await WalletTransaction.create({
+    userId: reservation.userId,
+    type: "payment_released",
+    amountEgp: reservation.amountEgp,
+    status: "completed",
+    description: opts.description,
+    balanceAfterEgp: wallet.balanceEgp,
+    paymentId: new Types.ObjectId(opts.paymentId),
+    bookingId: opts.bookingId ? new Types.ObjectId(opts.bookingId) : undefined,
+  });
+
+  return true;
 }
