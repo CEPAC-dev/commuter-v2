@@ -317,6 +317,10 @@ async function settleMixedPayment(
       },
     );
 
+    if (payment.gatewayAmountEgp > 0) {
+      await writeKashierPaymentLedger(payment, transactionId);
+    }
+
     if (settled) {
       await Trip.updateMany(
         { requestId: payment.bookingId },
@@ -370,4 +374,36 @@ async function settleMixedPayment(
       paymentId: String(payment._id),
     },
   });
+}
+
+// Idempotent ledger write for the Kashier (gateway) leg of a Payment.
+async function writeKashierPaymentLedger(
+  payment: {
+    _id: Types.ObjectId;
+    userId: Types.ObjectId;
+    bookingId: Types.ObjectId;
+    gatewayAmountEgp: number;
+    kashierSessionId?: string | null;
+    kashierOrderId?: string | null;
+  },
+  transactionId: string,
+): Promise<void> {
+  await WalletTransaction.updateOne(
+    { paymentId: payment._id, type: "kashier_payment" },
+    {
+      $setOnInsert: {
+        userId: payment.userId,
+        type: "kashier_payment",
+        amountEgp: payment.gatewayAmountEgp,
+        status: "completed",
+        description: `Card payment via Kashier for booking ${payment.bookingId}`,
+        paymentId: payment._id,
+        bookingId: payment.bookingId,
+        kashierSessionId: payment.kashierSessionId ?? undefined,
+        kashierOrderId: payment.kashierOrderId ?? undefined,
+      },
+      $addToSet: { kashierTransactionIds: transactionId },
+    },
+    { upsert: true },
+  );
 }

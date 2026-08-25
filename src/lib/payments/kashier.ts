@@ -154,6 +154,25 @@ export async function verifyAndSettleBooking(
           $push: { timeline: { event: "verify_settled_paid" } },
         },
       );
+      if (payment.gatewayAmountEgp > 0) {
+        await WalletTransaction.updateOne(
+          { paymentId: payment._id, type: "kashier_payment" },
+          {
+            $setOnInsert: {
+              userId: payment.userId,
+              type: "kashier_payment",
+              amountEgp: payment.gatewayAmountEgp,
+              status: "completed",
+              description: `Card payment via Kashier for booking ${payment.bookingId}`,
+              paymentId: payment._id,
+              bookingId: payment.bookingId,
+              kashierSessionId: payment.kashierSessionId ?? undefined,
+              kashierOrderId: payment.kashierOrderId ?? undefined,
+            },
+          },
+          { upsert: true },
+        );
+      }
       return "paid";
     }
     if (outcome === "failed") {

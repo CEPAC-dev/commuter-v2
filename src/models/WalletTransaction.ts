@@ -33,6 +33,9 @@ const WalletTransactionSchema = new Schema(
         "payment_released",
         "payment_captured",
         "payment_refund_partial",
+        // Gateway (card) leg of a Payment — mirrors gatewayAmountEgp so
+        // Kashier-only or mixed payments appear in the ledger/admin views.
+        "kashier_payment",
       ],
     },
     amountEgp: { type: Number, required: true, min: 0 },

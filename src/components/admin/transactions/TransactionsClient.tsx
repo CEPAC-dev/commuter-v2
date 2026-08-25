@@ -52,6 +52,7 @@ const STATUS_COLORS: Record<string, string> = {
 const TYPES = [
   "topup",
   "payment",
+  "kashier_payment",
   "refund",
   "earning",
   "referral_bonus",

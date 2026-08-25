@@ -120,7 +120,14 @@ export async function buildTxQuery(
         ],
       };
     } else if (f.paymentMethod === "kashier") {
-      q.type = { $in: ["topup", "withdrawal", "payment_refund_partial"] };
+      q.type = {
+        $in: [
+          "topup",
+          "withdrawal",
+          "kashier_payment",
+          "payment_refund_partial",
+        ],
+      };
     } else if (f.paymentMethod === "mixed") {
       q.paymentId = { $exists: true, $ne: null };
     }
