@@ -879,6 +879,7 @@ export default function CreateClient({
                 paddingTop: 12,
                 paddingBottom: 8,
                 marginTop: -4,
+                zIndex: 99,
               }}
             >
               {totalEgp > 0 && (
