@@ -3,6 +3,8 @@ import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
+import { Types } from "mongoose";
+import { validateMutationRequest } from "@/lib/security/request";
 
 export async function GET(
   req: NextRequest,
@@ -13,6 +15,8 @@ export async function GET(
 
   await connectDB();
   const { id } = await params;
+  if (!Types.ObjectId.isValid(id))
+    return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
   const user = await User.findById(id)
     .select("userNumber name phone profilePic")
     .lean();
@@ -27,17 +31,24 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+
   const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   try {
     await connectDB();
     const { id } = await params;
+    if (!Types.ObjectId.isValid(id))
+      return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
     const body = await req.json();
 
     const updates: Record<string, unknown> = {};
-    if (typeof body.role === "string") {
+    if (["passenger", "driver", "admin"].includes(body.role)) {
       updates.role = body.role;
+    } else if (body.role !== undefined) {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
     if (body.verificationStatus) {
@@ -61,9 +72,12 @@ export async function PATCH(
     }
 
     return NextResponse.json({ data: user });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Unable to update user" },
+      {
+        error:
+          error instanceof Error ? error.message : "Unable to update user",
+      },
       { status: 500 },
     );
   }

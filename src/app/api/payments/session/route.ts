@@ -12,6 +12,7 @@ import {
 } from "@/lib/wallet/wallet";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { Types } from "mongoose";
+import { validateMutationRequest } from "@/lib/security/request";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
@@ -24,6 +25,9 @@ const KASHIER_URL =
  * amount. Wallet portion is RESERVED (not debited) until Kashier confirms.
  */
 export async function POST(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+
   const session = await getSession();
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -38,7 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  if (!bookingId || !Types.ObjectId.isValid(bookingId))
+  if (typeof bookingId !== "string" || !Types.ObjectId.isValid(bookingId))
     return NextResponse.json({ error: "Invalid bookingId" }, { status: 400 });
 
   await connectDB();
@@ -240,11 +244,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let appUrl = process.env.APP_URL;
+  const appUrl = process.env.APP_URL;
   if (!appUrl) {
-    const proto = req.headers.get("x-forwarded-proto") || "https";
-    const host = req.headers.get("host") || "localhost:3000";
-    appUrl = `${proto}://${host}`;
+    return NextResponse.json(
+      { error: "APP_URL is not configured on the server." },
+      { status: 500 },
+    );
   }
   const expireAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 

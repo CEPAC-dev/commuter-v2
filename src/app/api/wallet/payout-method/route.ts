@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Driver } from "@/models/Driver";
+import { normalizePlainText, validateMutationRequest } from "@/lib/security/request";
 
 export async function GET() {
   const session = await getSession();
@@ -30,6 +31,9 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+
   const session = await getSession();
   if (!session || session.role !== "driver") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -65,10 +69,15 @@ export async function PATCH(req: NextRequest) {
     update.payoutAccountNumber = undefined;
     update.payoutAccountHolder = undefined;
   } else {
-    const bankName = String(body.payoutBankName ?? "").trim();
-    const accountNumber = String(body.payoutAccountNumber ?? "").trim();
-    const accountHolder = String(body.payoutAccountHolder ?? "").trim();
-    if (!bankName || !accountNumber || !accountHolder) {
+    const bankName = normalizePlainText(body.payoutBankName, { maxLength: 100 });
+    const accountNumber =
+      typeof body.payoutAccountNumber === "string"
+        ? body.payoutAccountNumber.normalize("NFKC").trim()
+        : "";
+    const accountHolder = normalizePlainText(body.payoutAccountHolder, {
+      maxLength: 100,
+    });
+    if (!bankName || !/^[A-Za-z0-9 -]{6,34}$/.test(accountNumber) || !accountHolder) {
       return NextResponse.json(
         { error: "Bank name, account number, and holder name are required." },
         { status: 400 },

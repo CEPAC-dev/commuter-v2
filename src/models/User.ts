@@ -2,10 +2,10 @@ import { Schema, model, models, Types, type InferSchemaType } from "mongoose";
 
 const SavedAddressSchema = new Schema(
   {
-    label: { type: String, required: true, trim: true },
-    address: { type: String, required: true, trim: true },
-    lat: { type: Number, required: true },
-    lng: { type: Number, required: true },
+    label: { type: String, required: true, trim: true, maxlength: 60 },
+    address: { type: String, required: true, trim: true, maxlength: 300 },
+    lat: { type: Number, required: true, min: -90, max: 90 },
+    lng: { type: Number, required: true, min: -180, max: 180 },
   },
   { _id: true },
 );
@@ -19,7 +19,13 @@ const UserSchema = new Schema(
       sparse: true,
       immutable: true,
     },
-    name: { type: String, required: true, trim: true },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 2,
+      maxlength: 100,
+    },
     role: {
       type: String,
       required: true,
@@ -30,14 +36,23 @@ const UserSchema = new Schema(
       type: String,
       required: true,
       trim: true,
+      maxlength: 13,
+      match: /^\+20\d{10}$/,
     },
-    passwordHash: { type: String, required: true },
+    passwordHash: { type: String, required: true, select: false },
     email: {
       type: String,
       lowercase: true,
       trim: true,
+      maxlength: 254,
+      match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
     },
-    profilePic: { type: String, default: null },
+    profilePic: {
+      type: String,
+      default: null,
+      maxlength: 300,
+      match: /^\/assets\/uploads\/[A-Za-z0-9/_-]+\.[A-Za-z0-9]+$/,
+    },
     // null = never chosen/detected yet; the client detects it from geolocation.
     region: {
       type: String,

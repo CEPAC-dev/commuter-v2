@@ -3,8 +3,20 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { getSession } from "@/lib/auth/session";
+import {
+  isPasswordInput,
+  isSafePassword,
+  validateMutationRequest,
+} from "@/lib/security/request";
+import {
+  PASSWORD_RULES_MESSAGE,
+  isStrongPassword,
+} from "@/lib/auth/validation";
 
 export async function POST(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+
   const session = await getSession();
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -12,15 +24,19 @@ export async function POST(req: NextRequest) {
   try {
     const { currentPassword, newPassword, confirmPassword } = await req.json();
 
-    if (!currentPassword || !newPassword || !confirmPassword)
+    if (
+      !isPasswordInput(currentPassword) ||
+      !isSafePassword(newPassword) ||
+      !isPasswordInput(confirmPassword)
+    )
       return NextResponse.json(
-        { error: "All password fields are required." },
+        { error: PASSWORD_RULES_MESSAGE },
         { status: 400 },
       );
 
-    if (newPassword.length < 8)
+    if (!isStrongPassword(newPassword))
       return NextResponse.json(
-        { error: "New password must be at least 8 characters." },
+        { error: PASSWORD_RULES_MESSAGE },
         { status: 400 },
       );
 
@@ -37,7 +53,7 @@ export async function POST(req: NextRequest) {
       );
 
     await connectDB();
-    const user = await User.findById(session.userId).select("passwordHash");
+    const user = await User.findById(session.userId).select("+passwordHash");
     if (!user)
       return NextResponse.json({ error: "User not found." }, { status: 404 });
 

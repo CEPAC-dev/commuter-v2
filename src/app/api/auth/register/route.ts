@@ -11,19 +11,35 @@ import {
   PHONE_RULES_MESSAGE,
 } from "@/lib/auth/validation";
 import bcrypt from "bcryptjs";
+import {
+  isSafePassword,
+  normalizeEmail,
+  normalizePlainText,
+  validateMutationRequest,
+} from "@/lib/security/request";
+import { enforceRateLimit } from "@/lib/security/rateLimit";
 
 export async function POST(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+  const limited = await enforceRateLimit(req, "auth-register", {
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
+
   try {
     const { name, email, password, phone, referralCodeUsed } = await req.json();
+    const safeName = normalizePlainText(name, { maxLength: 100 });
 
-    if (!name?.trim() || !phone?.trim() || !password)
+    if (!safeName || typeof phone !== "string" || !phone.trim() || !password)
       return NextResponse.json(
         { error: "Name, phone and password are required." },
         { status: 400 },
       );
-    if (password.length < 8)
+    if (!isSafePassword(password))
       return NextResponse.json(
-        { error: "Password must be at least 8 characters." },
+        { error: PASSWORD_RULES_MESSAGE },
         { status: 400 },
       );
     if (!isStrongPassword(password))
@@ -34,7 +50,13 @@ export async function POST(req: NextRequest) {
     const normalizedPhone = normalizeEgyptPhone(phone);
     if (!normalizedPhone)
       return NextResponse.json({ error: PHONE_RULES_MESSAGE }, { status: 400 });
-    if (email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    if (email !== undefined && typeof email !== "string")
+      return NextResponse.json(
+        { error: "Invalid email address." },
+        { status: 400 },
+      );
+    const normalizedEmail = email?.trim() ? normalizeEmail(email) : undefined;
+    if (email?.trim() && !normalizedEmail)
       return NextResponse.json(
         { error: "Invalid email address." },
         { status: 400 },
@@ -52,9 +74,9 @@ export async function POST(req: NextRequest) {
         { status: 409 },
       );
 
-    if (email?.trim()) {
+    if (normalizedEmail) {
       const existingEmail = await User.findOne({
-        email: email.toLowerCase().trim(),
+        email: normalizedEmail,
         role: "passenger",
       }).lean();
       if (existingEmail)
@@ -69,22 +91,30 @@ export async function POST(req: NextRequest) {
     const referralCode = await generateReferralCode();
     const user = await User.create({
       userNumber,
-      name: name.trim(),
+      name: safeName,
       phone: normalizedPhone,
       passwordHash,
-      email: email?.trim() ? email.toLowerCase().trim() : undefined,
+      email: normalizedEmail,
       role: "passenger",
       referralCode,
     });
 
     let referralWarning: string | undefined;
-    if (typeof referralCodeUsed === "string" && referralCodeUsed.trim()) {
+    const safeReferralCode = normalizePlainText(referralCodeUsed, {
+      maxLength: 32,
+      allowEmpty: true,
+    });
+    if (safeReferralCode) {
       try {
-        const referralResult = await applyReferralOnSignup(referralCodeUsed, user._id);
+        const referralResult = await applyReferralOnSignup(
+          safeReferralCode.toUpperCase(),
+          user._id,
+        );
         if (!referralResult.success) referralWarning = referralResult.message;
       } catch (referralError) {
         console.error("Referral application failed:", referralError);
-        referralWarning = "Your account was created, but the referral could not be applied.";
+        referralWarning =
+          "Your account was created, but the referral could not be applied.";
       }
     }
 

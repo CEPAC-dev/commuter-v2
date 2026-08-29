@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { Types } from "mongoose";
+import { validateMutationRequest } from "@/lib/security/request";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
@@ -13,6 +14,9 @@ const MIN_TOPUP = 10;
 const MAX_TOPUP = 5000;
 
 export async function POST(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+
   const session = await getSession();
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -24,8 +28,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  amount = Math.round(Number(amount));
-  if (!isFinite(amount) || amount < MIN_TOPUP || amount > MAX_TOPUP) {
+  if (
+    !Number.isSafeInteger(amount) ||
+    amount < MIN_TOPUP ||
+    amount > MAX_TOPUP
+  ) {
     return NextResponse.json(
       { error: `Top-up must be between ${MIN_TOPUP} and ${MAX_TOPUP} EGP.` },
       { status: 400 },
@@ -73,16 +80,25 @@ export async function POST(req: NextRequest) {
   };
 
   // Validate Kashier credentials early to avoid opaque upstream HTML errors
-  if (!process.env.KASHIER_API_KEY || !process.env.KASHIER_SECRET_KEY || !process.env.KASHIER_MERCHANT_ID) {
-    console.error('Kashier credentials missing: KASHIER_API_KEY/KASHIER_SECRET_KEY/KASHIER_MERCHANT_ID');
-    await WalletTransaction.findByIdAndUpdate(tx._id, { status: 'failed' });
+  if (
+    !process.env.KASHIER_API_KEY ||
+    !process.env.KASHIER_SECRET_KEY ||
+    !process.env.KASHIER_MERCHANT_ID
+  ) {
+    console.error(
+      "Kashier credentials missing: KASHIER_API_KEY/KASHIER_SECRET_KEY/KASHIER_MERCHANT_ID",
+    );
+    await WalletTransaction.findByIdAndUpdate(tx._id, { status: "failed" });
     return NextResponse.json(
-      { error: 'Kashier credentials are not configured on the server.' },
+      { error: "Kashier credentials are not configured on the server." },
       { status: 500 },
     );
   }
 
-  console.error('Kashier request (topup)', { KASHIER_URL, merchantId: process.env.KASHIER_MERCHANT_ID });
+  console.error("Kashier request (topup)", {
+    KASHIER_URL,
+    merchantId: process.env.KASHIER_MERCHANT_ID,
+  });
 
   let kashierRes: Response;
   try {
@@ -106,20 +122,32 @@ export async function POST(req: NextRequest) {
 
   // Safe parse
   const kashierText = await kashierRes.text();
-  let kashierData: any = null;
+  let kashierData: Record<string, unknown> | null = null;
   try {
-    kashierData = JSON.parse(kashierText);
-  } catch (err) {
-    console.error("Kashier non-JSON response", kashierRes.status, kashierText.substring(0, 200));
+    kashierData = JSON.parse(kashierText) as Record<string, unknown>;
+  } catch {
+    console.error(
+      "Kashier non-JSON response",
+      kashierRes.status,
+      kashierText.substring(0, 200),
+    );
     await WalletTransaction.findByIdAndUpdate(tx._id, { status: "failed" });
     return NextResponse.json(
-      { error: "Payment gateway returned non-JSON response", status: kashierRes.status, details: kashierText },
+      {
+        error: "Payment gateway returned non-JSON response",
+        status: kashierRes.status,
+        details: kashierText,
+      },
       { status: 502 },
     );
   }
 
   if (!kashierRes.ok || !kashierData?.sessionUrl) {
-    console.error("Kashier topup session error:", kashierRes.status, kashierData);
+    console.error(
+      "Kashier topup session error:",
+      kashierRes.status,
+      kashierData,
+    );
     await WalletTransaction.findByIdAndUpdate(tx._id, { status: "failed" });
     return NextResponse.json(
       { error: "Payment gateway rejected the request.", details: kashierData },

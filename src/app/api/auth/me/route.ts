@@ -6,6 +6,10 @@ import { getSession } from "@/lib/auth/session";
 import { carTypeToCapacity, type CarType } from "@/lib/config/driver";
 import { isRegionKey } from "@/lib/config/regions";
 import { getProfile } from "@/lib/services/profile";
+import {
+  normalizePlainText,
+  validateMutationRequest,
+} from "@/lib/security/request";
 
 export async function GET() {
   const session = await getSession();
@@ -20,6 +24,9 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+
   const session = await getSession();
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,10 +34,11 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
     const { name, phone, profilePic, region } = body;
-    if (!name?.trim())
+    const safeName = normalizePlainText(name, { maxLength: 100 });
+    if (!safeName)
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
 
-    const userUpdate: Record<string, unknown> = { name: name.trim() };
+    const userUpdate: Record<string, unknown> = { name: safeName };
     if (region !== undefined) {
       if (!isRegionKey(region)) {
         return NextResponse.json({ error: "Invalid region." }, { status: 400 });
@@ -52,7 +60,8 @@ export async function PATCH(req: NextRequest) {
     // Save profilePic even if phone validation is skipped.
     if (
       typeof profilePic === "string" &&
-      profilePic.startsWith("/assets/uploads/")
+      /^\/assets\/uploads\/[A-Za-z0-9/_-]+\.[A-Za-z0-9]+$/.test(profilePic) &&
+      profilePic.length <= 300
     ) {
       userUpdate.profilePic = profilePic;
     }
@@ -98,11 +107,38 @@ export async function PATCH(req: NextRequest) {
       // Server-authoritative capacity — never trust client input.
       driverUpdate.carCapacity = carTypeToCapacity(carType as CarType);
     }
-    if (carBrand?.trim()) driverUpdate.carBrand = carBrand.trim();
-    if (carModel?.trim()) driverUpdate.carModel = carModel.trim();
+    const safeCarBrand = normalizePlainText(carBrand, {
+      maxLength: 60,
+      allowEmpty: true,
+    });
+    const safeCarModel = normalizePlainText(carModel, {
+      maxLength: 60,
+      allowEmpty: true,
+    });
+    const safeVehicleColor = normalizePlainText(vehicleColor, {
+      maxLength: 40,
+      allowEmpty: true,
+    });
+    if (carBrand !== undefined && safeCarBrand === null)
+      return NextResponse.json(
+        { error: "Invalid car brand." },
+        { status: 400 },
+      );
+    if (carModel !== undefined && safeCarModel === null)
+      return NextResponse.json(
+        { error: "Invalid car model." },
+        { status: 400 },
+      );
+    if (vehicleColor !== undefined && safeVehicleColor === null)
+      return NextResponse.json(
+        { error: "Invalid vehicle color." },
+        { status: 400 },
+      );
+    if (safeCarBrand) driverUpdate.carBrand = safeCarBrand;
+    if (safeCarModel) driverUpdate.carModel = safeCarModel;
     if (Number.isInteger(Number(modelYear)) && Number(modelYear) > 0)
       driverUpdate.modelYear = Number(modelYear);
-    if (vehicleColor?.trim()) driverUpdate.vehicleColor = vehicleColor.trim();
+    if (safeVehicleColor) driverUpdate.vehicleColor = safeVehicleColor;
     if (typeof plateChar1 === "string" && /^[\u0600-\u06FF]$/.test(plateChar1))
       driverUpdate.plateChar1 = plateChar1;
     if (typeof plateChar2 === "string" && /^[\u0600-\u06FF]$/.test(plateChar2))
