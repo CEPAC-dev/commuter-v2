@@ -1,4 +1,5 @@
-export const isProduction = process.env.NODE_ENV === "production";
+export const runtimeEnvironment = (process.env.APP_ENV ?? process.env.NODE_ENV ?? "development").toLowerCase();
+export const isProduction = runtimeEnvironment === "production";
 
 export function getMongoUri(): string {
   const uri = isProduction
@@ -6,7 +7,7 @@ export function getMongoUri(): string {
     : process.env.MONGODB_URI;
 
   if (!uri) {
-    throw new Error("MONGODB_URI is not set");
+    throw new Error(isProduction ? "PROD_MONGODB_URI is not set" : "MONGODB_URI is not set");
   }
 
   return uri;
