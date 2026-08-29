@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { getSession } from "@/lib/auth/session";
+import {
+  normalizePlainText,
+  validateMutationRequest,
+} from "@/lib/security/request";
 
 export async function GET() {
   const session = await getSession();
@@ -17,17 +21,29 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+
   const session = await getSession();
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const { label, address, lat, lng } = await req.json();
-    if (!label?.trim())
+    const safeLabel = normalizePlainText(label, { maxLength: 60 });
+    const safeAddress = normalizePlainText(address, { maxLength: 300 });
+    if (!safeLabel)
       return NextResponse.json({ error: "Label required." }, { status: 400 });
-    if (!address?.trim())
+    if (!safeAddress)
       return NextResponse.json({ error: "Address required." }, { status: 400 });
-    if (typeof lat !== "number" || typeof lng !== "number")
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
+    )
       return NextResponse.json(
         { error: "lat and lng are required numbers." },
         { status: 400 },
@@ -39,8 +55,8 @@ export async function POST(req: NextRequest) {
       {
         $push: {
           savedAddresses: {
-            label: label.trim(),
-            address: address.trim(),
+            label: safeLabel,
+            address: safeAddress,
             lat,
             lng,
           },

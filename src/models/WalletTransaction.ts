@@ -38,15 +38,15 @@ const WalletTransactionSchema = new Schema(
         "kashier_payment",
       ],
     },
-    amountEgp: { type: Number, required: true, min: 0 },
+    amountEgp: { type: Number, required: true, min: 0.01, max: 1000000000 },
     status: {
       type: String,
       required: true,
       default: "completed",
       enum: ["pending", "completed", "failed"],
     },
-    description: { type: String, required: true },
-    balanceAfterEgp: { type: Number },
+    description: { type: String, required: true, trim: true, maxlength: 300 },
+    balanceAfterEgp: { type: Number, min: 0, max: 1000000000 },
     bookingId: { type: Types.ObjectId, ref: "Booking" },
     paymentId: {
       type: Types.ObjectId,
@@ -87,6 +87,21 @@ WalletTransactionSchema.index({ createdAt: -1 });
 WalletTransactionSchema.index({ type: 1, status: 1, createdAt: -1 });
 WalletTransactionSchema.index({ userId: 1, createdAt: -1 });
 WalletTransactionSchema.index({ kashierOrderId: 1 });
+
+WalletTransactionSchema.pre(
+  [
+    "deleteOne",
+    "deleteMany",
+    "findOneAndDelete",
+    "findOneAndReplace",
+    "replaceOne",
+  ],
+  function () {
+    throw new Error(
+      "Wallet ledger entries are immutable and cannot be deleted or replaced.",
+    );
+  },
+);
 
 export type WalletTransactionDoc = InferSchemaType<
   typeof WalletTransactionSchema

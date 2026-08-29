@@ -4,10 +4,15 @@ import { SignJWT, jwtVerify } from "jose";
 
 const COOKIE_NAME = "session";
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+const JWT_ISSUER = "commuter";
+const JWT_AUDIENCE = "commuter-web";
+const VALID_ROLES = new Set<UserRole>(["passenger", "driver", "admin"]);
 
 function getSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET is not set");
+  if (process.env.NODE_ENV === "production" && secret.length < 32)
+    throw new Error("JWT_SECRET must be at least 32 characters in production");
   return new TextEncoder().encode(secret);
 }
 
@@ -21,9 +26,14 @@ export interface SessionPayload {
 
 /** Sign a JWT and set it as an httpOnly cookie. Call only from route handlers / server actions. */
 export async function createSession(payload: SessionPayload): Promise<void> {
+  if (!/^[a-f\d]{24}$/i.test(payload.userId) || !VALID_ROLES.has(payload.role))
+    throw new Error("Invalid session payload");
+
   const token = await new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
+    .setIssuer(JWT_ISSUER)
+    .setAudience(JWT_AUDIENCE)
     .setExpirationTime(`${MAX_AGE}s`)
     .sign(getSecret());
 
@@ -34,6 +44,7 @@ export async function createSession(payload: SessionPayload): Promise<void> {
     sameSite: "lax",
     path: "/",
     maxAge: MAX_AGE,
+    priority: "high",
   });
 }
 
@@ -43,11 +54,23 @@ export async function getSession(): Promise<SessionPayload | null> {
   const token = store.get(COOKIE_NAME)?.value;
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, getSecret(), {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+      algorithms: ["HS256"],
+    });
+    if (
+      typeof payload.userId !== "string" ||
+      !/^[a-f\d]{24}$/i.test(payload.userId) ||
+      typeof payload.email !== "string" ||
+      typeof payload.role !== "string" ||
+      !VALID_ROLES.has(payload.role as UserRole)
+    )
+      return null;
     return {
-      userId: payload.userId as string,
-      email: payload.email as string,
-      role: (payload.role as UserRole) ?? "passenger",
+      userId: payload.userId,
+      email: payload.email,
+      role: payload.role as UserRole,
     };
   } catch {
     return null;

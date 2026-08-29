@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateMutationRequest } from "@/lib/security/request";
 
 /**
  * DEPRECATED — mixed payments now go through /api/payments/session with
@@ -7,6 +8,9 @@ import { NextRequest, NextResponse } from "next/server";
  * previous flow.
  */
 export async function POST(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+
   const forwarded = new URL("/api/payments/session", req.url);
   const body = await req.text();
   let parsed: Record<string, unknown> = {};
@@ -18,6 +22,7 @@ export async function POST(req: NextRequest) {
     headers: {
       "Content-Type": "application/json",
       cookie: req.headers.get("cookie") ?? "",
+      origin: req.headers.get("origin") ?? new URL(req.url).origin,
     },
     body: JSON.stringify({ ...parsed, useWallet: true }),
   });

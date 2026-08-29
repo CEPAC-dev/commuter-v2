@@ -261,12 +261,6 @@ export async function verifyAndSettleTopup(
   const outcome = await queryKashierStatus(tx.kashierSessionId);
 
   if (outcome === "paid") {
-    // Claim the pending row atomically so the credit fires exactly once.
-    const claimed = await WalletTransaction.findOneAndUpdate(
-      { _id: tx._id, status: "pending" },
-      { status: "completed" },
-    );
-    if (!claimed) return "paid"; // already claimed by another caller
     await creditWallet(String(tx.userId), tx.amountEgp, {
       description: tx.description,
       transactionId: String(tx._id),

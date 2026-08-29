@@ -12,19 +12,35 @@ import {
   PASSWORD_RULES_MESSAGE,
   PHONE_RULES_MESSAGE,
 } from "@/lib/auth/validation";
+import {
+  isSafePassword,
+  normalizeEmail,
+  normalizePlainText,
+  validateMutationRequest,
+} from "@/lib/security/request";
+import { enforceRateLimit } from "@/lib/security/rateLimit";
 
 export async function POST(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+  const limited = await enforceRateLimit(req, "driver-register", {
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
+
   try {
     const { name, phone, password, email, gender } = await req.json();
+    const safeName = normalizePlainText(name, { maxLength: 100 });
 
-    if (!name?.trim() || !phone?.trim() || !password)
+    if (!safeName || typeof phone !== "string" || !phone.trim() || !password)
       return NextResponse.json(
         { error: "Name, phone and password are required." },
         { status: 400 },
       );
-    if (password.length < 8)
+    if (!isSafePassword(password))
       return NextResponse.json(
-        { error: "Password must be at least 8 characters." },
+        { error: PASSWORD_RULES_MESSAGE },
         { status: 400 },
       );
     if (!isStrongPassword(password))
@@ -35,7 +51,13 @@ export async function POST(req: NextRequest) {
     const normalizedPhone = normalizeEgyptPhone(phone);
     if (!normalizedPhone)
       return NextResponse.json({ error: PHONE_RULES_MESSAGE }, { status: 400 });
-    if (email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    if (email !== undefined && typeof email !== "string")
+      return NextResponse.json(
+        { error: "Invalid email address." },
+        { status: 400 },
+      );
+    const normalizedEmail = email?.trim() ? normalizeEmail(email) : undefined;
+    if (email?.trim() && !normalizedEmail)
       return NextResponse.json(
         { error: "Invalid email address." },
         { status: 400 },
@@ -68,9 +90,9 @@ export async function POST(req: NextRequest) {
       "Phase 3: No existing driver account found with the provided phone number. Proceeding to check email if provided.",
     );
 
-    if (email?.trim()) {
+    if (normalizedEmail) {
       const existingEmail = await User.findOne({
-        email: email.toLowerCase().trim(),
+        email: normalizedEmail,
         role: "driver",
       }).lean();
       if (existingEmail)
@@ -88,29 +110,14 @@ export async function POST(req: NextRequest) {
 
     console.log("Phase 5: Password hashed. Proceeding to create user.");
 
-    console.log("Driver registration data:", {
-      name: name.trim(),
-      phone: normalizedPhone,
-      PasswordHash: passwordHash,
-      email: email?.trim() ? email.toLowerCase().trim() : undefined,
-      gender,
-    });
-
     const user = await User.create({
       userNumber,
-      name: name.trim(),
+      name: safeName,
       phone: normalizedPhone,
       passwordHash,
-      email: email?.trim() ? email.toLowerCase().trim() : undefined,
+      email: normalizedEmail,
       role: "driver",
       referralCode,
-    });
-
-    console.log("Driver user created:", user);
-    console.log("Driver data:", {
-      userId: user._id,
-      gender,
-      verificationStatus: "incomplete",
     });
 
     await Driver.create({

@@ -3,15 +3,45 @@ import { Wallet } from "@/models/Wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import mongoose, { Types } from "mongoose";
 
+const MAX_WALLET_AMOUNT_EGP = 1_000_000_000;
+
+function objectId(value: string, field: string): Types.ObjectId {
+  if (typeof value !== "string" || !Types.ObjectId.isValid(value))
+    throw new TypeError(`Invalid ${field}`);
+  return new Types.ObjectId(value);
+}
+
+function amount(value: number): number {
+  if (
+    !Number.isSafeInteger(value) ||
+    value <= 0 ||
+    value > MAX_WALLET_AMOUNT_EGP
+  )
+    throw new RangeError("Wallet amount must be a positive whole EGP value.");
+  return value;
+}
+
+function description(value: string): string {
+  if (typeof value !== "string") throw new TypeError("Invalid description");
+  const normalized = value.normalize("NFKC").trim();
+  if (
+    !normalized ||
+    normalized.length > 300 ||
+    /[\u0000-\u001F\u007F<>]/.test(normalized)
+  )
+    throw new TypeError("Invalid description");
+  return normalized;
+}
+
 /** Ensure a wallet doc exists for the user and return it. */
 export async function getOrCreateWallet(userId: string) {
   await connectDB();
-  const uid = new Types.ObjectId(userId);
-  let wallet = await Wallet.findOne({ userId: uid });
-  if (!wallet) {
-    wallet = await Wallet.create({ userId: uid, balanceEgp: 0 });
-  }
-  return wallet;
+  const uid = objectId(userId, "userId");
+  return Wallet.findOneAndUpdate(
+    { userId: uid },
+    { $setOnInsert: { balanceEgp: 0 } },
+    { new: true, upsert: true, runValidators: true },
+  );
 }
 
 /**
@@ -32,41 +62,97 @@ export async function creditWallet(
   },
 ): Promise<number> {
   await connectDB();
-  const uid = new Types.ObjectId(userId);
+  const uid = objectId(userId, "userId");
+  const safeAmount = amount(amountEgp);
+  const safeDescription = description(opts.description);
+  const paymentId = opts.paymentId
+    ? objectId(opts.paymentId, "paymentId")
+    : undefined;
+  const bookingId = opts.bookingId
+    ? objectId(opts.bookingId, "bookingId")
+    : undefined;
+  const transactionId = opts.transactionId
+    ? objectId(opts.transactionId, "transactionId")
+    : undefined;
+  const session = await mongoose.startSession();
+  let balance = 0;
 
-  const wallet = await Wallet.findOneAndUpdate(
-    { userId: uid },
-    {
-      $inc: { balanceEgp: amountEgp, totalCreditedEgp: amountEgp },
-      $set: { lastTransactionAt: new Date() },
-    },
-    { new: true, upsert: true },
-  );
+  try {
+    await session.withTransaction(async () => {
+      if (transactionId) {
+        const claimed = await WalletTransaction.findOneAndUpdate(
+          {
+            _id: transactionId,
+            userId: uid,
+            type: "topup",
+            status: "pending",
+            amountEgp: safeAmount,
+          },
+          { $set: { status: "completed" } },
+          { new: true, session, runValidators: true },
+        );
+        if (!claimed) {
+          const existing = await WalletTransaction.findOne({
+            _id: transactionId,
+            userId: uid,
+            type: "topup",
+            status: "completed",
+            amountEgp: safeAmount,
+          })
+            .select("balanceAfterEgp")
+            .session(session);
+          if (typeof existing?.balanceAfterEgp !== "number")
+            throw new Error("Top-up ledger entry not available for settlement");
+          balance = existing.balanceAfterEgp;
+          return;
+        }
+      }
 
-  if (opts.transactionId) {
-    // Mark the existing pending top-up ledger row as completed.
-    await WalletTransaction.findByIdAndUpdate(opts.transactionId, {
-      status: "completed",
-      balanceAfterEgp: wallet.balanceEgp,
+      const wallet = await Wallet.findOneAndUpdate(
+        { userId: uid },
+        {
+          $inc: { balanceEgp: safeAmount, totalCreditedEgp: safeAmount },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { new: true, upsert: true, session, runValidators: true },
+      );
+
+      if (transactionId) {
+        const ledger = await WalletTransaction.findOneAndUpdate(
+          {
+            _id: transactionId,
+            userId: uid,
+            type: "topup",
+            status: "completed",
+            balanceAfterEgp: { $exists: false },
+          },
+          { $set: { balanceAfterEgp: wallet.balanceEgp } },
+          { new: true, session, runValidators: true },
+        );
+        if (!ledger) throw new Error("Top-up ledger entry not found");
+      } else {
+        await WalletTransaction.create(
+          [
+            {
+              userId: uid,
+              type: opts.type ?? "topup",
+              amountEgp: safeAmount,
+              status: "completed",
+              description: safeDescription,
+              balanceAfterEgp: wallet.balanceEgp,
+              paymentId,
+              bookingId,
+            },
+          ],
+          { session },
+        );
+      }
+      balance = wallet.balanceEgp;
     });
-  } else {
-    await WalletTransaction.create({
-      userId: uid,
-      type: opts.type ?? "topup",
-      amountEgp,
-      status: "completed",
-      description: opts.description,
-      balanceAfterEgp: wallet.balanceEgp,
-      paymentId: opts.paymentId
-        ? new Types.ObjectId(opts.paymentId)
-        : undefined,
-      bookingId: opts.bookingId
-        ? new Types.ObjectId(opts.bookingId)
-        : undefined,
-    });
+    return balance;
+  } finally {
+    await session.endSession();
   }
-
-  return wallet.balanceEgp;
 }
 
 /**
@@ -81,30 +167,46 @@ export async function debitWallet(
   opts: { description: string; bookingId?: string },
 ): Promise<number | null> {
   await connectDB();
-  const uid = new Types.ObjectId(userId);
+  const uid = objectId(userId, "userId");
+  const safeAmount = amount(amountEgp);
+  const safeDescription = description(opts.description);
+  const bookingId = opts.bookingId
+    ? objectId(opts.bookingId, "bookingId")
+    : undefined;
+  const session = await mongoose.startSession();
+  let balance: number | null = null;
 
-  const wallet = await Wallet.findOneAndUpdate(
-    { userId: uid, status: "active", balanceEgp: { $gte: amountEgp } },
-    {
-      $inc: { balanceEgp: -amountEgp, totalDebitedEgp: amountEgp },
-      $set: { lastTransactionAt: new Date() },
-    },
-    { new: true },
-  );
-
-  if (!wallet) return null;
-
-  await WalletTransaction.create({
-    userId: uid,
-    type: "payment",
-    amountEgp,
-    status: "completed",
-    description: opts.description,
-    balanceAfterEgp: wallet.balanceEgp,
-    bookingId: opts.bookingId ? new Types.ObjectId(opts.bookingId) : undefined,
-  });
-
-  return wallet.balanceEgp;
+  try {
+    await session.withTransaction(async () => {
+      const wallet = await Wallet.findOneAndUpdate(
+        { userId: uid, status: "active", balanceEgp: { $gte: safeAmount } },
+        {
+          $inc: { balanceEgp: -safeAmount, totalDebitedEgp: safeAmount },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { new: true, session, runValidators: true },
+      );
+      if (!wallet) return;
+      await WalletTransaction.create(
+        [
+          {
+            userId: uid,
+            type: "payment",
+            amountEgp: safeAmount,
+            status: "completed",
+            description: safeDescription,
+            balanceAfterEgp: wallet.balanceEgp,
+            bookingId,
+          },
+        ],
+        { session },
+      );
+      balance = wallet.balanceEgp;
+    });
+    return balance;
+  } finally {
+    await session.endSession();
+  }
 }
 
 /**
@@ -187,33 +289,49 @@ export async function reserveWithdrawal(
   },
 ): Promise<{ transactionId: string; balanceAfterEgp: number } | null> {
   await connectDB();
-  const uid = new Types.ObjectId(userId);
+  const uid = objectId(userId, "userId");
+  const safeAmount = amount(amountEgp);
+  const safeDescription = description(opts.description);
+  const safeDestination = description(opts.payoutDestination);
+  const session = await mongoose.startSession();
+  let result: { transactionId: string; balanceAfterEgp: number } | null = null;
 
-  const wallet = await Wallet.findOneAndUpdate(
-    { userId: uid, status: "active", balanceEgp: { $gte: amountEgp } },
-    {
-      $inc: { balanceEgp: -amountEgp, totalDebitedEgp: amountEgp },
-      $set: { lastTransactionAt: new Date() },
-    },
-    { new: true },
-  );
-  if (!wallet) return null;
+  try {
+    await session.withTransaction(async () => {
+      const wallet = await Wallet.findOneAndUpdate(
+        { userId: uid, status: "active", balanceEgp: { $gte: safeAmount } },
+        {
+          $inc: { balanceEgp: -safeAmount, totalDebitedEgp: safeAmount },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { new: true, session, runValidators: true },
+      );
+      if (!wallet) return;
 
-  const tx = await WalletTransaction.create({
-    userId: uid,
-    type: "withdrawal",
-    amountEgp,
-    status: "pending",
-    description: opts.description,
-    balanceAfterEgp: wallet.balanceEgp,
-    payoutMethod: opts.payoutMethod,
-    payoutDestination: opts.payoutDestination,
-  });
-
-  return {
-    transactionId: String(tx._id),
-    balanceAfterEgp: wallet.balanceEgp,
-  };
+      const [tx] = await WalletTransaction.create(
+        [
+          {
+            userId: uid,
+            type: "withdrawal",
+            amountEgp: safeAmount,
+            status: "pending",
+            description: safeDescription,
+            balanceAfterEgp: wallet.balanceEgp,
+            payoutMethod: opts.payoutMethod,
+            payoutDestination: safeDestination,
+          },
+        ],
+        { session },
+      );
+      result = {
+        transactionId: String(tx._id),
+        balanceAfterEgp: wallet.balanceEgp,
+      };
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
 
 export async function completeWithdrawal(
@@ -221,6 +339,14 @@ export async function completeWithdrawal(
   kashierPayoutId?: string,
 ): Promise<boolean> {
   await connectDB();
+  objectId(transactionId, "transactionId");
+  if (
+    kashierPayoutId !== undefined &&
+    (typeof kashierPayoutId !== "string" ||
+      !kashierPayoutId.trim() ||
+      kashierPayoutId.length > 200)
+  )
+    throw new TypeError("Invalid Kashier payout id");
   const update: Record<string, unknown> = { status: "completed" };
   if (kashierPayoutId) update.kashierPayoutId = kashierPayoutId;
 
@@ -235,6 +361,7 @@ export async function refundWithdrawal(
   transactionId: string,
 ): Promise<boolean> {
   await connectDB();
+  objectId(transactionId, "transactionId");
   const session = await mongoose.startSession();
   let refunded = false;
 
@@ -282,47 +409,66 @@ export async function reserveWallet(
   opts: { description: string; paymentId: string; bookingId?: string },
 ): Promise<{ transactionId: string; availableEgp: number } | null> {
   await connectDB();
-  const uid = new Types.ObjectId(userId);
+  const uid = objectId(userId, "userId");
+  const safeAmount = amount(amountEgp);
+  const safeDescription = description(opts.description);
+  const paymentId = objectId(opts.paymentId, "paymentId");
+  const bookingId = opts.bookingId
+    ? objectId(opts.bookingId, "bookingId")
+    : undefined;
+  const session = await mongoose.startSession();
+  let result: { transactionId: string; availableEgp: number } | null = null;
 
-  const wallet = await Wallet.findOneAndUpdate(
-    {
-      userId: uid,
-      status: "active",
-      $expr: {
-        $gte: [
-          {
-            $subtract: [
-              { $ifNull: ["$balanceEgp", 0] },
-              { $ifNull: ["$reservedBalanceEgp", 0] },
+  try {
+    await session.withTransaction(async () => {
+      const wallet = await Wallet.findOneAndUpdate(
+        {
+          userId: uid,
+          status: "active",
+          $expr: {
+            $gte: [
+              {
+                $subtract: [
+                  { $ifNull: ["$balanceEgp", 0] },
+                  { $ifNull: ["$reservedBalanceEgp", 0] },
+                ],
+              },
+              safeAmount,
             ],
           },
-          amountEgp,
+        },
+        {
+          $inc: { reservedBalanceEgp: safeAmount },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { new: true, session, runValidators: true },
+      );
+      if (!wallet) return;
+
+      const [tx] = await WalletTransaction.create(
+        [
+          {
+            userId: uid,
+            type: "payment_reserved",
+            amountEgp: safeAmount,
+            status: "pending",
+            description: safeDescription,
+            balanceAfterEgp: wallet.balanceEgp,
+            paymentId,
+            bookingId,
+          },
         ],
-      },
-    },
-    {
-      $inc: { reservedBalanceEgp: amountEgp },
-      $set: { lastTransactionAt: new Date() },
-    },
-    { new: true },
-  );
-  if (!wallet) return null;
-
-  const tx = await WalletTransaction.create({
-    userId: uid,
-    type: "payment_reserved",
-    amountEgp,
-    status: "pending",
-    description: opts.description,
-    balanceAfterEgp: wallet.balanceEgp,
-    paymentId: new Types.ObjectId(opts.paymentId),
-    bookingId: opts.bookingId ? new Types.ObjectId(opts.bookingId) : undefined,
-  });
-
-  return {
-    transactionId: String(tx._id),
-    availableEgp: wallet.balanceEgp - wallet.reservedBalanceEgp,
-  };
+        { session },
+      );
+      result = {
+        transactionId: String(tx._id),
+        availableEgp: wallet.balanceEgp - wallet.reservedBalanceEgp,
+      };
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
 
 /**
@@ -336,50 +482,63 @@ export async function captureReservation(
   opts: { description: string; paymentId: string; bookingId?: string },
 ): Promise<number | null> {
   await connectDB();
+  const reservationId = objectId(reservationTxId, "reservationTxId");
+  const safeDescription = description(opts.description);
+  const paymentId = objectId(opts.paymentId, "paymentId");
+  const bookingId = opts.bookingId
+    ? objectId(opts.bookingId, "bookingId")
+    : undefined;
+  const session = await mongoose.startSession();
+  let balance: number | null = null;
 
-  const reservation = await WalletTransaction.findOneAndUpdate(
-    { _id: reservationTxId, type: "payment_reserved", status: "pending" },
-    { $set: { status: "completed" } },
-    { new: true },
-  );
-  if (!reservation) return null;
+  try {
+    await session.withTransaction(async () => {
+      const reservation = await WalletTransaction.findOneAndUpdate(
+        { _id: reservationId, type: "payment_reserved", status: "pending" },
+        { $set: { status: "completed" } },
+        { new: true, session, runValidators: true },
+      );
+      if (!reservation) return;
 
-  const wallet = await Wallet.findOneAndUpdate(
-    { userId: reservation.userId },
-    {
-      $inc: {
-        balanceEgp: -reservation.amountEgp,
-        reservedBalanceEgp: -reservation.amountEgp,
-        totalDebitedEgp: reservation.amountEgp,
-      },
-      $set: { lastTransactionAt: new Date() },
-    },
-    { new: true },
-  );
-  if (!wallet) {
-    // Restore reservation row for retry.
-    await WalletTransaction.updateOne(
-      { _id: reservationTxId },
-      { $set: { status: "pending" } },
-    );
-    return null;
+      const wallet = await Wallet.findOneAndUpdate(
+        {
+          userId: reservation.userId,
+          balanceEgp: { $gte: reservation.amountEgp },
+          reservedBalanceEgp: { $gte: reservation.amountEgp },
+        },
+        {
+          $inc: {
+            balanceEgp: -reservation.amountEgp,
+            reservedBalanceEgp: -reservation.amountEgp,
+            totalDebitedEgp: reservation.amountEgp,
+          },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { new: true, session, runValidators: true },
+      );
+      if (!wallet) throw new Error("Wallet reservation invariant failed");
+
+      await WalletTransaction.create(
+        [
+          {
+            userId: reservation.userId,
+            type: "payment_captured",
+            amountEgp: reservation.amountEgp,
+            status: "completed",
+            description: safeDescription,
+            balanceAfterEgp: wallet.balanceEgp,
+            paymentId,
+            bookingId,
+          },
+        ],
+        { session },
+      );
+      balance = wallet.balanceEgp;
+    });
+    return balance;
+  } finally {
+    await session.endSession();
   }
-
-  const captureTx = await WalletTransaction.create({
-    userId: reservation.userId,
-    type: "payment_captured",
-    amountEgp: reservation.amountEgp,
-    status: "completed",
-    description: opts.description,
-    balanceAfterEgp: wallet.balanceEgp,
-    paymentId: new Types.ObjectId(opts.paymentId),
-    bookingId: opts.bookingId ? new Types.ObjectId(opts.bookingId) : undefined,
-  });
-
-  return wallet.balanceEgp;
-
-  // captureTx id can be looked up by callers via paymentId if needed.
-  void captureTx;
 }
 
 /**
@@ -391,34 +550,205 @@ export async function releaseReservation(
   opts: { description: string; paymentId: string; bookingId?: string },
 ): Promise<boolean> {
   await connectDB();
+  const reservationId = objectId(reservationTxId, "reservationTxId");
+  const safeDescription = description(opts.description);
+  const paymentId = objectId(opts.paymentId, "paymentId");
+  const bookingId = opts.bookingId
+    ? objectId(opts.bookingId, "bookingId")
+    : undefined;
+  const session = await mongoose.startSession();
+  let released = false;
 
-  const reservation = await WalletTransaction.findOneAndUpdate(
-    { _id: reservationTxId, type: "payment_reserved", status: "pending" },
-    { $set: { status: "failed" } },
-    { new: true },
-  );
-  if (!reservation) return false;
+  try {
+    await session.withTransaction(async () => {
+      const reservation = await WalletTransaction.findOneAndUpdate(
+        { _id: reservationId, type: "payment_reserved", status: "pending" },
+        { $set: { status: "failed" } },
+        { new: true, session, runValidators: true },
+      );
+      if (!reservation) return;
 
-  const wallet = await Wallet.findOneAndUpdate(
-    { userId: reservation.userId },
-    {
-      $inc: { reservedBalanceEgp: -reservation.amountEgp },
-      $set: { lastTransactionAt: new Date() },
-    },
-    { new: true },
-  );
-  if (!wallet) return false;
+      const wallet = await Wallet.findOneAndUpdate(
+        {
+          userId: reservation.userId,
+          reservedBalanceEgp: { $gte: reservation.amountEgp },
+        },
+        {
+          $inc: { reservedBalanceEgp: -reservation.amountEgp },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { new: true, session, runValidators: true },
+      );
+      if (!wallet) throw new Error("Wallet reservation invariant failed");
 
-  await WalletTransaction.create({
-    userId: reservation.userId,
-    type: "payment_released",
-    amountEgp: reservation.amountEgp,
-    status: "completed",
-    description: opts.description,
-    balanceAfterEgp: wallet.balanceEgp,
-    paymentId: new Types.ObjectId(opts.paymentId),
-    bookingId: opts.bookingId ? new Types.ObjectId(opts.bookingId) : undefined,
-  });
+      await WalletTransaction.create(
+        [
+          {
+            userId: reservation.userId,
+            type: "payment_released",
+            amountEgp: reservation.amountEgp,
+            status: "completed",
+            description: safeDescription,
+            balanceAfterEgp: wallet.balanceEgp,
+            paymentId,
+            bookingId,
+          },
+        ],
+        { session },
+      );
+      released = true;
+    });
+    return released;
+  } finally {
+    await session.endSession();
+  }
+}
 
-  return true;
+export interface WalletReconciliation {
+  repaired: boolean;
+  hadDrift: boolean;
+  before: {
+    balanceEgp: number;
+    reservedBalanceEgp: number;
+    totalCreditedEgp: number;
+    totalDebitedEgp: number;
+  };
+  expected: {
+    balanceEgp: number;
+    reservedBalanceEgp: number;
+    totalCreditedEgp: number;
+    totalDebitedEgp: number;
+  };
+}
+
+/** Rebuild wallet summary fields from the immutable financial ledger. */
+export async function reconcileWalletFromLedger(
+  userId: string,
+  repair = false,
+): Promise<WalletReconciliation> {
+  await connectDB();
+  const uid = objectId(userId, "userId");
+  const session = await mongoose.startSession();
+  let result: WalletReconciliation | null = null;
+
+  try {
+    await session.withTransaction(async () => {
+      const [totals] = await WalletTransaction.aggregate<{
+        totalCreditedEgp: number;
+        totalDebitedEgp: number;
+        reservedBalanceEgp: number;
+      }>([
+        { $match: { userId: uid } },
+        {
+          $group: {
+            _id: null,
+            totalCreditedEgp: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ["$status", "completed"] },
+                      {
+                        $in: [
+                          "$type",
+                          ["topup", "refund", "earning", "referral_bonus"],
+                        ],
+                      },
+                    ],
+                  },
+                  "$amountEgp",
+                  0,
+                ],
+              },
+            },
+            totalDebitedEgp: {
+              $sum: {
+                $cond: [
+                  {
+                    $or: [
+                      {
+                        $and: [
+                          { $eq: ["$status", "completed"] },
+                          { $in: ["$type", ["payment", "payment_captured"]] },
+                        ],
+                      },
+                      {
+                        $and: [
+                          { $eq: ["$type", "withdrawal"] },
+                          { $in: ["$status", ["pending", "completed"]] },
+                        ],
+                      },
+                    ],
+                  },
+                  "$amountEgp",
+                  0,
+                ],
+              },
+            },
+            reservedBalanceEgp: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ["$type", "payment_reserved"] },
+                      { $eq: ["$status", "pending"] },
+                    ],
+                  },
+                  "$amountEgp",
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]).session(session);
+
+      const expected = {
+        totalCreditedEgp: totals?.totalCreditedEgp ?? 0,
+        totalDebitedEgp: totals?.totalDebitedEgp ?? 0,
+        reservedBalanceEgp: totals?.reservedBalanceEgp ?? 0,
+        balanceEgp:
+          (totals?.totalCreditedEgp ?? 0) - (totals?.totalDebitedEgp ?? 0),
+      };
+      if (
+        expected.balanceEgp < 0 ||
+        expected.reservedBalanceEgp > expected.balanceEgp
+      )
+        throw new Error(
+          "Wallet ledger invariants are invalid; manual review required.",
+        );
+
+      const wallet = await Wallet.findOne({ userId: uid }).session(session);
+      const before = {
+        balanceEgp: wallet?.balanceEgp ?? 0,
+        reservedBalanceEgp: wallet?.reservedBalanceEgp ?? 0,
+        totalCreditedEgp: wallet?.totalCreditedEgp ?? 0,
+        totalDebitedEgp: wallet?.totalDebitedEgp ?? 0,
+      };
+      const hadDrift = Object.keys(expected).some(
+        (key) =>
+          before[key as keyof typeof before] !==
+          expected[key as keyof typeof expected],
+      );
+
+      if (repair && hadDrift) {
+        await Wallet.findOneAndUpdate(
+          { userId: uid },
+          { $set: { ...expected, lastTransactionAt: new Date() } },
+          { upsert: true, session, runValidators: true },
+        );
+        console.warn("Wallet summary drift repaired from ledger", {
+          userId,
+          before,
+          expected,
+        });
+      }
+
+      result = { repaired: repair && hadDrift, hadDrift, before, expected };
+    });
+    if (!result) throw new Error("Wallet reconciliation did not complete");
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
