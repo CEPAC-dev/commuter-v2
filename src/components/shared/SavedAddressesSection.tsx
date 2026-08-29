@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { Bookmark, Plus, Pencil, Trash2, X, Loader2 } from "lucide-react";
+import { Bookmark, Plus, Pencil, Trash2, X, Loader2, ChevronDown } from "lucide-react";
 const LocationPickerMap = dynamic(
   () => import("@/components/map/LocationPickerMapOsm"),
   { ssr: false },
@@ -9,6 +9,9 @@ const LocationPickerMap = dynamic(
 import type { SavedAddress } from "@/types/shared";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import { useClientLocale } from "@/lib/locale.client";
+import BottomSheet from "@/components/shared/BottomSheet";
+
+const VISIBLE_LIMIT = 2;
 
 interface Props {
   initialAddresses: SavedAddress[];
@@ -40,6 +43,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
   const { t, dir } = useClientLocale();
   const [addresses, setAddresses] = useState<SavedAddress[]>(initialAddresses);
   const [addrForm, setAddrForm] = useState<AddrForm>(BLANK_FORM);
+  const [showAllOpen, setShowAllOpen] = useState(false);
 
   function openAddForm() {
     setAddrForm({ ...BLANK_FORM, open: true });
@@ -50,6 +54,7 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
       PRESET_LABELS.includes(a.label) ||
       a.label === t("addresses.home") ||
       a.label === t("addresses.work");
+    setShowAllOpen(false);
     setAddrForm({
       open: true,
       editId: a._id,
@@ -421,97 +426,163 @@ export default function SavedAddressesSection({ initialAddresses }: Props) {
         </p>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {addresses.map((a) => (
-          <div
+        {addresses.slice(0, VISIBLE_LIMIT).map((a) => (
+          <AddressRow
             key={a._id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              padding: "12px 14px",
-              background: "#f8f9fa",
-              borderRadius: 10,
-              border: "1.5px solid #eef0f3",
-            }}
-          >
-            <Bookmark
-              size={16}
-              style={{ color: "#00C2A8", flexShrink: 0 }}
-              aria-hidden="true"
-            />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <span
-                style={{
-                  display: "block",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: "#0B1E3D",
-                }}
-              >
-                {a.label}
-              </span>
-              <span
-                style={{
-                  display: "block",
-                  fontSize: 12,
-                  color: "#5A6A7A",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {a.address}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => openEditForm(a)}
-              aria-label={t("addresses.edit") + " " + a.label}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "#5A6A7A",
-                padding: 6,
-                borderRadius: 6,
-                display: "flex",
-                alignItems: "center",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = "#0B1E3D";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = "#5A6A7A";
-              }}
-            >
-              <Pencil size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => deleteAddress(a._id)}
-              aria-label={t("addresses.delete") + " " + a.label}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "#e74c3c",
-                padding: 6,
-                borderRadius: 6,
-                display: "flex",
-                alignItems: "center",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "rgba(231,76,60,0.08)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "none";
-              }}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+            address={a}
+            onEdit={openEditForm}
+            onDelete={deleteAddress}
+            t={t}
+          />
         ))}
       </div>
+
+      {addresses.length > VISIBLE_LIMIT && (
+        <button
+          type="button"
+          onClick={() => setShowAllOpen(true)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            width: "100%",
+            marginTop: 10,
+            padding: "10px 14px",
+            background: "#f8f9fa",
+            border: "1.5px solid #eef0f3",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#0B1E3D",
+            fontFamily: "inherit",
+          }}
+        >
+          {t("addresses.view_more")} ({addresses.length})
+          <ChevronDown size={14} aria-hidden="true" />
+        </button>
+      )}
+
+      <BottomSheet
+        isOpen={showAllOpen}
+        onClose={() => setShowAllOpen(false)}
+        title={t("addresses.title")}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {addresses.map((a) => (
+            <AddressRow
+              key={a._id}
+              address={a}
+              onEdit={openEditForm}
+              onDelete={deleteAddress}
+              t={t}
+            />
+          ))}
+        </div>
+      </BottomSheet>
+    </div>
+  );
+}
+
+function AddressRow({
+  address: a,
+  onEdit,
+  onDelete,
+  t,
+}: {
+  address: SavedAddress;
+  onEdit: (a: SavedAddress) => void;
+  onDelete: (id: string) => void;
+  t: (key: string) => string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "12px 14px",
+        background: "#f8f9fa",
+        borderRadius: 10,
+        border: "1.5px solid #eef0f3",
+      }}
+    >
+      <Bookmark
+        size={16}
+        style={{ color: "#00C2A8", flexShrink: 0 }}
+        aria-hidden="true"
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span
+          style={{
+            display: "block",
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#0B1E3D",
+          }}
+        >
+          {a.label}
+        </span>
+        <span
+          style={{
+            display: "block",
+            fontSize: 12,
+            color: "#5A6A7A",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {a.address}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => onEdit(a)}
+        aria-label={t("addresses.edit") + " " + a.label}
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "#5A6A7A",
+          padding: 6,
+          borderRadius: 6,
+          display: "flex",
+          alignItems: "center",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "#0B1E3D";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "#5A6A7A";
+        }}
+      >
+        <Pencil size={14} />
+      </button>
+      <button
+        type="button"
+        onClick={() => onDelete(a._id)}
+        aria-label={t("addresses.delete") + " " + a.label}
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "#e74c3c",
+          padding: 6,
+          borderRadius: 6,
+          display: "flex",
+          alignItems: "center",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "rgba(231,76,60,0.08)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "none";
+        }}
+      >
+        <Trash2 size={14} />
+      </button>
     </div>
   );
 }

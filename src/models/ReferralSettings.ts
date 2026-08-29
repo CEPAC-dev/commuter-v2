@@ -1,11 +1,14 @@
 import { Schema, model, models, type InferSchemaType } from "mongoose";
 
+export const REFERRAL_SETTINGS_ROLES = ["passenger", "driver"] as const;
+export type ReferralSettingsRole = (typeof REFERRAL_SETTINGS_ROLES)[number];
+
 const ReferralSettingsSchema = new Schema(
   {
     singletonKey: {
       type: String,
       required: true,
-      default: "global",
+      default: "passenger",
       unique: true,
       immutable: true,
     },

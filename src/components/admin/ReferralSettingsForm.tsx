@@ -1,7 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Loader2, Save } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  AlertCircle,
+  Car,
+  Check,
+  Gift,
+  Loader2,
+  Save,
+  Sparkles,
+  Users,
+  UserRound,
+} from "lucide-react";
 
 export interface ReferralSettingsValues {
   referrerBonusAmount: number;
@@ -10,25 +20,63 @@ export interface ReferralSettingsValues {
   isActive: boolean;
 }
 
-export default function ReferralSettingsForm({ initialValues }: { initialValues: ReferralSettingsValues }) {
-  const [values, setValues] = useState(initialValues);
+type ReferralOwnerRole = "passenger" | "driver";
+type SettingsByRole = Record<ReferralOwnerRole, ReferralSettingsValues>;
+
+const ROLE_OPTIONS: Array<{ key: ReferralOwnerRole; label: string; icon: typeof UserRound }> = [
+  { key: "passenger", label: "Passenger", icon: UserRound },
+  { key: "driver", label: "Driver", icon: Car },
+];
+
+function fieldsEqual(a: ReferralSettingsValues, b: ReferralSettingsValues) {
+  return (
+    a.referrerBonusAmount === b.referrerBonusAmount &&
+    a.refereeBonusAmount === b.refereeBonusAmount &&
+    a.maxUsersPerCode === b.maxUsersPerCode &&
+    a.isActive === b.isActive
+  );
+}
+
+export default function ReferralSettingsForm({
+  initialValues,
+}: {
+  initialValues: SettingsByRole;
+}) {
+  const [role, setRole] = useState<ReferralOwnerRole>("passenger");
+  const [savedByRole, setSavedByRole] = useState(initialValues);
+  const [draftByRole, setDraftByRole] = useState(initialValues);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
+  const values = draftByRole[role];
+  const roleLabel = role === "driver" ? "Driver" : "Passenger";
+  const isDirty = !fieldsEqual(values, savedByRole[role]);
+
+  function updateValues(updater: (current: ReferralSettingsValues) => ReferralSettingsValues) {
+    setDraftByRole((current) => ({ ...current, [role]: updater(current[role]) }));
+  }
+
+  function selectRole(next: ReferralOwnerRole) {
+    setRole(next);
+    setMessage(null);
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (!isDirty) return;
     setSaving(true);
     setMessage(null);
     try {
       const response = await fetch("/api/admin/referral-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, role }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Unable to save settings.");
-      setValues(result.data);
-      setMessage({ ok: true, text: "Referral settings saved." });
+      setSavedByRole((current) => ({ ...current, [role]: result.data }));
+      setDraftByRole((current) => ({ ...current, [role]: result.data }));
+      setMessage({ ok: true, text: `${roleLabel} referral settings saved.` });
     } catch (error) {
       setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to save settings." });
     } finally {
@@ -36,50 +84,402 @@ export default function ReferralSettingsForm({ initialValues }: { initialValues:
     }
   }
 
-  const fields: Array<{ key: keyof ReferralSettingsValues; label: string; min: number; max?: number }> = [
-    { key: "referrerBonusAmount", label: "Referrer bonus (EGP)", min: 0 },
-    { key: "refereeBonusAmount", label: "New user bonus (EGP)", min: 0 },
-    { key: "maxUsersPerCode", label: "Maximum users per code", min: 1 },
-  ];
+  function discardChanges() {
+    setDraftByRole((current) => ({ ...current, [role]: savedByRole[role] }));
+    setMessage(null);
+  }
 
   return (
-    <form onSubmit={handleSubmit} style={{ background: "#ffffff", border: "1px solid #e8edf0", borderRadius: 16, padding: 24, display: "grid", gap: 20 }}>
-      {fields.map((field) => (
-        <label key={field.key} style={{ display: "grid", gap: 7, color: "#0B1E3D", fontSize: 13, fontWeight: 700 }}>
-          {field.label}
-          <input
-            type="number"
-            min={field.min}
-            max={field.max}
-            step="1"
-            required
-            value={String(values[field.key])}
-            onChange={(event) => setValues((current) => ({ ...current, [field.key]: Number(event.target.value) }))}
-            style={{ height: 48, border: "1.5px solid #d0d8e0", borderRadius: 10, padding: "0 14px", color: "#0B1E3D", fontSize: 15, fontFamily: "inherit" }}
-          />
-        </label>
-      ))}
+    <div className="referral-settings-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 280px", gap: 20, alignItems: "start" }}>
+      <style>{`
+        @media (max-width: 760px) {
+          .referral-settings-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+      <form onSubmit={handleSubmit} style={panelStyle}>
+        {/* Role switch */}
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid #eef1f3" }}>
+          <p style={eyebrowStyle}>Referral code owner</p>
+          <div
+            role="tablist"
+            aria-label="Referral code owner"
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, padding: 4, marginTop: 10, background: "#eef2f3", borderRadius: 8 }}
+          >
+            {ROLE_OPTIONS.map((option) => {
+              const active = role === option.key;
+              const Icon = option.icon;
+              const dirty = !fieldsEqual(draftByRole[option.key], savedByRole[option.key]);
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => selectRole(option.key)}
+                  style={{
+                    position: "relative",
+                    minHeight: 40,
+                    border: 0,
+                    borderRadius: 6,
+                    background: active ? "#ffffff" : "transparent",
+                    boxShadow: active ? "0 1px 4px rgba(11,30,61,0.14)" : "none",
+                    color: active ? "#0B1E3D" : "#5A6A7A",
+                    fontWeight: 700,
+                    fontSize: 13.5,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Icon size={15} aria-hidden="true" />
+                  {option.label}
+                  {dirty ? (
+                    <span
+                      aria-label="Unsaved changes"
+                      style={{ position: "absolute", top: 6, right: 10, width: 6, height: 6, borderRadius: "50%", background: "#E8A33D" }}
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-      <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "14px 16px", background: "#f8f9fa", borderRadius: 10, color: "#0B1E3D", fontWeight: 700 }}>
-        Referral program active
-        <input
-          type="checkbox"
-          checked={values.isActive}
-          onChange={(event) => setValues((current) => ({ ...current, isActive: event.target.checked }))}
-          style={{ width: 20, height: 20, accentColor: "#00C2A8" }}
-        />
-      </label>
+        {/* Bonus amounts */}
+        <fieldset style={fieldsetStyle}>
+          <legend style={legendStyle}>
+            <Gift size={14} aria-hidden="true" /> Bonus amounts
+          </legend>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+            <NumberField
+              label="Referral code owner bonus"
+              hint={`Paid to the ${role} who shares the code`}
+              suffix="EGP"
+              min={0}
+              value={values.referrerBonusAmount}
+              onChange={(next) => updateValues((current) => ({ ...current, referrerBonusAmount: next }))}
+            />
+            <NumberField
+              label="New passenger bonus"
+              hint="Paid to whoever redeems the code"
+              suffix="EGP"
+              min={0}
+              value={values.refereeBonusAmount}
+              onChange={(next) => updateValues((current) => ({ ...current, refereeBonusAmount: next }))}
+            />
+          </div>
+        </fieldset>
 
-      {message ? (
-        <p role={message.ok ? "status" : "alert"} style={{ margin: 0, color: message.ok ? "#00877A" : "#e74c3c", display: "flex", alignItems: "center", gap: 7, fontSize: 13 }}>
-          {message.ok ? <Check size={16} /> : null}{message.text}
-        </p>
-      ) : null}
+        {/* Usage limits */}
+        <fieldset style={fieldsetStyle}>
+          <legend style={legendStyle}>
+            <Users size={14} aria-hidden="true" /> Usage limits
+          </legend>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+            <NumberField
+              label="Maximum users per code"
+              hint="Redemptions allowed for a single code"
+              min={1}
+              value={values.maxUsersPerCode}
+              onChange={(next) => updateValues((current) => ({ ...current, maxUsersPerCode: next }))}
+            />
+          </div>
+        </fieldset>
 
-      <button type="submit" disabled={saving} style={{ minHeight: 48, border: 0, borderRadius: 10, background: saving ? "#5A6A7A" : "#0B1E3D", color: "#ffffff", fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-        {saving ? <Loader2 size={17} className="animate-spin" /> : <Save size={17} />}
-        {saving ? "Saving..." : "Save settings"}
-      </button>
-    </form>
+        {/* Status */}
+        <div style={{ padding: "16px 20px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              padding: "14px 16px",
+              background: values.isActive ? "rgba(0,194,168,0.08)" : "#f4f6f7",
+              border: `1px solid ${values.isActive ? "rgba(0,194,168,0.28)" : "#e2e8ed"}`,
+              borderRadius: 8,
+            }}
+          >
+            <div>
+              <label htmlFor={`referral-active-${role}`} style={{ display: "block", fontWeight: 800, color: "#0B1E3D", fontSize: 14, cursor: "pointer" }}>
+                {roleLabel} referrals active
+              </label>
+              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#5A6A7A" }}>
+                {values.isActive ? `New ${role} referral codes can be redeemed.` : `New ${role} referral codes are paused.`}
+              </p>
+            </div>
+            <ToggleSwitch
+              id={`referral-active-${role}`}
+              checked={values.isActive}
+              onChange={(checked) => updateValues((current) => ({ ...current, isActive: checked }))}
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            padding: "16px 20px",
+            borderTop: "1px solid #eef1f3",
+            background: "#fafbfc",
+          }}
+        >
+          <div style={{ minHeight: 20 }}>
+            {message ? (
+              <p
+                role={message.ok ? "status" : "alert"}
+                style={{ margin: 0, color: message.ok ? "#00877A" : "#e74c3c", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 }}
+              >
+                {message.ok ? <Check size={15} /> : <AlertCircle size={15} />}
+                {message.text}
+              </p>
+            ) : isDirty ? (
+              <p style={{ margin: 0, color: "#B4790C", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E8A33D" }} />
+                Unsaved changes
+              </p>
+            ) : null}
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            {isDirty ? (
+              <button type="button" onClick={discardChanges} style={ghostButtonStyle}>
+                Discard
+              </button>
+            ) : null}
+            <button type="submit" disabled={saving || !isDirty} style={primaryButtonStyle(saving || !isDirty)}>
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              {saving ? "Saving..." : `Save ${roleLabel.toLowerCase()} settings`}
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <SummarySidebar draftByRole={draftByRole} />
+    </div>
   );
+}
+
+function NumberField({
+  label,
+  hint,
+  suffix,
+  min,
+  max,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  suffix?: string;
+  min: number;
+  max?: number;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label style={{ display: "grid", gap: 6 }}>
+      <span style={{ color: "#0B1E3D", fontSize: 13, fontWeight: 700 }}>{label}</span>
+      <span
+        style={{
+          display: "flex",
+          alignItems: "center",
+          height: 46,
+          border: "1px solid #cbd6dc",
+          borderRadius: 7,
+          background: "#fbfcfc",
+          overflow: "hidden",
+        }}
+      >
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step="1"
+          required
+          value={String(value)}
+          onChange={(event) => onChange(Number(event.target.value))}
+          style={{ flex: 1, minWidth: 0, height: "100%", border: 0, background: "transparent", padding: "0 14px", color: "#0B1E3D", fontSize: 15, fontFamily: "inherit", outline: "none" }}
+        />
+        {suffix ? (
+          <span style={{ padding: "0 14px", height: "100%", display: "inline-flex", alignItems: "center", color: "#5A6A7A", fontSize: 12.5, fontWeight: 700, background: "#f1f4f5", borderLeft: "1px solid #e2e8ed" }}>
+            {suffix}
+          </span>
+        ) : null}
+      </span>
+      {hint ? <span style={{ fontSize: 12, color: "#5A6A7A" }}>{hint}</span> : null}
+    </label>
+  );
+}
+
+function ToggleSwitch({ id, checked, onChange }: { id: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      style={{
+        flexShrink: 0,
+        width: 44,
+        height: 26,
+        borderRadius: 999,
+        border: "none",
+        background: checked ? "#00C2A8" : "#c7d0d6",
+        position: "relative",
+        cursor: "pointer",
+        transition: "background 0.15s ease",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 3,
+          left: checked ? 21 : 3,
+          width: 20,
+          height: 20,
+          borderRadius: "50%",
+          background: "#ffffff",
+          boxShadow: "0 1px 3px rgba(11,30,61,0.3)",
+          transition: "left 0.15s ease",
+        }}
+      />
+    </button>
+  );
+}
+
+function SummarySidebar({ draftByRole }: { draftByRole: SettingsByRole }) {
+  const rows = useMemo(
+    () =>
+      ROLE_OPTIONS.map((option) => ({
+        ...option,
+        values: draftByRole[option.key],
+      })),
+    [draftByRole],
+  );
+
+  return (
+    <aside style={{ ...panelStyle, padding: 20, display: "grid", gap: 16, position: "sticky", top: 20 }}>
+      <p style={{ ...eyebrowStyle, display: "flex", alignItems: "center", gap: 6 }}>
+        <Sparkles size={13} aria-hidden="true" /> Live overview
+      </p>
+      {rows.map((row) => {
+        const Icon = row.icon;
+        return (
+          <div key={row.key} style={{ border: "1px solid #eef1f3", borderRadius: 8, padding: 14, display: "grid", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 28, height: 28, borderRadius: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "rgba(0,194,168,0.12)", color: "#00877A" }}>
+                <Icon size={14} aria-hidden="true" />
+              </span>
+              <span style={{ fontWeight: 800, color: "#0B1E3D", fontSize: 13.5 }}>{row.label}</span>
+              <span
+                style={{
+                  marginInlineStart: "auto",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: "3px 8px",
+                  borderRadius: 999,
+                  color: row.values.isActive ? "#00877A" : "#5A6A7A",
+                  background: row.values.isActive ? "rgba(0,194,168,0.12)" : "#eef1f3",
+                }}
+              >
+                {row.values.isActive ? "Active" : "Paused"}
+              </span>
+            </div>
+            <dl style={{ margin: 0, display: "grid", gap: 6, fontSize: 12.5 }}>
+              <SummaryRow label="Owner bonus" value={`${row.values.referrerBonusAmount} EGP`} />
+              <SummaryRow label="New user bonus" value={`${row.values.refereeBonusAmount} EGP`} />
+              <SummaryRow label="Max uses" value={String(row.values.maxUsersPerCode)} />
+            </dl>
+          </div>
+        );
+      })}
+    </aside>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+      <dt style={{ color: "#5A6A7A" }}>{label}</dt>
+      <dd style={{ margin: 0, color: "#0B1E3D", fontWeight: 700 }}>{value}</dd>
+    </div>
+  );
+}
+
+const panelStyle: React.CSSProperties = {
+  background: "#ffffff",
+  border: "1px solid #e2e8ed",
+  borderRadius: 10,
+  boxShadow: "0 12px 28px rgba(11,30,61,0.05)",
+  overflow: "hidden",
+};
+
+const eyebrowStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#00877A",
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+};
+
+const fieldsetStyle: React.CSSProperties = {
+  margin: 0,
+  border: 0,
+  padding: "18px 20px",
+  borderBottom: "1px solid #eef1f3",
+  display: "grid",
+  gap: 14,
+};
+
+const legendStyle: React.CSSProperties = {
+  padding: 0,
+  marginBottom: 2,
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#0B1E3D",
+};
+
+const ghostButtonStyle: React.CSSProperties = {
+  minHeight: 44,
+  padding: "0 16px",
+  border: "1px solid #d0d8e0",
+  borderRadius: 7,
+  background: "#ffffff",
+  color: "#0B1E3D",
+  fontWeight: 700,
+  fontSize: 13.5,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+function primaryButtonStyle(disabled: boolean): React.CSSProperties {
+  return {
+    minHeight: 44,
+    padding: "0 18px",
+    border: 0,
+    borderRadius: 7,
+    background: disabled ? "#a9b3ba" : "#0B1E3D",
+    color: "#ffffff",
+    fontWeight: 800,
+    fontSize: 13.5,
+    cursor: disabled ? "not-allowed" : "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    fontFamily: "inherit",
+  };
 }

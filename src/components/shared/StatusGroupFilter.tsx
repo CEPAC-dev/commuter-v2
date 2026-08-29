@@ -5,8 +5,10 @@ import { useClientLocale } from "@/lib/locale.client";
 
 export default function StatusGroupFilter({
   hiddenGroups = [],
+  orientation = "horizontal",
 }: {
   hiddenGroups?: Array<"all" | "upcoming" | "ongoing" | "previous" | "pending_payment">;
+  orientation?: "horizontal" | "vertical";
 }) {
   const { t } = useClientLocale();
 
@@ -34,8 +36,17 @@ export default function StatusGroupFilter({
     router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
+  const isVertical = orientation === "vertical";
+
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: isVertical ? "column" : "row",
+        gap: isVertical ? 6 : 8,
+        flexWrap: isVertical ? "nowrap" : "wrap",
+      }}
+    >
       {visibleGroups.map((g) => {
         const isActive = active === g.value;
         return (
@@ -49,10 +60,12 @@ export default function StatusGroupFilter({
               color: isActive ? "#fff" : "#0B1E3D",
               fontWeight: 700,
               fontSize: 13,
-              padding: "8px 16px",
-              borderRadius: 20,
+              padding: isVertical ? "10px 14px" : "8px 16px",
+              borderRadius: isVertical ? 10 : 20,
               cursor: "pointer",
               fontFamily: "inherit",
+              textAlign: isVertical ? "start" : "center",
+              width: isVertical ? "100%" : undefined,
             }}
           >
             {g.label}

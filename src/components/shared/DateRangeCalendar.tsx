@@ -43,7 +43,7 @@ function toKey(d: Date): string {
   return format(d, "yyyy-MM-dd");
 }
 
-export default function DateRangeCalendar() {
+export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: boolean }) {
   const { t: translate } = useClientLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -132,7 +132,15 @@ export default function DateRangeCalendar() {
 
   return (
     <div ref={containerRef} style={{ position: "relative" }}>
-      <button type="button" style={triggerStyle} onClick={toggleOpen}>
+      <button
+        type="button"
+        style={{
+          ...triggerStyle,
+          width: fullWidth ? "100%" : undefined,
+          justifyContent: fullWidth ? "flex-start" : undefined,
+        }}
+        onClick={toggleOpen}
+      >
         <CalendarDays size={14} color="#00806E" aria-hidden="true" />
         {label}
       </button>

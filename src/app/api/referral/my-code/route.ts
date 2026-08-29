@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     ReferralUsage.countDocuments({ referrer: user._id, status: "pending" }),
     ReferralUsage.countDocuments({ referrer: user._id, status: "credited" }),
     Wallet.findOne({ userId: user._id }).select("balanceEgp").lean(),
-    getOrCreateReferralSettings(),
+    getOrCreateReferralSettings(session.role === "driver" ? "driver" : "passenger"),
   ]);
 
   const shareUrl = new URL("/login", req.nextUrl.origin);

@@ -23,6 +23,7 @@ import { VEHICLES } from "@/lib/config/vehicles";
 import type { VehicleKey } from "@/lib/config/vehicles";
 import AppHeader from "@/components/layout/AppHeader";
 import EmptyState from "@/components/shared/EmptyState";
+import { PassengerEmptyIcon, DriverEmptyIcon } from "@/components/icons/EmptyStateIcons";
 import StatusGroupFilter from "@/components/shared/StatusGroupFilter";
 import DateRangeCalendar from "@/components/shared/DateRangeCalendar";
 import Pagination from "@/components/shared/Pagination";
@@ -39,7 +40,11 @@ const PAGE_SIZE = 12;
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function truncate(s: string, max = 38): string {
-  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+  if (s.length <= max) return s;
+  const slice = s.slice(0, max - 1);
+  const lastSpace = slice.lastIndexOf(" ");
+  const safe = lastSpace > max * 0.6 ? slice.slice(0, lastSpace) : slice;
+  return `${safe.trimEnd()}…`;
 }
 
 function prettyDate(locale: "en" | "ar", date: string): string {
@@ -481,6 +486,31 @@ type DayItem =
   | { kind: "trip"; data: TripListRow }
   | { kind: "ride"; data: RideListRow };
 
+function TripsPageHeader({
+  locale,
+  summaryText,
+}: {
+  locale: "en" | "ar";
+  summaryText: string;
+}) {
+  return (
+    <>
+      <h1
+        style={{
+          fontSize: 22,
+          fontWeight: 800,
+          color: "#0B1E3D",
+          margin: "0 0 var(--space-4)",
+          letterSpacing: "-0.02em",
+        }}
+      >
+        {translate(locale, "my_trips.title")}
+      </h1>
+      <p style={{ fontSize: 14, color: "#5A6A7A", margin: 0 }}>{summaryText}</p>
+    </>
+  );
+}
+
 // ── page ─────────────────────────────────────────────────────────────────────
 
 export default async function MyTripsPage({
@@ -522,7 +552,7 @@ export default async function MyTripsPage({
   }
 
   const driverOngoingView = isDriver && groupFilter === "ongoing";
-  const passengerOngoingView = isPassenger;
+  const passengerOngoingView = isPassenger && groupFilter === "ongoing";
 
   const passengerListOptions = {
     page,
@@ -622,10 +652,12 @@ export default async function MyTripsPage({
   } else {
     if (isDriver) {
       summaryText = driverOngoingView
-        ? translate(locale, "my_trips.total_ongoing", { total })
-        : translate(locale, "my_trips.total_assigned", { total });
+        ? translate(locale, "my_trips.total_ongoing", { total, plural: total === 1 ? "" : "s" })
+        : translate(locale, "my_trips.total_assigned", { total, plural: total === 1 ? "" : "s" });
     } else {
-      summaryText = translate(locale, "my_trips.total_ongoing", { total });
+      summaryText = passengerOngoingView
+        ? translate(locale, "my_trips.total_ongoing", { total, plural: total === 1 ? "" : "s" })
+        : translate(locale, "my_trips.total_history", { total, plural: total === 1 ? "" : "s" });
     }
   }
 
@@ -633,8 +665,19 @@ export default async function MyTripsPage({
     summaryText = translate(locale, "my_trips.empty_ongoing");
   }
 
+  const activeGroupLabel =
+    !groupFilter || groupFilter === "all"
+      ? translate(locale, "filter.all")
+      : translate(locale, `status.${groupFilter}`);
+
+  const pendingPaymentCount = !isDriver
+    ? tripRows.filter(
+        (t) => t.paymentStatus === "pending" || t.paymentStatus === "failed",
+      ).length
+    : 0;
+
   return (
-    <div style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
+    <div className="my-trips-page" style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
       <AppHeader
         authed
         email={session.email}
@@ -643,42 +686,250 @@ export default async function MyTripsPage({
         backHref={isDriver ? "/my-trips" : "/"}
       />
 
-      <main
-        style={{ maxWidth: 640, margin: "0 auto", padding: "28px 20px 56px" }}
-      >
-        <div style={{ marginBottom: 22 }}>
-            <h1
-            style={{
-              fontSize: 22,
-              fontWeight: 800,
-              color: "#0B1E3D",
-              margin: "0 0 4px",
-              letterSpacing: "-0.02em",
-            }}
-          >
-            {translate(locale, "my_trips.title")}
-          </h1>
-          <p style={{ fontSize: 14, color: "#5A6A7A", margin: 0 }}>
-            {summaryText}
-          </p>
+      <style>{`
+        .my-trips-page {
+          overflow: visible;
+        }
+        .empty-state-icon { width: 80px; height: 80px; }
+        .my-trips-shell {
+          margin: 0 auto;
+          padding: var(--space-24) var(--space-16) var(--space-48);
+          overflow: visible;
+        }
+        .my-trips-filters-mobile {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--space-8);
+          margin-bottom: var(--space-16);
+        }
+        .my-trips-layout {
+          display: block;
+        }
+        .my-trips-header-desktop {
+          display: none;
+        }
+        .my-trips-sidebar {
+          display: none;
+        }
+        @media (min-width: 640px) {
+          .empty-state-icon { width: 96px; height: 96px; }
+        }
+        @media (min-width: 900px) {
+          .empty-state-icon { width: 120px; height: 120px; }
+        }
+        @media (min-width: 1024px) {
+          .my-trips-shell {
+            max-width: 1280px;
+            padding: var(--space-32) var(--space-32) var(--space-48);
+          }
+          .my-trips-header h1 {
+            font-size: 28px;
+          }
+          .my-trips-filters-mobile {
+            display: none;
+          }
+          .my-trips-layout {
+            display: grid;
+            grid-template-columns: 280px minmax(0, 1fr);
+            gap: var(--space-32);
+            align-items: start;
+            overflow: visible;
+          }
+          .my-trips-header-mobile {
+            display: none;
+          }
+          .my-trips-header-desktop {
+            display: block;
+            margin-bottom: var(--space-24);
+          }
+          .my-trips-sidebar {
+            display: block;
+            align-self: start;
+            min-width: 0;
+            position: sticky;
+            top: var(--app-header-offset);
+            z-index: 5;
+            height: fit-content;
+          }
+          .my-trips-sidebar-pin {
+            position: static;
+            width: 100%;
+          }
+          .my-trips-sidebar-panel {
+            background: #fff;
+            border: 1px solid #eef0f3;
+            border-radius: 14px;
+            padding: var(--space-16);
+            margin-bottom: var(--space-16);
+          }
+          .my-trips-sidebar-panel:last-child {
+            margin-bottom: 0;
+          }
+          .my-trips-sidebar-label {
+            font-size: 11px;
+            font-weight: 800;
+            color: #5A6A7A;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 0 0 var(--space-12);
+          }
+          .my-trips-stat-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: var(--space-8);
+            padding: var(--space-8) 0;
+            border-bottom: 1px solid #f4f6f8;
+          }
+          .my-trips-stat-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+          }
+          .my-trips-stat-row:first-of-type {
+            padding-top: 0;
+          }
+        }
+      `}</style>
+
+      <main className="my-trips-shell">
+        <div
+          className="my-trips-header my-trips-header-mobile"
+          style={{ marginBottom: "var(--space-24)" }}
+        >
+          <TripsPageHeader locale={locale} summaryText={summaryText} />
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            gap: 10,
-            marginBottom: 14,
-          }}
-        >
+        <div className="my-trips-filters-mobile">
           <DateRangeCalendar />
           <StatusGroupFilter hiddenGroups={hiddenGroups} />
         </div>
 
+        <div className="my-trips-layout">
+          <aside className="my-trips-sidebar" aria-label={translate(locale, "my_trips.title")}>
+            <div className="my-trips-sidebar-pin">
+              <div className="my-trips-sidebar-panel">
+              <p className="my-trips-sidebar-label">{translate(locale, "my_trips.sidebar_filters")}</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-16)" }}>
+                <DateRangeCalendar fullWidth />
+                <StatusGroupFilter hiddenGroups={hiddenGroups} orientation="vertical" />
+              </div>
+            </div>
+
+            <div className="my-trips-sidebar-panel">
+              <p className="my-trips-sidebar-label">{translate(locale, "my_trips.sidebar_overview")}</p>
+              <div className="my-trips-stat-row">
+                <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                  {translate(locale, "my_trips.results_label")}
+                </span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: "#0B1E3D", fontVariantNumeric: "tabular-nums" }}>
+                  {toArabicDigitsIf(locale, String(total))}
+                </span>
+              </div>
+              <div className="my-trips-stat-row">
+                <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                  {translate(locale, "my_trips.status_filter_label")}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
+                  {activeGroupLabel}
+                </span>
+              </div>
+              {(dateFrom || dateTo) && (
+                <div className="my-trips-stat-row">
+                  <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                    {translate(locale, "my_trips.date_filter_label")}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
+                    {dateFrom && dateTo
+                      ? `${prettyDate(locale, dateFrom)} – ${prettyDate(locale, dateTo)}`
+                      : dateFrom
+                        ? prettyDate(locale, dateFrom)
+                        : prettyDate(locale, dateTo!)}
+                  </span>
+                </div>
+              )}
+              {!isDriver && pendingPaymentCount > 0 && (
+                <div className="my-trips-stat-row">
+                  <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                    {translate(locale, "status.pending_payment")}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#E65100" }}>
+                    {toArabicDigitsIf(locale, String(pendingPaymentCount))}
+                  </span>
+                </div>
+              )}
+              {!isDriver && (
+                <div className="my-trips-stat-row">
+                  <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                    {translate(locale, "wallet.balance_label")}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#00C2A8" }}>
+                    {formatEgp(locale, walletBalance)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {!isDriver && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)", marginTop: "var(--space-16)" }}>
+                <Link
+                  href="/create"
+                  style={{
+                    display: "block",
+                    padding: "var(--space-12) var(--space-16)",
+                    background: "#0B1E3D",
+                    color: "#fff",
+                    borderRadius: 10,
+                    fontWeight: 700,
+                    fontSize: 14,
+                    textDecoration: "none",
+                    textAlign: "center",
+                  }}
+                >
+                  {translate(locale, "my_trips.book_ride")}
+                </Link>
+                <Link
+                  href="/wallet"
+                  style={{
+                    display: "block",
+                    padding: "var(--space-12) var(--space-16)",
+                    background: "#fff",
+                    color: "#0B1E3D",
+                    border: "1px solid #eef0f3",
+                    borderRadius: 10,
+                    fontWeight: 700,
+                    fontSize: 14,
+                    textDecoration: "none",
+                    textAlign: "center",
+                  }}
+                >
+                  {translate(locale, "nav.wallet")}
+                </Link>
+              </div>
+            )}
+            </div>
+          </aside>
+
+          <div className="my-trips-content" style={{ minWidth: 0 }}>
+            <div className="my-trips-header my-trips-header-desktop">
+              <TripsPageHeader locale={locale} summaryText={summaryText} />
+            </div>
         {listItems.length === 0 ? (
           <EmptyState
-            icon={isDriver ? "🚗" : "🧾"}
+            minHeight="min(40vh, 360px)"
+            icon={
+              isDriver ? (
+                <DriverEmptyIcon
+                  className="empty-state-icon"
+                  title={translate(locale, "my_trips.empty_assigned")}
+                />
+              ) : (
+                <PassengerEmptyIcon
+                  className="empty-state-icon"
+                  title={translate(locale, "my_trips.empty")}
+                />
+              )
+            }
             title={
               hasFilters
                 ? translate(locale, "my_trips.empty_title_filtered")
@@ -686,7 +937,9 @@ export default async function MyTripsPage({
                   ? driverOngoingView
                     ? translate(locale, "my_trips.empty_ongoing")
                     : translate(locale, "my_trips.empty_assigned")
-                  : translate(locale, "my_trips.empty_ongoing")
+                  : passengerOngoingView
+                    ? translate(locale, "my_trips.empty_ongoing")
+                    : translate(locale, "my_trips.empty")
             }
             description={
               hasFilters
@@ -695,7 +948,9 @@ export default async function MyTripsPage({
                   ? driverOngoingView
                     ? translate(locale, "my_trips.empty_description_ongoing")
                     : translate(locale, "my_trips.empty_description_assigned")
-                  : translate(locale, "my_trips.empty_description_ongoing")
+                  : passengerOngoingView
+                    ? translate(locale, "my_trips.empty_description_ongoing_passenger")
+                    : translate(locale, "my_trips.empty_description_book")
             }
             action={
               !isDriver ? (
@@ -703,7 +958,7 @@ export default async function MyTripsPage({
                   href="/create"
                   style={{
                     display: "inline-block",
-                    padding: "12px 24px",
+                    padding: "var(--space-12) var(--space-24)",
                     background: "#0B1E3D",
                     color: "#fff",
                     borderRadius: 10,
@@ -720,13 +975,13 @@ export default async function MyTripsPage({
         ) : (
           <>
             {dayGroups.map((group) => (
-              <div key={group.date} style={{ marginBottom: 20 }}>
+              <div key={group.date} style={{ marginBottom: "var(--space-24)" }}>
                 <div
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 8,
-                    marginBottom: 10,
+                    gap: "var(--space-8)",
+                    marginBottom: "var(--space-8)",
                   }}
                 >
                   <CalendarDays size={14} color="#00806E" aria-hidden="true" />
@@ -751,7 +1006,7 @@ export default async function MyTripsPage({
                   </span>
                 </div>
                 <div
-                  style={{ display: "flex", flexDirection: "column", gap: 12 }}
+                  style={{ display: "flex", flexDirection: "column", gap: "var(--space-12)" }}
                 >
                   {group.items.map((item) => {
                     if (item.kind === "ride") {
@@ -1008,6 +1263,13 @@ export default async function MyTripsPage({
                                             aria-hidden="true"
                                           />
                                           <span
+                                            title={
+                                              ride.rideType === "shared"
+                                                ? (passenger.pickupStation?.name ??
+                                                  ride.pickupStation?.name ??
+                                                  passenger.pickupAddress)
+                                                : passenger.pickupAddress
+                                            }
                                             style={{
                                               fontSize: 13,
                                               color: "#0B1E3D",
@@ -1039,6 +1301,13 @@ export default async function MyTripsPage({
                                             aria-hidden="true"
                                           />
                                           <span
+                                            title={
+                                              ride.rideType === "shared"
+                                                ? (passenger.dropoffStation?.name ??
+                                                  ride.dropoffStation?.name ??
+                                                  passenger.dropoffAddress)
+                                                : passenger.dropoffAddress
+                                            }
                                             style={{
                                               fontSize: 13,
                                               color: "#0B1E3D",
@@ -1220,11 +1489,11 @@ export default async function MyTripsPage({
                                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
                                   <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                                     <MapPin size={13} color="#00C2A8" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
-                                    <span style={{ fontSize: 13, color: "#0B1E3D" }}>{truncate(trip.pickupAddress)}</span>
+                                    <span style={{ fontSize: 13, color: "#0B1E3D" }} title={trip.pickupAddress}>{truncate(trip.pickupAddress)}</span>
                                   </div>
                                   <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                                     <MapPin size={13} color="#E74C3C" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
-                                    <span style={{ fontSize: 13, color: "#0B1E3D" }}>{truncate(trip.dropoffAddress)}</span>
+                                    <span style={{ fontSize: 13, color: "#0B1E3D" }} title={trip.dropoffAddress}>{truncate(trip.dropoffAddress)}</span>
                                   </div>
                                 </div>
 
@@ -1274,6 +1543,8 @@ export default async function MyTripsPage({
             <Pagination page={page} totalPages={totalPages} />
           </>
         )}
+          </div>
+        </div>
       </main>
     </div>
   );

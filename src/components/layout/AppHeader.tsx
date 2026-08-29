@@ -132,7 +132,7 @@ export default function AppHeader({
           maxWidth: 1200,
           margin: "0 auto",
           padding: "0 20px",
-          height: 60,
+          height: "var(--app-header-height)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -235,6 +235,7 @@ export default function AppHeader({
         </nav>
 
         <div
+          className="appheader-actions"
           style={{
             display: "flex",
             alignItems: "center",
@@ -250,6 +251,7 @@ export default function AppHeader({
           <button
             onClick={toggleLocale}
             aria-label="Switch language"
+            className="appheader-desktop"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -279,6 +281,7 @@ export default function AppHeader({
               onClick={() => setShowLogoutModal(true)}
               disabled={loggingOut}
               aria-label="Log out"
+              className="appheader-desktop"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -317,6 +320,7 @@ export default function AppHeader({
           ) : (
             <Link
               href="/login"
+              className="appheader-desktop"
               style={{
                 fontWeight: 700,
                 fontSize: 14,
@@ -502,6 +506,7 @@ export default function AppHeader({
         @media (max-width: 767px) {
           .appheader-desktop { display: none !important; }
           .appheader-mobile-toggle { display: flex !important; }
+          .appheader-actions { min-width: 0 !important; }
         }
       `}</style>
       <LogoutConfirmModal

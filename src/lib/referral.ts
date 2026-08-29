@@ -2,7 +2,10 @@ import "server-only";
 import { randomBytes } from "crypto";
 import mongoose, { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
-import { ReferralSettings } from "@/models/ReferralSettings";
+import {
+  type ReferralSettingsRole,
+  ReferralSettings,
+} from "@/models/ReferralSettings";
 import { ReferralUsage } from "@/models/ReferralUsage";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
@@ -17,11 +20,34 @@ export interface ReferralResult {
   message: string;
 }
 
-export async function getOrCreateReferralSettings() {
+export async function getOrCreateReferralSettings(
+  role: ReferralSettingsRole = "passenger",
+) {
   await connectDB();
+
+  const existing = await ReferralSettings.findOne({ singletonKey: role });
+  if (existing) return existing;
+
+  // Preserve the original global configuration as the passenger baseline.
+  const legacySettings = await ReferralSettings.findOne({ singletonKey: "global" })
+    .select("referrerBonusAmount refereeBonusAmount maxUsersPerCode isActive")
+    .lean();
+
   return ReferralSettings.findOneAndUpdate(
-    { singletonKey: "global" },
-    { $setOnInsert: { singletonKey: "global" } },
+    { singletonKey: role },
+    {
+      $setOnInsert: {
+        singletonKey: role,
+        ...(role === "passenger" && legacySettings
+          ? {
+              referrerBonusAmount: legacySettings.referrerBonusAmount,
+              refereeBonusAmount: legacySettings.refereeBonusAmount,
+              maxUsersPerCode: legacySettings.maxUsersPerCode,
+              isActive: legacySettings.isActive,
+            }
+          : {}),
+      },
+    },
     { upsert: true, returnDocument: "after", runValidators: true },
   );
 }
@@ -50,15 +76,21 @@ export async function applyReferralOnSignup(
     return { success: false, message: "Invalid new user." };
   }
 
-  const settings = await ReferralSettings.findOne({ singletonKey: "global" }).lean();
-  if (!settings || !settings.isActive) {
-    return { success: false, message: "Referrals are not currently active." };
-  }
-
   const normalizedCode = referralCode.trim().toUpperCase();
-  const referrer = await User.findOne({ referralCode: normalizedCode }).select("_id").lean();
+  const referrer = await User.findOne({ referralCode: normalizedCode })
+    .select("_id role")
+    .lean();
   if (!referrer) {
     return { success: false, message: "Referral code is invalid." };
+  }
+
+  if (referrer.role !== "passenger" && referrer.role !== "driver") {
+    return { success: false, message: "Referral code is invalid." };
+  }
+
+  const settings = await getOrCreateReferralSettings(referrer.role);
+  if (!settings.isActive) {
+    return { success: false, message: "Referrals are not currently active." };
   }
 
   const referredUserId = new Types.ObjectId(String(newUserId));
