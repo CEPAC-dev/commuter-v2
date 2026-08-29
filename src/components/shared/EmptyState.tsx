@@ -1,8 +1,9 @@
 interface EmptyStateProps {
-  icon?: string;
+  icon?: React.ReactNode;
   title: string;
   description?: string;
   action?: React.ReactNode;
+  minHeight?: string;
 }
 
 export default function EmptyState({
@@ -10,7 +11,9 @@ export default function EmptyState({
   title,
   description,
   action,
+  minHeight = '40vh',
 }: EmptyStateProps) {
+  const isEmoji = typeof icon === 'string';
   return (
     <div
       style={{
@@ -18,12 +21,13 @@ export default function EmptyState({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '48px 24px',
+        minHeight,
+        padding: 'var(--space-24) var(--space-16)',
         textAlign: 'center',
-        gap: 12,
+        gap: 'var(--space-16)',
       }}
     >
-      <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 8 }}>{icon}</div>
+      <div style={{ lineHeight: 1, fontSize: isEmoji ? 48 : undefined }}>{icon}</div>
       <h3
         style={{
           margin: 0,
@@ -46,7 +50,7 @@ export default function EmptyState({
           {description}
         </p>
       )}
-      {action && <div style={{ marginTop: 8 }}>{action}</div>}
+      {action && <div style={{ marginTop: 'var(--space-8)' }}>{action}</div>}
     </div>
   );
 }

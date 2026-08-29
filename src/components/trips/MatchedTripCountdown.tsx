@@ -7,14 +7,14 @@ function remainingLabel(date: string, pickupTime: string, locale: "en" | "ar") {
   const pickup = new Date(`${date}T${pickupTime}:00`);
   const remainingMs = pickup.getTime() - Date.now();
   if (!Number.isFinite(pickup.getTime()) || remainingMs <= 0) {
-    return locale === "ar" ? "وقت الاستلام الآن" : "Pickup time is now";
+    return locale === "ar" ? "وقت الاركوب الآن" : "Pickup time is now";
   }
 
   const totalMinutes = Math.ceil(remainingMs / 60_000);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   const value = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-  return locale === "ar" ? `الاستلام خلال ${value}` : `Pickup in ${value}`;
+  return locale === "ar" ? `الاركوب خلال ${value}` : `Pickup in ${value}`;
 }
 
 export default function MatchedTripCountdown({

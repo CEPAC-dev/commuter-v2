@@ -1,46 +1,22 @@
 "use client";
-import { useState, useRef, useTransition } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import {
   User,
   Loader2,
   Check,
-  Upload,
-  FileText,
-  Car,
-  Calendar,
+  ArrowRight,
+  ArrowLeft,
+  ShieldCheck,
 } from "lucide-react";
 import AppHeader from "@/components/layout/AppHeader";
 import Section from "@/components/shared/Section";
 import ChangePasswordSection from "@/components/shared/ChangePasswordSection";
+import ReferralCard from "@/components/shared/ReferralCard";
 import SavedAddressesSection from "@/components/shared/SavedAddressesSection";
-import { CAR_TYPE_LIST, type CarType } from "@/lib/config/driver";
+import type { CarType } from "@/lib/config/driver";
 import type { SavedAddress } from "@/types/shared";
 import { useClientLocale } from "@/lib/locale.client";
-import { useRouter } from "next/navigation";
-
-interface DocKey {
-  key:
-    | "nationalIdFront"
-    | "nationalIdBack"
-    | "drivingLicense"
-    | "carLicenseFront"
-    | "carLicenseBack"
-    | "criminalRecord"
-    | "profilePic"
-    | "carImage";
-  label: string;
-}
-
-const DOCUMENTS: DocKey[] = [
-  { key: "nationalIdFront", label: "documents.nationalIdFront" },
-  { key: "nationalIdBack", label: "documents.nationalIdBack" },
-  { key: "drivingLicense", label: "documents.drivingLicense" },
-  { key: "carLicenseFront", label: "documents.carLicenseFront" },
-  { key: "carLicenseBack", label: "documents.carLicenseBack" },
-  { key: "criminalRecord", label: "documents.criminalRecord" },
-  { key: "profilePic", label: "documents.profilePic" },
-  { key: "carImage", label: "documents.carImage" },
-];
 
 interface Props {
   userNumber: number;
@@ -75,6 +51,7 @@ const labelStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
+  minWidth: 0,
   height: 48,
   padding: "0 14px",
   background: "#f8f9fa",
@@ -138,88 +115,17 @@ function saveButtonStyle(loading: boolean): React.CSSProperties {
   };
 }
 
-function ProgressBar({
-  pct,
-  filled,
-  total,
-  t,
-}: {
-  pct: number;
-  filled: number;
-  total: number;
-  t: (k: string) => string;
-}) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: 6,
-          alignItems: "center",
-        }}
-      >
-        <span style={{ fontSize: 12, color: "#5A6A7A", fontWeight: 500 }}>
-          {filled} / {total} {" "}
-          <span style={{ color: "#5A6A7A" }}>{t("progress.complete")}</span>
-        </span>
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: pct === 100 ? "#27AE60" : "#0B1E3D",
-          }}
-        >
-          {pct}%
-        </span>
-      </div>
-      <div
-        style={{
-          height: 6,
-          background: "#eef0f3",
-          borderRadius: 99,
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: `${pct}%`,
-            background: pct === 100 ? "#27AE60" : "#00C2A8",
-            borderRadius: 99,
-            transition: "width 0.3s ease",
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
 export default function DriverProfileClient({
   userNumber,
   initialName,
   email,
   initialPhone,
   gender: initialGender,
-  carType: initialCarType,
-  carBrand: initialCarBrand = "",
-  carModel: initialCarModel = "",
-  modelYear: initialModelYear = null,
-  vehicleColor: initialVehicleColor = "",
-  plateChar1: initialPlateChar1 = "",
-  plateChar2: initialPlateChar2 = "",
-  plateChar3: initialPlateChar3 = "",
-  plateDigits: initialPlateDigits = "",
-  licenseExpiry: initialLicenseExpiry = "",
-  carCapacity,
-  documents: initialDocuments,
-  verificationStatus: initialVerificationStatus,
-  profileSince,
+  documents,
+  verificationStatus,
   initialSavedAddresses,
 }: Props) {
-  const { locale, dir, t } = useClientLocale();
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { dir, t } = useClientLocale();
   const selectStyle = getSelectStyle(dir);
   // Personal info
   const [name, setName] = useState(initialName);
@@ -230,80 +136,6 @@ export default function DriverProfileClient({
     ok: boolean;
     text: string;
   } | null>(null);
-
-  // Driver details
-  const [carType, setCarType] = useState<CarType | "">(initialCarType);
-  const [carBrand, setCarBrand] = useState(initialCarBrand);
-  const [carModel, setCarModel] = useState(initialCarModel);
-  const [modelYear, setModelYear] = useState(
-    initialModelYear ? String(initialModelYear) : "",
-  );
-  const [vehicleColor, setVehicleColor] = useState(initialVehicleColor);
-  const [plateChar1, setPlateChar1] = useState(initialPlateChar1);
-  const [plateChar2, setPlateChar2] = useState(initialPlateChar2);
-  const [plateChar3, setPlateChar3] = useState(initialPlateChar3);
-  const [plateDigits, setPlateDigits] = useState(initialPlateDigits);
-  const [licenseExpiry, setLicenseExpiry] = useState(initialLicenseExpiry);
-  const [savingDetails, setSavingDetails] = useState(false);
-  const [detailsMsg, setDetailsMsg] = useState<{
-    ok: boolean;
-    text: string;
-  } | null>(null);
-
-  const capacity = carType
-    ? CAR_TYPE_LIST.find((c) => c.key === carType)?.capacity
-    : carCapacity;
-
-  // Documents
-  const [documents, setDocuments] = useState(initialDocuments);
-  const [uploading, setUploading] = useState<Record<string, boolean>>({});
-  const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  // License plate refs for auto-focus
-  const plateChar1Ref = useRef<HTMLInputElement>(null);
-  const plateChar2Ref = useRef<HTMLInputElement>(null);
-  const plateChar3Ref = useRef<HTMLInputElement>(null);
-  const plateDigitsRef = useRef<HTMLInputElement>(null);
-
-  // Verification
-  const [verificationStatus, setVerificationStatus] = useState(
-    initialVerificationStatus,
-  );
-  const [submitting, setSubmitting] = useState(false);
-  const [submitMsg, setSubmitMsg] = useState<{
-    ok: boolean;
-    text: string;
-  } | null>(null);
-
-  // Progress helpers (after all useState)
-  const DETAIL_FIELDS = [
-    carType,
-    carBrand.trim(),
-    carModel.trim(),
-    (() => {
-      const y = Number(modelYear);
-      return modelYear.trim() && Number.isInteger(y) && y >= 1900 && y <= 2100
-        ? modelYear
-        : "";
-    })(),
-    vehicleColor.trim(),
-    /^[\u0600-\u06FF]$/.test(plateChar1) ? plateChar1 : "",
-    /^[\u0600-\u06FF]$/.test(plateChar2) ? plateChar2 : "",
-    /^[\u0600-\u06FF]$/.test(plateChar3) ? plateChar3 : "",
-    /^\d{3,4}$/.test(plateDigits) ? plateDigits : "",
-    licenseExpiry.trim(),
-  ];
-  const detailsFilledCount = DETAIL_FIELDS.filter(Boolean).length;
-  const detailsPct = Math.round(
-    (detailsFilledCount / DETAIL_FIELDS.length) * 100,
-  );
-
-  const docsFilledCount = DOCUMENTS.filter((d) =>
-    Boolean(documents[d.key]),
-  ).length;
-  const docsPct = Math.round((docsFilledCount / DOCUMENTS.length) * 100);
-
-  const canSubmit = detailsPct === 100 && docsPct === 100;
 
   async function savePersonal(e: React.FormEvent) {
     e.preventDefault();
@@ -336,126 +168,6 @@ export default function DriverProfileClient({
     }
   }
 
-  async function saveDetails(e: React.FormEvent) {
-    e.preventDefault();
-    const yearNum = Number(modelYear);
-    if (
-      !carType ||
-      !carBrand.trim() ||
-      !carModel.trim() ||
-      !modelYear.trim() ||
-      !Number.isInteger(yearNum) ||
-      yearNum < 1900 ||
-      yearNum > 2100 ||
-      !vehicleColor.trim() ||
-      !/^[\u0600-\u06FF]$/.test(plateChar1) ||
-      !/^[\u0600-\u06FF]$/.test(plateChar2) ||
-      !/^[\u0600-\u06FF]$/.test(plateChar3) ||
-      !/^\d{3,4}$/.test(plateDigits) ||
-      !licenseExpiry.trim()
-    ) {
-      setDetailsMsg({ ok: false, text: t("error.details_required") });
-      return;
-    }
-    setSavingDetails(true);
-    setDetailsMsg(null);
-    try {
-      const res = await fetch("/api/auth/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          phone: phone.trim(),
-          carType,
-          carBrand: carBrand.trim(),
-          carModel: carModel.trim(),
-          modelYear: yearNum,
-          vehicleColor: vehicleColor.trim(),
-          plateChar1,
-          plateChar2,
-          plateChar3,
-          plateDigits,
-          licenseExpiry: licenseExpiry.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setDetailsMsg({ ok: false, text: data.error ?? t("error.save_failed") });
-        return;
-      }
-      setDetailsMsg({ ok: true, text: t("action.saved") });
-    } catch {
-      setDetailsMsg({ ok: false, text: t("error.network") });
-    } finally {
-      setSavingDetails(false);
-    }
-  }
-
-  async function handleFileChange(key: string, file: File | null) {
-    if (!file) return;
-    setUploading((u) => ({ ...u, [key]: true }));
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const uploadRes = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const uploadData = await uploadRes.json();
-      if (!uploadRes.ok) {
-        console.error(uploadData.error ?? "Upload failed.");
-        return;
-      }
-
-      const res = await fetch("/api/auth/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          phone: phone.trim(),
-          documents: { [key]: uploadData.path },
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setDocuments((d) => ({ ...d, [key]: uploadData.path }));
-      } else {
-        console.error(data.error ?? "Failed to save document.");
-      }
-    } finally {
-      setUploading((u) => ({ ...u, [key]: false }));
-      if (fileInputs.current[key]) fileInputs.current[key]!.value = "";
-    }
-  }
-
-  const profileSinceLabel = new Date(profileSince).toLocaleDateString("en-EG", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
-  async function submitForReview() {
-    setSubmitting(true);
-    setSubmitMsg(null);
-    try {
-      const res = await fetch("/api/driver/submit-review", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        const missingText = Array.isArray(data.missing)
-          ? `Missing: ${data.missing.join(", ")}.`
-          : (data.error ?? t("error.submit_failed"));
-        setSubmitMsg({ ok: false, text: missingText });
-        return;
-      }
-      setVerificationStatus("pending");
-      setSubmitMsg({ ok: true, text: t("profile.submit_review_success") });
-    } catch {
-      setSubmitMsg({ ok: false, text: t("error.network") });
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   const statusConfig: Record<
     typeof verificationStatus,
     { label: string; bg: string; color: string }
@@ -465,6 +177,13 @@ export default function DriverProfileClient({
     verified: { label: t("profile.status.verified"), bg: "#E8F5E9", color: "#27AE60" },
   };
   const statusCfg = statusConfig[verificationStatus];
+
+  const verificationCta =
+    verificationStatus === "verified"
+      ? t("verification.cta_view")
+      : verificationStatus === "pending"
+        ? t("verification.cta_view_submission")
+        : t("verification.cta_complete");
 
   return (
     <div style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
@@ -476,10 +195,19 @@ export default function DriverProfileClient({
         backHref="/my-trips"
       />
 
-      <main
-        dir={dir}
-        style={{ maxWidth: 560, margin: "0 auto", padding: "32px 20px 48px" }}
-      >
+      <style>{`
+        .profile-shell { max-width: 560px; margin: 0 auto; padding: 32px 20px 48px; }
+        .profile-columns { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
+        /* Grid items default to min-width:auto, which lets form controls' UA min-content size
+           force the track (and page) wider than the viewport. Force them shrinkable. */
+        .profile-columns > * { min-width: 0; }
+        @media (min-width: 900px) {
+          .profile-shell { max-width: 960px; padding: 44px 32px 72px; }
+          .profile-columns { grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; }
+        }
+      `}</style>
+
+      <main dir={dir} className="profile-shell">
         {/* Avatar + name */}
         <div
           style={{
@@ -491,8 +219,8 @@ export default function DriverProfileClient({
         >
           <div
             style={{
-              width: 96,
-              height: 96,
+              width: 104,
+              height: 104,
               borderRadius: "50%",
               background: "#00C2A8",
               display: "flex",
@@ -500,6 +228,8 @@ export default function DriverProfileClient({
               justifyContent: "center",
               flexShrink: 0,
               overflow: "hidden",
+              border: "3px solid #ffffff",
+              boxShadow: "0 0 0 1px #e8edf0, 0 8px 20px rgba(11,30,61,0.1)",
             }}
           >
             {documents.profilePic ? (
@@ -516,13 +246,14 @@ export default function DriverProfileClient({
               <User size={48} color="#fff" aria-hidden="true" />
             )}
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
                 marginBottom: 2,
+                flexWrap: "wrap",
               }}
             >
               <p
@@ -552,12 +283,15 @@ export default function DriverProfileClient({
                 {statusCfg.label}
               </span>
             </div>
-            <p style={{ margin: 0, fontSize: 13, color: "#5A6A7A" }}>
-              #{userNumber} · {email}
+            <p style={{ margin: 0, fontSize: 13, color: "#5A6A7A", overflowWrap: "anywhere" }}>
+              #{userNumber}
+              {email ? ` · ${email}` : ""}
             </p>
           </div>
-
         </div>
+
+        <div className="profile-columns">
+          <div>
 
         {/* Personal information */}
         <Section title={t("profile.personal_info")}>
@@ -682,409 +416,91 @@ export default function DriverProfileClient({
           </form>
         </Section>
 
-        {/* Driver details */}
-        <Section title={t("profile.driver_details")}>
-          <ProgressBar
-            pct={detailsPct}
-            filled={detailsFilledCount}
-            total={DETAIL_FIELDS.length}
-            t={t}
-          />
-          <form onSubmit={saveDetails} noValidate style={cardStyle}>
-            <div>
-              <label htmlFor="d-carType" style={labelStyle}>
-                {t("profile.car_type")}
-              </label>
-              <select
-                id="d-carType"
-                value={carType}
-                onChange={(e) => setCarType(e.target.value as CarType)}
-                style={selectStyle}
-              >
-                <option value="">{t("select.placeholder")}</option>
-                {CAR_TYPE_LIST.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {t(`vehicles.${c.key}`) || c.label}
-                  </option>
-                ))}
-              </select>
-                <p
-                style={{
-                  fontSize: 12,
-                  color: "#5A6A7A",
-                  marginTop: 5,
-                  marginBottom: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                }}
-              >
-                <Car size={13} aria-hidden="true" /> {t("profile.capacity_label")} {capacity ?? "—"} {t("profile.capacity_note")}
-              </p>
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 12,
-              }}
-            >
-              <div>
-                <label htmlFor="d-carBrand" style={labelStyle}>
-                  {t("profile.car_brand")}
-                </label>
-                <input
-                  id="d-carBrand"
-                  type="text"
-                  placeholder="BYD"
-                  value={carBrand}
-                  onChange={(e) => setCarBrand(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label htmlFor="d-carModel" style={labelStyle}>
-                  {t("profile.car_model")}
-                </label>
-                <input
-                  id="d-carModel"
-                  type="text"
-                  placeholder="F3"
-                  value={carModel}
-                  onChange={(e) => setCarModel(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 12,
-              }}
-            >
-              <div>
-                <label htmlFor="d-modelYear" style={labelStyle}>
-                  {t("profile.model_year")}
-                </label>
-                <input
-                  id="d-modelYear"
-                  type="number"
-                  inputMode="numeric"
-                  placeholder="2024"
-                  value={modelYear}
-                  onChange={(e) =>
-                    setModelYear(e.target.value.replace(/\D/g, "").slice(0, 4))
-                  }
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label htmlFor="d-vehicleColor" style={labelStyle}>
-                  {t("profile.vehicle_color")}
-                </label>
-                <input
-                  id="d-vehicleColor"
-                  type="text"
-                  value={vehicleColor}
-                  onChange={(e) => setVehicleColor(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-            </div>
-            <div>
-              <label style={labelStyle}>{t("profile.plate_letters")} / {t("profile.plate_numbers")}</label>
-              <div
-                dir="rtl"
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  direction: "rtl",
-                }}
-              >
-                {[
-                  [
-                    plateChar1,
-                    setPlateChar1,
-                    plateChar1Ref,
-                    plateChar2Ref,
-                  ] as const,
-                  [
-                    plateChar2,
-                    setPlateChar2,
-                    plateChar2Ref,
-                    plateChar3Ref,
-                  ] as const,
-                  [
-                    plateChar3,
-                    setPlateChar3,
-                    plateChar3Ref,
-                    plateDigitsRef,
-                  ] as const,
-                ].map(([val, setVal, currentRef, nextRef], i) => (
-                  <input
-                    key={i}
-                    ref={currentRef}
-                    dir="rtl"
-                    type="text"
-                    inputMode="text"
-                    maxLength={1}
-                    value={val}
-                    onChange={(e) => {
-                      const ch = e.target.value
-                        .replace(/[^\u0600-\u06FF]/g, "")
-                        .slice(-1);
-                      setVal(ch);
-                      if (ch) {
-                        nextRef.current?.focus();
-                      }
-                    }}
-                    style={{
-                      ...inputStyle,
-                      textAlign: "center",
-                      width: 52,
-                      flexShrink: 0,
-                    }}
-                  />
-                ))}
-                <input
-                  ref={plateDigitsRef}
-                  dir="rtl"
-                  type="text"
-                  inputMode="numeric"
-                  minLength={3}
-                  maxLength={4}
-                  placeholder="987"
-                  value={plateDigits}
-                  onChange={(e) =>
-                    setPlateDigits(
-                      e.target.value.replace(/\D/g, "").slice(0, 4),
-                    )
-                  }
-                  style={{ ...inputStyle, textAlign: "center", flex: 1 }}
-                />
-              </div>
-            </div>
-            <div>
-              <label htmlFor="d-expiry" style={labelStyle}>
-                {t("profile.license_expiry")}
-              </label>
-              <input
-                id="d-expiry"
-                type="date"
-                value={licenseExpiry}
-                onChange={(e) => setLicenseExpiry(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-            <p
-              style={{
-                fontSize: 12,
-                color: "#5A6A7A",
-                margin: 0,
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-              }}
-            >
-              <Calendar size={13} aria-hidden="true" /> {t("profile.profile_since")} {profileSinceLabel}
-            </p>
-            {detailsMsg && (
-              <p
-                role="status"
-                aria-live="polite"
-                style={{
-                  fontSize: 13,
-                  margin: 0,
-                  color: detailsMsg.ok ? "#27AE60" : "#e74c3c",
-                }}
-              >
-                {detailsMsg.text}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={savingDetails}
-              style={saveButtonStyle(savingDetails)}
-            >
-              {savingDetails ? (
-                <Loader2 size={16} className="spin" aria-hidden="true" />
-              ) : (
-                <Check size={16} aria-hidden="true" />
-              )}
-              {savingDetails ? t("action.saving") : t("profile.save")}
-            </button>
-          </form>
-        </Section>
-
-        {/* Documents */}
-        <Section title={t("profile.documents")}>
-          <ProgressBar
-            pct={docsPct}
-            filled={docsFilledCount}
-            total={DOCUMENTS.length}
-            t={t}
-          />
-          <div style={{ ...cardStyle, gap: 10 }}>
-            {DOCUMENTS.map((doc) => {
-              const path = documents[doc.key];
-              const done = Boolean(path);
-              const busy = Boolean(uploading[doc.key]);
-              return (
-                <div
-                  key={doc.key}
+        {/* Vehicle & documents verification */}
+        <Section title={t("verification.section_title")}>
+          <div style={{ ...cardStyle, gap: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span
                   style={{
-                    display: "flex",
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    flexShrink: 0,
+                    display: "inline-flex",
                     alignItems: "center",
-                    gap: 10,
-                    padding: "10px 14px",
-                    minHeight: 52,
-                    background: "#f8f9fa",
-                    border: `1.5px solid ${done ? "#00C2A8" : "#e8edf0"}`,
-                    borderRadius: 12,
+                    justifyContent: "center",
+                    background: "rgba(0,194,168,0.12)",
+                    color: "#00877A",
                   }}
                 >
-                  <FileText
-                    size={18}
-                    style={{
-                      color: done ? "#00C2A8" : "#5A6A7A",
-                      flexShrink: 0,
-                    }}
-                    aria-hidden="true"
-                  />
-                  <input
-                    ref={(el) => {
-                      fileInputs.current[doc.key] = el;
-                    }}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
-                    id={`pdoc-${doc.key}`}
-                    style={{ display: "none" }}
-                    onChange={(e) =>
-                      handleFileChange(doc.key, e.target.files?.[0] ?? null)
-                    }
-                  />
-                    <label
-                      htmlFor={`pdoc-${doc.key}`}
-                      style={{
-                        flex: 1,
-                        fontSize: 14,
-                        fontWeight: 500,
-                        color: "#0B1E3D",
-                        cursor: "pointer",
-                      }}
-                    >
-                        {t(doc.label)}
-                    </label>
-                  {done && (
-                    <a
-                      href={path ?? undefined}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: "#00806E",
-                        textDecoration: "none",
-                      }}
-                    >
-                        {t("doc.view")}
-                    </a>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => fileInputs.current[doc.key]?.click()}
-                    disabled={busy}
-                        aria-label={done ? `${t("doc.replace")} ${t(doc.label)}` : `${t("doc.upload")} ${t(doc.label)}`}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      minHeight: 40,
-                      padding: "0 14px",
-                      borderRadius: 9,
-                      border: "none",
-                      fontSize: 13,
-                      fontWeight: 700,
-                      fontFamily: "inherit",
-                      cursor: busy ? "not-allowed" : "pointer",
-                      background: done ? "#E6F8F5" : "#0B1E3D",
-                      color: done ? "#00806E" : "#ffffff",
-                    }}
-                    >
-                    {busy ? (
-                      <Loader2 size={14} className="spin" aria-hidden="true" />
-                    ) : done ? (
-                      <Check size={14} aria-hidden="true" />
-                    ) : (
-                      <Upload size={14} aria-hidden="true" />
-                    )}
-                      {busy ? t("doc.uploading") : done ? t("doc.replace") : t("doc.upload")}
-                  </button>
+                  <ShieldCheck size={19} aria-hidden="true" />
+                </span>
+                <div>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0B1E3D" }}>
+                    {t("profile.driver_details")} &amp; {t("profile.documents").toLowerCase()}
+                  </p>
+                  <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "#5A6A7A" }}>
+                    {t("verification.section_hint")}
+                  </p>
                 </div>
-              );
-            })}
-          </div>
-        </Section>
-
-        {/* Submit for review */}
-        {verificationStatus === "incomplete" && (
-          <div style={{ ...cardStyle, marginTop: 4 }}>
-            <p style={{ margin: 0, fontSize: 13, color: "#5A6A7A" }}>
-              {t("profile.subtitle")}
-            </p>
-            {!canSubmit && (
-              <p
+              </div>
+              <span
                 style={{
-                  margin: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "3px 10px",
+                  borderRadius: 20,
                   fontSize: 12,
-                  color: "#E65100",
-                  padding: "6px 10px",
-                  background: "#FFF3E0",
-                  borderRadius: 8,
+                  fontWeight: 600,
+                  background: statusCfg.bg,
+                  color: statusCfg.color,
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
                 }}
               >
-                {t("profile.complete_details_start")}
-                {detailsPct}
-                {t("profile.complete_details_middle")}
-                {docsPct}
-                {t("profile.complete_details_end")}
-              </p>
-            )}
-            {submitMsg && (
-              <p
-                role="status"
-                aria-live="polite"
-                style={{
-                  fontSize: 13,
-                  margin: 0,
-                  color: submitMsg.ok ? "#27AE60" : "#e74c3c",
-                }}
-              >
-                {submitMsg.text}
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={submitForReview}
-              disabled={submitting || !canSubmit}
-              style={saveButtonStyle(submitting || !canSubmit)}
+                {statusCfg.label}
+              </span>
+            </div>
+
+            <Link
+              href="/profile/verification"
+              style={{
+                ...saveButtonStyle(false),
+                textDecoration: "none",
+                alignSelf: "stretch",
+                justifyContent: "center",
+              }}
             >
-              {submitting ? (
-                <Loader2 size={16} className="spin" aria-hidden="true" />
-              ) : (
-                <Check size={16} aria-hidden="true" />
-              )}
-              {submitting ? t("action.submitting") : t("profile.submit_review")}
-            </button>
+              {verificationCta}
+              {dir === "rtl" ? <ArrowLeft size={16} aria-hidden="true" /> : <ArrowRight size={16} aria-hidden="true" />}
+            </Link>
           </div>
-        )}
-
-        <Section title={t("profile.change_password")}>
-          <ChangePasswordSection />
         </Section>
+          </div>
 
-        <SavedAddressesSection initialAddresses={initialSavedAddresses} />
+          <div>
+            <p
+              style={{
+                margin: "0 0 12px",
+                fontSize: 12,
+                fontWeight: 800,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: "#00877A",
+              }}
+            >
+              {t("profile.account_section")}
+            </p>
+            <ChangePasswordSection />
+            <div style={{ marginTop: 20 }}>
+              <ReferralCard />
+            </div>
+            <div style={{ marginTop: 20 }}>
+              <SavedAddressesSection initialAddresses={initialSavedAddresses} />
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   );

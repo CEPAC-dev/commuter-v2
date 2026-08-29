@@ -67,7 +67,6 @@ export default function ReferralCard() {
   return (
     <section
       style={{
-        marginTop: 20,
         background: "#ffffff",
         border: "1px solid #eef0f3",
         borderRadius: 16,

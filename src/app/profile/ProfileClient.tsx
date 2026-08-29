@@ -36,7 +36,7 @@ export default function ProfileClient({
   initialSavedAddresses,
 }: Props) {
   const router = useRouter();
-  const { t, dir } = useClientLocale();
+  const { t, dir, locale } = useClientLocale();
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
   const [region, setRegion] = useState<RegionKey>(
@@ -53,6 +53,7 @@ export default function ProfileClient({
   // No region stored yet → derive it once from the browser's location fix.
   useEffect(() => {
     if (initialRegion || !navigator.geolocation) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- shows a loading flag while the async geolocation fix resolves
     setDetectingRegion(true);
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
@@ -162,10 +163,19 @@ export default function ProfileClient({
     <div style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
       <AppHeader authed email={email} variant="app" backHref="/" />
 
-      <main
-        dir={dir}
-        style={{ maxWidth: 520, margin: "0 auto", padding: "32px 20px 48px" }}
-      >
+      <style>{`
+        .profile-shell { max-width: 520px; margin: 0 auto; padding: 32px 20px 48px; }
+        .profile-columns { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
+        /* Grid items default to min-width:auto, which lets form controls' UA min-content size
+           force the track (and page) wider than the viewport. Force them shrinkable. */
+        .profile-columns > * { min-width: 0; }
+        @media (min-width: 900px) {
+          .profile-shell { max-width: 960px; padding: 44px 32px 72px; }
+          .profile-columns { grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; }
+        }
+      `}</style>
+
+      <main dir={dir} className="profile-shell">
         {/* Avatar + name */}
         <div
           style={{
@@ -182,67 +192,89 @@ export default function ProfileClient({
             style={{ display: "none" }}
             onChange={handlePicChange}
           />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            aria-label={t("profile.change_picture")}
-            className="group"
-            style={{
-              position: "relative",
-              width: 96,
-              height: 96,
-              borderRadius: "50%",
-              background: "#00C2A8",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-              overflow: "hidden",
-              border: "none",
-              padding: 0,
-              cursor: uploading ? "default" : "pointer",
-            }}
-          >
-            {profilePic ? (
-              <img
-                src={profilePic}
-                alt={t("profile.profile_alt")}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                }}
-              />
-            ) : (
-              <User size={48} color="#fff" aria-hidden="true" />
-            )}
-            <div
-              className="group-hover:opacity-100"
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              aria-label={t("profile.change_picture")}
+              className="group"
               style={{
-                position: "absolute",
-                inset: 0,
-                background: "rgba(11,30,61,0.5)",
+                position: "relative",
+                width: 104,
+                height: 104,
+                borderRadius: "50%",
+                background: "#00C2A8",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                opacity: uploading ? 1 : 0,
-                transition: "opacity 0.15s",
+                flexShrink: 0,
+                overflow: "hidden",
+                border: "3px solid #ffffff",
+                boxShadow: "0 0 0 1px #e8edf0, 0 8px 20px rgba(11,30,61,0.1)",
+                padding: 0,
+                cursor: uploading ? "default" : "pointer",
               }}
             >
-              {uploading ? (
-                <Loader2
-                  size={22}
-                  color="#fff"
-                  className="animate-spin"
-                  aria-hidden="true"
+              {profilePic ? (
+                <img
+                  src={profilePic}
+                  alt={t("profile.profile_alt")}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
                 />
               ) : (
-                <Camera size={22} color="#fff" aria-hidden="true" />
+                <User size={48} color="#fff" aria-hidden="true" />
               )}
-            </div>
-          </button>
-          <div>
+              <div
+                className="group-hover:opacity-100"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "rgba(11,30,61,0.5)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: uploading ? 1 : 0,
+                  transition: "opacity 0.15s",
+                }}
+              >
+                {uploading ? (
+                  <Loader2
+                    size={22}
+                    color="#fff"
+                    className="animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Camera size={22} color="#fff" aria-hidden="true" />
+                )}
+              </div>
+            </button>
+            <span
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                bottom: 0,
+                right: 0,
+                width: 26,
+                height: 26,
+                borderRadius: "50%",
+                background: "#0B1E3D",
+                border: "2px solid #ffffff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                pointerEvents: "none",
+              }}
+            >
+              <Camera size={12} color="#fff" />
+            </span>
+          </div>
+          <div style={{ minWidth: 0 }}>
             <p
               style={{
                 margin: "0 0 2px",
@@ -254,12 +286,15 @@ export default function ProfileClient({
             >
               {initialName}
             </p>
-            <p style={{ margin: 0, fontSize: 13, color: "#5A6A7A" }}>
-              #{userNumber} · {email}
+            <p style={{ margin: 0, fontSize: 13, color: "#5A6A7A", overflowWrap: "anywhere" }}>
+              #{userNumber}
+              {email ? ` · ${email}` : ""}
             </p>
           </div>
         </div>
 
+        <div className="profile-columns">
+          <div>
         {/* Form card */}
         <form
           onSubmit={handleSave}
@@ -308,7 +343,8 @@ export default function ProfileClient({
                 aria-hidden="true"
                 style={{
                   position: "absolute",
-                  left: 14,
+                  left: dir === "rtl" ? undefined : 14,
+                  right: dir === "rtl" ? 14 : undefined,
                   top: "50%",
                   transform: "translateY(-50%)",
                   color: "#9aa8b5",
@@ -324,9 +360,10 @@ export default function ProfileClient({
                 onChange={(e) => setName(e.target.value)}
                 style={{
                   width: "100%",
+                  minWidth: 0,
                   height: 48,
-                  paddingLeft: 38,
-                  paddingRight: 14,
+                  paddingLeft: dir === "rtl" ? 14 : 38,
+                  paddingRight: dir === "rtl" ? 38 : 14,
                   border: "1.5px solid #d0d8e0",
                   borderRadius: 10,
                   fontSize: 15,
@@ -363,7 +400,8 @@ export default function ProfileClient({
                 aria-hidden="true"
                 style={{
                   position: "absolute",
-                  left: 14,
+                  left: dir === "rtl" ? undefined : 14,
+                  right: dir === "rtl" ? 14 : undefined,
                   top: "50%",
                   transform: "translateY(-50%)",
                   color: "#9aa8b5",
@@ -378,9 +416,10 @@ export default function ProfileClient({
                 aria-readonly="true"
                 style={{
                   width: "100%",
+                  minWidth: 0,
                   height: 48,
-                  paddingLeft: 38,
-                  paddingRight: 14,
+                  paddingLeft: dir === "rtl" ? 14 : 38,
+                  paddingRight: dir === "rtl" ? 38 : 14,
                   border: "1.5px solid #eef0f3",
                   borderRadius: 10,
                   fontSize: 15,
@@ -505,7 +544,8 @@ export default function ProfileClient({
                 aria-hidden="true"
                 style={{
                   position: "absolute",
-                  left: 14,
+                  left: dir === "rtl" ? undefined : 14,
+                  right: dir === "rtl" ? 14 : undefined,
                   top: "50%",
                   transform: "translateY(-50%)",
                   color: "#9aa8b5",
@@ -518,9 +558,10 @@ export default function ProfileClient({
                 onChange={(e) => setRegion(e.target.value as RegionKey)}
                 style={{
                   width: "100%",
+                  minWidth: 0,
                   height: 48,
-                  paddingLeft: 38,
-                  paddingRight: 14,
+                  paddingLeft: dir === "rtl" ? 14 : 38,
+                  paddingRight: dir === "rtl" ? 38 : 14,
                   border: "1.5px solid #d0d8e0",
                   borderRadius: 10,
                   fontSize: 15,
@@ -534,7 +575,7 @@ export default function ProfileClient({
               >
                 {REGION_LIST.map((r) => (
                   <option key={r.key} value={r.key}>
-                    {r.label}
+                    {locale === "ar" ? r.labelAr : r.label}
                   </option>
                 ))}
               </select>
@@ -627,25 +668,13 @@ export default function ProfileClient({
           </button>
         </form>
 
-        {/* Nav links */}
+        <div style={{ marginTop: 20 }}>
+          <ChangePasswordSection />
+        </div>
+
         <div
           style={{ display: "flex", gap: 12, marginTop: 20, flexWrap: "wrap" }}
         >
-          {/* <Link
-            href="/my-trips"
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: "#0B1E3D",
-              textDecoration: "none",
-              padding: "10px 18px",
-              background: "#fff",
-              border: "1.5px solid #eef0f3",
-              borderRadius: 10,
-            }}
-          >
-            My requests →
-          </Link> */}
           <Link
             href="/create"
             style={{
@@ -662,14 +691,27 @@ export default function ProfileClient({
             {t("profile.book_a_ride")}
           </Link>
         </div>
+          </div>
 
-        <div style={{ marginTop: 20 }}>
-          <ChangePasswordSection />
+          <div>
+            <p
+              style={{
+                margin: "0 0 12px",
+                fontSize: 12,
+                fontWeight: 800,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: "#00877A",
+              }}
+            >
+              {t("profile.account_section")}
+            </p>
+            <ReferralCard />
+            <div style={{ marginTop: 20 }}>
+              <SavedAddressesSection initialAddresses={initialSavedAddresses} />
+            </div>
+          </div>
         </div>
-
-        <ReferralCard />
-
-        <SavedAddressesSection initialAddresses={initialSavedAddresses} />
       </main>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

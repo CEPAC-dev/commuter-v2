@@ -5,6 +5,7 @@ import { User } from "@/models/User";
 import { nextSequence } from "@/models/Counter";
 import { Driver } from "@/models/Driver";
 import { createSession } from "@/lib/auth/session";
+import { generateReferralCode } from "@/lib/referral";
 import {
   isStrongPassword,
   normalizeEgyptPhone,
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const userNumber = await nextSequence("userNumber");
+    const referralCode = await generateReferralCode();
 
     console.log("Phase 5: Password hashed. Proceeding to create user.");
 
@@ -101,6 +103,7 @@ export async function POST(req: NextRequest) {
       passwordHash,
       email: email?.trim() ? email.toLowerCase().trim() : undefined,
       role: "driver",
+      referralCode,
     });
 
     console.log("Driver user created:", user);

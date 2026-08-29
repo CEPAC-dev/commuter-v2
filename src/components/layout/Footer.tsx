@@ -186,19 +186,7 @@ export default function Footer() {
           <p style={{ fontSize: 13, margin: 0, color: "rgba(255,255,255,0.4)" }}>
             {t("footer.copyright", { year: year.toString() })}
           </p>
-          <p
-            style={{
-              fontSize: 13,
-              margin: 0,
-              color: "rgba(255,255,255,0.4)",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            {t("footer.built_for")}
-            <span aria-hidden="true">🇪🇬</span>
-          </p>
+          
         </div>
       </div>
 
