@@ -17,12 +17,23 @@ type StationRecord = {
   popupInfo?: string;
 };
 
+function currentLocalDateTime() {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
 export default function OperationConsole() {
   const [matchDate, setMatchDate] = useState("");
   const [matrixProvider, setMatrixProvider] = useState("osrm");
   const [valhallaCosting, setValhallaCosting] = useState("auto");
   const [valhallaDateTimeType, setValhallaDateTimeType] = useState("current");
   const [valhallaDateTime, setValhallaDateTime] = useState("");
+  const [travelTimeTransportation, setTravelTimeTransportation] =
+    useState("driving");
+  const [travelTimeDepartureTime, setTravelTimeDepartureTime] = useState(
+    currentLocalDateTime,
+  );
   const [availabilityDate, setAvailabilityDate] = useState("");
   const [loadingMatchData, setLoadingMatchData] = useState(false);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
@@ -213,6 +224,16 @@ export default function OperationConsole() {
         if (valhallaDateTimeType !== "current" && valhallaDateTime) {
           target.searchParams.set("valhallaDateTime", valhallaDateTime);
         }
+      }
+      if (matrixProvider === "traveltime") {
+        target.searchParams.set(
+          "travelTimeTransportation",
+          travelTimeTransportation,
+        );
+        target.searchParams.set(
+          "travelTimeDepartureTime",
+          new Date(travelTimeDepartureTime).toISOString(),
+        );
       }
 
       const response = await fetch(target.toString());
@@ -858,6 +879,69 @@ export default function OperationConsole() {
                   />
                 </label>
               ) : null}
+            </>
+          ) : null}
+          {matrixProvider === "traveltime" ? (
+            <>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 180,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Transportation type
+                </span>
+                <select
+                  value={travelTimeTransportation}
+                  onChange={(event) =>
+                    setTravelTimeTransportation(event.target.value)
+                  }
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="driving">Driving</option>
+                  <option value="walking">Walking</option>
+                  <option value="cycling">Cycling</option>
+                </select>
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 220,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Departure time
+                </span>
+                <input
+                  value={travelTimeDepartureTime}
+                  onChange={(event) =>
+                    setTravelTimeDepartureTime(event.target.value)
+                  }
+                  type="datetime-local"
+                  required
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                  }}
+                />
+              </label>
             </>
           ) : null}
           <button

@@ -10,6 +10,8 @@ const WalletSchema = new Schema(
       index: true,
     },
     balanceEgp: { type: Number, required: true, default: 0, min: 0 },
+    // Funds held for in-flight mixed payments; available = balanceEgp - reservedBalanceEgp.
+    reservedBalanceEgp: { type: Number, required: true, default: 0, min: 0 },
     totalCreditedEgp: { type: Number, required: true, default: 0 },
     totalDebitedEgp: { type: Number, required: true, default: 0 },
     status: {

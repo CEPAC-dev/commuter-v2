@@ -353,6 +353,22 @@ export async function GET(req: NextRequest) {
   const valhallaDateTime = req.nextUrl.searchParams
     .get("valhallaDateTime")
     ?.trim();
+  const requestedTravelTimeTransportation = req.nextUrl.searchParams.get(
+    "travelTimeTransportation",
+  );
+  const travelTimeTransportation =
+    requestedTravelTimeTransportation === "walking" ||
+    requestedTravelTimeTransportation === "cycling"
+      ? requestedTravelTimeTransportation
+      : "driving";
+  const requestedTravelTimeDepartureTime = req.nextUrl.searchParams
+    .get("travelTimeDepartureTime")
+    ?.trim();
+  const travelTimeDepartureTime =
+    requestedTravelTimeDepartureTime &&
+    !Number.isNaN(Date.parse(requestedTravelTimeDepartureTime))
+      ? requestedTravelTimeDepartureTime
+      : new Date().toISOString();
 
   const privateTrips = await Trip.find({
     date: targetDate,
@@ -692,6 +708,10 @@ export async function GET(req: NextRequest) {
         costing: valhallaCosting,
         dateTimeType: valhallaDateTimeType,
         dateTime: valhallaDateTime || undefined,
+      },
+      travelTime: {
+        transportation: travelTimeTransportation,
+        departureTime: travelTimeDepartureTime,
       },
     },
   );

@@ -46,6 +46,9 @@ const UserSchema = new Schema(
       index: true,
     },
     savedAddresses: { type: [SavedAddressSchema], default: [] },
+    // Fine-grained admin permissions (e.g. "transactions.view"). Empty/absent
+    // for role=admin = full access (backward compat with pre-permission admins).
+    permissions: { type: [String], default: [] },
     referralCode: { type: String, unique: true, sparse: true, index: true },
     referredBy: { type: Types.ObjectId, ref: "User", default: null },
   },

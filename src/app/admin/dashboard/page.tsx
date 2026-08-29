@@ -8,7 +8,14 @@ import { Availability } from "@/models/Availability";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import LanguageToggle from "@/components/layout/LanguageToggle";
 import MatchRideForm from "@/components/admin/MatchRideForm";
-import { ShieldCheck, Users, Route, CalendarClock, ArrowUpRight, Car } from "lucide-react";
+import {
+  ShieldCheck,
+  Users,
+  Route,
+  CalendarClock,
+  ArrowUpRight,
+  Car,
+} from "lucide-react";
 
 export default async function AdminDashboardPage() {
   const session = await getSession();
@@ -16,18 +23,47 @@ export default async function AdminDashboardPage() {
   if (session.role !== "admin") redirect("/admin/signup");
 
   await connectDB();
-  const [userCount, tripCount, rideCount, availabilityCount] = await Promise.all([
-    User.countDocuments(),
-    Trip.countDocuments(),
-    Ride.countDocuments(),
-    Availability.countDocuments(),
-  ]);
+  const [userCount, tripCount, rideCount, availabilityCount] =
+    await Promise.all([
+      User.countDocuments(),
+      Trip.countDocuments(),
+      Ride.countDocuments(),
+      Availability.countDocuments(),
+    ]);
 
   const cards = [
-    { title: "Users", value: userCount, icon: Users, accent: "#00C2A8", accentDeep: "#00877A", href: "/admin/users" },
-    { title: "Rides", value: rideCount, icon: Car, accent: "#00877A", accentDeep: "#00877A", href: "/admin/rides" },
-    { title: "Trips", value: tripCount, icon: Route, accent: "#0B1E3D", accentDeep: "#0B1E3D", href: "/admin/trips" },
-    { title: "Availability", value: availabilityCount, icon: CalendarClock, accent: "#E8A33D", accentDeep: "#B4790C", href: "/admin/availability" },
+    {
+      title: "Users",
+      value: userCount,
+      icon: Users,
+      accent: "#00C2A8",
+      accentDeep: "#00877A",
+      href: "/admin/users",
+    },
+    {
+      title: "Rides",
+      value: rideCount,
+      icon: Car,
+      accent: "#00877A",
+      accentDeep: "#00877A",
+      href: "/admin/rides",
+    },
+    {
+      title: "Trips",
+      value: tripCount,
+      icon: Route,
+      accent: "#0B1E3D",
+      accentDeep: "#0B1E3D",
+      href: "/admin/trips",
+    },
+    {
+      title: "Availability",
+      value: availabilityCount,
+      icon: CalendarClock,
+      accent: "#E8A33D",
+      accentDeep: "#B4790C",
+      href: "/admin/availability",
+    },
   ];
 
   const [availabilities, drivers, trips] = await Promise.all([
@@ -39,8 +75,13 @@ export default async function AdminDashboardPage() {
       .select("_id name phone email")
       .sort({ name: 1 })
       .lean(),
-    Trip.find({ status: { $in: ["submitted", "pending_payment", "matched"] }, paymentStatus: "paid" })
-      .select("_id tripNumber date pickupTime arrivalTime pickup dropoff pickupStation dropoffStation vehicleType rideType priceEgp numberOfPassengers userId")
+    Trip.find({
+      status: { $in: ["submitted", "pending_payment", "matched"] },
+      paymentStatus: "paid",
+    })
+      .select(
+        "_id tripNumber date pickupTime arrivalTime pickup dropoff pickupStation dropoffStation vehicleType rideType priceEgp numberOfPassengers userId",
+      )
       .sort({ date: 1, pickupTime: 1 })
       .lean(),
   ]);
@@ -52,6 +93,7 @@ export default async function AdminDashboardPage() {
     { label: "Manage availability", href: "/admin/availability" },
     { label: "Referral settings", href: "/admin/referral-settings" },
     { label: "Promo codes", href: "/admin/promo-codes" },
+    { label: "Transactions", href: "/admin/transactions" },
   ];
 
   const now = new Date();
@@ -207,20 +249,69 @@ export default async function AdminDashboardPage() {
       `}</style>
 
       <div style={{ maxWidth: 1120, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-              <p className="mono" style={{ margin: 0, fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "#00877A" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <p
+                className="mono"
+                style={{
+                  margin: 0,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "#00877A",
+                }}
+              >
                 Admin · Overview
               </p>
-              <span className="live-pill"><span className="live-dot" />Live</span>
+              <span className="live-pill">
+                <span className="live-dot" />
+                Live
+              </span>
             </div>
-            <h1 className="display" style={{ margin: 0, fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 700, color: "#0B1E3D" }}>
+            <h1
+              className="display"
+              style={{
+                margin: 0,
+                fontSize: "clamp(28px, 4vw, 38px)",
+                fontWeight: 700,
+                color: "#0B1E3D",
+              }}
+            >
               Dashboard
             </h1>
-            <p className="mono" style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5A6A7A" }}>{stamp}</p>
+            <p
+              className="mono"
+              style={{ margin: "6px 0 0", fontSize: 12.5, color: "#5A6A7A" }}
+            >
+              {stamp}
+            </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
             <LanguageToggle />
             <a href="/admin/operation" className="top-link">
               Operation <ArrowUpRight size={15} />
@@ -234,25 +325,92 @@ export default async function AdminDashboardPage() {
 
         <div className="route-rule" aria-hidden="true" />
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 18 }}>
-          {cards.map(({ title, value, icon: Icon, accent, accentDeep, href }) => (
-            <a key={title} href={href} className="stat-card">
-              <span className="rail" style={{ background: accent }} />
-              <ArrowUpRight size={16} className="go" />
-              <div style={{ width: 46, height: 46, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", background: `${accent}1F`, marginBottom: 18 }}>
-                <Icon size={22} style={{ color: accentDeep }} />
-              </div>
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#5A6A7A", textTransform: "uppercase", letterSpacing: "0.05em" }}>{title}</p>
-              <h2 className="mono" style={{ margin: "8px 0 0", fontSize: 32, fontWeight: 600, color: "#0B1E3D" }}>{value}</h2>
-              <p className="foot">Tap to manage {title.toLowerCase()}</p>
-            </a>
-          ))}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 18,
+          }}
+        >
+          {cards.map(
+            ({ title, value, icon: Icon, accent, accentDeep, href }) => (
+              <a key={title} href={href} className="stat-card">
+                <span className="rail" style={{ background: accent }} />
+                <ArrowUpRight size={16} className="go" />
+                <div
+                  style={{
+                    width: 46,
+                    height: 46,
+                    borderRadius: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: `${accent}1F`,
+                    marginBottom: 18,
+                  }}
+                >
+                  <Icon size={22} style={{ color: accentDeep }} />
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#5A6A7A",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  {title}
+                </p>
+                <h2
+                  className="mono"
+                  style={{
+                    margin: "8px 0 0",
+                    fontSize: 32,
+                    fontWeight: 600,
+                    color: "#0B1E3D",
+                  }}
+                >
+                  {value}
+                </h2>
+                <p className="foot">Tap to manage {title.toLowerCase()}</p>
+              </a>
+            ),
+          )}
         </div>
 
-        <div style={{ background: "#ffffff", border: "1px solid #E6EAEC", borderRadius: 18, boxShadow: "0 10px 35px rgba(11,30,61,0.05)", padding: 24, marginTop: 20, borderTop: "3px solid #00C2A8" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid #E6EAEC",
+            borderRadius: 18,
+            boxShadow: "0 10px 35px rgba(11,30,61,0.05)",
+            padding: 24,
+            marginTop: 20,
+            borderTop: "3px solid #00C2A8",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 14,
+            }}
+          >
             <ShieldCheck size={20} style={{ color: "#00877A" }} />
-            <h2 className="display" style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#0B1E3D" }}>Admin tools</h2>
+            <h2
+              className="display"
+              style={{
+                margin: 0,
+                fontSize: 17,
+                fontWeight: 700,
+                color: "#0B1E3D",
+              }}
+            >
+              Admin tools
+            </h2>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {tools.map((tool) => (
