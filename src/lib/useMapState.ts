@@ -45,6 +45,8 @@ export function useMapState() {
       destination.lat === 0 ||
       destination.lng === 0
     ) {
+      // Clear state for invalid inputs
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRoutes([]);
       setLoading(false);
       setError(null);

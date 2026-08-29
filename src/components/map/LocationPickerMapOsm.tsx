@@ -45,7 +45,6 @@ export default function LocationPickerMapOsm({
   onChange,
   error,
 }: Props) {
-  const { t } = useClientLocale();
   const [map, setMap] = useState<L.Map | null>(null);
   const [query, setQuery] = useState(name);
   const [results, setResults] = useState<
@@ -57,12 +56,31 @@ export default function LocationPickerMapOsm({
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const marker = lat && lng ? { lat: Number(lat), lng: Number(lng) } : null;
 
+  // Sync query with name prop
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setQuery(name), [name]);
   useEffect(
     () => () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     },
     [],
+  );
+
+  const setPoint = useCallback(
+    async (newLat: number, newLng: number, moveMap = true) => {
+      if (!inCairo(newLat, newLng)) {
+        setOutOfBounds(true);
+        return;
+      }
+      setOutOfBounds(false);
+      const address =
+        formatDisplayName(await reverseGeocode(newLat, newLng)) ||
+        `${newLat.toFixed(5)}, ${newLng.toFixed(5)}`;
+      setQuery(address);
+      onChange(newLat.toFixed(6), newLng.toFixed(6), address);
+      if (moveMap) map?.setView([newLat, newLng], 15);
+    },
+    [map, onChange],
   );
 
   useEffect(() => {
@@ -82,24 +100,7 @@ export default function LocationPickerMapOsm({
     return () => {
       layer.remove();
     };
-  }, [map, lat, lng]);
-
-  const setPoint = useCallback(
-    async (newLat: number, newLng: number, moveMap = true) => {
-      if (!inCairo(newLat, newLng)) {
-        setOutOfBounds(true);
-        return;
-      }
-      setOutOfBounds(false);
-      const address =
-        formatDisplayName(await reverseGeocode(newLat, newLng)) ||
-        `${newLat.toFixed(5)}, ${newLng.toFixed(5)}`;
-      setQuery(address);
-      onChange(newLat.toFixed(6), newLng.toFixed(6), address);
-      if (moveMap) map?.setView([newLat, newLng], 15);
-    },
-    [map, onChange],
-  );
+  }, [map, marker, setPoint]);
 
   const handleSearch = (value: string) => {
     setQuery(value);

@@ -10,7 +10,7 @@ import {
 import { PromoCode } from "@/models/PromoCode";
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();
@@ -28,7 +28,9 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(safeLimit)
-      .select("code discountType discountValue maxUses usedCount expiresAt isActive createdAt")
+      .select(
+        "code discountType discountValue maxUses usedCount expiresAt isActive createdAt",
+      )
       .lean(),
     PromoCode.countDocuments(),
   ]);
@@ -42,7 +44,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   let body: {
@@ -77,7 +79,10 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  if (discountType === "percentage" && (discountValue < 0 || discountValue > 100)) {
+  if (
+    discountType === "percentage" &&
+    (discountValue < 0 || discountValue > 100)
+  ) {
     return NextResponse.json(
       { error: "Discount percentage must be between 0 and 100." },
       { status: 400 },
@@ -128,7 +133,9 @@ export async function POST(req: NextRequest) {
   }
 
   await connectDB();
-  const code = customCode ? normalizePromoCode(customCode) : await generatePromoCode();
+  const code = customCode
+    ? normalizePromoCode(customCode)
+    : await generatePromoCode();
 
   try {
     const promoCode = await PromoCode.create({

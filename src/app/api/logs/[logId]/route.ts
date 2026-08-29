@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Log } from "@/models/Log";
 import { getSession } from "@/lib/auth/session";
+import { adminAuth } from "@/lib/middleware/adminAuth";
 
 /**
  * GET /api/logs/:logId
@@ -12,11 +13,25 @@ export async function GET(
   { params }: { params: Promise<{ logId: string }> },
 ) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
+
     await connectDB();
 
     const { logId } = await params;
-
-    const log = await Log.findById(logId).lean();
+    const ownershipFilter =
+      session.role === "admin"
+        ? { _id: logId }
+        : {
+            _id: logId,
+            $or: [{ userId: session.userId }, { driverId: session.userId }],
+          };
+    const log = await Log.findOne(ownershipFilter).lean();
 
     if (!log) {
       return NextResponse.json(
@@ -44,21 +59,8 @@ export async function DELETE(
   { params }: { params: Promise<{ logId: string }> },
 ) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 },
-      );
-    }
-
-    // Optional: Add admin check if needed
-    // if (session.user?.role !== "admin") {
-    //   return NextResponse.json(
-    //     { success: false, error: "Forbidden" },
-    //     { status: 403 }
-    //   );
-    // }
+    const auth = await adminAuth();
+    if (!auth.authorized) return auth.response;
 
     await connectDB();
 

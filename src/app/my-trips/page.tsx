@@ -9,6 +9,8 @@ import {
   Route,
   Users,
   Phone,
+  ShieldCheck,
+  ArrowDown,
 } from "lucide-react";
 import { getServerLocale } from "@/lib/i18n/server";
 import { translate, formatDate, formatTime, formatEgp, toArabicDigits, formatDistanceKm, formatMinutes } from "@/lib/i18n";
@@ -27,6 +29,7 @@ import Pagination from "@/components/shared/Pagination";
 import type { BookingStatus, RideListRow, TripListRow } from "@/types/booking";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import RateTripModal from "@/components/trips/RateTripModal";
+import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 
 export const metadata = { title: "My trips — Commuter" };
 export const dynamic = "force-dynamic";
@@ -145,14 +148,16 @@ function SharedSummaryCard({
   arrivalTime: string;
 }) {
   const carLine = [driver?.carBrand, driver?.carModel].filter(Boolean).join(" ");
+  const avatarUrl = driver?.profilePicture ?? driver?.profilePic;
 
   return (
     <div
       style={{
-        background: "linear-gradient(135deg, #F6FBFA 0%, #EEFBF8 100%)",
-        border: "1px solid #D6F5EE",
+        background: "#fff",
+        border: "1px solid #DDF0EC",
         borderRadius: 16,
         overflow: "hidden",
+        boxShadow: "0 2px 8px rgba(11,30,61,0.04)",
       }}
     >
       {/* Driver identity row */}
@@ -162,43 +167,50 @@ function SharedSummaryCard({
           alignItems: "center",
           gap: 12,
           padding: "14px 16px",
+          background: "linear-gradient(135deg, #F2FAF8 0%, #FFFFFF 100%)",
+          borderBottom: "1px solid #E8F5F2",
         }}
       >
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: "50%",
-            flexShrink: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "#0B1E3D",
-            color: "#fff",
-            fontWeight: 800,
-            fontSize: 16,
-          }}
-          aria-hidden="true"
-        >
-          {driverInitials(driver?.name) || <Car size={18} />}
-        </div>
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={avatarUrl}
+            alt={driver?.name ?? translate(locale, "my_trips.driver_fallback")}
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "50%",
+              objectFit: "cover",
+              flexShrink: 0,
+              border: "2px solid #00C2A8",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "50%",
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "linear-gradient(135deg, #00C2A8 0%, #0B1E3D 100%)",
+              color: "#fff",
+              fontWeight: 800,
+              fontSize: 15,
+            }}
+            aria-hidden="true"
+          >
+            {driverInitials(driver?.name) || <Car size={18} />}
+          </div>
+        )}
+
         <div style={{ minWidth: 0, flex: 1 }}>
           <p
             style={{
               margin: 0,
-              fontSize: 10,
-              fontWeight: 700,
-              color: "#00806E",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-            }}
-          >
-            {translate(locale, "my_trips.driver_heading")}
-          </p>
-          <p
-            style={{
-              margin: "2px 0 0",
-              fontSize: 15,
+              fontSize: 14.5,
               fontWeight: 800,
               color: "#0B1E3D",
               overflow: "hidden",
@@ -208,27 +220,55 @@ function SharedSummaryCard({
           >
             {driver?.name ?? translate(locale, "my_trips.driver_fallback")}
           </p>
-          {(carLine || driver?.plate) && (
-            <p
-              style={{
-                margin: "2px 0 0",
-                fontSize: 12,
-                fontWeight: 600,
-                color: "#5A6A7A",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {carLine}
-              {carLine && driver?.plate ? " · " : ""}
-              {driver?.plate ?? ""}
-            </p>
-          )}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginTop: 3,
+              flexWrap: "wrap",
+            }}
+          >
+            {carLine && (
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "#5A6A7A",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {carLine}
+              </span>
+            )}
+            {driver?.plate && (
+              <span
+                style={{
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  padding: "1px 7px",
+                  borderRadius: 6,
+                  background: "#fff",
+                  border: "1px solid #CBE9E2",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: "#0B1E3D",
+                  letterSpacing: "0.06em",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {driver.plate}
+              </span>
+            )}
+          </div>
         </div>
+
         {driver?.phone && (
           <div
             aria-label={translate(locale, "auth.driver.phone")}
+            title={driver.phone}
             style={{
               flexShrink: 0,
               width: 36,
@@ -237,25 +277,21 @@ function SharedSummaryCard({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: "#fff",
-              border: "1px solid #CBE9E2",
-              color: "#00806E",
+              background: "#00C2A8",
+              color: "#0B1E3D",
+              boxShadow: "0 2px 6px rgba(0,194,168,0.25)",
+              userSelect: "none",
             }}
           >
-            <Phone size={16} aria-hidden="true" />
+            <Phone size={15} aria-hidden="true" />
           </div>
         )}
       </div>
 
       {/* Route timeline */}
-      <div
-        style={{
-          padding: "12px 16px",
-          borderTop: "1px solid #D6F5EE",
-          background: "rgba(255,255,255,0.55)",
-        }}
-      >
-        <div style={{ display: "flex", gap: 10 }}>
+      <div style={{ padding: "14px 16px" }}>
+        <div style={{ display: "flex", gap: 12 }}>
+          {/* Vertical indicator line */}
           <div
             style={{
               display: "flex",
@@ -267,106 +303,175 @@ function SharedSummaryCard({
           >
             <span
               style={{
-                width: 9,
-                height: 9,
+                width: 10,
+                height: 10,
                 borderRadius: "50%",
                 background: "#00C2A8",
                 flexShrink: 0,
+                boxShadow: "0 0 0 3px #E8F8F5",
               }}
             />
             <span
               style={{
                 width: 2,
                 flex: 1,
-                minHeight: 22,
-                background: "#D6F5EE",
-                margin: "3px 0",
+                minHeight: 28,
+                background: "repeating-linear-gradient(180deg, #CBE9E2 0 4px, transparent 4px 8px)",
+                margin: "4px 0",
               }}
             />
             <span
               style={{
-                width: 9,
-                height: 9,
+                width: 10,
+                height: 10,
                 borderRadius: 3,
                 background: "#E74C3C",
                 flexShrink: 0,
+                boxShadow: "0 0 0 3px #FDECEA",
               }}
             />
           </div>
-          <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 16 }}>
-            <div>
-              <p
+
+          {/* Points list */}
+          <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 14 }}>
+            {/* Pickup */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: "#00806E",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  {translate(locale, "pickup")}
+                </span>
+                <p
+                  style={{
+                    margin: "2px 0 0",
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    color: "#0B1E3D",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {pickupPoint}
+                </p>
+              </div>
+              <span
                 style={{
-                  margin: 0,
-                  fontSize: 13,
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 8px",
+                  borderRadius: 8,
+                  background: "#E8F8F5",
+                  color: "#00806E",
+                  fontSize: 12,
                   fontWeight: 700,
-                  color: "#0B1E3D",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {pickupPoint}
-              </p>
-              <p style={{ margin: "2px 0 0", fontSize: 12, color: "#5A6A7A" }}>
+                <Clock size={11} aria-hidden="true" />
                 {departureTime}
-              </p>
+              </span>
             </div>
-            <div>
-              <p
+
+            {/* Dropoff */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: "#E74C3C",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  {translate(locale, "dropoff")}
+                </span>
+                <p
+                  style={{
+                    margin: "2px 0 0",
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    color: "#0B1E3D",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {dropoffPoint}
+                </p>
+              </div>
+              <span
                 style={{
-                  margin: 0,
-                  fontSize: 13,
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 8px",
+                  borderRadius: 8,
+                  background: "#FDECEA",
+                  color: "#C0392B",
+                  fontSize: 12,
                   fontWeight: 700,
-                  color: "#0B1E3D",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {dropoffPoint}
-              </p>
-              <p style={{ margin: "2px 0 0", fontSize: 12, color: "#5A6A7A" }}>
+                <Clock size={11} aria-hidden="true" />
                 {arrivalTime}
-              </p>
+              </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Passengers + fare */}
+      {/* Passengers footer */}
       <div
         style={{
+          padding: "10px 16px",
+          background: "#FAFCFB",
+          borderTop: "1px solid #E8F5F2",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 8,
-          padding: "10px 16px",
-          borderTop: "1px solid #D6F5EE",
         }}
       >
         <span
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: 5,
+            gap: 6,
             fontSize: 12,
             fontWeight: 600,
             color: "#5A6A7A",
           }}
         >
-          <Users size={13} aria-hidden="true" />
+          <Users size={13} color="#00806E" aria-hidden="true" />
           {totalPersons} {totalPersons === 1 ? translate(locale, "my_trips.passenger_singular") : translate(locale, "my_trips.passenger_plural")}
-        </span>
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 800,
-            color: "#00806E",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {formatEgp(locale, totalFees)}
         </span>
       </div>
     </div>
@@ -463,6 +568,7 @@ export default async function MyTripsPage({
     }
   } else {
     const result = await listUserTrips(session.userId, passengerListOptions);
+    console.log("Fetched trips", result);
     tripRows = result.rows;
     total = result.total;
   }
@@ -1048,6 +1154,13 @@ export default async function MyTripsPage({
 
                             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                               <Pill {...(getStatusPill(locale)[trip.status] ?? getStatusPill(locale).pending_payment)} />
+                              {trip.status === "matched" && (
+                                <MatchedTripCountdown
+                                  date={trip.date}
+                                  pickupTime={trip.pickupTime}
+                                  locale={locale}
+                                />
+                              )}
                             </div>
 
                             {showSharedSummary ? (
@@ -1068,10 +1181,10 @@ export default async function MyTripsPage({
                                 {!isDriver && hasAssignedDriver && (
                                   <div style={{ marginBottom: 12, background: "linear-gradient(135deg, #F6FBFA 0%, #EEFBF8 100%)", border: "1px solid #D6F5EE", borderRadius: 14, overflow: "hidden" }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px" }}>
-                                      {trip.assignedDriver?.profilePic ? (
+                                      {(trip.assignedDriver?.profilePicture ?? trip.assignedDriver?.profilePic) ? (
                                         // eslint-disable-next-line @next/next/no-img-element
                                         <img
-                                          src={trip.assignedDriver.profilePic}
+                                          src={trip.assignedDriver.profilePicture ?? trip.assignedDriver.profilePic ?? ""}
                                           alt={trip.assignedDriver?.name ?? translate(locale, "my_trips.driver_fallback")}
                                           style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
                                         />

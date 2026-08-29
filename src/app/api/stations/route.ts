@@ -3,15 +3,30 @@ import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Station } from "@/models/Station";
 
-function serialize(s: any) {
+interface StationSource {
+  objectId?: number;
+  name?: string;
+  direction?: string;
+  zones?: string;
+  description?: string;
+  landmark?: string;
+  stationType?: string;
+  lat?: number;
+  lng?: number;
+}
+
+function serialize(s: StationSource) {
   return {
     id: s.objectId,
     name: s.name || s.direction || "",
     direction: s.direction,
+    zones: s.zones || "",
+    description: s.description || "",
+    landmark: s.landmark || "",
     stationType: s.stationType,
     lat: s.lat,
     lng: s.lng,
-    popupInfo: [s.direction, s.landmark, s.stationType]
+    popupInfo: [s.description, s.direction, s.landmark, s.stationType]
       .filter(Boolean)
       .join("\n"),
   };
@@ -84,6 +99,8 @@ export async function POST(req: NextRequest) {
     objectId: nextObjectId,
     name: String(body.name ?? ""),
     direction: String(body.direction ?? ""),
+    zones: String(body.zones ?? ""),
+    description: String(body.description ?? ""),
     stationType: String(body.stationType ?? ""),
     landmark: String(body.landmark ?? ""),
     lat,

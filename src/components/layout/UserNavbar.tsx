@@ -1,12 +1,9 @@
-// @ts-nocheck
 "use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { ChevronDown, LogOut, User, Wallet, Bell } from "lucide-react";
-import { useAuth } from "@/lib/auth/AuthContext";
-import authApi from "@/lib/api/auth";
 import { getUnreadCount } from "@/lib/api/notifications";
 import LanguageToggle from "./LanguageToggle";
 import LogoutConfirmModal from "@/components/shared/LogoutConfirmModal";
@@ -31,11 +28,7 @@ export default function UserNavbar() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { name: authName, logout, profilePhoto } = useAuth();
-
-  useEffect(() => {
-    if (authName) setUserName(authName);
-  }, [authName]);
+  const profilePhoto = null;
 
   useEffect(() => {
     let ignore = false;
@@ -73,11 +66,10 @@ export default function UserNavbar() {
   async function handleLogout() {
     setShowLogoutModal(false);
     try {
-      await authApi.logout();
+      await fetch("/api/auth/logout", { method: "POST" });
     } catch {
       // ignore — clear client session regardless
     }
-    logout();
     router.replace("/");
   }
 

@@ -12,7 +12,10 @@ interface RawFeature {
     OBJECTID?: number;
     name?: string;
     direction?: string;
+    zones?: string;
+    description?: string;
     station_type?: string;
+    stationType?: string | number;
     landmark?: string;
   };
 }
@@ -94,8 +97,12 @@ export async function POST(req: NextRequest) {
       objectId,
       name: String(f.properties?.name ?? ""),
       direction: String(f.properties?.direction ?? ""),
+      zones: String(f.properties?.zones ?? ""),
+      description: String(f.properties?.description ?? ""),
       landmark: String(f.properties?.landmark ?? ""),
-      stationType: String(f.properties?.station_type ?? ""),
+      stationType: String(
+        f.properties?.stationType ?? f.properties?.station_type ?? "",
+      ),
       lat,
       lng,
       active: true,

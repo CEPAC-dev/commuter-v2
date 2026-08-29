@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Log } from "@/models/Log";
 import { Trip } from "@/models/Trip";
 import { getSession } from "@/lib/auth/session";
+import { adminAuth } from "@/lib/middleware/adminAuth";
 
 /**
  * GET /api/logs
@@ -18,6 +19,9 @@ import { getSession } from "@/lib/auth/session";
  */
 export async function GET(request: NextRequest) {
   try {
+    const auth = await adminAuth();
+    if (!auth.authorized) return auth.response;
+
     await connectDB();
 
     const searchParams = request.nextUrl.searchParams;
@@ -30,7 +34,7 @@ export async function GET(request: NextRequest) {
     const skip = parseInt(searchParams.get("skip") || "0");
 
     // Build filter object
-    const filter: any = {};
+    const filter: Record<string, unknown> = {};
     if (tripId) filter.tripId = tripId;
     if (userId) filter.userId = userId;
     if (driverId) filter.driverId = driverId;
@@ -104,8 +108,6 @@ export async function POST(request: NextRequest) {
       action,
       description,
       metadata,
-      actorType,
-      actorId,
     } = body;
 
     // Validate required fields
@@ -121,7 +123,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify trip exists
-    const trip = await Trip.findById(tripId);
+    const trip = await Trip.findById(tripId)
+      .select("userId driverId")
+      .lean<{ userId: unknown; driverId?: unknown }>();
     if (!trip) {
       return NextResponse.json(
         { success: false, error: "Trip not found" },
@@ -129,18 +133,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const ownsTrip =
+      String(trip.userId) === session.userId ||
+      String(trip.driverId ?? "") === session.userId;
+    if (session.role !== "admin" && !ownsTrip) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 },
+      );
+    }
+
+    const actorType = session.role === "passenger" ? "user" : session.role;
+
     // Create log
     const log = await Log.create({
       tripId,
-      userId,
-      driverId: driverId || null,
+      userId: trip.userId,
+      driverId: trip.driverId ?? driverId ?? null,
       status,
       previousStatus: previousStatus || null,
       action,
       description,
       metadata: metadata || {},
-      actorType: actorType || "system",
-      actorId: actorId || null,
+      actorType,
+      actorId: session.userId,
     });
 
     return NextResponse.json({ success: true, data: log }, { status: 201 });

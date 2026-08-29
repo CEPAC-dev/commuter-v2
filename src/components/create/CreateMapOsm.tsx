@@ -43,6 +43,20 @@ function stopIcon(index: number) {
   );
 }
 
+function escapeHtml(value: string) {
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      })[character] ?? character,
+  );
+}
+
 function zoneLabelHtml(name: string, zoom: number) {
   const scale = Math.max(0.8, Math.min(1.4, 0.8 + (zoom - 20) * 0.12));
   const fontSize = Math.round(11 * scale);
@@ -128,6 +142,11 @@ interface Props {
   trips: TripData[];
   picking?: { tripId: string; field: "pickup" | "dropoff" } | null;
   onMapPick?: (point: TripPoint) => void;
+  onStationSelect?: (
+    tripId: string,
+    field: "pickup" | "dropoff",
+    stationId: number,
+  ) => void;
   onCancelPick?: () => void;
 }
 
@@ -135,6 +154,7 @@ export default function CreateMapOsm({
   trips,
   picking,
   onMapPick,
+  onStationSelect,
   onCancelPick,
 }: Props) {
   const [map, setMap] = useState<L.Map | null>(null);
@@ -243,7 +263,7 @@ export default function CreateMapOsm({
         );
         zoneFeaturesRef.current = features;
         refreshZoneLabels();
-        L.geoJSON(features as any, {
+        L.geoJSON(features as unknown as Parameters<typeof L.geoJSON>[0], {
           style: {
             color: "#00C2A8",
             weight: 2,
@@ -337,25 +357,39 @@ export default function CreateMapOsm({
         });
       if (shared) {
         trip.pickupStationOptions.forEach((station) => {
-          L.marker([station.lat, station.lng], {
+          const marker = L.marker([station.lat, station.lng], {
             icon:
               station.id === trip.pickupStation?.id
                 ? STATION_ICON
                 : DIMMED_STATION_ICON,
+            keyboard: true,
+            title: `Select ${station.name} as pickup station`,
           })
-            .bindTooltip(`Pickup station: ${station.name}`)
+            .bindTooltip(
+              `Pickup station: ${escapeHtml(station.name)}<br><strong>Description:</strong> ${escapeHtml(station.description || "No description available")}`,
+            )
             .addTo(layers);
+          marker.on("click", () =>
+            onStationSelect?.(trip.id, "pickup", station.id),
+          );
           allPoints.push(station);
         });
         trip.dropoffStationOptions.forEach((station) => {
-          L.marker([station.lat, station.lng], {
+          const marker = L.marker([station.lat, station.lng], {
             icon:
               station.id === trip.dropoffStation?.id
                 ? STATION_ICON
                 : DIMMED_STATION_ICON,
+            keyboard: true,
+            title: `Select ${station.name} as dropoff station`,
           })
-            .bindTooltip(`Dropoff station: ${station.name}`)
+            .bindTooltip(
+              `Dropoff station: ${escapeHtml(station.name)}<br><strong>Description:</strong> ${escapeHtml(station.description || "No description available")}`,
+            )
             .addTo(layers);
+          marker.on("click", () =>
+            onStationSelect?.(trip.id, "dropoff", station.id),
+          );
           allPoints.push(station);
         });
         if (trip.pickup && trip.pickupStation)
@@ -380,7 +414,7 @@ export default function CreateMapOsm({
     return () => {
       layers.remove();
     };
-  }, [map, trips]);
+  }, [map, onStationSelect, trips]);
 
   const handleClick = useCallback(
     async ({ lat, lng }: OsmPoint) => {

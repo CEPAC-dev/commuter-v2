@@ -18,7 +18,7 @@ function serializeSettings(settings: {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const settings = await getOrCreateReferralSettings();
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   let body: Record<string, unknown>;
@@ -60,7 +60,10 @@ export async function PUT(req: NextRequest) {
     );
   }
   if (typeof isActive !== "boolean") {
-    return NextResponse.json({ error: "isActive must be a boolean." }, { status: 400 });
+    return NextResponse.json(
+      { error: "isActive must be a boolean." },
+      { status: 400 },
+    );
   }
 
   await getOrCreateReferralSettings();

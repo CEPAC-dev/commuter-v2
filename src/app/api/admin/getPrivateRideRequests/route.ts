@@ -1,11 +1,12 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { Station } from "@/models/Station";
 import { fetchDirections } from "@/app/api/directions/route";
+import { adminAuth } from "@/lib/middleware/adminAuth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -101,7 +102,10 @@ function getTomorrowDate() {
   return `${year}-${month}-${day}`;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await adminAuth();
+  if (!auth.authorized) return auth.response;
+
   await connectDB();
 
   const tomorrow = getTomorrowDate();
@@ -276,7 +280,8 @@ export async function GET() {
       const originStation = orderedStations[rowIndex];
       const destStation = orderedStations[colIndex];
       const durationMin = await getDurationMin(originStation, destStation);
-      durationSheet.getRow(rowIndex + 3).getCell(colIndex + 3).value = durationMin;
+      durationSheet.getRow(rowIndex + 3).getCell(colIndex + 3).value =
+        durationMin;
     }
   }
 

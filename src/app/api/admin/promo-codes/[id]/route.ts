@@ -12,12 +12,15 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;
   if (!Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ error: "Invalid promo code id." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid promo code id." },
+      { status: 400 },
+    );
   }
 
   let body: {
@@ -48,7 +51,10 @@ export async function PATCH(
     } | null>();
 
   if (!existing) {
-    return NextResponse.json({ error: "Promo code not found." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Promo code not found." },
+      { status: 404 },
+    );
   }
 
   const update: Record<string, unknown> = {};
@@ -148,7 +154,9 @@ export async function PATCH(
       mergedMaxUses = existing.maxUses;
     } else {
       return NextResponse.json(
-        { error: "Maximum uses is required when unlimited uses is turned off." },
+        {
+          error: "Maximum uses is required when unlimited uses is turned off.",
+        },
         { status: 400 },
       );
     }
@@ -167,7 +175,10 @@ export async function PATCH(
   }
 
   if (Object.keys(update).length === 0) {
-    return NextResponse.json({ error: "No changes provided." }, { status: 400 });
+    return NextResponse.json(
+      { error: "No changes provided." },
+      { status: 400 },
+    );
   }
 
   const promoCode = await PromoCode.findByIdAndUpdate(
@@ -176,12 +187,16 @@ export async function PATCH(
     {
       returnDocument: "after",
       runValidators: true,
-      select: "code discountType discountValue maxUses usedCount expiresAt isActive createdAt",
+      select:
+        "code discountType discountValue maxUses usedCount expiresAt isActive createdAt",
     },
   ).lean();
 
   if (!promoCode) {
-    return NextResponse.json({ error: "Promo code not found." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Promo code not found." },
+      { status: 404 },
+    );
   }
 
   return NextResponse.json({ data: promoCode });
@@ -191,12 +206,15 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;
   if (!Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ error: "Invalid promo code id." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid promo code id." },
+      { status: 400 },
+    );
   }
 
   await connectDB();
@@ -207,7 +225,10 @@ export async function DELETE(
   ).lean();
 
   if (!promoCode) {
-    return NextResponse.json({ error: "Promo code not found." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Promo code not found." },
+      { status: 404 },
+    );
   }
 
   return NextResponse.json({ ok: true });

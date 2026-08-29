@@ -29,6 +29,9 @@ export async function PATCH(
   const patch: Record<string, unknown> = {};
   if (body.name !== undefined) patch.name = String(body.name);
   if (body.direction !== undefined) patch.direction = String(body.direction);
+  if (body.zones !== undefined) patch.zones = String(body.zones);
+  if (body.description !== undefined)
+    patch.description = String(body.description);
   if (body.landmark !== undefined) patch.landmark = String(body.landmark);
   if (body.stationType !== undefined)
     patch.stationType = String(body.stationType);

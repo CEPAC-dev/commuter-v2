@@ -9,13 +9,16 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;
   await connectDB();
 
-  const trip = await Trip.findById(id).lean<{ date?: string; pickupTime?: string }>();
+  const trip = await Trip.findById(id).lean<{
+    date?: string;
+    pickupTime?: string;
+  }>();
   if (!trip) {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
@@ -31,7 +34,9 @@ export async function GET(
     .select("name phone")
     .lean<Array<{ _id: unknown; name?: string; phone?: string }>>();
 
-  const driverMap = new Map(drivers.map((driver) => [String(driver._id), driver]));
+  const driverMap = new Map(
+    drivers.map((driver) => [String(driver._id), driver]),
+  );
 
   const matches = availability
     .map((item) => ({

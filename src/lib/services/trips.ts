@@ -23,10 +23,19 @@ export interface AssignedDriver {
   name?: string;
   phone?: string;
   profilePic?: string;
+  profilePicture?: string;
   carBrand?: string;
   carModel?: string;
+  carType?: string;
   modelYear?: string;
+  vehicleColor?: string;
+  carCapacity?: number;
+  carImage?: string;
   plate?: string;
+  plateChar1?: string;
+  plateChar2?: string;
+  plateChar3?: string;
+  plateDigits?: string;
 }
 
 export interface DriverSummarySnapshot {
@@ -220,16 +229,8 @@ export async function listDriverTrips(
           tripNumber: number;
           requestId: unknown;
           driverId?: unknown;
+          assignedDriver?: AssignedDriver | null;
           date: string;
-          assignedDriver?: {
-            name?: string;
-            phone?: string;
-            profilePic?: string;
-            carBrand?: string;
-            carModel?: string;
-            modelYear?: string;
-            plate?: string;
-          } | null;
           paymentStatus: string;
           status: string;
           vehicleType: string;
@@ -307,8 +308,10 @@ export async function listDriverTrips(
           ? trip.createdAt.toISOString()
           : String(trip.createdAt),
       assignedDriver: trip.driverId
-        ? (assignedDriverById.get(String(trip.driverId)) ?? null)
-        : null,
+        ? (trip.assignedDriver ??
+          assignedDriverById.get(String(trip.driverId)) ??
+          null)
+        : (trip.assignedDriver ?? null),
     })),
   };
 }
@@ -646,7 +649,9 @@ export async function getUserTrip(
     seatNumbers: trip.seatNumbers ?? [],
     rideId: trip.rideId ? String(trip.rideId) : undefined,
     rideDetails,
-    rating: rating ? { driverRating: rating.driverRating, carRating: rating.carRating } : null,
+    rating: rating
+      ? { driverRating: rating.driverRating, carRating: rating.carRating }
+      : null,
     paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
     pickupStationOptions: trip.pickupStationOptions ?? [],
     dropoffStationOptions: trip.dropoffStationOptions ?? [],

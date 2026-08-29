@@ -1,8 +1,19 @@
 import "server-only";
 import nodemailer from "nodemailer";
 import { Resend } from "resend";
-type Transporter = any;
 import { SUPPORT_EMAIL } from "@/lib/config/site";
+
+type NodemailerTransporter = {
+  sendMail: (...args: any[]) => Promise<any>;
+};
+
+type NodemailerModule = {
+  createTestAccount: () => Promise<{ user: string; pass: string }>;
+  createTransport: (options: Record<string, unknown>) => NodemailerTransporter;
+  getTestMessageUrl: (info: any) => string | false;
+};
+
+const mailer = nodemailer as unknown as NodemailerModule;
 
 interface ContactPayload {
   name: string;
@@ -17,8 +28,8 @@ function resendConfigured(): boolean {
 function smtpConfigured(): boolean {
   return Boolean(
     process.env.SMTP_HOST?.trim() &&
-      process.env.SMTP_USER?.trim() &&
-      process.env.SMTP_PASS?.trim(),
+    process.env.SMTP_USER?.trim() &&
+    process.env.SMTP_PASS?.trim(),
   );
 }
 
@@ -35,12 +46,12 @@ function getContactAddresses() {
   return { to, from };
 }
 
-let devTransporter: Transporter | null = null;
+let devTransporter: NodemailerTransporter | null = null;
 
-async function getDevTransporter(): Promise<Transporter> {
+async function getDevTransporter(): Promise<NodemailerTransporter> {
   if (!devTransporter) {
-    const account = await nodemailer.createTestAccount();
-    devTransporter = nodemailer.createTransport({
+    const account = await mailer.createTestAccount();
+    devTransporter = mailer.createTransport({
       host: "smtp.ethereal.email",
       port: 587,
       secure: false,
@@ -59,7 +70,7 @@ async function sendViaResend({
 
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);
-    const res = await resend.emails.send({
+    const res = (await resend.emails.send({
       from,
       to: [to],
       replyTo: email,
@@ -73,7 +84,7 @@ async function sendViaResend({
         <hr />
         <p style="white-space:pre-wrap">${message.replace(/</g, "&lt;")}</p>
       `,
-    });
+    })) as { error?: { message?: string } | null };
 
     if (res.error) {
       console.error("[contact] Resend error:", res.error);
@@ -96,7 +107,7 @@ async function sendViaResend({
 
 async function sendViaSmtp(
   payload: ContactPayload,
-  transporter: Transporter,
+  transporter: NodemailerTransporter,
   from: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { to } = getContactAddresses();
@@ -119,7 +130,7 @@ async function sendViaSmtp(
       `,
     });
 
-    const preview = nodemailer.getTestMessageUrl(info);
+    const preview = mailer.getTestMessageUrl(info);
     if (preview) {
       console.log("[contact] Dev preview URL:", preview);
     }
@@ -145,7 +156,7 @@ export async function sendContactEmail(
     const from =
       process.env.CONTACT_FROM_EMAIL?.trim() ||
       `"Commuter Contact" <${process.env.SMTP_USER}>`;
-    const transporter = nodemailer.createTransport({
+    const transporter = mailer.createTransport({
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT ?? 587),
       secure: process.env.SMTP_SECURE === "true",

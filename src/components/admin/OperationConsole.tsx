@@ -17,8 +17,23 @@ type StationRecord = {
   popupInfo?: string;
 };
 
+function currentLocalDateTime() {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
 export default function OperationConsole() {
   const [matchDate, setMatchDate] = useState("");
+  const [matrixProvider, setMatrixProvider] = useState("osrm");
+  const [valhallaCosting, setValhallaCosting] = useState("auto");
+  const [valhallaDateTimeType, setValhallaDateTimeType] = useState("current");
+  const [valhallaDateTime, setValhallaDateTime] = useState("");
+  const [travelTimeTransportation, setTravelTimeTransportation] =
+    useState("driving");
+  const [travelTimeDepartureTime, setTravelTimeDepartureTime] = useState(
+    currentLocalDateTime,
+  );
   const [availabilityDate, setAvailabilityDate] = useState("");
   const [loadingMatchData, setLoadingMatchData] = useState(false);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
@@ -34,7 +49,9 @@ export default function OperationConsole() {
   const [shiftFromDate, setShiftFromDate] = useState("");
   const [shiftToDate, setShiftToDate] = useState("");
   const [loadingShiftDates, setLoadingShiftDates] = useState(false);
-  const [shiftDatesMessage, setShiftDatesMessage] = useState<string | null>(null);
+  const [shiftDatesMessage, setShiftDatesMessage] = useState<string | null>(
+    null,
+  );
   const [stationNumberQuery, setStationNumberQuery] = useState("");
   const [stationFormName, setStationFormName] = useState("");
   const [stationFormDirection, setStationFormDirection] = useState("");
@@ -55,16 +72,24 @@ export default function OperationConsole() {
   const [ridesDatePurge, setRidesDatePurge] = useState("");
   const [ridesPurgeLoading, setRidesPurgeLoading] = useState(false);
   const [ridesPurgeTodayLoading, setRidesPurgeTodayLoading] = useState(false);
-  const [ridesPurgeMessage, setRidesPurgeMessage] = useState<string | null>(null);
-  const [tripNumberDelete, setTripNumberDelete] = useState("");
-  const [tripDateDelete, setTripDateDelete] = useState("");
-  const [tripDeleteLoading, setTripDeleteLoading] = useState(false);
-  const [tripDeleteMessage, setTripDeleteMessage] = useState<string | null>(null);
+  const [ridesPurgeMessage, setRidesPurgeMessage] = useState<string | null>(
+    null,
+  );
+  const [availabilityBackupLoading, setAvailabilityBackupLoading] =
+    useState(false);
+  const [availabilityRestoreLoading, setAvailabilityRestoreLoading] =
+    useState(false);
+  const [availabilityImportFile, setAvailabilityImportFile] =
+    useState<File | null>(null);
+  const [availabilityActionMessage, setAvailabilityActionMessage] = useState<
+    string | null
+  >(null);
 
   async function handleInspectAvailability(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoadingAvailability(true);
     setAvailabilityError(null);
+    setAvailabilityActionMessage(null);
 
     try {
       const params = new URLSearchParams({ limit: "5" });
@@ -97,6 +122,91 @@ export default function OperationConsole() {
     }
   }
 
+  async function handleDownloadAvailabilityBackup() {
+    setAvailabilityBackupLoading(true);
+    setAvailabilityActionMessage(null);
+
+    try {
+      const response = await fetch("/api/admin/availability/export");
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(
+          payload?.error || "Unable to export availability backup.",
+        );
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "availabilities-backup.json";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setAvailabilityActionMessage(
+        "Availability backup downloaded successfully.",
+      );
+    } catch (error) {
+      setAvailabilityActionMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to export availability backup.",
+      );
+    } finally {
+      setAvailabilityBackupLoading(false);
+    }
+  }
+
+  async function handleRestoreAvailability(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAvailabilityRestoreLoading(true);
+    setAvailabilityActionMessage(null);
+
+    if (!availabilityImportFile) {
+      setAvailabilityActionMessage(
+        "Please choose a JSON backup file to restore.",
+      );
+      setAvailabilityRestoreLoading(false);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("file", availabilityImportFile);
+
+      const response = await fetch("/api/admin/availability/restore", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error || "Unable to restore availability records.",
+        );
+      }
+
+      setAvailabilityActionMessage(
+        `Restored ${payload?.createdCount ?? 0} new and ${payload?.updatedCount ?? 0} updated availability record(s).`,
+      );
+      const form = event.currentTarget;
+      if (form instanceof HTMLFormElement) {
+        form.reset();
+      }
+      setAvailabilityImportFile(null);
+    } catch (error) {
+      setAvailabilityActionMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to restore availability records.",
+      );
+    } finally {
+      setAvailabilityRestoreLoading(false);
+    }
+  }
+
   async function handleDownloadMatchData(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoadingMatchData(true);
@@ -106,6 +216,24 @@ export default function OperationConsole() {
       const target = new URL("/api/admin/getMatchData", window.location.origin);
       if (matchDate.trim()) {
         target.searchParams.set("date", matchDate.trim());
+      }
+      target.searchParams.set("matrixProvider", matrixProvider);
+      if (matrixProvider === "valhalla") {
+        target.searchParams.set("valhallaCosting", valhallaCosting);
+        target.searchParams.set("valhallaDateTimeType", valhallaDateTimeType);
+        if (valhallaDateTimeType !== "current" && valhallaDateTime) {
+          target.searchParams.set("valhallaDateTime", valhallaDateTime);
+        }
+      }
+      if (matrixProvider === "traveltime") {
+        target.searchParams.set(
+          "travelTimeTransportation",
+          travelTimeTransportation,
+        );
+        target.searchParams.set(
+          "travelTimeDepartureTime",
+          new Date(travelTimeDepartureTime).toISOString(),
+        );
       }
 
       const response = await fetch(target.toString());
@@ -210,7 +338,9 @@ export default function OperationConsole() {
       setSelectedFile(null);
     } catch (error) {
       setImportMessage(
-        error instanceof Error ? error.message : "Unable to import matched data.",
+        error instanceof Error
+          ? error.message
+          : "Unable to import matched data.",
       );
     } finally {
       setLoadingImport(false);
@@ -262,7 +392,9 @@ export default function OperationConsole() {
     const lat = Number(stationFormLat);
     const lng = Number(stationFormLng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      setStationsMessage("Latitude and longitude are required and must be valid numbers.");
+      setStationsMessage(
+        "Latitude and longitude are required and must be valid numbers.",
+      );
       setStationsCreateLoading(false);
       return;
     }
@@ -317,9 +449,11 @@ export default function OperationConsole() {
 
     const payload: Record<string, unknown> = {};
     if (stationFormName.trim()) payload.name = stationFormName.trim();
-    if (stationFormDirection.trim()) payload.direction = stationFormDirection.trim();
+    if (stationFormDirection.trim())
+      payload.direction = stationFormDirection.trim();
     if (stationFormType.trim()) payload.stationType = stationFormType.trim();
-    if (stationFormLandmark.trim()) payload.landmark = stationFormLandmark.trim();
+    if (stationFormLandmark.trim())
+      payload.landmark = stationFormLandmark.trim();
     if (stationFormLat.trim()) {
       const lat = Number(stationFormLat);
       if (!Number.isFinite(lat)) {
@@ -359,7 +493,9 @@ export default function OperationConsole() {
       const updated = result?.station as StationRecord | undefined;
       if (updated) {
         setStationsData((current) => {
-          const filtered = current.filter((station) => station.id !== updated.id);
+          const filtered = current.filter(
+            (station) => station.id !== updated.id,
+          );
           return [updated, ...filtered].slice(0, 20);
         });
       }
@@ -433,7 +569,9 @@ export default function OperationConsole() {
         throw new Error(payload?.error || "Unable to import stations.");
       }
 
-      setStationsMessage(`Imported ${payload?.count ?? 0} station(s) successfully.`);
+      setStationsMessage(
+        `Imported ${payload?.count ?? 0} station(s) successfully.`,
+      );
       const form = event.currentTarget;
       if (form instanceof HTMLFormElement) {
         form.reset();
@@ -541,98 +679,12 @@ export default function OperationConsole() {
       );
     } catch (error) {
       setRidesPurgeMessage(
-        error instanceof Error ? error.message : "Unable to purge today's rides.",
+        error instanceof Error
+          ? error.message
+          : "Unable to purge today's rides.",
       );
     } finally {
       setRidesPurgeTodayLoading(false);
-    }
-  }
-
-  async function handleDeleteTripRecords(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setTripDeleteLoading(true);
-    setTripDeleteMessage(null);
-
-    try {
-      const action = new URLSearchParams();
-      const tripNumber = tripNumberDelete.trim();
-      const tripDate = tripDateDelete.trim();
-
-      if (!tripNumber && !tripDate) {
-        setTripDeleteMessage("Provide either a trip number or a date, or use the full delete action.");
-        setTripDeleteLoading(false);
-        return;
-      }
-
-      if (tripNumber) {
-        action.set("action", "by-trip-number");
-        action.set("tripNumber", tripNumber);
-      } else if (tripDate) {
-        action.set("action", "by-date");
-        action.set("date", tripDate);
-      }
-
-      const result = await requestAdminDelete(
-        tripNumber
-          ? `trip deletion for trip #${tripNumber}`
-          : `trip deletion for date ${tripDate}`,
-        `/api/admin/trips?${action.toString()}`,
-        { method: "DELETE" },
-      );
-
-      if (result.canceled) {
-        return;
-      }
-
-      const { response, payload } = result;
-      if (!response.ok) {
-        throw new Error(payload?.error || "Unable to delete trips.");
-      }
-
-      setTripDeleteMessage(
-        `Deleted ${payload?.deletedCount ?? 0} trip(s) with action ${payload?.scope ?? action.get("action") ?? "unknown"}.`,
-      );
-      setTripNumberDelete("");
-      setTripDateDelete("");
-    } catch (error) {
-      setTripDeleteMessage(
-        error instanceof Error ? error.message : "Unable to delete trips.",
-      );
-    } finally {
-      setTripDeleteLoading(false);
-    }
-  }
-
-  async function handleDeleteAllTrips(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setTripDeleteLoading(true);
-    setTripDeleteMessage(null);
-
-    try {
-      const result = await requestAdminDelete(
-        "full trip deletion",
-        "/api/admin/trips?action=all",
-        { method: "DELETE" },
-      );
-
-      if (result.canceled) {
-        return;
-      }
-
-      const { response, payload } = result;
-      if (!response.ok) {
-        throw new Error(payload?.error || "Unable to delete all trips.");
-      }
-
-      setTripDeleteMessage(`Deleted ${payload?.deletedCount ?? 0} trip(s) in total.`);
-      setTripNumberDelete("");
-      setTripDateDelete("");
-    } catch (error) {
-      setTripDeleteMessage(
-        error instanceof Error ? error.message : "Unable to delete all trips.",
-      );
-    } finally {
-      setTripDeleteLoading(false);
     }
   }
 
@@ -706,6 +758,192 @@ export default function OperationConsole() {
               }}
             />
           </label>
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 220,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              Matrix API calculator
+            </span>
+            <select
+              value={matrixProvider}
+              onChange={(event) => setMatrixProvider(event.target.value)}
+              style={{
+                border: "1px solid #D8E0E4",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+                background: "#ffffff",
+              }}
+            >
+              <option value="osrm">OSRM</option>
+              <option value="openrouteservice">OpenRouteService</option>
+              <option value="valhalla">Valhalla</option>
+              <option value="graphhopper">GraphHopper</option>
+              <option value="traveltime">TravelTime</option>
+            </select>
+          </label>
+          {matrixProvider === "valhalla" ? (
+            <>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 160,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Valhalla costing
+                </span>
+                <select
+                  value={valhallaCosting}
+                  onChange={(event) => setValhallaCosting(event.target.value)}
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="taxi">Taxi</option>
+                  <option value="bus">Bus</option>
+                </select>
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 160,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Traffic time
+                </span>
+                <select
+                  value={valhallaDateTimeType}
+                  onChange={(event) =>
+                    setValhallaDateTimeType(event.target.value)
+                  }
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="current">Current time</option>
+                  <option value="depart_at">Depart at</option>
+                  <option value="arrive_by">Arrive by</option>
+                </select>
+              </label>
+              {valhallaDateTimeType !== "current" ? (
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    minWidth: 220,
+                  }}
+                >
+                  <span
+                    style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                  >
+                    Traffic date and time
+                  </span>
+                  <input
+                    value={valhallaDateTime}
+                    onChange={(event) =>
+                      setValhallaDateTime(event.target.value)
+                    }
+                    type="datetime-local"
+                    required
+                    style={{
+                      border: "1px solid #D8E0E4",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      fontSize: 14,
+                    }}
+                  />
+                </label>
+              ) : null}
+            </>
+          ) : null}
+          {matrixProvider === "traveltime" ? (
+            <>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 180,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Transportation type
+                </span>
+                <select
+                  value={travelTimeTransportation}
+                  onChange={(event) =>
+                    setTravelTimeTransportation(event.target.value)
+                  }
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="driving">Driving</option>
+                  <option value="walking">Walking</option>
+                  <option value="cycling">Cycling</option>
+                </select>
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 220,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Departure time
+                </span>
+                <input
+                  value={travelTimeDepartureTime}
+                  onChange={(event) =>
+                    setTravelTimeDepartureTime(event.target.value)
+                  }
+                  type="datetime-local"
+                  required
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+            </>
+          ) : null}
           <button
             type="submit"
             disabled={loadingMatchData}
@@ -883,144 +1121,10 @@ export default function OperationConsole() {
             style={{
               margin: "10px 0 0",
               fontSize: 14,
-              color: importMessage.includes("success")
-                ? "#00877A"
-                : "#B94A48",
+              color: importMessage.includes("success") ? "#00877A" : "#B94A48",
             }}
           >
             {importMessage}
-          </p>
-        ) : null}
-      </section>
-
-      <section
-        style={{
-          background: "#ffffff",
-          border: "1px solid #E6EAEC",
-          borderRadius: 18,
-          padding: 20,
-          boxShadow: "0 10px 30px rgba(11,30,61,0.05)",
-        }}
-      >
-        <div style={{ marginBottom: 12 }}>
-          <h2
-            style={{
-              margin: 0,
-              fontSize: 18,
-              fontWeight: 700,
-              color: "#0B1E3D",
-            }}
-          >
-            Trips cleanup
-          </h2>
-          <p style={{ margin: "6px 0 0", color: "#5A6A7A", fontSize: 14 }}>
-            Delete trips by trip number, delete trips for a pickup date, or clear the entire trips collection.
-          </p>
-        </div>
-
-        <form
-          onSubmit={handleDeleteTripRecords}
-          style={{
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
-          <label
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-              minWidth: 180,
-            }}
-          >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
-              Trip number
-            </span>
-            <input
-              value={tripNumberDelete}
-              onChange={(event) => setTripNumberDelete(event.target.value)}
-              type="number"
-              min="1"
-              placeholder="e.g. 1245"
-              style={{
-                border: "1px solid #D8E0E4",
-                borderRadius: 10,
-                padding: "10px 12px",
-                fontSize: 14,
-              }}
-            />
-          </label>
-          <label
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-              minWidth: 220,
-            }}
-          >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
-              Pickup date
-            </span>
-            <input
-              value={tripDateDelete}
-              onChange={(event) => setTripDateDelete(event.target.value)}
-              type="date"
-              style={{
-                border: "1px solid #D8E0E4",
-                borderRadius: 10,
-                padding: "10px 12px",
-                fontSize: 14,
-              }}
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={tripDeleteLoading}
-            style={{
-              border: "none",
-              borderRadius: 10,
-              background: tripDeleteLoading ? "#EFA8A8" : "#B94A48",
-              color: "#ffffff",
-              fontWeight: 700,
-              padding: "10px 16px",
-              cursor: tripDeleteLoading ? "wait" : "pointer",
-              alignSelf: "flex-end",
-            }}
-          >
-            {tripDeleteLoading ? "Deleting..." : "Delete by trip/date"}
-          </button>
-        </form>
-
-        <form onSubmit={handleDeleteAllTrips}>
-          <button
-            type="submit"
-            disabled={tripDeleteLoading}
-            style={{
-              border: "none",
-              borderRadius: 10,
-              background: tripDeleteLoading ? "#EFA8A8" : "#0B1E3D",
-              color: "#ffffff",
-              fontWeight: 700,
-              padding: "10px 16px",
-              cursor: tripDeleteLoading ? "wait" : "pointer",
-            }}
-          >
-            {tripDeleteLoading ? "Deleting all trips..." : "Delete all trips"}
-          </button>
-        </form>
-
-        {tripDeleteMessage ? (
-          <p
-            style={{
-              margin: "12px 0 0",
-              fontSize: 14,
-              color: tripDeleteMessage.includes("Deleted") ? "#00877A" : "#B94A48",
-            }}
-          >
-            {tripDeleteMessage}
           </p>
         ) : null}
       </section>
@@ -1120,7 +1224,9 @@ export default function OperationConsole() {
               cursor: ridesPurgeTodayLoading ? "wait" : "pointer",
             }}
           >
-            {ridesPurgeTodayLoading ? "Deleting today rides..." : "Delete today's rides"}
+            {ridesPurgeTodayLoading
+              ? "Deleting today rides..."
+              : "Delete today's rides"}
           </button>
         </form>
 
@@ -1129,7 +1235,9 @@ export default function OperationConsole() {
             style={{
               margin: "12px 0 0",
               fontSize: 14,
-              color: ridesPurgeMessage.includes("Deleted") ? "#00877A" : "#B94A48",
+              color: ridesPurgeMessage.includes("Deleted")
+                ? "#00877A"
+                : "#B94A48",
             }}
           >
             {ridesPurgeMessage}
@@ -1164,14 +1272,97 @@ export default function OperationConsole() {
                 color: "#0B1E3D",
               }}
             >
-              Inspect availability
+              Availabilities
             </h2>
             <p style={{ margin: "6px 0 0", color: "#5A6A7A", fontSize: 14 }}>
-              Query the admin availability API to preview the next available
-              records.
+              Inspect current records, download a JSON backup, or restore a
+              saved availability snapshot.
             </p>
           </div>
         </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            flexWrap: "wrap",
+            alignItems: "center",
+            marginBottom: 12,
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleDownloadAvailabilityBackup}
+            disabled={availabilityBackupLoading}
+            style={{
+              border: "none",
+              borderRadius: 10,
+              background: availabilityBackupLoading ? "#7BD7CB" : "#00C2A8",
+              color: "#ffffff",
+              fontWeight: 700,
+              padding: "10px 16px",
+              cursor: availabilityBackupLoading ? "wait" : "pointer",
+            }}
+          >
+            {availabilityBackupLoading
+              ? "Preparing backup..."
+              : "Download JSON backup"}
+          </button>
+        </div>
+
+        <form
+          onSubmit={handleRestoreAvailability}
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+            marginBottom: 12,
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 260,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              Restore JSON backup
+            </span>
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={(event) =>
+                setAvailabilityImportFile(event.target.files?.[0] ?? null)
+              }
+              style={{
+                border: "1px solid #D8E0E4",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+                background: "#ffffff",
+              }}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={availabilityRestoreLoading}
+            style={{
+              border: "none",
+              borderRadius: 10,
+              background: availabilityRestoreLoading ? "#7BD7CB" : "#0B1E3D",
+              color: "#ffffff",
+              fontWeight: 700,
+              padding: "10px 16px",
+              cursor: availabilityRestoreLoading ? "wait" : "pointer",
+              alignSelf: "flex-end",
+            }}
+          >
+            {availabilityRestoreLoading ? "Restoring..." : "Restore from file"}
+          </button>
+        </form>
 
         <form
           onSubmit={handleInspectAvailability}
@@ -1226,6 +1417,22 @@ export default function OperationConsole() {
         {availabilityError ? (
           <p style={{ margin: 0, color: "#B94A48", fontSize: 14 }}>
             {availabilityError}
+          </p>
+        ) : null}
+
+        {availabilityActionMessage ? (
+          <p
+            style={{
+              margin: "0 0 10px",
+              fontSize: 14,
+              color:
+                availabilityActionMessage.includes("success") ||
+                availabilityActionMessage.includes("Restored")
+                  ? "#00877A"
+                  : "#B94A48",
+            }}
+          >
+            {availabilityActionMessage}
           </p>
         ) : null}
 
@@ -1361,37 +1568,67 @@ export default function OperationConsole() {
             value={stationFormName}
             onChange={(event) => setStationFormName(event.target.value)}
             placeholder="Name"
-            style={{ border: "1px solid #D8E0E4", borderRadius: 10, padding: "10px 12px", fontSize: 14 }}
+            style={{
+              border: "1px solid #D8E0E4",
+              borderRadius: 10,
+              padding: "10px 12px",
+              fontSize: 14,
+            }}
           />
           <input
             value={stationFormDirection}
             onChange={(event) => setStationFormDirection(event.target.value)}
             placeholder="Direction"
-            style={{ border: "1px solid #D8E0E4", borderRadius: 10, padding: "10px 12px", fontSize: 14 }}
+            style={{
+              border: "1px solid #D8E0E4",
+              borderRadius: 10,
+              padding: "10px 12px",
+              fontSize: 14,
+            }}
           />
           <input
             value={stationFormType}
             onChange={(event) => setStationFormType(event.target.value)}
             placeholder="Station type"
-            style={{ border: "1px solid #D8E0E4", borderRadius: 10, padding: "10px 12px", fontSize: 14 }}
+            style={{
+              border: "1px solid #D8E0E4",
+              borderRadius: 10,
+              padding: "10px 12px",
+              fontSize: 14,
+            }}
           />
           <input
             value={stationFormLandmark}
             onChange={(event) => setStationFormLandmark(event.target.value)}
             placeholder="Landmark"
-            style={{ border: "1px solid #D8E0E4", borderRadius: 10, padding: "10px 12px", fontSize: 14 }}
+            style={{
+              border: "1px solid #D8E0E4",
+              borderRadius: 10,
+              padding: "10px 12px",
+              fontSize: 14,
+            }}
           />
           <input
             value={stationFormLat}
             onChange={(event) => setStationFormLat(event.target.value)}
             placeholder="Latitude"
-            style={{ border: "1px solid #D8E0E4", borderRadius: 10, padding: "10px 12px", fontSize: 14 }}
+            style={{
+              border: "1px solid #D8E0E4",
+              borderRadius: 10,
+              padding: "10px 12px",
+              fontSize: 14,
+            }}
           />
           <input
             value={stationFormLng}
             onChange={(event) => setStationFormLng(event.target.value)}
             placeholder="Longitude"
-            style={{ border: "1px solid #D8E0E4", borderRadius: 10, padding: "10px 12px", fontSize: 14 }}
+            style={{
+              border: "1px solid #D8E0E4",
+              borderRadius: 10,
+              padding: "10px 12px",
+              fontSize: 14,
+            }}
           />
           <button
             type="submit"
@@ -1423,7 +1660,12 @@ export default function OperationConsole() {
             value={stationPatchId}
             onChange={(event) => setStationPatchId(event.target.value)}
             placeholder="Station id for update"
-            style={{ border: "1px solid #D8E0E4", borderRadius: 10, padding: "10px 12px", fontSize: 14 }}
+            style={{
+              border: "1px solid #D8E0E4",
+              borderRadius: 10,
+              padding: "10px 12px",
+              fontSize: 14,
+            }}
           />
           <button
             type="submit"
@@ -1438,7 +1680,9 @@ export default function OperationConsole() {
               cursor: stationsPatchLoading ? "wait" : "pointer",
             }}
           >
-            {stationsPatchLoading ? "Updating..." : "Update station (use fields above)"}
+            {stationsPatchLoading
+              ? "Updating..."
+              : "Update station (use fields above)"}
           </button>
         </form>
 
@@ -1494,7 +1738,9 @@ export default function OperationConsole() {
           <input
             type="file"
             accept=".json,.geojson"
-            onChange={(event) => setStationsFile(event.target.files?.[0] ?? null)}
+            onChange={(event) =>
+              setStationsFile(event.target.files?.[0] ?? null)
+            }
             style={{
               border: "1px solid #D8E0E4",
               borderRadius: 10,
@@ -1525,7 +1771,8 @@ export default function OperationConsole() {
             style={{
               margin: "12px 0 0",
               color:
-                stationsMessage.includes("success") || stationsMessage.includes("Loaded")
+                stationsMessage.includes("success") ||
+                stationsMessage.includes("Loaded")
                   ? "#00877A"
                   : "#B94A48",
               fontSize: 14,
@@ -1546,7 +1793,8 @@ export default function OperationConsole() {
             }}
           >
             <p style={{ margin: "0 0 8px", color: "#0B1E3D", fontWeight: 700 }}>
-              Showing {Math.min(stationsData.length, 10)} of {stationsData.length} station(s)
+              Showing {Math.min(stationsData.length, 10)} of{" "}
+              {stationsData.length} station(s)
             </p>
             <ul
               style={{
@@ -1559,8 +1807,8 @@ export default function OperationConsole() {
             >
               {stationsData.slice(0, 10).map((station) => (
                 <li key={station.id} style={{ fontSize: 13 }}>
-                  #{station.id} {station.name || station.direction || "Station"} ·
-                  {` ${station.stationType || "type n/a"}`} ·
+                  #{station.id} {station.name || station.direction || "Station"}{" "}
+                  ·{` ${station.stationType || "type n/a"}`} ·
                   {` ${station.lat ?? "-"}, ${station.lng ?? "-"}`}
                 </li>
               ))}

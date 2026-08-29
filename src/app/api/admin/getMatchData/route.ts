@@ -8,7 +8,10 @@ import { Driver } from "@/models/Driver";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { Station } from "@/models/Station";
-import { fetchDirections } from "@/app/api/directions/route";
+import {
+  fetchDirectionsMatrix,
+  isMatrixProvider,
+} from "@/app/api/directions/route";
 import { haversineKm } from "@/lib/geo/stations";
 import { VEHICLE_LIST } from "@/lib/config/vehicles";
 
@@ -321,13 +324,51 @@ function getExcelValueForColumn<T extends PrivateRow | SharedRow>(
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();
 
   const requestedDate = req.nextUrl.searchParams.get("date")?.trim();
   const targetDate = requestedDate || getTomorrowDate();
+  const requestedMatrixProvider =
+    req.nextUrl.searchParams.get("matrixProvider");
+  const matrixProvider = isMatrixProvider(requestedMatrixProvider)
+    ? requestedMatrixProvider
+    : "osrm";
+  const requestedValhallaCosting =
+    req.nextUrl.searchParams.get("valhallaCosting");
+  const valhallaCosting =
+    requestedValhallaCosting === "taxi" || requestedValhallaCosting === "bus"
+      ? requestedValhallaCosting
+      : "auto";
+  const requestedValhallaDateTimeType = req.nextUrl.searchParams.get(
+    "valhallaDateTimeType",
+  );
+  const valhallaDateTimeType =
+    requestedValhallaDateTimeType === "depart_at" ||
+    requestedValhallaDateTimeType === "arrive_by"
+      ? requestedValhallaDateTimeType
+      : "current";
+  const valhallaDateTime = req.nextUrl.searchParams
+    .get("valhallaDateTime")
+    ?.trim();
+  const requestedTravelTimeTransportation = req.nextUrl.searchParams.get(
+    "travelTimeTransportation",
+  );
+  const travelTimeTransportation =
+    requestedTravelTimeTransportation === "walking" ||
+    requestedTravelTimeTransportation === "cycling"
+      ? requestedTravelTimeTransportation
+      : "driving";
+  const requestedTravelTimeDepartureTime = req.nextUrl.searchParams
+    .get("travelTimeDepartureTime")
+    ?.trim();
+  const travelTimeDepartureTime =
+    requestedTravelTimeDepartureTime &&
+    !Number.isNaN(Date.parse(requestedTravelTimeDepartureTime))
+      ? requestedTravelTimeDepartureTime
+      : new Date().toISOString();
 
   const privateTrips = await Trip.find({
     date: targetDate,
@@ -659,66 +700,103 @@ export async function GET(req: NextRequest) {
     .map((id) => stationMap.get(id) ?? syntheticStationMap.get(id))
     .filter((station): station is StationInfo => Boolean(station));
 
-  const routeCache = new Map<
-    string,
+  const directionsTable = await fetchDirectionsMatrix(
+    matrixProvider,
+    stationsSheetRows,
     {
-      distance_km: number;
-      duration_minutes: number;
-      usedDistanceFallback: boolean;
-      usedDurationFallback: boolean;
-    }
-  >();
+      valhalla: {
+        costing: valhallaCosting,
+        dateTimeType: valhallaDateTimeType,
+        dateTime: valhallaDateTime || undefined,
+      },
+      travelTime: {
+        transportation: travelTimeTransportation,
+        departureTime: travelTimeDepartureTime,
+      },
+    },
+  );
+  console.log(
+    "[Admin matrix] Provider result",
+    JSON.stringify({
+      provider: matrixProvider,
+      pointCount: stationsSheetRows.length,
+      receivedTable: directionsTable !== null,
+      distanceRows: directionsTable?.distancesKm.length ?? 0,
+      durationRows: directionsTable?.durationsMinutes.length ?? 0,
+    }),
+  );
+  const skimMetrics = stationsSheetRows.map((originStation, rowIndex) =>
+    stationsSheetRows.map((destStation, colIndex) => {
+      if (
+        originStation.lat === destStation.lat &&
+        originStation.lng === destStation.lng
+      ) {
+        return {
+          distance_km: 0,
+          duration_minutes: 0,
+          usedDistanceFallback: false,
+          usedDurationFallback: false,
+          usedGraphHopperDistance: false,
+          usedGraphHopperDuration: false,
+        };
+      }
 
-  async function fetchRouteMetrics(
-    from: { lat: number; lng: number },
-    to: { lat: number; lng: number },
-  ) {
-    const key = `${from.lat},${from.lng}->${to.lat},${to.lng}`;
-    const cached = routeCache.get(key);
-    if (cached) return cached;
-    if (from.lat === to.lat && from.lng === to.lng) {
-      const same = {
-        distance_km: 0,
-        duration_minutes: 0,
-        usedDistanceFallback: false,
-        usedDurationFallback: false,
+      const directDistanceKm = haversineKm(
+        originStation.lat,
+        originStation.lng,
+        destStation.lat,
+        destStation.lng,
+      );
+      const estimatedDurationMinutes = Math.max(
+        1,
+        Math.round((directDistanceKm / 35) * 60),
+      );
+      const routeDistanceKm =
+        directionsTable?.distancesKm[rowIndex]?.[colIndex];
+      const routeDurationMinutes =
+        directionsTable?.durationsMinutes[rowIndex]?.[colIndex];
+      const hasRouteDistance =
+        typeof routeDistanceKm === "number" && routeDistanceKm > 0;
+      const hasRouteDuration =
+        typeof routeDurationMinutes === "number" && routeDurationMinutes > 0;
+
+      return {
+        distance_km: hasRouteDistance
+          ? routeDistanceKm
+          : Math.round(directDistanceKm * 10) / 10,
+        duration_minutes: hasRouteDuration
+          ? routeDurationMinutes
+          : estimatedDurationMinutes,
+        usedDistanceFallback: !hasRouteDistance,
+        usedDurationFallback: !hasRouteDuration,
+        usedGraphHopperDistance:
+          matrixProvider === "graphhopper" && hasRouteDistance,
+        usedGraphHopperDuration:
+          matrixProvider === "graphhopper" && hasRouteDuration,
       };
-      routeCache.set(key, same);
-      return same;
-    }
-
-    const origin = `${from.lat},${from.lng}`;
-    const dest = `${to.lat},${to.lng}`;
-    const result = await fetchDirections(origin, dest);
-    const directDistanceKm = haversineKm(from.lat, from.lng, to.lat, to.lng);
-    const estimatedDurationMinutes = Math.max(
-      1,
-      Math.round((directDistanceKm / 35) * 60),
-    );
-
-    const hasRouteDistance =
-      result[0] &&
-      Number.isFinite(result[0].distance_km) &&
-      result[0].distance_km > 0;
-    const hasRouteDuration =
-      result[0] &&
-      Number.isFinite(result[0].duration_minutes) &&
-      result[0].duration_minutes > 0;
-
-    const metrics = {
-      distance_km: hasRouteDistance
-        ? Math.round(result[0].distance_km * 10) / 10
-        : Math.round(directDistanceKm * 10) / 10,
-      duration_minutes: hasRouteDuration
-        ? result[0].duration_minutes
-        : estimatedDurationMinutes,
-      usedDistanceFallback: !hasRouteDistance,
-      usedDurationFallback: !hasRouteDuration,
-    };
-
-    routeCache.set(key, metrics);
-    return metrics;
-  }
+    }),
+  );
+  const fallbackSummary = skimMetrics.reduce(
+    (summary, row) => {
+      for (const metrics of row) {
+        if (metrics.usedDistanceFallback) summary.distanceCells += 1;
+        if (metrics.usedDurationFallback) summary.durationCells += 1;
+      }
+      return summary;
+    },
+    { distanceCells: 0, durationCells: 0 },
+  );
+  console.log(
+    "[Admin matrix] Fallback summary",
+    JSON.stringify({
+      provider: matrixProvider,
+      ...fallbackSummary,
+      reason:
+        directionsTable === null
+          ? "provider returned no matrix"
+          : "provider matrix contained missing or non-positive cells",
+    }),
+  );
 
   const wb = new ExcelJS.Workbook();
 
@@ -738,7 +816,7 @@ export async function GET(req: NextRequest) {
 
   VEHICLE_LIST.forEach((vehicle, index) => {
     const rowNumber = index + 2;
-    const waitingRateFormula = `=ROUND(0.5*E${rowNumber}*50*I${rowNumber},0)`;
+    const waitingRateFormula = `=ROUND(0.5*E${rowNumber}*30*I${rowNumber},0)`;
     const additionalRateFormula = `=${vehicle.additional_rate}*E${rowNumber}`;
     const waitingRateValue =
       0.5 * vehicle.rate * Math.pow(50, 0.8) * vehicle.min_occupancy;
@@ -783,6 +861,7 @@ export async function GET(req: NextRequest) {
   const matrixDuration = wb.addWorksheet("Time_Skim");
   matrixDuration.getCell("A1").value = "District Id";
   const fallbackCellColor = "FF00FFFF";
+  const graphHopperCellColor = "FF00B050";
 
   stationsSheetRows.forEach((station, index) => {
     const column = index + 2;
@@ -799,12 +878,7 @@ export async function GET(req: NextRequest) {
 
   for (let rowIndex = 0; rowIndex < stationsSheetRows.length; rowIndex++) {
     for (let colIndex = 0; colIndex < stationsSheetRows.length; colIndex++) {
-      const originStation = stationsSheetRows[rowIndex];
-      const destStation = stationsSheetRows[colIndex];
-      const metrics = await fetchRouteMetrics(
-        { lat: originStation.lat, lng: originStation.lng },
-        { lat: destStation.lat, lng: destStation.lng },
-      );
+      const metrics = skimMetrics[rowIndex][colIndex];
       const distanceCell = matrixDistance
         .getRow(rowIndex + 2)
         .getCell(colIndex + 2);
@@ -821,6 +895,12 @@ export async function GET(req: NextRequest) {
           pattern: "solid",
           fgColor: { argb: fallbackCellColor },
         };
+      } else if (metrics.usedGraphHopperDistance) {
+        distanceCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: graphHopperCellColor },
+        };
       }
 
       if (metrics.usedDurationFallback) {
@@ -828,6 +908,12 @@ export async function GET(req: NextRequest) {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: fallbackCellColor },
+        };
+      } else if (metrics.usedGraphHopperDuration) {
+        durationCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: graphHopperCellColor },
         };
       }
     }
@@ -1096,17 +1182,11 @@ export async function GET(req: NextRequest) {
     sharedRideRequests: sharedRows,
     availability: availabilityRows,
     stations: stationsSheetRows,
-    stationMatrixDistance: stationsSheetRows.map((origin) =>
-      stationsSheetRows.map((dest) => {
-        const key = `${origin.lat},${origin.lng}->${dest.lat},${dest.lng}`;
-        return routeCache.get(key)?.distance_km ?? 0;
-      }),
+    stationMatrixDistance: skimMetrics.map((row) =>
+      row.map((metrics) => metrics.distance_km),
     ),
-    stationMatrixDuration: stationsSheetRows.map((origin) =>
-      stationsSheetRows.map((dest) => {
-        const key = `${origin.lat},${origin.lng}->${dest.lat},${dest.lng}`;
-        return routeCache.get(key)?.duration_minutes ?? 0;
-      }),
+    stationMatrixDuration: skimMetrics.map((row) =>
+      row.map((metrics) => metrics.duration_minutes),
     ),
   };
 

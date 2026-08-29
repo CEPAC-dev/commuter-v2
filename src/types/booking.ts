@@ -33,6 +33,7 @@ export type RideStatus =
 
 export interface RidePassengerRow {
   tripId: string;
+  userId?: string;
   pickupAddress: string;
   dropoffAddress: string;
   pickupOrder: number;
@@ -115,10 +116,19 @@ export interface TripListRow {
     name?: string;
     phone?: string;
     profilePic?: string;
+    profilePicture?: string;
     carBrand?: string;
     carModel?: string;
+    carType?: string;
     modelYear?: string;
+    vehicleColor?: string;
+    carCapacity?: number;
+    carImage?: string;
     plate?: string;
+    plateChar1?: string;
+    plateChar2?: string;
+    plateChar3?: string;
+    plateDigits?: string;
   } | null;
   rating?: { driverRating: number; carRating: number } | null;
 }

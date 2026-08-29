@@ -795,10 +795,11 @@ export default function DriverProfileClient({
             <div>
               <label style={labelStyle}>{t("profile.plate_letters")} / {t("profile.plate_numbers")}</label>
               <div
+                dir="rtl"
                 style={{
                   display: "flex",
                   gap: 8,
-                  direction: dir === "rtl" ? "rtl" : "ltr",
+                  direction: "rtl",
                 }}
               >
                 {[
@@ -824,6 +825,7 @@ export default function DriverProfileClient({
                   <input
                     key={i}
                     ref={currentRef}
+                    dir="rtl"
                     type="text"
                     inputMode="text"
                     maxLength={1}
@@ -847,6 +849,7 @@ export default function DriverProfileClient({
                 ))}
                 <input
                   ref={plateDigitsRef}
+                  dir="rtl"
                   type="text"
                   inputMode="numeric"
                   minLength={3}

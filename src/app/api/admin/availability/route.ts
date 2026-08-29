@@ -102,7 +102,7 @@ async function buildAvailabilityPayload(input: {
 const ALLOWED_STATUSES = ["open", "matched", "full", "closed", "cancelled"];
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();
@@ -113,7 +113,10 @@ export async function GET(req: NextRequest) {
   const driverId = searchParams.get("driverId")?.trim();
   const date = searchParams.get("date")?.trim();
   const status = searchParams.get("status")?.trim();
-  const availabilityNumber = Number(searchParams.get("availabilityNumber") ?? "");
+  const availabilityNumberParam = searchParams.get("availabilityNumber")?.trim();
+  const availabilityNumber = availabilityNumberParam
+    ? Number(availabilityNumberParam)
+    : null;
   const safePage = Number.isFinite(page) && page > 0 ? page : 1;
   const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 20;
   const skip = (safePage - 1) * safeLimit;
@@ -122,7 +125,9 @@ export async function GET(req: NextRequest) {
   if (driverId) query.driverId = driverId;
   if (date) query.date = date;
   if (status && ALLOWED_STATUSES.includes(status)) query.status = status;
-  if (Number.isFinite(availabilityNumber)) query.availabilityNumber = availabilityNumber;
+  if (availabilityNumber !== null && Number.isFinite(availabilityNumber)) {
+    query.availabilityNumber = availabilityNumber;
+  }
 
   const [records, totalCount] = await Promise.all([
     Availability.find(query)
@@ -143,7 +148,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await adminAuth(req);
+  const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
 
   await connectDB();
