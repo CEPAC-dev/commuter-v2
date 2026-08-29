@@ -11,6 +11,7 @@ import type { SavedAddress } from "@/types/shared";
 
 interface Props {
   placeholder: string;
+  label?: React.ReactNode;
   value: TripPoint | null;
   onChange: (p: TripPoint | null) => void;
   icon?: React.ReactNode;
@@ -26,6 +27,7 @@ interface Suggestion {
 
 export default function AddressInput({
   placeholder,
+  label,
   value,
   onChange,
   icon,
@@ -133,14 +135,29 @@ export default function AddressInput({
       <label
         htmlFor={id}
         style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          overflow: "hidden",
-          clip: "rect(0,0,0,0)",
+          ...(label
+            ? {
+                position: "absolute",
+                top: -8,
+                left: 12,
+                zIndex: 1,
+                padding: "0 5px",
+                background: "#f8f9fa",
+                color: "#00C2A8",
+                fontSize: 12,
+                fontWeight: 600,
+                lineHeight: 1.2,
+              }
+            : {
+                position: "absolute",
+                width: 1,
+                height: 1,
+                overflow: "hidden",
+                clip: "rect(0,0,0,0)",
+              }),
         }}
       >
-        {placeholder}
+        {label ?? placeholder}
       </label>
       <div
         style={{
@@ -150,8 +167,8 @@ export default function AddressInput({
           padding: "0 12px",
           height: 52,
           background: "#f8f9fa",
-          borderRadius: 10,
-          border: "1.5px solid #e8edf0",
+          borderRadius: 5,
+          border: "1.5px solid rgb(200, 232, 228)",
           transition: "border-color 0.15s, box-shadow 0.15s",
         }}
         onFocusCapture={(e) => {
@@ -161,7 +178,8 @@ export default function AddressInput({
         }}
         onBlurCapture={(e) => {
           if (!wrapRef.current?.contains(e.relatedTarget as Node)) {
-            (e.currentTarget as HTMLDivElement).style.borderColor = "#e8edf0";
+            (e.currentTarget as HTMLDivElement).style.borderColor =
+              "rgb(200, 232, 228)";
             (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
           }
         }}
@@ -235,7 +253,7 @@ export default function AddressInput({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              borderRadius: 6,
+              borderRadius: 5,
             }}
           >
             <X size={15} />
@@ -254,8 +272,8 @@ export default function AddressInput({
             left: 0,
             right: 0,
             background: "#ffffff",
-            border: "1.5px solid #e8edf0",
-            borderRadius: 12,
+            border: "1.5px solid rgb(200, 232, 228)",
+            borderRadius: 5,
             boxShadow: "0 8px 32px rgba(11,30,61,0.13)",
             listStyle: "none",
             margin: 0,
@@ -306,7 +324,7 @@ export default function AddressInput({
                   }}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLLIElement).style.background =
-                      "#eff7f6";
+                      "rgb(200, 232, 228)";
                   }}
                   onMouseLeave={(e) => {
                     (e.currentTarget as HTMLLIElement).style.background =
