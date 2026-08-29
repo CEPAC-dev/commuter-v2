@@ -29,6 +29,7 @@ export interface AssignedDriver {
   carType?: string;
   modelYear?: string;
   vehicleColor?: string;
+  carColor?: string;
   carCapacity?: number;
   carImage?: string;
   plate?: string;
@@ -128,12 +129,13 @@ export async function buildAssignedDriver(
       .lean<{ name?: string; phone?: string }>(),
     Driver.findOne({ userId: driverId })
       .select(
-        "carBrand carModel modelYear plateChar1 plateChar2 plateChar3 plateDigits documents",
+        "carBrand carModel modelYear vehicleColor plateChar1 plateChar2 plateChar3 plateDigits documents",
       )
       .lean<{
         carBrand?: string;
         carModel?: string;
         modelYear?: number;
+        vehicleColor?: string;
         plateChar1?: string;
         plateChar2?: string;
         plateChar3?: string;
@@ -160,6 +162,8 @@ export async function buildAssignedDriver(
     carBrand: driver?.carBrand,
     carModel: driver?.carModel,
     modelYear: driver?.modelYear ? String(driver.modelYear) : undefined,
+    vehicleColor: driver?.vehicleColor,
+    carColor: driver?.vehicleColor,
     plate,
   };
 }

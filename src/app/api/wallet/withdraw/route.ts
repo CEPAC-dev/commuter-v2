@@ -17,6 +17,7 @@ import {
   refundWithdrawal,
 } from "@/lib/wallet/wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
+import { getAdminSettings, computeWithdrawableBalance } from "@/lib/cancellationPolicy";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -92,9 +93,15 @@ export async function POST(req: NextRequest) {
   }
 
   const wallet = await getOrCreateWallet(session.userId);
-  if (wallet.balanceEgp < amount) {
+  const settings = await getAdminSettings();
+  const reserveAmount = wallet.reserveAmount ?? settings.walletReserveAmount ?? 200;
+  const withdrawable = computeWithdrawableBalance(wallet.balanceEgp, reserveAmount);
+
+  if (withdrawable < amount) {
     return NextResponse.json(
-      { error: "Insufficient balance." },
+      {
+        error: `Insufficient withdrawable balance. A reserve of ${reserveAmount} EGP must remain in your wallet (Withdrawable: ${withdrawable} EGP).`,
+      },
       { status: 400 },
     );
   }

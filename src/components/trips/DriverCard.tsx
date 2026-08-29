@@ -10,6 +10,8 @@ interface DriverCardData {
   carBrand?: string;
   carModel?: string;
   modelYear?: string;
+  vehicleColor?: string;
+  carColor?: string;
   plate?: string;
 }
 
@@ -31,6 +33,7 @@ export default function DriverCard({
   showCall?: boolean;
 }) {
   const { t, dir } = useClientLocale();
+  const carColor = driver.vehicleColor ?? driver.carColor;
 
   return (
     <div
@@ -144,6 +147,16 @@ export default function DriverCard({
           <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0B1E3D" }}>
             {(driver.carBrand ?? "") + (driver.carBrand && driver.carModel ? " " : "") + (driver.carModel ?? "") || t("my_trips.vehicle_pending")}
             {driver.modelYear ? ` · ${driver.modelYear}` : ""}
+          </p>
+          <p
+            style={{
+              margin: "4px 0 0",
+              fontSize: 12,
+              color: "#5A6A7A",
+              fontWeight: 600,
+            }}
+          >
+            {carColor ? `Color: ${carColor}` : t("my_trips.vehicle_pending")}
           </p>
           <p
             style={{

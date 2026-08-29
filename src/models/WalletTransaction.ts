@@ -36,6 +36,8 @@ const WalletTransactionSchema = new Schema(
         // Gateway (card) leg of a Payment — mirrors gatewayAmountEgp so
         // Kashier-only or mixed payments appear in the ledger/admin views.
         "kashier_payment",
+        // Driver penalty for cancelling ride late
+        "cancellation_penalty",
       ],
     },
     amountEgp: { type: Number, required: true, min: 0 },
@@ -48,6 +50,7 @@ const WalletTransactionSchema = new Schema(
     description: { type: String, required: true },
     balanceAfterEgp: { type: Number },
     bookingId: { type: Types.ObjectId, ref: "Booking" },
+    rideId: { type: Types.ObjectId, ref: "Ride" },
     paymentId: {
       type: Types.ObjectId,
       ref: "Payment",
