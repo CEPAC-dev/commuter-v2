@@ -85,9 +85,21 @@ html[dir="rtl"] body {
   text-align: right;
 }
 
-/* Ensure all text elements align right in RTL */
-html[dir="rtl"] * {
+/* Keep most content RTL, but preserve LTR behavior for phone/password inputs */
+html[dir="rtl"] :not(input):not(textarea):not(select):not(button):not(a):not(svg):not([data-ltr="true"]) {
   direction: rtl;
+}
+
+html[dir="rtl"] input[type="tel"],
+html[dir="rtl"] input[type="password"],
+html[dir="rtl"] input[type="number"],
+html[dir="rtl"] input[inputmode="numeric"],
+html[dir="rtl"] input[data-ltr="true"],
+html[dir="rtl"] textarea[data-ltr="true"],
+html[dir="rtl"] .ltr-field,
+html[dir="rtl"] .ltr-field * {
+  direction: ltr !important;
+  text-align: left !important;
 }
 
 /* Booking / activity card hover */

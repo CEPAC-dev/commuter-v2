@@ -1,18 +1,19 @@
 'use client';
 
+import { useClientLocale } from '@/lib/i18n/client';
+
 interface Props {
   password: string;
 }
 
-function getStrength(pw: string): { score: 0 | 1 | 2 | 3 | 4; label: string } {
-  if (!pw) return { score: 0, label: '' };
+function computeScore(pw: string): 0 | 1 | 2 | 3 | 4 {
+  if (!pw) return 0;
   let score = 0;
   if (pw.length >= 8) score++;
   if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
-  const labels = ['', 'Weak', 'Fair', 'Strong', 'Very strong'];
-  return { score: score as 0 | 1 | 2 | 3 | 4, label: labels[score] };
+  return score as 0 | 1 | 2 | 3 | 4;
 }
 
 const SEGMENT_COLORS: Record<number, string> = {
@@ -23,10 +24,26 @@ const SEGMENT_COLORS: Record<number, string> = {
 };
 
 export default function PasswordStrengthMeter({ password }: Props) {
-  const { score, label } = getStrength(password);
+  const { t } = useClientLocale();
+  const score = computeScore(password);
   if (!password) return null;
 
   const color = SEGMENT_COLORS[score] ?? '#D1D5DB';
+
+  const labelMap: Record<number, string> = {
+    1: t('password_strength.weak'),
+    2: t('password_strength.fair'),
+    3: t('password_strength.strong'),
+    4: t('password_strength.very_strong'),
+  };
+
+  const hintMap: Record<number, string> = {
+    1: t('password_strength.hint_1'),
+    2: t('password_strength.hint_2'),
+    3: t('password_strength.hint_3'),
+  };
+
+  const label = labelMap[score] ?? '';
 
   return (
     <div style={{ marginTop: 8 }}>
@@ -45,11 +62,9 @@ export default function PasswordStrengthMeter({ password }: Props) {
       {label && (
         <p style={{ marginTop: 6, fontSize: 12, color }}>
           {label}
-          {score < 4 && score > 0 && (
-            <span style={{ color: '#9CA3AF', marginLeft: 4 }}>
-              {score === 1 && '— Add uppercase, numbers & symbols'}
-              {score === 2 && '— Add numbers & special characters'}
-              {score === 3 && '— Add a special character'}
+          {score < 4 && score > 0 && hintMap[score] && (
+            <span style={{ color: '#9CA3AF', marginLeft: 4, marginRight: 4 }}>
+              {hintMap[score]}
             </span>
           )}
         </p>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateMutationRequest } from "@/lib/security/request";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Driver } from "@/models/Driver";
