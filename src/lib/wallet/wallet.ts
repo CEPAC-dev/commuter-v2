@@ -40,7 +40,7 @@ export async function getOrCreateWallet(userId: string) {
   return Wallet.findOneAndUpdate(
     { userId: uid },
     { $setOnInsert: { balanceEgp: 0 } },
-    { new: true, upsert: true, runValidators: true },
+    { returnDocument: "after", upsert: true, runValidators: true },
   );
 }
 
@@ -89,7 +89,7 @@ export async function creditWallet(
             amountEgp: safeAmount,
           },
           { $set: { status: "completed" } },
-          { new: true, session, runValidators: true },
+          { returnDocument: "after", session, runValidators: true },
         );
         if (!claimed) {
           const existing = await WalletTransaction.findOne({
@@ -114,7 +114,7 @@ export async function creditWallet(
           $inc: { balanceEgp: safeAmount, totalCreditedEgp: safeAmount },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, upsert: true, session, runValidators: true },
+        { returnDocument: "after", upsert: true, session, runValidators: true },
       );
 
       if (transactionId) {
@@ -127,7 +127,7 @@ export async function creditWallet(
             balanceAfterEgp: { $exists: false },
           },
           { $set: { balanceAfterEgp: wallet.balanceEgp } },
-          { new: true, session, runValidators: true },
+          { returnDocument: "after", session, runValidators: true },
         );
         if (!ledger) throw new Error("Top-up ledger entry not found");
       } else {
@@ -184,7 +184,7 @@ export async function debitWallet(
           $inc: { balanceEgp: -safeAmount, totalDebitedEgp: safeAmount },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, session, runValidators: true },
+        { returnDocument: "after", session, runValidators: true },
       );
       if (!wallet) return;
       await WalletTransaction.create(
@@ -245,13 +245,13 @@ export async function creditDriverEarning(
           $inc: { balanceEgp: amountEgp, totalCreditedEgp: amountEgp },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, upsert: true, session },
+        { returnDocument: "after", upsert: true, session },
       );
 
       const settled = await WalletTransaction.findOneAndUpdate(
         { _id: ledger._id, status: "pending" },
         { $set: { status: "completed", balanceAfterEgp: wallet.balanceEgp } },
-        { new: true, session },
+        { returnDocument: "after", session },
       );
       if (!settled) throw new Error("Earning ledger claim failed");
       balance = wallet.balanceEgp;
@@ -304,7 +304,7 @@ export async function reserveWithdrawal(
           $inc: { balanceEgp: -safeAmount, totalDebitedEgp: safeAmount },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, session, runValidators: true },
+        { returnDocument: "after", session, runValidators: true },
       );
       if (!wallet) return;
 
@@ -370,7 +370,7 @@ export async function refundWithdrawal(
       const tx = await WalletTransaction.findOneAndUpdate(
         { _id: transactionId, type: "withdrawal", status: "pending" },
         { $set: { status: "failed" } },
-        { new: true, session },
+        { returnDocument: "after", session },
       );
       if (!tx) return;
 
@@ -380,7 +380,7 @@ export async function refundWithdrawal(
           $inc: { balanceEgp: tx.amountEgp, totalDebitedEgp: -tx.amountEgp },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, session },
+        { returnDocument: "after", session },
       );
       if (!wallet) throw new Error("Withdrawal wallet not found");
 
@@ -441,7 +441,7 @@ export async function reserveWallet(
           $inc: { reservedBalanceEgp: safeAmount },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, session, runValidators: true },
+        { returnDocument: "after", session, runValidators: true },
       );
       if (!wallet) return;
 
@@ -496,7 +496,7 @@ export async function captureReservation(
       const reservation = await WalletTransaction.findOneAndUpdate(
         { _id: reservationId, type: "payment_reserved", status: "pending" },
         { $set: { status: "completed" } },
-        { new: true, session, runValidators: true },
+        { returnDocument: "after", session, runValidators: true },
       );
       if (!reservation) return;
 
@@ -514,7 +514,7 @@ export async function captureReservation(
           },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, session, runValidators: true },
+        { returnDocument: "after", session, runValidators: true },
       );
       if (!wallet) throw new Error("Wallet reservation invariant failed");
 
@@ -564,7 +564,7 @@ export async function releaseReservation(
       const reservation = await WalletTransaction.findOneAndUpdate(
         { _id: reservationId, type: "payment_reserved", status: "pending" },
         { $set: { status: "failed" } },
-        { new: true, session, runValidators: true },
+        { returnDocument: "after", session, runValidators: true },
       );
       if (!reservation) return;
 
@@ -577,7 +577,7 @@ export async function releaseReservation(
           $inc: { reservedBalanceEgp: -reservation.amountEgp },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, session, runValidators: true },
+        { returnDocument: "after", session, runValidators: true },
       );
       if (!wallet) throw new Error("Wallet reservation invariant failed");
 

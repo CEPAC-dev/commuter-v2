@@ -23,7 +23,7 @@ export async function enforceRateLimit(
       $inc: { count: 1 },
       $setOnInsert: { expiresAt: new Date(windowStart + options.windowMs) },
     },
-    { new: true, upsert: true, setDefaultsOnInsert: true },
+    { returnDocument: "after", upsert: true, setDefaultsOnInsert: true },
   );
 
   if (record.count <= options.limit) return null;

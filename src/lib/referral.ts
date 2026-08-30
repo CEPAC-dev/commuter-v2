@@ -184,7 +184,7 @@ export async function creditReferralBonusIfEligible(
             firstTripId: new Types.ObjectId(tripId),
           },
         },
-        { new: true, session },
+        { returnDocument: "after", session },
       )
         .select("referrer referrerBonusAmount refereeBonusAmount")
         .lean();
@@ -199,7 +199,7 @@ export async function creditReferralBonusIfEligible(
           },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, upsert: true, session },
+        { returnDocument: "after", upsert: true, session },
       ).lean();
       const refereeWallet = await Wallet.findOneAndUpdate(
         { userId: new Types.ObjectId(referredUserId) },
@@ -210,7 +210,7 @@ export async function creditReferralBonusIfEligible(
           },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, upsert: true, session },
+        { returnDocument: "after", upsert: true, session },
       ).lean();
 
       await WalletTransaction.create(
