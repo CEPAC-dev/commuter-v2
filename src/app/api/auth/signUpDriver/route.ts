@@ -18,17 +18,10 @@ import {
   normalizePlainText,
   validateMutationRequest,
 } from "@/lib/security/request";
-import { enforceRateLimit } from "@/lib/security/rateLimit";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
   if (invalidRequest) return invalidRequest;
-  const limited = await enforceRateLimit(req, "driver-register", {
-    limit: 5,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return limited;
-
   try {
     const { name, phone, password, email, gender } = await req.json();
     const safeName = normalizePlainText(name, { maxLength: 100 });

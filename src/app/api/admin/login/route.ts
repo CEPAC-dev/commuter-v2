@@ -9,17 +9,10 @@ import {
   validateMutationRequest,
 } from "@/lib/security/request";
 import { normalizeEgyptPhone } from "@/lib/auth/validation";
-import { enforceRateLimit } from "@/lib/security/rateLimit";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
   if (invalidRequest) return invalidRequest;
-  const limited = await enforceRateLimit(req, "admin-login", {
-    limit: 10,
-    windowMs: 15 * 60 * 1000,
-  });
-  if (limited) return limited;
-
   try {
     const { phone, password } = await req.json();
 
