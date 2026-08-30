@@ -31,9 +31,8 @@ export default function OperationConsole() {
   const [valhallaDateTime, setValhallaDateTime] = useState("");
   const [travelTimeTransportation, setTravelTimeTransportation] =
     useState("driving");
-  const [travelTimeDepartureTime, setTravelTimeDepartureTime] = useState(
-    currentLocalDateTime,
-  );
+  const [travelTimeDepartureTime, setTravelTimeDepartureTime] =
+    useState(currentLocalDateTime);
   const [availabilityDate, setAvailabilityDate] = useState("");
   const [loadingMatchData, setLoadingMatchData] = useState(false);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
@@ -69,6 +68,22 @@ export default function OperationConsole() {
   const [stationsImportLoading, setStationsImportLoading] = useState(false);
   const [stationsMessage, setStationsMessage] = useState<string | null>(null);
   const [stationsData, setStationsData] = useState<StationRecord[]>([]);
+  const [stationsMatrixProvider, setStationsMatrixProvider] = useState("osrm");
+  const [stationsValhallaCosting, setStationsValhallaCosting] =
+    useState("auto");
+  const [stationsValhallaDateTimeType, setStationsValhallaDateTimeType] =
+    useState("current");
+  const [stationsValhallaDateTime, setStationsValhallaDateTime] = useState("");
+  const [
+    stationsTravelTimeTransportation,
+    setStationsTravelTimeTransportation,
+  ] = useState("driving");
+  const [stationsTravelTimeDepartureTime, setStationsTravelTimeDepartureTime] =
+    useState(currentLocalDateTime);
+  const [stationsMatrixLoading, setStationsMatrixLoading] = useState(false);
+  const [stationsMatrixMessage, setStationsMatrixMessage] = useState<
+    string | null
+  >(null);
   const [ridesDatePurge, setRidesDatePurge] = useState("");
   const [ridesPurgeLoading, setRidesPurgeLoading] = useState(false);
   const [ridesPurgeTodayLoading, setRidesPurgeTodayLoading] = useState(false);
@@ -381,6 +396,70 @@ export default function OperationConsole() {
       );
     } finally {
       setStationsLoading(false);
+    }
+  }
+
+  async function handleGenerateStationsMatrix(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    setStationsMatrixLoading(true);
+    setStationsMatrixMessage(null);
+
+    try {
+      const target = new URL(
+        "/api/admin/stations/matrix",
+        window.location.origin,
+      );
+      target.searchParams.set("matrixProvider", stationsMatrixProvider);
+      if (stationsMatrixProvider === "valhalla") {
+        target.searchParams.set("valhallaCosting", stationsValhallaCosting);
+        target.searchParams.set(
+          "valhallaDateTimeType",
+          stationsValhallaDateTimeType,
+        );
+        if (
+          stationsValhallaDateTimeType !== "current" &&
+          stationsValhallaDateTime
+        ) {
+          target.searchParams.set("valhallaDateTime", stationsValhallaDateTime);
+        }
+      }
+      if (stationsMatrixProvider === "traveltime") {
+        target.searchParams.set(
+          "travelTimeTransportation",
+          stationsTravelTimeTransportation,
+        );
+        target.searchParams.set(
+          "travelTimeDepartureTime",
+          new Date(stationsTravelTimeDepartureTime).toISOString(),
+        );
+      }
+
+      const response = await fetch(target.toString());
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || "Unable to generate station matrix.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "stations-matrix.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setStationsMatrixMessage("Station matrix downloaded successfully.");
+    } catch (error) {
+      setStationsMatrixMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to generate station matrix.",
+      );
+    } finally {
+      setStationsMatrixLoading(false);
     }
   }
 
@@ -1504,6 +1583,240 @@ export default function OperationConsole() {
             import station points.
           </p>
         </div>
+
+        <form
+          onSubmit={handleGenerateStationsMatrix}
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+            marginBottom: 16,
+            paddingBottom: 16,
+            borderBottom: "1px solid #E6EAEC",
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 220,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              Matrix API calculator
+            </span>
+            <select
+              value={stationsMatrixProvider}
+              onChange={(event) =>
+                setStationsMatrixProvider(event.target.value)
+              }
+              style={{
+                border: "1px solid #D8E0E4",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+                background: "#ffffff",
+              }}
+            >
+              <option value="osrm">OSRM</option>
+              <option value="openrouteservice">OpenRouteService</option>
+              <option value="valhalla">Valhalla</option>
+              <option value="graphhopper">GraphHopper</option>
+              <option value="traveltime">TravelTime</option>
+            </select>
+          </label>
+          {stationsMatrixProvider === "valhalla" ? (
+            <>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 160,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Valhalla costing
+                </span>
+                <select
+                  value={stationsValhallaCosting}
+                  onChange={(event) =>
+                    setStationsValhallaCosting(event.target.value)
+                  }
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="taxi">Taxi</option>
+                  <option value="bus">Bus</option>
+                </select>
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 160,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Traffic time
+                </span>
+                <select
+                  value={stationsValhallaDateTimeType}
+                  onChange={(event) =>
+                    setStationsValhallaDateTimeType(event.target.value)
+                  }
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="current">Current time</option>
+                  <option value="depart_at">Depart at</option>
+                  <option value="arrive_by">Arrive by</option>
+                </select>
+              </label>
+              {stationsValhallaDateTimeType !== "current" ? (
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    minWidth: 220,
+                  }}
+                >
+                  <span
+                    style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                  >
+                    Traffic date and time
+                  </span>
+                  <input
+                    value={stationsValhallaDateTime}
+                    onChange={(event) =>
+                      setStationsValhallaDateTime(event.target.value)
+                    }
+                    type="datetime-local"
+                    required
+                    style={{
+                      border: "1px solid #D8E0E4",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      fontSize: 14,
+                    }}
+                  />
+                </label>
+              ) : null}
+            </>
+          ) : null}
+          {stationsMatrixProvider === "traveltime" ? (
+            <>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 180,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Transportation type
+                </span>
+                <select
+                  value={stationsTravelTimeTransportation}
+                  onChange={(event) =>
+                    setStationsTravelTimeTransportation(event.target.value)
+                  }
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="driving">Driving</option>
+                  <option value="walking">Walking</option>
+                  <option value="cycling">Cycling</option>
+                </select>
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 220,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Departure time
+                </span>
+                <input
+                  value={stationsTravelTimeDepartureTime}
+                  onChange={(event) =>
+                    setStationsTravelTimeDepartureTime(event.target.value)
+                  }
+                  type="datetime-local"
+                  required
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+            </>
+          ) : null}
+          <button
+            type="submit"
+            disabled={stationsMatrixLoading}
+            style={{
+              border: "none",
+              borderRadius: 10,
+              background: stationsMatrixLoading ? "#7BD7CB" : "#00C2A8",
+              color: "#ffffff",
+              fontWeight: 700,
+              padding: "10px 16px",
+              cursor: stationsMatrixLoading ? "wait" : "pointer",
+              alignSelf: "flex-end",
+            }}
+          >
+            {stationsMatrixLoading ? "Generating matrix..." : "Generate Matrix"}
+          </button>
+          {stationsMatrixMessage ? (
+            <p
+              style={{
+                flexBasis: "100%",
+                margin: 0,
+                fontSize: 14,
+                color: stationsMatrixMessage.includes("success")
+                  ? "#00877A"
+                  : "#B94A48",
+              }}
+            >
+              {stationsMatrixMessage}
+            </p>
+          ) : null}
+        </form>
 
         <form
           onSubmit={handleFetchStations}

@@ -33,7 +33,8 @@ export interface MatrixOptions {
 }
 
 type MatrixPoint = { lat: number; lng: number };
-const GRAPHHOPPER_GROUP_SIZE = 10;
+const GRAPHHOPPER_BATCH_SIZE = 10;
+const GRAPHHOPPER_CONCURRENCY = 8;
 
 export function isMatrixProvider(
   value: string | null,
@@ -213,13 +214,13 @@ export async function fetchGraphHopperMatrix(
 
   const url = `${baseUrl}/matrix`;
   const groups = Array.from(
-    { length: Math.ceil(points.length / GRAPHHOPPER_GROUP_SIZE) },
+    { length: Math.ceil(points.length / GRAPHHOPPER_BATCH_SIZE) },
     (_, index) => {
-      const start = index * GRAPHHOPPER_GROUP_SIZE;
-      return points.slice(start, start + GRAPHHOPPER_GROUP_SIZE).map((point, offset) => ({
-        point,
-        originalIndex: start + offset,
-      }));
+      const start = index * GRAPHHOPPER_BATCH_SIZE;
+      return {
+        start,
+        points: points.slice(start, start + GRAPHHOPPER_BATCH_SIZE),
+      };
     },
   );
   const distancesKm = Array.from({ length: points.length }, () =>
@@ -229,29 +230,30 @@ export async function fetchGraphHopperMatrix(
     Array<number | null>(points.length).fill(null),
   );
 
-  for (let firstGroupIndex = 0; firstGroupIndex < groups.length; firstGroupIndex++) {
-    for (
-      let secondGroupIndex = firstGroupIndex;
-      secondGroupIndex < groups.length;
-      secondGroupIndex++
-    ) {
-      const requestPoints =
-        firstGroupIndex === secondGroupIndex
-          ? groups[firstGroupIndex]
-          : [...groups[firstGroupIndex], ...groups[secondGroupIndex]];
+  const batches = groups.flatMap((sourceGroup, sourceGroupIndex) =>
+    groups.slice(sourceGroupIndex).map((targetGroup, offset) => ({
+      sourceGroup,
+      sourceGroupIndex,
+      targetGroup,
+      targetGroupIndex: sourceGroupIndex + offset,
+    })),
+  );
+  let nextBatchIndex = 0;
+
+  async function processBatches() {
+    while (nextBatchIndex < batches.length) {
+      const batchIndex = nextBatchIndex++;
+      const { sourceGroup, sourceGroupIndex, targetGroup, targetGroupIndex } =
+        batches[batchIndex];
+      const batchLabel = `${sourceGroupIndex + 1}-${targetGroupIndex + 1}`;
+      const isSameGroup = sourceGroupIndex === targetGroupIndex;
+      const combinedPoints = isSameGroup
+        ? sourceGroup.points
+        : [...sourceGroup.points, ...targetGroup.points];
       const payload = {
-        points: requestPoints.map(({ point }) => [point.lng, point.lat]),
+        points: combinedPoints.map(({ lat, lng }) => [lng, lat]),
         profile: "car",
       };
-      console.log(
-        "[GraphHopper matrix] Request",
-        JSON.stringify({
-          url,
-          batch: `${firstGroupIndex + 1}-${secondGroupIndex + 1}`,
-          pointCount: requestPoints.length,
-          payload,
-        }),
-      );
 
       const res = await fetch(url, {
         method: "POST",
@@ -262,7 +264,7 @@ export async function fetchGraphHopperMatrix(
       if (!res.ok) {
         const errorBody = await res.text();
         console.error(
-          `[GraphHopper matrix] Batch ${firstGroupIndex + 1}-${secondGroupIndex + 1} ${res.status} ${res.statusText}: ${errorBody}`,
+          `[GraphHopper matrix] Batch ${batchLabel} ${res.status} ${res.statusText}: ${errorBody}`,
         );
         continue;
       }
@@ -271,22 +273,31 @@ export async function fetchGraphHopperMatrix(
         distances?: Array<Array<number | null>>;
         times?: Array<Array<number | null>>;
       };
+      const isCombinedResponse =
+        data.distances?.length === combinedPoints.length &&
+        data.times?.length === combinedPoints.length &&
+        data.distances.every((row) => row.length === combinedPoints.length) &&
+        data.times.every((row) => row.length === combinedPoints.length);
       if (
         !data.distances ||
         !data.times ||
-        data.distances.length !== requestPoints.length ||
-        data.times.length !== requestPoints.length
+        !isCombinedResponse
       ) {
         console.error(
-          `[GraphHopper matrix] Batch ${firstGroupIndex + 1}-${secondGroupIndex + 1} returned invalid dimensions.`,
+          `[GraphHopper matrix] Batch ${batchLabel} returned invalid dimensions: ${data.distances?.length ?? 0}x${data.distances?.[0]?.length ?? 0}.`,
         );
         continue;
       }
 
-      requestPoints.forEach(({ originalIndex: originIndex }, rowIndex) => {
-        requestPoints.forEach(({ originalIndex: destinationIndex }, colIndex) => {
-          const distance = data.distances?.[rowIndex]?.[colIndex];
-          const duration = data.times?.[rowIndex]?.[colIndex];
+      sourceGroup.points.forEach((_, rowIndex) => {
+        targetGroup.points.forEach((_, colIndex) => {
+          const responseColumnIndex = !isSameGroup
+            ? sourceGroup.points.length + colIndex
+            : colIndex;
+          const distance = data.distances?.[rowIndex]?.[responseColumnIndex];
+          const duration = data.times?.[rowIndex]?.[responseColumnIndex];
+          const originIndex = sourceGroup.start + rowIndex;
+          const destinationIndex = targetGroup.start + colIndex;
           distancesKm[originIndex][destinationIndex] =
             typeof distance === "number" && distance >= 0
               ? Math.round((distance / 1000) * 10) / 10
@@ -297,12 +308,50 @@ export async function fetchGraphHopperMatrix(
               : null;
         });
       });
+
+      if (!isSameGroup) {
+        targetGroup.points.forEach((_, rowIndex) => {
+          sourceGroup.points.forEach((_, colIndex) => {
+            const responseRowIndex = sourceGroup.points.length + rowIndex;
+            const distance = data.distances?.[responseRowIndex]?.[colIndex];
+            const duration = data.times?.[responseRowIndex]?.[colIndex];
+            const originIndex = targetGroup.start + rowIndex;
+            const destinationIndex = sourceGroup.start + colIndex;
+            distancesKm[originIndex][destinationIndex] =
+              typeof distance === "number" && distance >= 0
+                ? Math.round((distance / 1000) * 10) / 10
+                : null;
+            durationsMinutes[originIndex][destinationIndex] =
+              typeof duration === "number" && duration >= 0
+                ? Math.round(duration / 60)
+                : null;
+          });
+        });
+      }
+
+      if ((batchIndex + 1) % 100 === 0 || batchIndex + 1 === batches.length) {
+        console.log(
+          `[GraphHopper matrix] Completed ${batchIndex + 1}/${batches.length} batches.`,
+        );
+      }
     }
   }
 
+  await Promise.all(
+    Array.from(
+      { length: Math.min(GRAPHHOPPER_CONCURRENCY, batches.length) },
+      () => processBatches(),
+    ),
+  );
+
   console.log(
     "[GraphHopper matrix] Completed",
-    JSON.stringify({ pointCount: points.length, batchCount: (groups.length * (groups.length + 1)) / 2 }),
+    JSON.stringify({
+      pointCount: points.length,
+      batchSize: GRAPHHOPPER_BATCH_SIZE,
+      batchCount: batches.length,
+      concurrency: GRAPHHOPPER_CONCURRENCY,
+    }),
   );
   return { distancesKm, durationsMinutes };
 }
