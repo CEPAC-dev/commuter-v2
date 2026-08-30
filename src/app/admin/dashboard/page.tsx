@@ -10,6 +10,7 @@ import LanguageToggle from "@/components/layout/LanguageToggle";
 import MatchRideForm from "@/components/admin/MatchRideForm";
 import { AdminCard, AdminPageContainer, AdminPageHeader } from "@/components/admin/layout";
 import { AdminTopbarActions } from "@/components/admin/layout/AdminShell";
+import SmsBalanceCard from "@/components/admin/SmsBalanceCard";
 
 export default async function AdminDashboardPage() {
   const session = await getSession();
@@ -100,6 +101,8 @@ export default async function AdminDashboardPage() {
           ))}
         </div>
       </AdminCard>
+
+      <SmsBalanceCard />
 
       <MatchRideForm
         initialDate={new Date().toISOString().slice(0, 10)}

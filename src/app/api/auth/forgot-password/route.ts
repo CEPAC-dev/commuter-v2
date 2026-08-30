@@ -5,6 +5,7 @@ import { User } from "@/models/User";
 import { validateMutationRequest } from "@/lib/security/request";
 import { enforceRateLimit } from "@/lib/security/rateLimit";
 import { isStrongPassword, normalizeEgyptPhone, PASSWORD_RULES_MESSAGE } from "@/lib/auth/validation";
+import { consumeSmsOtp } from "@/lib/auth/smsOtp";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   try {
-    const { phone, role, newPassword, confirmPassword } = await req.json();
+    const { phone, role, newPassword, confirmPassword, otp } = await req.json();
 
     if (!phone || !newPassword || !confirmPassword) {
       return NextResponse.json({ error: "Phone and password fields are required." }, { status: 400 });
@@ -47,6 +48,14 @@ export async function POST(req: NextRequest) {
         { error: "No account found with this phone number." },
         { status: 404 }
       );
+    }
+
+    const validOtp = await consumeSmsOtp(
+      { purpose: "password_reset", userId: String(user._id), phone: normalizedPhone, role },
+      otp,
+    );
+    if (!validOtp) {
+      return NextResponse.json({ error: "Invalid or expired verification code." }, { status: 400 });
     }
 
     user.passwordHash = await bcrypt.hash(newPassword, 12);

@@ -11,6 +11,7 @@ interface ProfileUser {
   name: string;
   email: string;
   phone: string;
+  phoneVerifiedAt: string | null;
   region: RegionKey | null;
   savedAddresses: SavedAddress[];
 }
@@ -50,12 +51,13 @@ export async function getProfile(
   await connectDB();
 
   const user = await User.findById(userId)
-    .select("userNumber name email phone profilePic region savedAddresses")
+    .select("userNumber name email phone phoneVerifiedAt profilePic region savedAddresses")
     .lean<{
       userNumber: number;
       name: string;
       email: string;
       phone?: string;
+      phoneVerifiedAt?: Date | string | null;
       profilePic?: string | null;
       region?: string;
       savedAddresses?: SavedAddress[];
@@ -67,6 +69,9 @@ export async function getProfile(
     name: user.name,
     email: user.email,
     phone: user.phone ?? "",
+    phoneVerifiedAt: user.phoneVerifiedAt
+      ? new Date(user.phoneVerifiedAt).toISOString()
+      : null,
     region: isRegionKey(user.region) ? user.region : null,
     savedAddresses: serializeAddresses(user.savedAddresses),
   };

@@ -7,6 +7,7 @@ import AppHeader from "@/components/layout/AppHeader";
 import ChangePasswordSection from "@/components/shared/ChangePasswordSection";
 import SavedAddressesSection from "@/components/shared/SavedAddressesSection";
 import ReferralCard from "@/components/shared/ReferralCard";
+import PhoneVerificationCard from "@/components/shared/PhoneVerificationCard";
 import type { SavedAddress } from "@/types/shared";
 import { useClientLocale } from "@/lib/i18n/client";
 import {
@@ -21,6 +22,7 @@ interface Props {
   initialName: string;
   email: string;
   initialPhone: string;
+  initialPhoneVerified: boolean;
   initialRegion: RegionKey | null;
   initialProfilePic?: string | null;
   initialSavedAddresses: SavedAddress[];
@@ -31,6 +33,7 @@ export default function ProfileClient({
   initialName,
   email,
   initialPhone,
+  initialPhoneVerified,
   initialRegion,
   initialProfilePic,
   initialSavedAddresses,
@@ -670,6 +673,10 @@ export default function ProfileClient({
 
         <div style={{ marginTop: 20 }}>
           <ChangePasswordSection />
+        </div>
+
+        <div style={{ marginTop: 20 }}>
+          <PhoneVerificationCard initialVerified={initialPhoneVerified} />
         </div>
 
         <div

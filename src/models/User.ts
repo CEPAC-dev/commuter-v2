@@ -39,6 +39,7 @@ const UserSchema = new Schema(
       maxlength: 13,
       match: /^\+20\d{10}$/,
     },
+    phoneVerifiedAt: { type: Date, default: null },
     passwordHash: { type: String, required: true, select: false },
     email: {
       type: String,
@@ -87,6 +88,9 @@ if (existingUserModel) {
     existingUserModel.schema.add({
       referralUnlimited: { type: Boolean, default: false },
     });
+  }
+  if (!existingUserModel.schema.path("phoneVerifiedAt")) {
+    existingUserModel.schema.add({ phoneVerifiedAt: { type: Date, default: null } });
   }
 }
 

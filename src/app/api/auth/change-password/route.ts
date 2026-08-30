@@ -3,15 +3,12 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { getSession } from "@/lib/auth/session";
-import {
-  isPasswordInput,
-  isSafePassword,
-  validateMutationRequest,
-} from "@/lib/security/request";
+import { validateMutationRequest } from "@/lib/security/request";
 import {
   PASSWORD_RULES_MESSAGE,
   isStrongPassword,
 } from "@/lib/auth/validation";
+import { consumeSmsOtp } from "@/lib/auth/smsOtp";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -22,12 +19,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { currentPassword, newPassword, confirmPassword } = await req.json();
+    const { newPassword, confirmPassword, otp } = await req.json();
 
     if (
-      !isPasswordInput(currentPassword) ||
-      !isSafePassword(newPassword) ||
-      !isPasswordInput(confirmPassword)
+      typeof newPassword !== "string" ||
+      typeof confirmPassword !== "string"
     )
       return NextResponse.json(
         { error: PASSWORD_RULES_MESSAGE },
@@ -46,21 +42,23 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
 
-    if (currentPassword === newPassword)
-      return NextResponse.json(
-        { error: "New password must be different from current password." },
-        { status: 400 },
-      );
-
     await connectDB();
-    const user = await User.findById(session.userId).select("+passwordHash");
+    const user = await User.findById(session.userId).select("+passwordHash phone role");
     if (!user)
       return NextResponse.json({ error: "User not found." }, { status: 404 });
 
-    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
-    if (!valid)
+    const validOtp = await consumeSmsOtp(
+      {
+        purpose: "password_change",
+        userId: session.userId,
+        phone: user.phone,
+        role: user.role === "driver" ? "driver" : "passenger",
+      },
+      otp,
+    );
+    if (!validOtp)
       return NextResponse.json(
-        { error: "Current password is incorrect." },
+        { error: "Invalid or expired verification code." },
         { status: 400 },
       );
 

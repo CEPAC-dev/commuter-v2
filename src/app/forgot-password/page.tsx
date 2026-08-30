@@ -21,6 +21,9 @@ export default function ForgotPasswordPage() {
   const [phone, setPhone] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -66,6 +69,31 @@ export default function ForgotPasswordPage() {
     el.style.boxShadow = "none";
   };
 
+  async function handleSendCode() {
+    setError("");
+    setSuccess("");
+    if (!phone.trim()) {
+      setError(t("auth.phone_required"));
+      return;
+    }
+    setSendingCode(true);
+    try {
+      const res = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purpose: "password_reset", phone: phone.trim(), role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? t("auth.something_went_wrong"));
+      setCodeSent(true);
+      setSuccess("A verification code was sent to your phone.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t("auth.something_went_wrong"));
+    } finally {
+      setSendingCode(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -86,6 +114,11 @@ export default function ForgotPasswordPage() {
       return;
     }
 
+    if (!/^\d{6}$/.test(otp)) {
+      setError("Enter the 6-digit verification code.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -94,6 +127,7 @@ export default function ForgotPasswordPage() {
         role,
         newPassword,
         confirmPassword,
+        otp,
       };
 
       const res = await fetch("/api/auth/forgot-password", {
@@ -317,6 +351,31 @@ export default function ForgotPasswordPage() {
                 style={{ ...inputStyle, padding: "0 14px", direction: "ltr", textAlign: "left" }}
               />
             </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button
+              type="button"
+              onClick={handleSendCode}
+              disabled={sendingCode || loading}
+              style={{ height: 46, borderRadius: 10, border: "1.5px solid #0B1E3D", background: "#fff", color: "#0B1E3D", fontWeight: 700, cursor: sendingCode || loading ? "not-allowed" : "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              {sendingCode ? <><Loader2 size={16} className="animate-spin" /> Sending code…</> : codeSent ? "Resend verification code" : "Send verification code"}
+            </button>
+            {codeSent ? (
+              <div style={fieldStyle}>
+                <Lock size={17} style={{ color: "#5A6A7A" }} aria-hidden="true" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="6-digit verification code"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  style={{ ...inputStyle, letterSpacing: 3, direction: "ltr", textAlign: "left" }}
+                />
+              </div>
+            ) : null}
           </div>
 
           <div>
