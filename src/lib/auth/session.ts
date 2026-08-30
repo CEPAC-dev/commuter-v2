@@ -11,7 +11,7 @@ const VALID_ROLES = new Set<UserRole>(["passenger", "driver", "admin"]);
 function getSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET is not set");
-  if (process.env.NODE_ENV === "production" && secret.length < 32)
+  if (process.env.APP_ENV === "production" && secret.length < 32)
     throw new Error("JWT_SECRET must be at least 32 characters in production");
   return new TextEncoder().encode(secret);
 }
@@ -40,7 +40,7 @@ export async function createSession(payload: SessionPayload): Promise<void> {
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.APP_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: MAX_AGE,
