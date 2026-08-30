@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
       balanceEgp: wallet?.balanceEgp ?? 0,
       referrerBonusAmount: settings.referrerBonusAmount,
       maxUsersPerCode: settings.maxUsersPerCode,
+      isActive: settings.isActive,
       referralUnlimited: Boolean(user.referralUnlimited),
       stats: {
         total,

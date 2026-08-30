@@ -369,6 +369,7 @@ function LoginForm() {
             setEmail={setEmail}
             gender={gender}
             setGender={setGender}
+            referralCode={referralCode}
             onSuccess={() => router.replace("/profile")}
           />
         ) : (

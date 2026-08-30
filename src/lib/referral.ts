@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "crypto";
-import mongoose, { Types } from "mongoose";
+import mongoose, { Types, type ClientSession } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import {
   type ReferralSettingsRole,
@@ -23,15 +23,19 @@ export interface ReferralResult {
 
 export async function getOrCreateReferralSettings(
   role: ReferralSettingsRole = "passenger",
+  session?: ClientSession,
 ) {
   await connectDB();
 
-  const existing = await ReferralSettings.findOne({ singletonKey: role });
+  const existing = await ReferralSettings.findOne({ singletonKey: role }).session(
+    session ?? null,
+  );
   if (existing) return existing;
 
   // Preserve the original global configuration as the passenger baseline.
   const legacySettings = await ReferralSettings.findOne({ singletonKey: "global" })
     .select("referrerBonusAmount refereeBonusAmount maxUsersPerCode isActive")
+    .session(session ?? null)
     .lean();
 
   return ReferralSettings.findOneAndUpdate(
@@ -49,7 +53,12 @@ export async function getOrCreateReferralSettings(
           : {}),
       },
     },
-    { upsert: true, returnDocument: "after", runValidators: true },
+    {
+      upsert: true,
+      returnDocument: "after",
+      runValidators: true,
+      ...(session ? { session } : {}),
+    },
   );
 }
 
@@ -79,19 +88,10 @@ export async function applyReferralOnSignup(
 
   const normalizedCode = referralCode.trim().toUpperCase();
   const referrer = await User.findOne({ referralCode: normalizedCode })
-    .select("_id role referralUnlimited")
+    .select("_id")
     .lean();
   if (!referrer) {
     return { success: false, message: "Referral code is invalid." };
-  }
-
-  if (referrer.role !== "passenger" && referrer.role !== "driver") {
-    return { success: false, message: "Referral code is invalid." };
-  }
-
-  const settings = await getOrCreateReferralSettings(referrer.role);
-  if (!settings.isActive) {
-    return { success: false, message: "Referrals are not currently active." };
   }
 
   const referredUserId = new Types.ObjectId(String(newUserId));
@@ -104,15 +104,44 @@ export async function applyReferralOnSignup(
     return { success: false, message: "This account cannot use a referral code." };
   }
 
-  const usageCount = await ReferralUsage.countDocuments({ referrer: referrer._id });
-  if (!referrer.referralUnlimited && usageCount >= settings.maxUsersPerCode) {
-    return { success: false, message: "This referral code has reached its usage limit." };
-  }
-
   const session = await mongoose.startSession();
   try {
     let result: ReferralResult = { success: false, message: "Referral failed." };
     await session.withTransaction(async () => {
+      // Serialize referrals for this code so concurrent transactions cannot share a stale count.
+      const lockedReferrer = await User.findOneAndUpdate(
+        { _id: referrer._id },
+        { $inc: { referralLockVersion: 1 } },
+        { returnDocument: "after", session },
+      )
+        .select("_id role referralUnlimited")
+        .lean();
+
+      if (
+        !lockedReferrer ||
+        (lockedReferrer.role !== "passenger" && lockedReferrer.role !== "driver")
+      ) {
+        throw new Error("INVALID_REFERRER");
+      }
+
+      const settings = await getOrCreateReferralSettings(
+        lockedReferrer.role,
+        session,
+      );
+      if (!settings.isActive) {
+        throw new Error("REFERRALS_INACTIVE");
+      }
+
+      const usageCount = await ReferralUsage.countDocuments({
+        referrer: lockedReferrer._id,
+      }).session(session);
+      if (
+        !lockedReferrer.referralUnlimited &&
+        usageCount >= settings.maxUsersPerCode
+      ) {
+        throw new Error("REFERRAL_LIMIT_REACHED");
+      }
+
       // 1. Create ReferralUsage directly with status "credited"
       const usageArr = await ReferralUsage.create(
         [
@@ -126,7 +155,7 @@ export async function applyReferralOnSignup(
             firstTripId: null,
           },
         ],
-        { session },
+        { session, ordered: true },
       );
       const usage = usageArr[0];
 
@@ -190,7 +219,7 @@ export async function applyReferralOnSignup(
             referralUsageId: usage._id,
           },
         ],
-        { session },
+        { session, ordered: true },
       );
 
       // 5. Create Notifications for both users
@@ -219,16 +248,26 @@ export async function applyReferralOnSignup(
             },
           },
         ],
-        { session },
+        { session, ordered: true },
       );
 
       result = { success: true, message: "Referral applied successfully." };
     });
     return result;
   } catch (error) {
+    const message = (error as { message?: string }).message;
+    if (message === "INVALID_REFERRER") {
+      return { success: false, message: "Referral code is invalid." };
+    }
+    if (message === "REFERRALS_INACTIVE") {
+      return { success: false, message: "Referrals are not currently active." };
+    }
+    if (message === "REFERRAL_LIMIT_REACHED") {
+      return { success: false, message: "This referral code has reached its usage limit." };
+    }
     if (
       (error as { code?: number }).code === 11000 ||
-      (error as { message?: string }).message === "ALREADY_REFERRED"
+      message === "ALREADY_REFERRED"
     ) {
       return { success: false, message: "This account already used a referral code." };
     }
@@ -243,9 +282,175 @@ export async function applyReferralOnSignup(
  * Legacy crediting on trip completion — neutralized because crediting now occurs instantly on signup.
  */
 export async function creditReferralBonusIfEligible(
-  _referredUserId: string,
-  _tripId: string,
+  referredUserId: string,
+  tripId: string,
 ): Promise<boolean> {
-  // Neutralized: Referral bonuses are now credited instantly on signup in applyReferralOnSignup.
+  console.log(`[ReferralCheck] Trip completion check for referee [${referredUserId}], trip [${tripId}] — instant crediting active, skipped.`);
   return false;
+}
+
+/**
+ * Reconciles a stuck pending ReferralUsage record by atomically crediting both wallets,
+ * creating ledger transactions, generating notifications, and marking the status as "credited".
+ * Guarded against double-crediting.
+ */
+export async function reconcileReferralUsage(
+  referralUsageId: string | Types.ObjectId,
+): Promise<{
+  success: boolean;
+  message: string;
+  referrerNewBalance?: number;
+  refereeNewBalance?: number;
+  status?: string;
+}> {
+  await connectDB();
+
+  if (!Types.ObjectId.isValid(referralUsageId)) {
+    return { success: false, message: "Invalid referral usage ID." };
+  }
+
+  const usage = await ReferralUsage.findById(referralUsageId);
+  if (!usage) {
+    return { success: false, message: "Referral usage record not found." };
+  }
+
+  if (usage.status === "credited") {
+    return {
+      success: true,
+      message: "Referral has already been credited.",
+      status: "credited",
+    };
+  }
+
+  const session = await mongoose.startSession();
+  try {
+    let result = {
+      success: false,
+      message: "Reconciliation failed.",
+      referrerNewBalance: 0,
+      refereeNewBalance: 0,
+      status: "pending",
+    };
+
+    await session.withTransaction(async () => {
+      const updatedUsage = await ReferralUsage.findOneAndUpdate(
+        { _id: usage._id, status: "pending" },
+        { $set: { status: "credited", creditedAt: new Date() } },
+        { session, returnDocument: "after" },
+      );
+
+      if (!updatedUsage) {
+        throw new Error("ALREADY_CREDITED");
+      }
+
+      const referrerWallet = await Wallet.findOneAndUpdate(
+        { userId: usage.referrer },
+        {
+          $inc: {
+            balanceEgp: usage.referrerBonusAmount,
+            totalCreditedEgp: usage.referrerBonusAmount,
+          },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { returnDocument: "after", upsert: true, session },
+      ).lean();
+
+      const refereeWallet = await Wallet.findOneAndUpdate(
+        { userId: usage.referredUser },
+        {
+          $inc: {
+            balanceEgp: usage.refereeBonusAmount,
+            totalCreditedEgp: usage.refereeBonusAmount,
+          },
+          $set: { lastTransactionAt: new Date() },
+        },
+        { returnDocument: "after", upsert: true, session },
+      ).lean();
+
+      const referrerNewBalance =
+        referrerWallet?.balanceEgp ?? usage.referrerBonusAmount;
+      const refereeNewBalance =
+        refereeWallet?.balanceEgp ?? usage.refereeBonusAmount;
+
+      await WalletTransaction.create(
+        [
+          {
+            userId: usage.referrer,
+            type: "referral_bonus",
+            amountEgp: usage.referrerBonusAmount,
+            status: "completed",
+            description: "Referral bonus (reconciled)",
+            balanceAfterEgp: referrerNewBalance,
+            referralUsageId: usage._id,
+          },
+          {
+            userId: usage.referredUser,
+            type: "referral_bonus",
+            amountEgp: usage.refereeBonusAmount,
+            status: "completed",
+            description: "Welcome referral bonus (reconciled)",
+            balanceAfterEgp: refereeNewBalance,
+            referralUsageId: usage._id,
+          },
+        ],
+        { session, ordered: true },
+      );
+
+      await Notification.create(
+        [
+          {
+            userId: usage.referrer,
+            type: "referral_bonus",
+            title: "Referral bonus received",
+            body: `Someone signed up with your referral code — your wallet is now ${referrerNewBalance} EGP (+${usage.referrerBonusAmount}).`,
+            data: {
+              amount: usage.referrerBonusAmount,
+              newBalanceEgp: referrerNewBalance,
+              referralUsageId: usage._id,
+            },
+          },
+          {
+            userId: usage.referredUser,
+            type: "referral_bonus",
+            title: "Welcome bonus credited",
+            body: `Your referral bonus has been credited — your wallet is now ${refereeNewBalance} EGP (+${usage.refereeBonusAmount}).`,
+            data: {
+              amount: usage.refereeBonusAmount,
+              newBalanceEgp: refereeNewBalance,
+              referralUsageId: usage._id,
+            },
+          },
+        ],
+        { session, ordered: true },
+      );
+
+      result = {
+        success: true,
+        message: "Referral bonus successfully reconciled and credited.",
+        referrerNewBalance,
+        refereeNewBalance,
+        status: "credited",
+      };
+    });
+
+    return result;
+  } catch (error: any) {
+    if (error?.message === "ALREADY_CREDITED") {
+      return {
+        success: true,
+        message: "Referral has already been credited.",
+        status: "credited",
+      };
+    }
+    console.error(
+      `[ReferralReconciliationError] Failed for usage [${referralUsageId}] referrer [${usage.referrer}] referee [${usage.referredUser}]:`,
+      error,
+    );
+    return {
+      success: false,
+      message: `Reconciliation failed: ${error?.message || "Unknown error"}`,
+    };
+  } finally {
+    await session.endSession();
+  }
 }

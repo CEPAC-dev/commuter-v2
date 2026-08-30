@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
+import { ReferralUsage } from "@/models/ReferralUsage";
 
 export async function GET(req: NextRequest) {
   const auth = await adminAuth();
@@ -26,8 +27,23 @@ export async function GET(req: NextRequest) {
     User.countDocuments(),
   ]);
 
+  const userIds = users.map((user) => user._id);
+  const referralUsageCounts = await ReferralUsage.aggregate<{
+    _id: unknown;
+    count: number;
+  }>([
+    { $match: { referrer: { $in: userIds } } },
+    { $group: { _id: "$referrer", count: { $sum: 1 } } },
+  ]);
+  const referralUsageMap = new Map(
+    referralUsageCounts.map((item) => [String(item._id), item.count]),
+  );
+
   return NextResponse.json({
-    users,
+    users: users.map((user) => ({
+      ...user,
+      referralUsageCount: referralUsageMap.get(String(user._id)) ?? 0,
+    })),
     totalCount,
     page: safePage,
     limit: safeLimit,
