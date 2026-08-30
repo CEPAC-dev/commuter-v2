@@ -57,7 +57,7 @@ const UserSchema = new Schema(
     region: {
       type: String,
       default: null,
-      enum: ["EG", "SA", null],
+      enum: ["EG", "KSA", null],
       index: true,
     },
     savedAddresses: { type: [SavedAddressSchema], default: [] },
@@ -76,7 +76,7 @@ if (existingUserModel && !existingUserModel.schema.path("region")) {
     region: {
       type: String,
       default: null,
-      enum: ["EG", "SA", null],
+      enum: ["EG", "KSA", null],
       index: true,
     },
   });

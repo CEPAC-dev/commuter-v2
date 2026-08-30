@@ -1,6 +1,6 @@
 import type { VehicleConfig, VehicleKey } from "@/lib/config/vehicles";
 
-export const REGION_KEYS = ["EG", "SA"] as const;
+export const REGION_KEYS = ["EG", "KSA"] as const;
 export type RegionKey = (typeof REGION_KEYS)[number];
 
 export interface RegionBounds {
@@ -32,11 +32,11 @@ export const REGIONS: Record<RegionKey, RegionConfig> = {
     center: { lat: 30.0444, lng: 31.2357 },
     bounds: { minLat: 21.5, maxLat: 32.0, minLng: 24.5, maxLng: 35.0 },
   },
-  SA: {
-    key: "SA",
+  KSA: {
+    key: "KSA",
     label: "Saudi Arabia",
     labelAr: "السعودية",
-    countryCode: "SA",
+    countryCode: "KSA",
     currency: "SAR",
     phonePrefix: "+966",
     center: { lat: 24.7136, lng: 46.6753 },
@@ -52,15 +52,13 @@ export const VEHICLE_REGIONS: Record<VehicleKey, RegionKey[] | "all"> = {
   private_car: "all",
   taxi_private: "all",
   taxi_shared: "all",
-  shared_car: ["SA"],
-  van_shared: ["EG"],
-  microbus_shared: ["EG"],
+  shared_car: "all",
+  van_shared: ["KSA"],
+  microbus_shared: ["KSA"],
 };
 
 export function isRegionKey(value: unknown): value is RegionKey {
-  return (
-    typeof value === "string" && REGION_KEYS.includes(value as RegionKey)
-  );
+  return typeof value === "string" && REGION_KEYS.includes(value as RegionKey);
 }
 
 export function normalizeRegion(value: unknown): RegionKey {
@@ -98,7 +96,7 @@ export function regionFromCoordinates(
   lat: number,
   lng: number,
 ): RegionKey | null {
-  for (const region of [REGIONS.EG, REGIONS.SA]) {
+  for (const region of [REGIONS.EG, REGIONS.KSA]) {
     const { minLat, maxLat, minLng, maxLng } = region.bounds;
     if (lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng) {
       return region.key;
