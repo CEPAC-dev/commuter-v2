@@ -29,6 +29,7 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const {
       walletReserveAmount,
+      defaultWithdrawalLimit,
       availabilityLockTime,
       cancellationTiers,
       passengerCancellationTiers,
@@ -41,6 +42,17 @@ export async function PUT(req: NextRequest) {
     ) {
       return NextResponse.json(
         { error: "walletReserveAmount must be a non-negative number." },
+        { status: 400 },
+      );
+    }
+
+    if (
+      defaultWithdrawalLimit !== undefined &&
+      defaultWithdrawalLimit !== null &&
+      (typeof defaultWithdrawalLimit !== "number" || defaultWithdrawalLimit <= 0 || !Number.isFinite(defaultWithdrawalLimit))
+    ) {
+      return NextResponse.json(
+        { error: "defaultWithdrawalLimit must be a positive number or null." },
         { status: 400 },
       );
     }
@@ -76,6 +88,7 @@ export async function PUT(req: NextRequest) {
       {
         $set: {
           walletReserveAmount,
+          defaultWithdrawalLimit: defaultWithdrawalLimit ?? null,
           availabilityLockTime,
           ...(cancellationTiers && { cancellationTiers }),
           ...(passengerCancellationTiers && { passengerCancellationTiers }),

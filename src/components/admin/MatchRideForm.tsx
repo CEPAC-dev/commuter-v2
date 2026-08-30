@@ -99,12 +99,14 @@ export default function MatchRideForm({
 
   useEffect(() => {
     if (!availabilityId && availabilities[0]) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvailabilityId(String(availabilities[0]._id));
     }
   }, [availabilityId, availabilities]);
 
   useEffect(() => {
     if (!driverId && drivers[0]) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDriverId(String(drivers[0]._id));
     }
   }, [driverId, drivers]);
@@ -114,6 +116,7 @@ export default function MatchRideForm({
   }, [trips, tripDateFilter]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPassengerInputs((current) => {
       const next: Record<string, PassengerInput> = { ...current };
       selectedTripIds.forEach((tripId, index) => {
@@ -313,19 +316,19 @@ export default function MatchRideForm({
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
 
         .match-form {
-          --ink: #0B1E3D;
-          --teal: #00C2A8;
-          --teal-deep: #00877A;
-          --amber: #E8A33D;
-          --amber-deep: #A96A00;
-          --slate: #5A6A7A;
-          --line: #E6EAEC;
-          --canvas: #F6F8F7;
+          --ink: var(--color-primary);
+          --teal: var(--color-secondary);
+          --teal-deep: var(--color-secondary-deep);
+          --amber: var(--color-accent);
+          --amber-deep: var(--color-accent-deep);
+          --slate: var(--color-muted);
+          --line: var(--color-border);
+          --canvas: var(--color-surface);
           font-family: 'Inter', system-ui, sans-serif;
-          background: #ffffff;
+          background: var(--color-panel);
           border: 1px solid var(--line);
           border-radius: 18px;
-          box-shadow: 0 10px 35px rgba(11,30,61,0.05);
+          box-shadow: 0 10px 35px var(--color-shadow);
           padding: 24px;
           margin-top: 20px;
           border-top: 3px solid var(--teal);
@@ -343,33 +346,33 @@ export default function MatchRideForm({
         }
 
         .match-form .field {
-          border: 1px solid #DDE4E7;
+          border: 1px solid var(--color-border);
           border-radius: 10px;
           padding: 10px 12px;
           font-size: 14px;
           color: var(--ink);
-          background: #ffffff;
+          background: var(--color-panel);
           width: 100%;
           font-family: 'Inter', system-ui, sans-serif;
           transition: border-color 0.12s ease, box-shadow 0.12s ease;
         }
-        .match-form .field:hover { border-color: #C7D1D6; }
+        .match-form .field:hover { border-color: var(--color-muted); }
         .match-form .field:focus-visible {
           outline: none;
           border-color: var(--teal);
-          box-shadow: 0 0 0 3px rgba(0,194,168,0.14);
+          box-shadow: 0 0 0 3px var(--color-secondary-tint);
         }
 
         .match-form .trip-card {
           border: 1px solid var(--line);
           border-radius: 12px;
           padding: 12px;
-          background: #fbfcfd;
+          background: var(--color-background);
           transition: border-color 0.12s ease, background 0.12s ease;
         }
         .match-form .trip-card.selected {
           border-color: var(--teal);
-          background: rgba(0,194,168,0.06);
+          background: var(--color-secondary-tint);
         }
         .match-form .trip-check {
           display: flex;
@@ -408,12 +411,12 @@ export default function MatchRideForm({
           font-size: 12px;
           font-weight: 600;
           background: var(--ink);
-          color: #ffffff;
+          color: var(--color-on-primary);
         }
         .order-track {
           flex: 1;
           height: 1px;
-          background-image: repeating-linear-gradient(to right, var(--teal) 0 6px, transparent 6px 11px);
+          background-image: repeating-linear-gradient(to right, var(--teal) 0 6px, var(--color-transparent) 6px 11px);
           opacity: 0.6;
         }
         .order-badge.drop { background: var(--amber-deep); }
@@ -423,7 +426,7 @@ export default function MatchRideForm({
           border-radius: 999px;
           padding: 12px 20px;
           background: var(--ink);
-          color: #ffffff;
+          color: var(--color-on-primary);
           font-weight: 700;
           font-size: 14px;
           width: fit-content;
@@ -460,7 +463,7 @@ export default function MatchRideForm({
           <p style={{ margin: "4px 0 0", color: "var(--slate)", fontSize: 14 }}>Pick a driver, availability slot, and one or more trips to turn into a shared or private ride.</p>
         </div>
         {selectedTripIds.length > 0 && (
-          <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: "var(--teal-deep)", background: "rgba(0,194,168,0.09)", border: "1px solid rgba(0,194,168,0.25)", borderRadius: 999, padding: "6px 12px" }}>
+          <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: "var(--teal-deep)", background: "var(--color-secondary-tint)", border: "1px solid var(--color-secondary)", borderRadius: 999, padding: "6px 12px" }}>
             {selectedTripIds.length} trip{selectedTripIds.length > 1 ? "s" : ""} · {totalSelectedPassengers} passenger{totalSelectedPassengers !== 1 ? "s" : ""}
           </span>
         )}
@@ -536,7 +539,7 @@ export default function MatchRideForm({
 
           <div style={{ display: "grid", gap: 10, maxHeight: 320, overflowY: "auto", paddingRight: 4 }}>
             {filteredTrips.length === 0 ? (
-              <div style={{ border: "1px dashed #DDE4E7", borderRadius: 12, padding: 16, color: "var(--slate)" }}>No trips are available for this date yet.</div>
+              <div style={{ border: "1px dashed var(--color-border)", borderRadius: 12, padding: 16, color: "var(--slate)" }}>No trips are available for this date yet.</div>
             ) : (
               filteredTrips.map((trip) => {
                 const tripId = String(trip._id);
@@ -612,11 +615,11 @@ export default function MatchRideForm({
         </div>
 
         {orderedPoints.length > 0 && (
-          <div style={{ marginTop: 14, padding: 16, background: "#F8FAFB", border: "1px solid #E6EAEC", borderRadius: 14 }}>
-            <h3 className="display" style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: "#0B1E3D" }}>
+          <div style={{ marginTop: 14, padding: 16, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 14 }}>
+            <h3 className="display" style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: "var(--color-primary)" }}>
               Route Points Sequence (First Station → Final Destination)
             </h3>
-            <p style={{ margin: "0 0 12px", fontSize: 13, color: "#5A6A7A" }}>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--color-muted)" }}>
               Reorder the sequence of pickup and dropoff points from 1st (Start Station) to Nth (Final Destination).
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -631,8 +634,8 @@ export default function MatchRideForm({
                       alignItems: "center",
                       justifyContent: "space-between",
                       padding: "10px 14px",
-                      background: "#ffffff",
-                      border: "1px solid #E6EAEC",
+                      background: "var(--color-panel)",
+                      border: "1px solid var(--color-border)",
                       borderRadius: 10,
                       gap: 10,
                     }}
@@ -644,8 +647,8 @@ export default function MatchRideForm({
                           minWidth: 26,
                           height: 26,
                           borderRadius: "50%",
-                          background: isFirst ? "#00C2A8" : isLast ? "#0B1E3D" : "#5A6A7A",
-                          color: "#ffffff",
+                          background: isFirst ? "var(--color-secondary)" : isLast ? "var(--color-primary)" : "var(--color-muted)",
+                          color: "var(--color-on-primary)",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -657,11 +660,11 @@ export default function MatchRideForm({
                         {idx + 1}
                       </span>
                       <div style={{ minWidth: 0 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D", display: "block" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-primary)", display: "block" }}>
                           {isFirst ? "1st (Start Station): " : isLast ? `${idx + 1}th (Final Station): ` : `${idx + 1}th Station: `}
                           {pt.type === "pickup" ? "Pickup" : "Dropoff"} · Trip #{pt.tripNumber ?? "—"}
                         </span>
-                        <span style={{ fontSize: 12, color: "#5A6A7A", display: "block", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 12, color: "var(--color-muted)", display: "block", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
                           {pt.address}
                         </span>
                       </div>
@@ -675,8 +678,8 @@ export default function MatchRideForm({
                         style={{
                           padding: "4px 8px",
                           borderRadius: 6,
-                          border: "1px solid #DDE4E7",
-                          background: "#ffffff",
+                          border: "1px solid var(--color-border)",
+                          background: "var(--color-panel)",
                           fontSize: 12,
                           fontWeight: 600,
                           cursor: isFirst ? "default" : "pointer",
@@ -692,8 +695,8 @@ export default function MatchRideForm({
                         style={{
                           padding: "4px 8px",
                           borderRadius: 6,
-                          border: "1px solid #DDE4E7",
-                          background: "#ffffff",
+                          border: "1px solid var(--color-border)",
+                          background: "var(--color-panel)",
                           fontSize: 12,
                           fontWeight: 600,
                           cursor: isLast ? "default" : "pointer",
@@ -711,7 +714,7 @@ export default function MatchRideForm({
         )}
 
         {feedback && (
-          <div style={{ padding: "12px 14px", borderRadius: 12, background: feedback.type === "success" ? "rgba(0,194,168,0.12)" : "rgba(232,163,61,0.16)", color: feedback.type === "success" ? "var(--teal-deep)" : "var(--amber-deep)", fontWeight: 600, fontSize: 14 }}>
+          <div style={{ padding: "12px 14px", borderRadius: 12, background: feedback.type === "success" ? "var(--color-success-tint)" : "var(--color-warning-tint)", color: feedback.type === "success" ? "var(--color-success)" : "var(--color-warning)", fontWeight: 600, fontSize: 14 }}>
             {feedback.message}
           </div>
         )}

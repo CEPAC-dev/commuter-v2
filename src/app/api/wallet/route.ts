@@ -39,13 +39,26 @@ export async function GET() {
     session.role === "driver"
       ? (wallet.reserveAmount ?? settings.walletReserveAmount ?? 200)
       : 0;
+  const withdrawalLimit =
+    session.role === "driver"
+      ? (wallet.withdrawalLimit ?? settings.defaultWithdrawalLimit ?? null)
+      : null;
+  const pendingWithdrawalAmount =
+    session.role === "driver"
+      ? (wallet.pendingWithdrawalAmount ?? 0)
+      : 0;
 
-  const withdrawableEgp = Math.max(0, wallet.balanceEgp - reserveAmount);
+  const withdrawableEgp =
+    session.role === "driver"
+      ? Math.max(0, wallet.balanceEgp - reserveAmount - pendingWithdrawalAmount)
+      : 0;
 
   return NextResponse.json({
     balanceEgp: wallet.balanceEgp,
     reservedBalanceEgp: wallet.reservedBalanceEgp ?? 0,
     reserveAmount,
+    pendingWithdrawalAmount,
+    withdrawalLimit,
     availableEgp: Math.max(
       0,
       (wallet.balanceEgp ?? 0) - (wallet.reservedBalanceEgp ?? 0),

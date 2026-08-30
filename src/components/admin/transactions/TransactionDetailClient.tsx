@@ -1,6 +1,14 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  AdminCard,
+  AdminErrorState,
+  AdminLoadingState,
+  AdminPageContainer,
+  AdminPageHeader,
+  AdminStatusBadge,
+} from "@/components/admin/layout";
 
 interface DetailData {
   transaction: {
@@ -116,8 +124,8 @@ export default function TransactionDetailClient({
     }
   }
 
-  if (error) return <main style={{ padding: 24 }}>Error: {error}</main>;
-  if (!data) return <main style={{ padding: 24 }}>Loading…</main>;
+  if (error) return <AdminPageContainer maxWidth={1000}><AdminErrorState title="Unable to load transaction" description={error} /></AdminPageContainer>;
+  if (!data) return <AdminPageContainer maxWidth={1000}><AdminLoadingState title="Loading transaction..." /></AdminPageContainer>;
 
   const p = data.payment;
   const canDoRefund =
@@ -127,38 +135,18 @@ export default function TransactionDetailClient({
   const maxRefundable = p ? p.totalEgp - (p.refundedAmountEgp ?? 0) : 0;
 
   return (
-    <main
-      style={{
-        padding: 24,
-        background: "#F6F8F7",
-        minHeight: "100dvh",
-        fontFamily: "Inter, system-ui, sans-serif",
-      }}
-    >
-      <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-        <Link
-          href="/admin/transactions"
-          style={{ fontSize: 12, color: "#5A6A7A", textDecoration: "none" }}
-        >
-          ← Transactions
-        </Link>
-        <h1
-          style={{
-            fontSize: 22,
-            fontWeight: 800,
-            color: "#0B1E3D",
-            margin: "4px 0 20px",
-          }}
-        >
-          Transaction {data.transaction.id}
-        </h1>
+    <AdminPageContainer maxWidth={1000}>
+        <AdminPageHeader
+          title={`Transaction ${data.transaction.id}`}
+          breadcrumb={<Link href="/admin/transactions" style={{ fontSize: 12, color: "var(--color-muted)", textDecoration: "none" }}>Transactions / Details</Link>}
+        />
 
         <div
           style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}
         >
           <Section title="Transaction">
             <Row k="Type" v={<code>{data.transaction.type}</code>} />
-            <Row k="Status" v={data.transaction.status} />
+            <Row k="Status" v={<AdminStatusBadge status={data.transaction.status} />} />
             <Row k="Amount" v={`${data.transaction.amountEgp} EGP`} />
             <Row k="Description" v={data.transaction.description} />
             <Row
@@ -196,7 +184,7 @@ export default function TransactionDetailClient({
                 k="Kashier portion"
                 v={`${p.gatewayAmountEgp} EGP — ${p.gatewayStatus}`}
               />
-              <Row k="Overall status" v={p.overallStatus} />
+              <Row k="Overall status" v={<AdminStatusBadge status={p.overallStatus} />} />
               <Row
                 k="Paid at"
                 v={p.paidAt ? new Date(p.paidAt).toLocaleString() : "—"}
@@ -222,8 +210,8 @@ export default function TransactionDetailClient({
             <Section title="Booking" full>
               <Row k="Booking id" v={<code>{data.booking.id}</code>} />
               <Row k="Amount" v={`${data.booking.amountEgp} EGP`} />
-              <Row k="Payment status" v={data.booking.paymentStatus} />
-              <Row k="Status" v={data.booking.status} />
+              <Row k="Payment status" v={<AdminStatusBadge status={data.booking.paymentStatus} />} />
+              <Row k="Status" v={<AdminStatusBadge status={data.booking.status} />} />
               <Row k="Dates" v={(data.booking.dates ?? []).join(", ")} />
               <Row k="Note" v={data.booking.note || "—"} />
             </Section>
@@ -231,21 +219,21 @@ export default function TransactionDetailClient({
 
           <Section title="Related ledger rows" full>
             {data.ledger.length === 0 && (
-              <div style={{ color: "#5A6A7A" }}>No related rows</div>
+              <div style={{ color: "var(--color-muted)" }}>No related rows</div>
             )}
             {data.ledger.map((l) => (
               <div
                 key={l.id}
                 style={{
                   padding: "8px 0",
-                  borderBottom: "1px solid #eef0f3",
+                  borderBottom: "1px solid var(--color-border)",
                   fontSize: 13,
                 }}
               >
                 <code style={{ fontSize: 11 }}>{l.type}</code> · {l.status} ·{" "}
                 <strong>{l.amountEgp} EGP</strong> ·{" "}
                 {new Date(l.createdAt).toLocaleString()}
-                <div style={{ color: "#5A6A7A", fontSize: 12 }}>
+                <div style={{ color: "var(--color-muted)", fontSize: 12 }}>
                   {l.description}
                 </div>
               </div>
@@ -254,7 +242,7 @@ export default function TransactionDetailClient({
 
           <Section title="Timeline" full>
             {data.timeline.length === 0 && (
-              <div style={{ color: "#5A6A7A" }}>No timeline</div>
+              <div style={{ color: "var(--color-muted)" }}>No timeline</div>
             )}
             {data.timeline.map((ev, i) => (
               <div
@@ -262,16 +250,16 @@ export default function TransactionDetailClient({
                 style={{
                   padding: "6px 0",
                   fontSize: 13,
-                  borderBottom: "1px solid #eef0f3",
+                  borderBottom: "1px solid var(--color-border)",
                 }}
               >
-                <span style={{ color: "#5A6A7A", fontSize: 11 }}>
+                <span style={{ color: "var(--color-muted)", fontSize: 11 }}>
                   {new Date(ev.at).toLocaleString()}
                 </span>
                 {" · "}
                 <code style={{ fontSize: 11 }}>{ev.event}</code>
                 {ev.detail && (
-                  <span style={{ color: "#5A6A7A" }}> — {ev.detail}</span>
+                  <span style={{ color: "var(--color-muted)" }}> — {ev.detail}</span>
                 )}
               </div>
             ))}
@@ -279,9 +267,9 @@ export default function TransactionDetailClient({
 
           {canDoRefund && (
             <Section title="Issue refund" full>
-              <div style={{ fontSize: 12, color: "#5A6A7A", marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--color-muted)", marginBottom: 8 }}>
                 Refundable remaining:{" "}
-                <strong style={{ color: "#0B1E3D" }}>
+                <strong style={{ color: "var(--color-primary)" }}>
                   {maxRefundable} EGP
                 </strong>
                 . Wallet portion is refunded first, then Kashier.
@@ -296,7 +284,7 @@ export default function TransactionDetailClient({
                   placeholder="Amount EGP"
                   style={{
                     padding: "8px 10px",
-                    border: "1.5px solid #eef0f3",
+                    border: "1.5px solid var(--color-border)",
                     borderRadius: 8,
                     fontSize: 13,
                     width: 140,
@@ -310,7 +298,7 @@ export default function TransactionDetailClient({
                   style={{
                     flex: 1,
                     padding: "8px 10px",
-                    border: "1.5px solid #eef0f3",
+                    border: "1.5px solid var(--color-border)",
                     borderRadius: 8,
                     fontSize: 13,
                   }}
@@ -321,8 +309,8 @@ export default function TransactionDetailClient({
                   style={{
                     padding: "8px 16px",
                     background:
-                      refunding || !refundAmount ? "#9aa8b5" : "#E74C3C",
-                    color: "#fff",
+                      refunding || !refundAmount ? "var(--color-muted)" : "var(--color-danger)",
+                    color: "var(--color-on-primary)",
                     border: "none",
                     borderRadius: 8,
                     fontWeight: 700,
@@ -334,15 +322,14 @@ export default function TransactionDetailClient({
                 </button>
               </div>
               {refundResult && (
-                <div style={{ marginTop: 8, fontSize: 12, color: "#0B1E3D" }}>
+                <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-primary)" }}>
                   {refundResult}
                 </div>
               )}
             </Section>
           )}
         </div>
-      </div>
-    </main>
+    </AdminPageContainer>
   );
 }
 
@@ -356,20 +343,12 @@ function Section({
   full?: boolean;
 }) {
   return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid #eef0f3",
-        borderRadius: 12,
-        padding: 16,
-        gridColumn: full ? "1 / -1" : undefined,
-      }}
-    >
+    <AdminCard padding={16} style={{ gridColumn: full ? "1 / -1" : undefined }}>
       <div
         style={{
           fontSize: 12,
           fontWeight: 700,
-          color: "#5A6A7A",
+          color: "var(--color-muted)",
           textTransform: "uppercase",
           letterSpacing: 0.4,
           marginBottom: 10,
@@ -378,7 +357,7 @@ function Section({
         {title}
       </div>
       {children}
-    </div>
+    </AdminCard>
   );
 }
 function Row({ k, v }: { k: string; v: React.ReactNode }) {
@@ -392,10 +371,10 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
         fontSize: 13,
       }}
     >
-      <span style={{ color: "#5A6A7A" }}>{k}</span>
+      <span style={{ color: "var(--color-muted)" }}>{k}</span>
       <span
         style={{
-          color: "#0B1E3D",
+          color: "var(--color-primary)",
           fontWeight: 600,
           textAlign: "right",
           wordBreak: "break-all",

@@ -7,8 +7,6 @@ import {
   XCircle,
   AlertTriangle,
   Search,
-  User,
-  DollarSign,
   Loader2,
   ShieldCheck,
   RefreshCw,
@@ -44,6 +42,10 @@ interface RefundRequestItem {
   rejectionReason?: string;
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function RefundRequestsClient() {
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
   const [requests, setRequests] = useState<RefundRequestItem[]>([]);
@@ -58,6 +60,7 @@ export default function RefundRequestsClient() {
 
   useEffect(() => {
     fetchRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
   async function fetchRequests() {
@@ -68,8 +71,8 @@ export default function RefundRequestsClient() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load refund requests");
       setRequests(json.data || []);
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Error loading requests" });
+    } catch (error: unknown) {
+      setMessage({ type: "error", text: errorMessage(error, "Error loading requests") });
     } finally {
       setLoading(false);
     }
@@ -87,8 +90,8 @@ export default function RefundRequestsClient() {
 
       setMessage({ type: "success", text: json.message || "Refund approved successfully" });
       fetchRequests();
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Approval failed" });
+    } catch (error: unknown) {
+      setMessage({ type: "error", text: errorMessage(error, "Approval failed") });
     } finally {
       setActionLoadingId(null);
     }
@@ -111,8 +114,8 @@ export default function RefundRequestsClient() {
       setRejectingItem(null);
       setRejectionReason("");
       fetchRequests();
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Rejection failed" });
+    } catch (error: unknown) {
+      setMessage({ type: "error", text: errorMessage(error, "Rejection failed") });
     } finally {
       setActionLoadingId(null);
     }
@@ -130,13 +133,13 @@ export default function RefundRequestsClient() {
   return (
     <div className="space-y-6">
       {/* Top Banner & Status Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0B1E3D]/80 p-6 rounded-2xl border border-slate-800 backdrop-blur-md">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--color-panel)] p-6 rounded-lg border border-[var(--color-border)] shadow-[0_10px_28px_var(--color-shadow)]">
         <div>
-          <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 text-[#00C2A8]" />
+          <h2 className="text-xl font-extrabold text-[var(--color-primary)] flex items-center gap-2">
+            <ShieldCheck className="w-6 h-6 text-[var(--color-secondary)]" />
             <span>Passenger Refund Approval Queue</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[var(--color-muted)] mt-1">
             Review and act on passenger trip cancellation refund requests.
           </p>
         </div>
@@ -144,7 +147,7 @@ export default function RefundRequestsClient() {
         <button
           type="button"
           onClick={fetchRequests}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition-colors self-start sm:self-auto cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-[var(--color-on-primary)] rounded-lg text-xs font-semibold transition-opacity hover:opacity-80 self-start sm:self-auto cursor-pointer"
         >
           <RefreshCw className="w-3.5 h-3.5" />
           <span>Refresh</span>
@@ -156,8 +159,8 @@ export default function RefundRequestsClient() {
         <div
           className={`flex items-center gap-3 p-4 rounded-xl text-sm font-medium ${
             message.type === "success"
-              ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-              : "bg-rose-500/10 border border-rose-500/20 text-rose-400"
+              ? "bg-[var(--color-success-tint)] border border-[var(--color-success)] text-[var(--color-success)]"
+              : "bg-[var(--color-danger-tint)] border border-[var(--color-danger)] text-[var(--color-danger)]"
           }`}
         >
           {message.type === "success" ? (
@@ -171,7 +174,7 @@ export default function RefundRequestsClient() {
 
       {/* Filters & Search bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2 bg-slate-900/80 p-1.5 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-2 bg-[var(--color-background)] p-1.5 rounded-lg border border-[var(--color-border)]">
           {(["pending", "approved", "rejected", "all"] as const).map((tab) => (
             <button
               key={tab}
@@ -179,8 +182,8 @@ export default function RefundRequestsClient() {
               onClick={() => setStatusFilter(tab)}
               className={`px-4 py-2 rounded-lg text-xs font-bold capitalize transition-colors cursor-pointer ${
                 statusFilter === tab
-                  ? "bg-[#00C2A8] text-slate-950 shadow-md"
-                  : "text-slate-400 hover:text-white"
+                  ? "bg-[var(--color-secondary)] text-[var(--color-primary)] shadow-md"
+                  : "text-[var(--color-muted)] hover:text-[var(--color-primary)]"
               }`}
             >
               {tab}
@@ -189,32 +192,32 @@ export default function RefundRequestsClient() {
         </div>
 
         <div className="relative max-w-xs w-full">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" />
           <input
             type="text"
             placeholder="Search passenger or trip #..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-900/90 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#00C2A8]"
+            className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg pl-9 pr-4 py-2 text-xs text-[var(--color-primary)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-secondary)]"
           />
         </div>
       </div>
 
       {/* Queue Table */}
-      <div className="bg-[#0B1E3D]/60 border border-slate-800 rounded-2xl overflow-hidden backdrop-blur-md">
+      <div className="bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg overflow-hidden shadow-[0_10px_28px_var(--color-shadow)]">
         {loading ? (
-          <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-3">
-            <Loader2 className="w-8 h-8 animate-spin text-[#00C2A8]" />
+          <div className="py-16 flex flex-col items-center justify-center text-[var(--color-muted)] gap-3">
+            <Loader2 className="w-8 h-8 animate-spin text-[var(--color-secondary)]" />
             <span className="text-xs font-medium">Loading refund requests...</span>
           </div>
         ) : filteredRequests.length === 0 ? (
-          <div className="py-16 text-center text-slate-400 text-sm">
+          <div className="py-16 text-center text-[var(--color-muted)] text-sm">
             No {statusFilter !== "all" ? statusFilter : ""} refund requests found.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-900/80 text-slate-400 uppercase tracking-wider font-semibold">
+            <table className="w-full text-left text-xs text-[var(--color-primary)]">
+              <thead className="bg-[var(--color-background)] text-[var(--color-muted)] uppercase tracking-wider font-semibold">
                 <tr>
                   <th className="px-5 py-3.5">Requested At</th>
                   <th className="px-5 py-3.5">Passenger</th>
@@ -225,7 +228,7 @@ export default function RefundRequestsClient() {
                   <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-[var(--color-border)]">
                 {filteredRequests.map((reqItem) => {
                   const isOldPending =
                     reqItem.status === "pending" &&
@@ -235,14 +238,14 @@ export default function RefundRequestsClient() {
                   return (
                     <tr
                       key={reqItem._id}
-                      className={`hover:bg-slate-800/30 transition-colors ${
-                        isOldPending ? "bg-amber-500/5" : ""
+                      className={`hover:bg-[var(--color-primary-tint)] transition-colors ${
+                        isOldPending ? "bg-[var(--color-warning-tint)]" : ""
                       }`}
                     >
                       {/* Requested At */}
                       <td className="px-5 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5 font-medium text-white">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <div className="flex items-center gap-1.5 font-medium text-[var(--color-primary)]">
+                          <Clock className="w-3.5 h-3.5 text-[var(--color-muted)]" />
                           <span>
                             {new Date(reqItem.requestedAt).toLocaleString("en-EG", {
                               month: "short",
@@ -253,7 +256,7 @@ export default function RefundRequestsClient() {
                           </span>
                         </div>
                         {isOldPending && (
-                          <span className="inline-block mt-1 text-[10px] text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                          <span className="inline-block mt-1 text-[10px] text-[var(--color-warning)] font-semibold bg-[var(--color-warning-tint)] px-2 py-0.5 rounded border border-[var(--color-warning)]">
                             Over 24h old
                           </span>
                         )}
@@ -261,14 +264,14 @@ export default function RefundRequestsClient() {
 
                       {/* Passenger */}
                       <td className="px-5 py-4">
-                        <div className="font-semibold text-white">
+                        <div className="font-semibold text-[var(--color-primary)]">
                           {reqItem.passengerId?.name || "Passenger"}
                         </div>
-                        <div className="text-[11px] text-slate-400">
+                        <div className="text-[11px] text-[var(--color-muted)]">
                           {reqItem.passengerId?.email}
                         </div>
                         {reqItem.passengerId?.phone && (
-                          <div className="text-[11px] text-slate-500">
+                          <div className="text-[11px] text-[var(--color-muted)]">
                             {reqItem.passengerId.phone}
                           </div>
                         )}
@@ -276,30 +279,30 @@ export default function RefundRequestsClient() {
 
                       {/* Trip Details */}
                       <td className="px-5 py-4">
-                        <div className="font-bold text-[#00C2A8]">
+                        <div className="font-bold text-[var(--color-secondary)]">
                           Trip #{reqItem.tripId?.tripNumber || "—"}
                         </div>
-                        <div className="text-[11px] text-slate-400">
+                        <div className="text-[11px] text-[var(--color-muted)]">
                           Date: {reqItem.tripId?.date}
                         </div>
-                        <div className="text-[11px] text-slate-400">
+                        <div className="text-[11px] text-[var(--color-muted)]">
                           Fare: {reqItem.tripId?.priceEgp} EGP
                         </div>
                       </td>
 
                       {/* Tier & Breakdown */}
                       <td className="px-5 py-4">
-                        <span className="inline-block font-semibold text-white capitalize bg-slate-800 px-2 py-0.5 rounded text-[11px]">
+                        <span className="inline-block font-semibold text-[var(--color-primary)] capitalize bg-[var(--color-primary-tint)] px-2 py-0.5 rounded text-[11px]">
                           {reqItem.tier.replace(/_/g, " ")}
                         </span>
-                        <div className="text-[11px] text-slate-400 mt-1">
+                        <div className="text-[11px] text-[var(--color-muted)] mt-1">
                           Retained: {reqItem.retainedAmount} EGP
                         </div>
                       </td>
 
                       {/* Refund Amount */}
                       <td className="px-5 py-4 whitespace-nowrap">
-                        <span className="font-extrabold text-sm text-emerald-400">
+                        <span className="font-extrabold text-sm text-[var(--color-success)]">
                           +{reqItem.refundAmount} EGP
                         </span>
                       </td>
@@ -309,21 +312,21 @@ export default function RefundRequestsClient() {
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold capitalize ${
                             reqItem.status === "approved"
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              ? "bg-[var(--color-success-tint)] text-[var(--color-success)] border border-[var(--color-success)]"
                               : reqItem.status === "rejected"
-                                ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                                : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                ? "bg-[var(--color-danger-tint)] text-[var(--color-danger)] border border-[var(--color-danger)]"
+                                : "bg-[var(--color-warning-tint)] text-[var(--color-warning)] border border-[var(--color-warning)]"
                           }`}
                         >
                           {reqItem.status}
                         </span>
                         {reqItem.reviewedBy && (
-                          <div className="text-[10px] text-slate-500 mt-1">
+                          <div className="text-[10px] text-[var(--color-muted)] mt-1">
                             By: {reqItem.reviewedBy.name}
                           </div>
                         )}
                         {reqItem.rejectionReason && (
-                          <div className="text-[10px] text-rose-400 max-w-xs truncate" title={reqItem.rejectionReason}>
+                          <div className="text-[10px] text-[var(--color-danger)] max-w-xs truncate" title={reqItem.rejectionReason}>
                             Reason: {reqItem.rejectionReason}
                           </div>
                         )}
@@ -337,7 +340,7 @@ export default function RefundRequestsClient() {
                               type="button"
                               onClick={() => handleApprove(reqItem._id)}
                               disabled={actionLoadingId === reqItem._id}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-[var(--color-success)] text-[var(--color-on-primary)] font-bold rounded-lg text-xs transition-opacity hover:opacity-80 shadow-sm cursor-pointer disabled:opacity-50"
                             >
                               {actionLoadingId === reqItem._id ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -351,14 +354,14 @@ export default function RefundRequestsClient() {
                               type="button"
                               onClick={() => setRejectingItem(reqItem)}
                               disabled={actionLoadingId === reqItem._id}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white font-bold rounded-lg text-xs transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-[var(--color-danger)] text-[var(--color-on-primary)] font-bold rounded-lg text-xs transition-opacity hover:opacity-80 shadow-sm cursor-pointer disabled:opacity-50"
                             >
                               <XCircle className="w-3.5 h-3.5" />
                               <span>Reject</span>
                             </button>
                           </div>
                         ) : (
-                          <span className="text-slate-500 text-xs italic">Reviewed</span>
+                          <span className="text-[var(--color-muted)] text-xs italic">Reviewed</span>
                         )}
                       </td>
                     </tr>
@@ -372,30 +375,30 @@ export default function RefundRequestsClient() {
 
       {/* Rejection Modal */}
       {rejectingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 text-white space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--color-overlay)]">
+          <div className="bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg max-w-md w-full p-6 text-[var(--color-primary)] space-y-4 shadow-[0_20px_60px_var(--color-shadow-strong)]">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-lg text-rose-400 flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-rose-500" />
+              <h3 className="font-bold text-lg text-[var(--color-danger)] flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-[var(--color-danger)]" />
                 <span>Reject Refund Request</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setRejectingItem(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-[var(--color-muted)] hover:text-[var(--color-primary)]"
               >
                 &times;
               </button>
             </div>
 
-            <p className="text-xs text-slate-300">
+            <p className="text-xs text-[var(--color-muted)]">
               Rejecting this refund request for passenger{" "}
               <strong>{rejectingItem.passengerId?.name}</strong> (Trip #
               {rejectingItem.tripId?.tripNumber}). No wallet credit will be issued.
             </p>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-[var(--color-primary)] mb-1">
                 Rejection Reason (Optional)
               </label>
               <textarea
@@ -403,7 +406,7 @@ export default function RefundRequestsClient() {
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 placeholder="e.g., Policy violation, duplicate claim"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500"
+                className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg p-3 text-xs text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-danger)]"
               />
             </div>
 
@@ -411,7 +414,7 @@ export default function RefundRequestsClient() {
               <button
                 type="button"
                 onClick={() => setRejectingItem(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-[var(--color-muted)] hover:text-[var(--color-primary)] transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -419,7 +422,7 @@ export default function RefundRequestsClient() {
                 type="button"
                 onClick={handleConfirmReject}
                 disabled={actionLoadingId === rejectingItem._id}
-                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-colors shadow-lg shadow-rose-600/20 cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-[var(--color-on-primary)] bg-[var(--color-danger)] rounded-lg transition-opacity hover:opacity-80 shadow-lg cursor-pointer disabled:opacity-50"
               >
                 {actionLoadingId === rejectingItem._id && (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />

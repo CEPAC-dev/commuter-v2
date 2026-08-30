@@ -51,20 +51,28 @@ const UserSchema = new Schema(
     permissions: { type: [String], default: [] },
     referralCode: { type: String, unique: true, sparse: true, index: true },
     referredBy: { type: Types.ObjectId, ref: "User", default: null },
+    referralUnlimited: { type: Boolean, default: false },
   },
   { timestamps: true }, // createdAt, updatedAt
 );
 
 const existingUserModel = models.User;
-if (existingUserModel && !existingUserModel.schema.path("region")) {
-  existingUserModel.schema.add({
-    region: {
-      type: String,
-      default: null,
-      enum: ["EG", "SA", null],
-      index: true,
-    },
-  });
+if (existingUserModel) {
+  if (!existingUserModel.schema.path("region")) {
+    existingUserModel.schema.add({
+      region: {
+        type: String,
+        default: null,
+        enum: ["EG", "SA", null],
+        index: true,
+      },
+    });
+  }
+  if (!existingUserModel.schema.path("referralUnlimited")) {
+    existingUserModel.schema.add({
+      referralUnlimited: { type: Boolean, default: false },
+    });
+  }
 }
 
 // Same phone/email may exist once per role (one person can hold a passenger

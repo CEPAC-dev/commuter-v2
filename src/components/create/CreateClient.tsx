@@ -1190,7 +1190,7 @@ export default function CreateClient({
                               </strong>
                               {" "}
                               {locale === "ar"
-                                ? " لنوع هذه السيارة."
+                                ? " لنوع هذه المركبة."
                                 : " for this vehicle type."}
                             </span>
                           );
