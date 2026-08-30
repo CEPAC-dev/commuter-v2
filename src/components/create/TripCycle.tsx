@@ -10,7 +10,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useClientLocale } from "@/lib/locale.client";
-import { formatTime, formatDistanceKm, formatMinutes } from "@/lib/i18n";
+import { formatTime, formatDistanceKm, formatMinutes, toArabicDigits } from "@/lib/i18n";
 import AddressInput from "@/components/landing/AddressInput";
 import {
   VEHICLES,
@@ -424,6 +424,10 @@ export default function TripCycle({
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
   const previousStopErrorRef = useRef<string | null>(null);
+  const selectedVehicle = data.vehicleType ? vMap[data.vehicleType] : null;
+  const vehicleTimeMarginMin = selectedVehicle
+    ? Math.max(5, Math.round(selectedVehicle.window / 2))
+    : 0;
 
   useEffect(() => {
     const nextError = stopError || null;
@@ -1070,15 +1074,21 @@ export default function TripCycle({
   }
 
   const isPrivate = !!data.vehicleType && !isSharedVehicle(data.vehicleType);
-  const displayedPrice = !data.vehicleType
-    ? data.priceEgp
-    : computeTripPriceEgp({
-        basePrice: data.priceEgp ?? 0,
-        vehicleType: data.vehicleType,
-        extraPassengers: data.extraPassengers ?? 0,
-        numberOfPassengers: data.numberOfPassengers ?? 1,
-        vehiclesMap: vMap,
-      });
+  const hasPickup = !!(data.pickup?.address || (data.pickup?.lat && data.pickup?.lng));
+  const hasDropoff = !!(data.dropoff?.address || (data.dropoff?.lat && data.dropoff?.lng));
+  const hasTime = !!(data.arrivalTime && data.arrivalTime.trim().length > 0);
+  const hasRequiredFieldsForPrice = hasPickup && hasDropoff && hasTime;
+
+  const displayedPrice =
+    !data.vehicleType || !hasRequiredFieldsForPrice
+      ? null
+      : computeTripPriceEgp({
+          basePrice: data.priceEgp ?? 0,
+          vehicleType: data.vehicleType,
+          extraPassengers: data.extraPassengers ?? 0,
+          numberOfPassengers: data.numberOfPassengers ?? 1,
+          vehiclesMap: vMap,
+        });
 
   return (
     <div
@@ -1105,7 +1115,10 @@ export default function TripCycle({
         }}
       >
         <span style={{ fontWeight: 700, fontSize: 14, color: "#0B1E3D" }}>
-          Trip {index + 1}
+          {t("create.trip_number").replace(
+            "{n}",
+            locale === "ar" ? toArabicDigits(String(index + 1)) : String(index + 1),
+          )}
         </span>
 
         {/* Return trip checkbox — only for trips after the first */}
@@ -1141,7 +1154,7 @@ export default function TripCycle({
               }}
             />
             <RotateCcw size={12} aria-hidden="true" />
-            Return trip
+            {t("create.return_trip")}
           </label>
         )}
 
@@ -1187,7 +1200,7 @@ export default function TripCycle({
               e.currentTarget.style.background = "rgba(231,76,60,0.08)";
             }}
           >
-            <X size={14} /> Remove
+            <X size={14} /> {t("create.remove_trip")}
           </button>
         )}
       </div>
@@ -1308,6 +1321,40 @@ export default function TripCycle({
               </option>
             ))}
           </select>
+          {data.vehicleType && selectedVehicle && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "rgba(245,166,35,0.12)",
+                border: "1.5px solid rgba(245,166,35,0.55)",
+                color: "#7A5000",
+                fontSize: 12,
+                fontWeight: 700,
+                lineHeight: 1.6,
+              }}
+            >
+              {locale === "ar"
+                ? "هام: يختلف وقت الالتقاء بحوالي"
+                : "Time can shift by about"}{" "}
+              <strong
+                style={{
+                  color: "#0B1E3D",
+                  fontSize: 13,
+                  fontVariantNumeric: "tabular-nums",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span>+</span>
+                {vehicleTimeMarginMin}
+                {locale === "ar" ? "دقيقة" : "min"}
+                <span>-</span>
+              </strong>
+              {" "}
+              {locale === "ar" ? "لنوع هذه السيارة." : "for this vehicle type."}
+            </div>
+          )}
         </div>
 
         {/* Everything below is exclusive to shared rides for now — private ride

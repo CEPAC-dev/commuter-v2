@@ -28,6 +28,8 @@ interface Tx {
 
 interface WalletData {
   balanceEgp: number;
+  reserveAmount?: number;
+  withdrawableEgp?: number;
   status: string;
   role?: string;
   transactions: Tx[];
@@ -370,6 +372,27 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
         >
           {data ? formatNumber(data.balanceEgp) + " " + t("wallet.egp_suffix") : "—"}
         </div>
+
+        {isDriver && data && (
+          <div
+            style={{
+              marginTop: 14,
+              paddingTop: 12,
+              borderTop: "1px solid rgba(255,255,255,0.15)",
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 12,
+              color: "rgba(255,255,255,0.85)",
+            }}
+          >
+            <span>
+              Reserve: <strong>{formatNumber(data.reserveAmount ?? 200)} {t("wallet.egp_suffix")}</strong>
+            </span>
+            <span>
+              Withdrawable: <strong>{formatNumber(data.withdrawableEgp ?? 0)} {t("wallet.egp_suffix")}</strong>
+            </span>
+          </div>
+        )}
       </div>
 
       {notice && (

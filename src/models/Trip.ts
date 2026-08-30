@@ -203,6 +203,28 @@ const TripSchema = new Schema(
       type: Schema.Types.Mixed,
       default: null,
     },
+    cancellation: {
+      type: new Schema(
+        {
+          cancelledAt: { type: Date, required: true },
+          tierLabel: { type: String, required: true },
+          refundPercent: { type: Number, required: true },
+          penaltyPercent: { type: Number, required: true },
+          refundAmount: { type: Number, required: true },
+          retainedAmount: { type: Number, required: true },
+          refundStatus: {
+            type: String,
+            required: false,
+            enum: ["pending", "approved", "rejected", "none"],
+            default: "none",
+          },
+          reason: { type: String, required: false },
+        },
+        { _id: false },
+      ),
+      required: false,
+      default: null,
+    },
   },
   { timestamps: true, collection: "trips" },
 );

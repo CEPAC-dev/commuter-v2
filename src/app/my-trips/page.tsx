@@ -31,6 +31,7 @@ import type { BookingStatus, RideListRow, TripListRow } from "@/types/booking";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import RateTripModal from "@/components/trips/RateTripModal";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
+import CancelTripModal from "@/components/trips/CancelTripModal";
 
 export const metadata = { title: "My trips — Commuter" };
 export const dynamic = "force-dynamic";
@@ -1430,6 +1431,44 @@ export default async function MyTripsPage({
                                   locale={locale}
                                 />
                               )}
+                              {trip.status === "cancelled" && (trip as any).cancellation && (
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                    padding: "3px 10px",
+                                    borderRadius: 20,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    background:
+                                      (trip as any).cancellation.refundStatus === "approved"
+                                        ? "#E8F8F5"
+                                        : (trip as any).cancellation.refundStatus === "rejected"
+                                          ? "#FDECEA"
+                                          : "#FFF3E0",
+                                    color:
+                                      (trip as any).cancellation.refundStatus === "approved"
+                                        ? "#00806E"
+                                        : (trip as any).cancellation.refundStatus === "rejected"
+                                          ? "#C0392B"
+                                          : "#E65100",
+                                    border: `1px solid ${
+                                      (trip as any).cancellation.refundStatus === "approved"
+                                        ? "#CBE9E2"
+                                        : (trip as any).cancellation.refundStatus === "rejected"
+                                          ? "#FADBD8"
+                                          : "#FFE0B2"
+                                    }`,
+                                  }}
+                                >
+                                  {(trip as any).cancellation.refundStatus === "approved"
+                                    ? `Refund Approved (${(trip as any).cancellation.refundAmount} EGP)`
+                                    : (trip as any).cancellation.refundStatus === "rejected"
+                                      ? "Refund Rejected"
+                                      : `Refund Pending Review (${(trip as any).cancellation.refundAmount} EGP)`}
+                                </span>
+                              )}
                             </div>
 
                             {showSharedSummary ? (
@@ -1479,8 +1518,9 @@ export default async function MyTripsPage({
                                         {trip.assignedDriver?.carModel ?? ""}
                                         {trip.assignedDriver?.modelYear ? ` · ${trip.assignedDriver.modelYear}` : ""}
                                       </span>
-                                      <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: 8, background: "#fff", border: "1px solid #CBE9E2", fontSize: 13, fontWeight: 800, color: "#0B1E3D", letterSpacing: "0.08em", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                                        {trip.assignedDriver?.plate ?? "—"}
+                                      <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 8, background: "#fff", border: "1px solid #CBE9E2", fontSize: 12, fontWeight: 700, color: "#0B1E3D", whiteSpace: "nowrap" }}>
+                                        <span style={{ fontSize: 10, color: "#5A6A7A", textTransform: "uppercase", letterSpacing: "0.04em" }}>Color</span>
+                                        <span>{trip.assignedDriver?.vehicleColor ?? trip.assignedDriver?.carColor ?? "—"}</span>
                                       </span>
                                     </div>
                                   </div>
@@ -1523,6 +1563,17 @@ export default async function MyTripsPage({
                             )}
                           </div>
                         </Link>
+                        {!isDriver && (trip.status === "submitted" || trip.status === "matched" || trip.status === "confirmed" || trip.status === "active") && (
+                          <div style={{ padding: "0 18px 16px", display: "flex", justifyContent: "flex-end" }}>
+                            <CancelTripModal
+                              tripId={trip.id}
+                              tripNumber={trip.tripNumber}
+                              date={trip.date}
+                              priceEgp={trip.priceEgp}
+                              status={trip.status}
+                            />
+                          </div>
+                        )}
                         {!isDriver && needsPayment && (
                           <div style={{ padding: "0 18px 16px" }}>
                             <ContinueCheckoutButton bookingId={trip.requestId} amountEgp={trip.bookingAmountEgp} walletBalance={walletBalance} />

@@ -139,6 +139,17 @@ const RideSchema = new Schema(
     hrRate: { type: Number, required: false, default: 0 },
     // Audit trail of every action/status change made on this ride.
     logs: { type: [RideLogEntrySchema], default: [] },
+    cancellation: {
+      type: {
+        cancelledAt: { type: Date },
+        tier: { type: String },
+        penaltyPercent: { type: Number },
+        penaltyAmount: { type: Number },
+        availabilityRemoved: { type: Boolean },
+        reason: { type: String },
+      },
+      required: false,
+    },
     status: {
       type: String,
       required: true,

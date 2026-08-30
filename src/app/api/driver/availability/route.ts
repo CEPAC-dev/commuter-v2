@@ -8,6 +8,7 @@ import { getSession } from "@/lib/auth/session";
 import { findNearestStation } from "@/lib/geo/stations";
 import type { GeoPoint as Point } from "@/types/geo";
 import { listDriverAvailability } from "@/lib/services/availability";
+import { canModifyAvailability, getAdminSettings } from "@/lib/cancellationPolicy";
 
 function isValidPoint(p: unknown): p is Point {
   const point = p as Point;
@@ -58,15 +59,18 @@ export async function POST(req: NextRequest) {
         { error: "Select at least one date." },
         { status: 400 },
       );
-    if (
-      !dates.every(
-        (d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d),
-      )
-    )
+    const settings = await getAdminSettings();
+    const lockedDate = dates.find(
+      (d) => !canModifyAvailability(d, new Date(), settings.availabilityLockTime),
+    );
+    if (lockedDate) {
       return NextResponse.json(
-        { error: "Invalid date format." },
+        {
+          error: `Availability creation is locked after ${settings.availabilityLockTime} on the day before (${lockedDate}).`,
+        },
         { status: 400 },
       );
+    }
     if (!isValidPoint(startLocation) || !isValidPoint(endLocation))
       return NextResponse.json(
         { error: "Start and end locations are required." },

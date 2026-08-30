@@ -19,6 +19,7 @@ import TripChat from "@/components/shared/TripChat";
 import PrivateRideDetails from "@/components/trips/PrivateRideDetails";
 import SharedRideDetails from "@/components/trips/SharedRideDetails";
 import RateTripModal from "@/components/trips/RateTripModal";
+import CancelTripModal from "@/components/trips/CancelTripModal";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import type {
   PaymentStatus,
@@ -376,7 +377,48 @@ export default async function TripDetailPage({
               };
               return `status.${map[status] ?? "previous"}`;
             })()) })} />
+            {status === "cancelled" && (trip as any).cancellation && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "3px 10px",
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background:
+                    (trip as any).cancellation.refundStatus === "approved"
+                      ? "#E8F8F5"
+                      : (trip as any).cancellation.refundStatus === "rejected"
+                        ? "#FDECEA"
+                        : "#FFF3E0",
+                  color:
+                    (trip as any).cancellation.refundStatus === "approved"
+                      ? "#00806E"
+                      : (trip as any).cancellation.refundStatus === "rejected"
+                        ? "#C0392B"
+                        : "#E65100",
+                }}
+              >
+                {(trip as any).cancellation.refundStatus === "approved"
+                  ? `Refund Approved (${(trip as any).cancellation.refundAmount} EGP)`
+                  : (trip as any).cancellation.refundStatus === "rejected"
+                    ? "Refund Rejected"
+                    : `Refund Pending Review (${(trip as any).cancellation.refundAmount} EGP)`}
+              </span>
+            )}
           </div>
+          {!isDriver && (status === "submitted" || status === "matched" || status === "confirmed" || status === "active") && (
+            <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
+              <CancelTripModal
+                tripId={trip.id}
+                tripNumber={trip.tripNumber}
+                date={trip.date}
+                priceEgp={trip.priceEgp}
+                status={trip.status}
+              />
+            </div>
+          )}
           {status === "completed" && !isDriver && (
             <div style={{ marginTop: 14 }}>
               <RateTripModal tripId={id} initialRating={trip.rating ?? null} />
@@ -515,6 +557,8 @@ export default async function TripDetailPage({
                     carBrand: "",
                     carModel: "",
                     modelYear: "",
+                    vehicleColor: "",
+                    carColor: "",
                     plate: "",
                   }
                 }

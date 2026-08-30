@@ -122,6 +122,7 @@ export interface TripListRow {
     carType?: string;
     modelYear?: string;
     vehicleColor?: string;
+    carColor?: string;
     carCapacity?: number;
     carImage?: string;
     plate?: string;
