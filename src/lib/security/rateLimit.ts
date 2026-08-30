@@ -8,12 +8,17 @@ export async function enforceRateLimit(
   scope: string,
   options: { limit: number; windowMs: number },
 ): Promise<NextResponse | null> {
-  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const clientAddress = forwarded || req.headers.get("x-real-ip") || "unknown";
+  const forwarded = req.headers
+    .get("x-forwarded-for")
+    ?.split(",")[0]
+    ?.trim();
+  const clientAddress = forwarded || req.headers.get("x-real-ip")?.trim();
+  // Never put every client behind a proxy into one shared lockout bucket.
+  if (!clientAddress) return null;
   const windowStart =
     Math.floor(Date.now() / options.windowMs) * options.windowMs;
   const key = createHash("sha256")
-    .update(`${scope}:${clientAddress}:${windowStart}`)
+    .update(`v2:${scope}:${clientAddress}:${windowStart}`)
     .digest("hex");
 
   await connectDB();
