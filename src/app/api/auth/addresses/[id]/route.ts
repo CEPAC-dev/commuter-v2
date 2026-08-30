@@ -2,29 +2,47 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { getSession } from "@/lib/auth/session";
+import {
+  normalizePlainText,
+  validateMutationRequest,
+} from "@/lib/security/request";
+import { Types } from "mongoose";
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+  if (!Types.ObjectId.isValid(id))
+    return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   const session = await getSession();
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const { label, address, lat, lng } = await req.json();
-    if (!label?.trim())
+    const safeLabel = normalizePlainText(label, { maxLength: 60 });
+    const safeAddress = normalizePlainText(address, { maxLength: 300 });
+    if (!safeLabel)
       return NextResponse.json({ error: "Label required." }, { status: 400 });
-    if (!address?.trim())
+    if (!safeAddress)
       return NextResponse.json({ error: "Address required." }, { status: 400 });
 
     const setFields: Record<string, unknown> = {
-      "savedAddresses.$.label": label.trim(),
-      "savedAddresses.$.address": address.trim(),
+      "savedAddresses.$.label": safeLabel,
+      "savedAddresses.$.address": safeAddress,
     };
-    if (typeof lat === "number") setFields["savedAddresses.$.lat"] = lat;
-    if (typeof lng === "number") setFields["savedAddresses.$.lng"] = lng;
+    if (lat !== undefined && (!Number.isFinite(lat) || lat < -90 || lat > 90))
+      return NextResponse.json({ error: "Invalid latitude." }, { status: 400 });
+    if (lng !== undefined && (!Number.isFinite(lng) || lng < -180 || lng > 180))
+      return NextResponse.json(
+        { error: "Invalid longitude." },
+        { status: 400 },
+      );
+    if (lat !== undefined) setFields["savedAddresses.$.lat"] = lat;
+    if (lng !== undefined) setFields["savedAddresses.$.lng"] = lng;
 
     await connectDB();
     const result = await User.findOneAndUpdate(
@@ -51,10 +69,14 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const invalidRequest = validateMutationRequest(req, { requireJson: false });
+  if (invalidRequest) return invalidRequest;
+  if (!Types.ObjectId.isValid(id))
+    return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   const session = await getSession();
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

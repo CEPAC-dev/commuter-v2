@@ -150,7 +150,7 @@ export async function applyReferralOnSignup(
           },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, upsert: true, session },
+        { returnDocument: "after", upsert: true, session },
       ).lean();
 
       const refereeWallet = await Wallet.findOneAndUpdate(
@@ -162,7 +162,7 @@ export async function applyReferralOnSignup(
           },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, upsert: true, session },
+        { returnDocument: "after", upsert: true, session },
       ).lean();
 
       const referrerNewBalance = referrerWallet?.balanceEgp ?? settings.referrerBonusAmount;
@@ -248,4 +248,4 @@ export async function creditReferralBonusIfEligible(
 ): Promise<boolean> {
   // Neutralized: Referral bonuses are now credited instantly on signup in applyReferralOnSignup.
   return false;
-}
+}

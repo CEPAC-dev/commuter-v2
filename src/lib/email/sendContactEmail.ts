@@ -89,7 +89,7 @@ async function sendViaResend({
     if (res.error) {
       console.error("[contact] Resend error:", res.error);
       const hint =
-        process.env.NODE_ENV === "development" && res.error.message
+        process.env.APP_ENV === "development" && res.error.message
           ? res.error.message
           : "Failed to send message. Please try again later.";
       return { ok: false, error: hint };
@@ -169,7 +169,7 @@ export async function sendContactEmail(
   }
 
   // Local dev: auto-use Ethereal test inbox so the form works without env setup.
-  if (process.env.NODE_ENV === "development") {
+  if (process.env.APP_ENV === "development") {
     console.log(
       "[contact] No RESEND/SMTP configured — using Ethereal test inbox (dev only).",
     );

@@ -34,6 +34,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
+
   const session = await getSession();
   if (!session || session.role !== "driver") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -46,12 +49,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  amount = Math.round(Number(amount));
-  if (
-    !isFinite(amount) ||
-    amount < MIN_WITHDRAWAL_EGP ||
-    amount > MAX_WITHDRAWAL_EGP
-  ) {
+  if (!Number.isSafeInteger(amount)) {
+    return NextResponse.json(
+      { error: "Withdrawal amount must be a whole number." },
+      { status: 400 },
+    );
+  }
+  if (amount < MIN_WITHDRAWAL_EGP || amount > MAX_WITHDRAWAL_EGP) {
     return NextResponse.json(
       {
         error: `Withdrawal must be between ${MIN_WITHDRAWAL_EGP} and ${MAX_WITHDRAWAL_EGP} EGP.`,
