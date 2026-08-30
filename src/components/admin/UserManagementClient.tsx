@@ -19,6 +19,7 @@ import {
   Palette,
   type LucideIcon,
 } from "lucide-react";
+import { AdminCard, AdminEmptyState, AdminStatusBadge } from "@/components/admin/layout";
 
 /**
  * ---------------------------------------------------------------------
@@ -99,10 +100,10 @@ const DOC_LABELS: Record<string, string> = {
 };
 
 const TONE_CLASSES: Record<ToneKey, string> = {
-  slate: "bg-slate-100 text-slate-600 ring-slate-200",
-  amber: "bg-amber-50 text-amber-700 ring-amber-200",
-  teal: "bg-teal-50 text-teal-700 ring-teal-200",
-  navy: "bg-slate-900/5 text-slate-900 ring-slate-900/10",
+  slate: "bg-[var(--color-background)] text-[var(--color-muted)] ring-[var(--color-border)]",
+  amber: "bg-[var(--color-warning-tint)] text-[var(--color-warning)] ring-[var(--color-warning)]",
+  teal: "bg-[var(--color-success-tint)] text-[var(--color-success)] ring-[var(--color-success)]",
+  navy: "bg-[var(--color-primary-tint)] text-[var(--color-primary)] ring-[var(--color-primary)]",
 };
 
 // Sample data so this component renders standalone in preview.
@@ -254,15 +255,15 @@ export default function UserManagementClient({
   }
 
   return (
-    <section className="mx-auto w-full max-w-5xl rounded-3xl border border-slate-200 bg-white shadow-sm">
+    <AdminCard padding={0}>
       {/* Header */}
-      <div className="flex flex-col gap-5 border-b border-slate-100 p-6 sm:p-7">
+      <div className="flex flex-col gap-5 border-b border-[var(--color-border)] p-6 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-900">
+            <h2 className="text-xl font-bold tracking-tight text-[var(--color-primary)]">
               {title}
             </h2>
-            <p className="mt-1 text-sm text-slate-500">{description}</p>
+            <p className="mt-1 text-sm text-[var(--color-muted)]">{description}</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -298,12 +299,12 @@ export default function UserManagementClient({
         {/* Search + filter */}
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by #number, name, phone, or email"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-100"
+              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] py-2.5 pl-10 pr-3 text-sm text-[var(--color-primary)] placeholder:text-[var(--color-muted)] outline-none transition focus:border-[var(--color-secondary)] focus:bg-[var(--color-panel)] focus:ring-2 focus:ring-[var(--color-secondary-tint)]"
             />
           </div>
           <div className="flex gap-2 overflow-x-auto">
@@ -314,8 +315,8 @@ export default function UserManagementClient({
                 onClick={() => setRoleFilter(role)}
                 className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold capitalize transition ${
                   roleFilter === role
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? "bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-sm"
+                    : "bg-[var(--color-background)] text-[var(--color-muted)] hover:bg-[var(--color-primary-tint)]"
                 }`}
               >
                 {role}
@@ -327,10 +328,7 @@ export default function UserManagementClient({
 
       {/* List */}
       {filteredRows.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
-          <Users className="h-8 w-8 text-slate-300" />
-          <p className="text-sm text-slate-500">{emptyMessage}</p>
-        </div>
+        <AdminEmptyState title={emptyMessage} />
       ) : (
         <div className="grid gap-3 p-4 sm:p-5">
           {filteredRows.map((user) => {
@@ -345,22 +343,22 @@ export default function UserManagementClient({
                 key={user._id}
                 className={`overflow-hidden rounded-2xl border transition-shadow ${
                   expanded
-                    ? "border-slate-200 shadow-md"
-                    : "border-slate-100 hover:border-slate-200 hover:shadow-sm"
+                    ? "border-[var(--color-border)] shadow-md"
+                    : "border-[var(--color-border)] hover:border-[var(--color-secondary)] hover:shadow-sm"
                 }`}
               >
                 <button
                   type="button"
                   onClick={() => toggleExpanded(user._id)}
-                  className="flex w-full items-center justify-between gap-4 bg-white px-4 py-3.5 text-left sm:px-5"
+                  className="flex w-full items-center justify-between gap-4 bg-[var(--color-panel)] px-4 py-3.5 text-left sm:px-5"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <Avatar name={user.name} />
                     <div className="min-w-0">
-                      <div className="truncate font-semibold text-slate-900">
+                      <div className="truncate font-semibold text-[var(--color-primary)]">
                         {user.name || "Unnamed user"}
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-slate-500">
+                      <div className="mt-0.5 truncate text-xs text-[var(--color-muted)]">
                         #{user.userNumber ?? "—"} · {user.phone || "—"} ·{" "}
                         {user.email || "—"}
                       </div>
@@ -370,21 +368,22 @@ export default function UserManagementClient({
                   <div className="flex shrink-0 items-center gap-2">
                     <RoleBadge role={user.role} />
                     {verification && (
-                      <span
-                        className={`hidden items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset sm:inline-flex ${TONE_CLASSES[verification.tone]}`}
-                      >
-                        <verification.Icon className="h-3.5 w-3.5" />
-                        {verification.label}
+                      <span className="hidden sm:inline-flex">
+                        <AdminStatusBadge
+                          status={user.driver?.verificationStatus ?? "incomplete"}
+                          label={verification.label}
+                          tone={verification.tone === "teal" ? "success" : verification.tone === "amber" ? "warning" : "muted"}
+                        />
                       </span>
                     )}
                     <ChevronDown
-                      className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+                      className={`h-4 w-4 text-[var(--color-muted)] transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
                     />
                   </div>
                 </button>
 
                 {expanded && (
-                  <div className="grid gap-4 border-t border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+                  <div className="grid gap-4 border-t border-[var(--color-border)] bg-[var(--color-background)] p-4 sm:p-5">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <InfoCard title="Basic info">
                         <InfoRow
@@ -442,7 +441,7 @@ export default function UserManagementClient({
                           type="button"
                           onClick={() => saveChanges(user)}
                           disabled={savingIds[user._id]}
-                          className="mt-1 inline-flex w-fit items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60"
+                          className="mt-1 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-on-primary)] shadow-sm transition disabled:cursor-wait disabled:opacity-60"
                         >
                           {savingIds[user._id] ? "Saving…" : "Save changes"}
                         </button>
@@ -451,8 +450,8 @@ export default function UserManagementClient({
                           <div
                             className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${
                               feedbackMessage.type === "success"
-                                ? "bg-teal-50 text-teal-700"
-                                : "bg-amber-50 text-amber-700"
+                                ? "bg-[var(--color-success-tint)] text-[var(--color-success)]"
+                                : "bg-[var(--color-danger-tint)] text-[var(--color-danger)]"
                             }`}
                           >
                             {feedbackMessage.type === "success" ? (
@@ -491,14 +490,14 @@ export default function UserManagementClient({
                               value={user.driver.licenseExpiry || "—"}
                             />
                           </div>
-                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-3">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
                               Plate
                             </span>
-                            <span className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-mono text-sm font-bold tracking-widest text-slate-900">
+                            <span className="rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-1 font-mono text-sm font-bold tracking-widest text-[var(--color-primary)]">
                               {buildPlate(user.driver) || "—"}
                             </span>
-                            <span className="ml-2 text-xs text-slate-500">
+                            <span className="ml-2 text-xs text-[var(--color-muted)]">
                               {user.driver.carType || "—"} ·{" "}
                               {user.driver.modelYear || "—"}
                             </span>
@@ -524,9 +523,9 @@ export default function UserManagementClient({
                                       href={value}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="group overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-teal-300 hover:shadow-md"
+                                      className="group overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] transition hover:border-[var(--color-secondary)] hover:shadow-md"
                                     >
-                                      <div className="relative aspect-4/3 w-full overflow-hidden bg-slate-100">
+                                      <div className="relative aspect-4/3 w-full overflow-hidden bg-[var(--color-background)]">
                                         {isImage ? (
                                           <img
                                             src={value}
@@ -534,18 +533,18 @@ export default function UserManagementClient({
                                             className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                                           />
                                         ) : (
-                                          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
+                                          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-[var(--color-muted)]">
                                             <FileText className="h-6 w-6" />
                                             <span className="text-[11px] font-medium">
                                               File
                                             </span>
                                           </div>
                                         )}
-                                        <div className="absolute right-2 top-2 rounded-full bg-white/90 p-1 opacity-0 shadow-sm transition group-hover:opacity-100">
-                                          <ExternalLink className="h-3 w-3 text-slate-600" />
+                                        <div className="absolute right-2 top-2 rounded-full bg-[var(--color-panel)] p-1 opacity-0 shadow-sm transition group-hover:opacity-100">
+                                          <ExternalLink className="h-3 w-3 text-[var(--color-muted)]" />
                                         </div>
                                       </div>
-                                      <div className="px-2.5 py-2 text-[11px] font-semibold text-slate-600">
+                                      <div className="px-2.5 py-2 text-[11px] font-semibold text-[var(--color-muted)]">
                                         {docLabel}
                                       </div>
                                     </a>
@@ -554,7 +553,7 @@ export default function UserManagementClient({
                               )}
                             </div>
                           ) : (
-                            <p className="text-sm text-slate-500">
+                            <p className="text-sm text-[var(--color-muted)]">
                               No documents uploaded yet.
                             </p>
                           )}
@@ -568,7 +567,7 @@ export default function UserManagementClient({
           })}
         </div>
       )}
-    </section>
+    </AdminCard>
   );
 }
 
@@ -617,19 +616,12 @@ function StatPill({
 }
 
 function RoleBadge({ role }: { role?: string }) {
-  const tone = role === "admin" ? "navy" : role === "driver" ? "teal" : "slate";
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold capitalize ring-1 ring-inset ${TONE_CLASSES[tone]}`}
-    >
-      {role || "passenger"}
-    </span>
-  );
+  return <AdminStatusBadge status={role || "passenger"} tone={role === "driver" ? "success" : role === "admin" ? "info" : "muted"} />;
 }
 
 function Avatar({ name }: { name?: string }) {
   return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-slate-800 to-slate-600 text-sm font-bold text-white">
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] text-sm font-bold text-[var(--color-on-primary)]">
       {getInitials(name)}
     </div>
   );
@@ -637,8 +629,8 @@ function Avatar({ name }: { name?: string }) {
 
 function InfoCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] p-4">
+      <div className="mb-3 text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
         {title}
       </div>
       <div className="grid gap-3">{children}</div>
@@ -657,9 +649,9 @@ function InfoRow({
 }) {
   return (
     <div className="flex items-center gap-2.5 text-sm">
-      <Icon className="h-4 w-4 shrink-0 text-slate-400" />
-      <span className="text-slate-400">{label}:</span>
-      <span className="truncate font-medium text-slate-800">
+      <Icon className="h-4 w-4 shrink-0 text-[var(--color-muted)]" />
+      <span className="text-[var(--color-muted)]">{label}:</span>
+      <span className="truncate font-medium text-[var(--color-primary)]">
         {value || "—"}
       </span>
     </div>
@@ -677,11 +669,11 @@ function MiniStat({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
         <Icon className="h-3 w-3" />
         {label}
       </div>
-      <div className="truncate text-sm font-semibold text-slate-800">
+      <div className="truncate text-sm font-semibold text-[var(--color-primary)]">
         {value || "—"}
       </div>
     </div>
@@ -703,11 +695,11 @@ function FieldSelect({
 }) {
   return (
     <label className="grid gap-1.5">
-      <span className="text-xs font-semibold text-slate-500">{label}</span>
+      <span className="text-xs font-semibold text-[var(--color-muted)]">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+        className="rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-2 text-sm text-[var(--color-primary)] outline-none transition focus:border-[var(--color-secondary)] focus:ring-2 focus:ring-[var(--color-secondary-tint)]"
       >
         {options.map((opt) => (
           <option key={opt} value={opt}>

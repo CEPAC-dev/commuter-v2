@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   await connectDB();
-  const user = await User.findById(session.userId).select("referralCode");
+  const user = await User.findById(session.userId).select("referralCode referralUnlimited");
   if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
 
   if (!user.referralCode) {
@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
       shareUrl: shareUrl.toString(),
       balanceEgp: wallet?.balanceEgp ?? 0,
       referrerBonusAmount: settings.referrerBonusAmount,
+      maxUsersPerCode: settings.maxUsersPerCode,
+      referralUnlimited: Boolean(user.referralUnlimited),
       stats: {
         total,
         pending,

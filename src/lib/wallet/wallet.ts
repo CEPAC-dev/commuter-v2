@@ -1,6 +1,9 @@
 import { connectDB } from "@/lib/db/mongoose";
 import { Wallet } from "@/models/Wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
+import { WithdrawalRequest } from "@/models/WithdrawalRequest";
+import { Notification } from "@/models/Notification";
+import { getAdminSettings } from "@/lib/cancellationPolicy";
 import mongoose, { Types } from "mongoose";
 
 const MAX_WALLET_AMOUNT_EGP = 1_000_000_000;
@@ -751,4 +754,242 @@ export async function reconcileWalletFromLedger(
   } finally {
     await session.endSession();
   }
+}
+
+/**
+ * Driver submits a withdrawal request. Holds requested amount against pendingWithdrawalAmount.
+ */
+export async function createWithdrawalRequest(
+  userId: string,
+  amountEgp: number,
+  payoutMethod: "mobile_wallet" | "bank",
+  payoutDestination: string,
+) {
+  await connectDB();
+  const uid = new Types.ObjectId(userId);
+  const settings = await getAdminSettings();
+
+  const wallet = await getOrCreateWallet(userId);
+  const reserve = wallet.reserveAmount ?? settings.walletReserveAmount ?? 200;
+  const limit = wallet.withdrawalLimit ?? settings.defaultWithdrawalLimit ?? null;
+  const pending = wallet.pendingWithdrawalAmount ?? 0;
+  const withdrawable = Math.max(0, wallet.balanceEgp - reserve - pending);
+
+  if (amountEgp <= 0) {
+    throw new Error("Enter a valid amount.");
+  }
+  if (amountEgp > withdrawable) {
+    throw new Error(
+      `Amount exceeds your withdrawable balance. (Withdrawable: ${withdrawable} EGP)`,
+    );
+  }
+  if (limit != null && amountEgp > limit) {
+    throw new Error(
+      `Amount exceeds your withdrawal limit of ${limit} EGP.`,
+    );
+  }
+
+  const updatedWallet = await Wallet.findOneAndUpdate(
+    {
+      userId: uid,
+      status: "active",
+      $expr: {
+        $gte: [
+          {
+            $subtract: [
+              { $ifNull: ["$balanceEgp", 0] },
+              {
+                $add: [
+                  reserve,
+                  { $ifNull: ["$pendingWithdrawalAmount", 0] },
+                ],
+              },
+            ],
+          },
+          amountEgp,
+        ],
+      },
+    },
+    {
+      $inc: { pendingWithdrawalAmount: amountEgp },
+      $set: { lastTransactionAt: new Date() },
+    },
+    { new: true },
+  );
+
+  if (!updatedWallet) {
+    throw new Error("Insufficient withdrawable balance.");
+  }
+
+  const request = await WithdrawalRequest.create({
+    driverId: uid,
+    amountEgp,
+    status: "pending",
+    payoutMethod,
+    payoutDestination,
+    requestedAt: new Date(),
+  });
+
+  return { request, wallet: updatedWallet };
+}
+
+/**
+ * Admin approves a withdrawal request. Debits balanceEgp & releases hold, logs transaction, sends notification.
+ */
+export async function approveWithdrawalRequest(
+  requestId: string,
+  adminUserId: string,
+) {
+  await connectDB();
+  const reqOid = new Types.ObjectId(requestId);
+  const adminOid = new Types.ObjectId(adminUserId);
+
+  const request = await WithdrawalRequest.findById(reqOid);
+  if (!request) {
+    throw new Error("Withdrawal request not found.");
+  }
+  if (request.status !== "pending") {
+    throw new Error("This request was already resolved.");
+  }
+
+  const wallet = await Wallet.findOne({ userId: request.driverId });
+  if (!wallet) {
+    throw new Error("Driver wallet not found.");
+  }
+
+  if (wallet.balanceEgp < request.amountEgp) {
+    throw new Error(
+      "Driver balance is no longer sufficient to approve this request.",
+    );
+  }
+
+  const updatedWallet = await Wallet.findOneAndUpdate(
+    {
+      userId: request.driverId,
+      balanceEgp: { $gte: request.amountEgp },
+    },
+    {
+      $inc: {
+        balanceEgp: -request.amountEgp,
+        pendingWithdrawalAmount: -request.amountEgp,
+        totalDebitedEgp: request.amountEgp,
+      },
+      $set: { lastTransactionAt: new Date() },
+    },
+    { new: true },
+  );
+
+  if (!updatedWallet) {
+    throw new Error("Failed to debit wallet due to insufficient balance.");
+  }
+
+  await WalletTransaction.create({
+    userId: request.driverId,
+    type: "withdrawal",
+    amountEgp: request.amountEgp,
+    status: "completed",
+    description: `Withdrawal to ${request.payoutDestination}`,
+    balanceAfterEgp: updatedWallet.balanceEgp,
+    payoutMethod: request.payoutMethod,
+    payoutDestination: request.payoutDestination,
+  });
+
+  request.status = "approved";
+  request.resolvedAt = new Date();
+  request.resolvedBy = adminOid;
+  await request.save();
+
+  await Notification.create({
+    userId: request.driverId,
+    type: "withdrawal_approved",
+    title: "Withdrawal Approved",
+    body: `Your withdrawal request of ${request.amountEgp} EGP to ${request.payoutDestination} has been approved.`,
+    data: { requestId: String(request._id), amountEgp: request.amountEgp },
+  });
+
+  return { request, wallet: updatedWallet };
+}
+
+/**
+ * Admin rejects a withdrawal request with optional reason. Releases held amount.
+ */
+export async function rejectWithdrawalRequest(
+  requestId: string,
+  adminUserId: string,
+  reason?: string,
+) {
+  await connectDB();
+  const reqOid = new Types.ObjectId(requestId);
+  const adminOid = new Types.ObjectId(adminUserId);
+
+  const request = await WithdrawalRequest.findById(reqOid);
+  if (!request) {
+    throw new Error("Withdrawal request not found.");
+  }
+  if (request.status !== "pending") {
+    throw new Error("This request was already resolved.");
+  }
+
+  const updatedWallet = await Wallet.findOneAndUpdate(
+    { userId: request.driverId },
+    {
+      $inc: { pendingWithdrawalAmount: -request.amountEgp },
+      $set: { lastTransactionAt: new Date() },
+    },
+    { new: true },
+  );
+
+  request.status = "rejected";
+  request.resolvedAt = new Date();
+  request.resolvedBy = adminOid;
+  request.rejectionReason = reason || null;
+  await request.save();
+
+  await Notification.create({
+    userId: request.driverId,
+    type: "withdrawal_rejected",
+    title: "Withdrawal Rejected",
+    body: `Your withdrawal request of ${request.amountEgp} EGP was rejected.${reason ? ` Reason: ${reason}` : ""}`,
+    data: { requestId: String(request._id), amountEgp: request.amountEgp, reason },
+  });
+
+  return { request, wallet: updatedWallet };
+}
+
+/**
+ * Driver cancels their own pending withdrawal request. Releases held amount.
+ */
+export async function cancelWithdrawalRequest(
+  requestId: string,
+  driverUserId: string,
+) {
+  await connectDB();
+  const reqOid = new Types.ObjectId(requestId);
+  const driverOid = new Types.ObjectId(driverUserId);
+
+  const request = await WithdrawalRequest.findOne({
+    _id: reqOid,
+    driverId: driverOid,
+  });
+  if (!request) {
+    throw new Error("Withdrawal request not found.");
+  }
+  if (request.status !== "pending") {
+    throw new Error("This request can no longer be cancelled.");
+  }
+
+  const updatedWallet = await Wallet.findOneAndUpdate(
+    { userId: driverOid },
+    {
+      $inc: { pendingWithdrawalAmount: -request.amountEgp },
+      $set: { lastTransactionAt: new Date() },
+    },
+    { new: true },
+  );
+
+  request.status = "cancelled";
+  request.resolvedAt = new Date();
+  await request.save();
+
+  return { request, wallet: updatedWallet };
 }

@@ -5,6 +5,7 @@ import { useClientLocale } from "@/lib/locale.client";
 import { Check, Loader2 } from "lucide-react";
 import PasswordInput from "@/components/shared/PasswordInput";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
+import { isStrongPassword, PASSWORD_RULES_MESSAGE } from "@/lib/auth/validation";
 
 export default function ChangePasswordSection() {
   const [isOpen, setIsOpen] = useState(false);
@@ -25,8 +26,8 @@ export default function ChangePasswordSection() {
       setError(t("change_password.fields_required"));
       return;
     }
-    if (newPassword.length < 8) {
-      setError(t("change_password.min_length"));
+    if (!isStrongPassword(newPassword)) {
+      setError(PASSWORD_RULES_MESSAGE);
       return;
     }
     if (newPassword !== confirmPassword) {

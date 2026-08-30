@@ -121,20 +121,20 @@ export default function AdminDateRangeCalendar({
           display: "inline-flex",
           alignItems: "center",
           gap: 8,
-          border: "1px solid #E6EAEC",
+          border: "1px solid var(--color-border)",
           borderRadius: 10,
           padding: "10px 14px",
           fontSize: 13,
           fontWeight: 600,
-          color: "#0B1E3D",
+          color: "var(--color-primary)",
           fontFamily: "inherit",
           cursor: "pointer",
-          background: "#fff",
+          background: "var(--color-panel)",
           minHeight: 40,
           whiteSpace: "nowrap",
         }}
       >
-        <CalendarDays size={14} color="#00806E" aria-hidden="true" />
+        <CalendarDays size={14} color="var(--color-secondary-deep)" aria-hidden="true" />
         {label}
       </button>
 
@@ -145,10 +145,10 @@ export default function AdminDateRangeCalendar({
             top: "calc(100% + 8px)",
             insetInlineStart: 0,
             zIndex: 60,
-            background: "#fff",
+            background: "var(--color-panel)",
             borderRadius: 14,
-            border: "1px solid #eef0f3",
-            boxShadow: "0 8px 24px rgba(11,30,61,0.12)",
+            border: "1px solid var(--color-border)",
+            boxShadow: "0 8px 24px var(--color-shadow)",
             padding: 16,
             width: 300,
           }}
@@ -173,9 +173,9 @@ export default function AdminDateRangeCalendar({
                 display: "flex",
               }}
             >
-              <ChevronLeft size={16} color="#5A6A7A" aria-hidden="true" />
+              <ChevronLeft size={16} color="var(--color-muted)" aria-hidden="true" />
             </button>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-primary)" }}>
               {format(month, "MMMM yyyy")}
             </span>
             <button
@@ -190,7 +190,7 @@ export default function AdminDateRangeCalendar({
                 display: "flex",
               }}
             >
-              <ChevronRight size={16} color="#5A6A7A" aria-hidden="true" />
+              <ChevronRight size={16} color="var(--color-muted)" aria-hidden="true" />
             </button>
           </div>
 
@@ -208,7 +208,7 @@ export default function AdminDateRangeCalendar({
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
-                  color: "#9aa7b4",
+                  color: "var(--color-muted)",
                   textAlign: "center",
                   padding: "4px 0",
                 }}
@@ -250,11 +250,11 @@ export default function AdminDateRangeCalendar({
                     cursor: "pointer",
                     fontFamily: "inherit",
                     background: isEdge
-                      ? "#0B1E3D"
+                      ? "var(--color-primary)"
                       : inRange
-                        ? "#E6F8F5"
+                        ? "var(--color-secondary-tint)"
                         : "transparent",
-                    color: isEdge ? "#fff" : "#0B1E3D",
+                    color: isEdge ? "var(--color-on-primary)" : "var(--color-primary)",
                   }}
                 >
                   {format(day, "d")}
@@ -270,7 +270,7 @@ export default function AdminDateRangeCalendar({
               justifyContent: "space-between",
               marginTop: 14,
               paddingTop: 12,
-              borderTop: "1px solid #f4f6f8",
+              borderTop: "1px solid var(--color-surface)",
             }}
           >
             <button
@@ -279,7 +279,7 @@ export default function AdminDateRangeCalendar({
               style={{
                 background: "none",
                 border: "none",
-                color: "#9aa7b4",
+                color: "var(--color-muted)",
                 fontWeight: 700,
                 fontSize: 12,
                 cursor: "pointer",
@@ -293,9 +293,9 @@ export default function AdminDateRangeCalendar({
               onClick={apply}
               disabled={!draftFrom}
               style={{
-                background: "#00C2A8",
+                background: "var(--color-secondary)",
                 border: "none",
-                color: "#fff",
+                color: "var(--color-on-primary)",
                 fontWeight: 700,
                 fontSize: 13,
                 borderRadius: 8,

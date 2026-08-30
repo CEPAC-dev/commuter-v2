@@ -10,12 +10,14 @@ export interface CancellationTier {
 
 export interface SettingsResult {
   walletReserveAmount: number;
+  defaultWithdrawalLimit?: number | null;
   availabilityLockTime: string;
   cancellationTiers: CancellationTier[];
 }
 
 export const DEFAULT_ADMIN_SETTINGS: SettingsResult = {
   walletReserveAmount: 200,
+  defaultWithdrawalLimit: null,
   availabilityLockTime: "17:00",
   cancellationTiers: [
     { startTime: "00:00", endTime: "17:00", action: "free", penaltyPercent: 0 },
@@ -35,6 +37,7 @@ export async function getAdminSettings(): Promise<SettingsResult> {
     }
     return {
       walletReserveAmount: doc.walletReserveAmount ?? 200,
+      defaultWithdrawalLimit: doc.defaultWithdrawalLimit ?? null,
       availabilityLockTime: doc.availabilityLockTime ?? "17:00",
       cancellationTiers:
         doc.cancellationTiers && doc.cancellationTiers.length > 0
@@ -168,6 +171,7 @@ export function getCancellationTier(
 export function computeWithdrawableBalance(
   balanceEgp: number,
   reserveAmount: number = 200,
+  pendingWithdrawalAmount: number = 0,
 ): number {
-  return Math.max(0, balanceEgp - reserveAmount);
+  return Math.max(0, balanceEgp - reserveAmount - pendingWithdrawalAmount);
 }

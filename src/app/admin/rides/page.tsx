@@ -13,12 +13,12 @@ import {
   UserCog,
   X,
 } from "lucide-react";
-import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import AdminDateRangeCalendar from "@/components/admin/AdminDateRangeCalendar";
 import AdminTripMap, {
   type TripMapPoint,
 } from "@/components/admin/AdminTripMap";
 import { VEHICLES, type VehicleKey } from "@/lib/config/vehicles";
+import { AdminPageHeader } from "@/components/admin/layout";
 
 type RidePassenger = {
   tripId?: string;
@@ -121,21 +121,21 @@ const STATUS_STYLES: Record<
   string,
   { bg: string; color: string; label?: string }
 > = {
-  matched: { bg: "rgba(0,194,168,0.12)", color: "#00877A", label: "Matched" },
+  matched: { bg: "var(--color-secondary-tint)", color: "var(--color-secondary)", label: "Matched" },
   confirmed: {
-    bg: "rgba(0,194,168,0.12)",
-    color: "#00877A",
+    bg: "var(--color-secondary-tint)",
+    color: "var(--color-secondary-deep)",
     label: "Confirmed",
   },
-  active: { bg: "rgba(232,163,61,0.16)", color: "#B4790C", label: "Active" },
+  active: { bg: "var(--color-warning-tint)", color: "var(--color-warning)", label: "Active" },
   completed: {
-    bg: "rgba(90,106,122,0.12)",
-    color: "#4A5A6A",
+    bg: "var(--color-primary-tint)",
+    color: "var(--color-muted)",
     label: "Completed",
   },
   cancelled: {
-    bg: "rgba(225,82,82,0.12)",
-    color: "#C13E3E",
+    bg: "var(--color-danger-tint)",
+    color: "var(--color-danger)",
     label: "Cancelled",
   },
 };
@@ -144,8 +144,8 @@ function getStatusStyle(status: string) {
   const key = status?.toLowerCase() ?? "";
   return (
     STATUS_STYLES[key] ?? {
-      bg: "rgba(90,106,122,0.1)",
-      color: "#5A6A7A",
+      bg: "var(--color-primary-tint)",
+      color: "var(--color-muted)",
       label: status,
     }
   );
@@ -715,14 +715,14 @@ export default function AdminRidesPage() {
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
 
         .rides-board {
-          --ink: #0B1E3D;
-          --teal: #00C2A8;
-          --teal-deep: #00877A;
-          --amber: #E8A33D;
-          --rose: #E15252;
-          --slate: #5A6A7A;
-          --line: #E6EAEC;
-          --canvas: #F6F8F7;
+          --ink: var(--color-primary);
+          --teal: var(--color-secondary);
+          --teal-deep: var(--color-secondary-deep);
+          --amber: var(--color-accent);
+          --rose: var(--color-danger);
+          --slate: var(--color-muted);
+          --line: var(--color-border);
+          --canvas: var(--color-surface);
           font-family: 'Inter', system-ui, sans-serif;
           min-height: 100dvh;
           background: var(--canvas);
@@ -742,10 +742,10 @@ export default function AdminRidesPage() {
         }
         .tab-btn.active {
           background: var(--ink);
-          color: #ffffff;
+          color: var(--color-on-primary);
         }
         .tab-btn.inactive {
-          background: #ffffff;
+          background: var(--color-panel);
           color: var(--slate);
           border: 1px solid var(--line);
         }
@@ -768,10 +768,10 @@ export default function AdminRidesPage() {
           border-radius: 8px;
           padding: 8px 10px;
           color: var(--ink);
-          background: #fff;
+          background: var(--color-panel);
           font: 600 14px inherit;
         }
-        .filter-field input:focus, .filter-field select:focus { outline: 2px solid rgba(0,194,168,0.3); border-color: var(--teal); }
+        .filter-field input:focus, .filter-field select:focus { outline: 2px solid var(--color-secondary-tint); border-color: var(--teal); }
 
         .rides-board table { width: 100%; border-collapse: collapse; }
         .rides-board thead th {
@@ -788,7 +788,7 @@ export default function AdminRidesPage() {
           border-bottom: 1px solid var(--line);
           transition: background 0.12s ease;
         }
-        .rides-board tbody tr:hover { background: rgba(0,194,168,0.035); }
+        .rides-board tbody tr:hover { background: var(--color-secondary-tint); }
         .rides-board tbody tr:last-child { border-bottom: none; }
         .rides-board td { padding: 16px; vertical-align: middle; }
         .rides-board input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--teal-deep); cursor: pointer; }
@@ -826,7 +826,7 @@ export default function AdminRidesPage() {
         .driver-chip .avatar {
           width: 28px; height: 28px; border-radius: 50%;
           background: var(--ink);
-          color: #fff;
+          color: var(--color-on-primary);
           font-size: 11px;
           font-weight: 600;
           display: flex; align-items: center; justify-content: center;
@@ -843,116 +843,49 @@ export default function AdminRidesPage() {
           transition: opacity 0.12s ease;
         }
         .action-btn:hover { opacity: 0.75; }
-        .action-btn.delete { background: rgba(225,82,82,0.08); color: var(--rose); }
-        .action-btn.reassign { background: rgba(0,194,168,0.1); color: var(--teal-deep); }
-        .action-btn.solid-danger { background: var(--rose); color: #fff; }
-        .action-btn.ghost { background: #fff; color: var(--slate); border-color: var(--line); }
+        .action-btn.delete { background: var(--color-danger-tint); color: var(--rose); }
+        .action-btn.reassign { background: var(--color-secondary-tint); color: var(--teal-deep); }
+        .action-btn.solid-danger { background: var(--rose); color: var(--color-on-primary); }
+        .action-btn.ghost { background: var(--color-panel); color: var(--slate); border-color: var(--line); }
         .rides-board tbody tr.row-link { cursor: pointer; }
         .rides-board tbody tr.row-link:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
-        .detail-overlay { position: fixed; inset: 0; z-index: 1200; background: rgba(11,30,61,0.55); display: flex; justify-content: flex-end; }
-        .detail-drawer { width: min(620px, 100%); height: 100dvh; overflow-y: auto; background: #fff; border-top: 3px solid var(--teal); box-shadow: -12px 0 40px rgba(11,30,61,0.18); }
+        .detail-overlay { position: fixed; inset: 0; z-index: 1200; background: var(--color-overlay); display: flex; justify-content: flex-end; }
+        .detail-drawer { width: min(620px, 100%); height: 100dvh; overflow-y: auto; background: var(--color-panel); border-top: 3px solid var(--teal); box-shadow: -12px 0 40px var(--color-shadow-strong); }
         .detail-section { border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
         .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
         .detail-label { display: block; margin-bottom: 3px; color: var(--slate); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
         .route-stop { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
         .route-stop:last-child { border-bottom: none; }
-        .route-stop-number { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: var(--teal); color: #fff; font: 600 11px 'JetBrains Mono', monospace; }
+        .route-stop-number { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: var(--teal); color: var(--color-on-primary); font: 600 11px 'JetBrains Mono', monospace; }
         .route-stop-name { overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
         .route-stop-meta { color: var(--slate); font-size: 12px; }
-        .bulk-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 20px; background: rgba(0,194,168,0.08); border-bottom: 1px solid var(--line); }
+        .bulk-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 20px; background: var(--color-secondary-tint); border-bottom: 1px solid var(--line); }
         .passenger-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
         .passenger-row:last-child { border-bottom: none; }
-        .passenger-avatar { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; overflow: hidden; }
+        .passenger-avatar { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: var(--ink); color: var(--color-on-primary); font-size: 11px; font-weight: 700; overflow: hidden; }
         .passenger-avatar img { width: 100%; height: 100%; object-fit: cover; }
-        .avail-option { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; padding: 12px; text-align: left; border: 1px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; transition: border-color 0.12s ease, background 0.12s ease; }
-        .avail-option:hover:not(:disabled) { border-color: var(--teal); background: rgba(0,194,168,0.05); }
+        .avail-option { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; padding: 12px; text-align: left; border: 1px solid var(--line); border-radius: 10px; background: var(--color-panel); cursor: pointer; transition: border-color 0.12s ease, background 0.12s ease; }
+        .avail-option:hover:not(:disabled) { border-color: var(--teal); background: var(--color-secondary-tint); }
         .avail-option:disabled { opacity: 0.6; cursor: not-allowed; }
         @media (max-width: 560px) { .detail-grid { grid-template-columns: 1fr; } }
       `}</style>
 
       <div style={{ maxWidth: 1240, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
-            marginBottom: 28,
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <p
-              className="mono"
-              style={{
-                margin: 0,
-                fontSize: 12,
-                fontWeight: 600,
-                letterSpacing: "0.14em",
-                textTransform: "uppercase",
-                color: "#00877A",
-              }}
-            >
-              Admin · Rides Dispatch
-            </p>
-            <h1
-              className="display"
-              style={{
-                margin: "6px 0 0",
-                fontSize: "clamp(28px, 4vw, 38px)",
-                fontWeight: 700,
-                color: "#0B1E3D",
-              }}
-            >
-              Rides Board
-            </h1>
-            <p style={{ margin: "6px 0 0", fontSize: 14, color: "#5A6A7A" }}>
-              {loading
-                ? "Loading rides board…"
-                : `${totalCount} ride${totalCount === 1 ? "" : "s"} match the current filters`}
-            </p>
-            {!loading ? (
-              <p
-                className="mono"
-                style={{ margin: "4px 0 0", fontSize: 11, color: "#5A6A7A" }}
-              >
-                {rides.length} record{rides.length === 1 ? "" : "s"} returned on
-                this page
-              </p>
-            ) : null}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
+        <AdminPageHeader
+          title="Rides Board"
+          description={loading ? "Loading rides board…" : `${totalCount} ride${totalCount === 1 ? "" : "s"} match the current filters · ${rides.length} record${rides.length === 1 ? "" : "s"} on this page`}
+          icon={Route}
+          actions={
+            <>
             <Link href="/admin/trips" className="tab-btn inactive">
               Single Trips
             </Link>
             <Link href="/admin/rides" className="tab-btn active">
               Matched Rides
             </Link>
-            <a
-              href="/admin/dashboard"
-              style={{
-                textDecoration: "none",
-                padding: "11px 18px",
-                borderRadius: 10,
-                color: "#0B1E3D",
-                fontWeight: 600,
-                fontSize: 14,
-                background: "#ffffff",
-                border: "1px solid #E6EAEC",
-              }}
-            >
-              Dashboard
-            </a>
-            <AdminLogoutButton />
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {error ? (
           <p
@@ -961,9 +894,9 @@ export default function AdminRidesPage() {
               marginBottom: 16,
               padding: "12px 14px",
               borderRadius: 10,
-              background: "rgba(225,82,82,0.08)",
-              color: "#C13E3E",
-              border: "1px solid rgba(225,82,82,0.2)",
+              background: "var(--color-danger-tint)",
+              color: "var(--color-danger)",
+              border: "1px solid var(--color-danger)",
               fontSize: 14,
             }}
           >
@@ -977,8 +910,8 @@ export default function AdminRidesPage() {
             gap: 12,
             flexWrap: "wrap",
             alignItems: "flex-end",
-            background: "#fff",
-            border: "1px solid #E6EAEC",
+            background: "var(--color-panel)",
+            border: "1px solid var(--color-border)",
             borderRadius: 8,
             padding: 16,
             marginBottom: 16,
@@ -1061,20 +994,20 @@ export default function AdminRidesPage() {
         <section
           style={{
             borderRadius: 20,
-            background: "#ffffff",
-            border: "1px solid #E6EAEC",
-            boxShadow: "0 10px 35px rgba(11,30,61,0.05)",
+            background: "var(--color-panel)",
+            border: "1px solid var(--color-border)",
+            boxShadow: "0 10px 35px var(--color-shadow)",
             overflow: "hidden",
           }}
         >
           <div
             style={{
               padding: "18px 24px",
-              borderBottom: "1px solid #EEF2F5",
+              borderBottom: "1px solid var(--color-border)",
               display: "flex",
               alignItems: "center",
               gap: 12,
-              borderTop: "3px solid #00C2A8",
+              borderTop: "3px solid var(--color-secondary)",
             }}
           >
             <div
@@ -1082,13 +1015,13 @@ export default function AdminRidesPage() {
                 width: 40,
                 height: 40,
                 borderRadius: 10,
-                background: "rgba(0,194,168,0.12)",
+                background: "var(--color-secondary-tint)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Route size={18} style={{ color: "#00877A" }} />
+              <Route size={18} style={{ color: "var(--color-secondary-deep)" }} />
             </div>
             <div>
               <h2
@@ -1097,12 +1030,12 @@ export default function AdminRidesPage() {
                   margin: 0,
                   fontSize: 16,
                   fontWeight: 700,
-                  color: "#0B1E3D",
+                  color: "var(--color-primary)",
                 }}
               >
                 All Matched Rides
               </h2>
-              <p style={{ margin: "3px 0 0", color: "#5A6A7A", fontSize: 13 }}>
+              <p style={{ margin: "3px 0 0", color: "var(--color-muted)", fontSize: 13 }}>
                 View and manage multi-passenger matched rides across drivers.
               </p>
             </div>
@@ -1110,7 +1043,7 @@ export default function AdminRidesPage() {
 
           {selectedIds.length > 0 ? (
             <div className="bulk-bar">
-              <span style={{ color: "#0B1E3D", fontSize: 13, fontWeight: 600 }}>
+              <span style={{ color: "var(--color-primary)", fontSize: 13, fontWeight: 600 }}>
                 {selectedIds.length} ride{selectedIds.length === 1 ? "" : "s"}{" "}
                 selected
               </span>
@@ -1166,7 +1099,7 @@ export default function AdminRidesPage() {
                       style={{
                         textAlign: "center",
                         padding: 32,
-                        color: "#5A6A7A",
+                        color: "var(--color-muted)",
                       }}
                     >
                       Loading rides...
@@ -1179,7 +1112,7 @@ export default function AdminRidesPage() {
                       style={{
                         textAlign: "center",
                         padding: 32,
-                        color: "#5A6A7A",
+                        color: "var(--color-muted)",
                       }}
                     >
                       No rides matched yet. Go to Admin Dashboard to match trips
@@ -1234,7 +1167,7 @@ export default function AdminRidesPage() {
                               style={{
                                 fontSize: 13,
                                 fontWeight: 700,
-                                color: "#0B1E3D",
+                                color: "var(--color-primary)",
                               }}
                             >
                               Ride #{ride.rideNumber ?? ride._id.slice(-6)}
@@ -1243,7 +1176,7 @@ export default function AdminRidesPage() {
                               style={{
                                 display: "block",
                                 fontSize: 11,
-                                color: "#5A6A7A",
+                                color: "var(--color-muted)",
                                 marginTop: 2,
                               }}
                             >
@@ -1263,7 +1196,7 @@ export default function AdminRidesPage() {
                                   style={{
                                     display: "block",
                                     fontSize: 11,
-                                    color: "#5A6A7A",
+                                    color: "var(--color-muted)",
                                   }}
                                 >
                                   {ride.driverId.phone}
@@ -1282,7 +1215,7 @@ export default function AdminRidesPage() {
                                 <span
                                   style={{
                                     fontSize: 11,
-                                    color: "#00877A",
+                                    color: "var(--color-secondary-deep)",
                                     fontWeight: 600,
                                     paddingLeft: 12,
                                   }}
@@ -1303,7 +1236,7 @@ export default function AdminRidesPage() {
                               style={{
                                 fontSize: 13,
                                 fontWeight: 600,
-                                color: "#0B1E3D",
+                                color: "var(--color-primary)",
                                 display: "block",
                               }}
                             >
@@ -1311,7 +1244,7 @@ export default function AdminRidesPage() {
                             </span>
                             <span
                               className="mono"
-                              style={{ fontSize: 12, color: "#5A6A7A" }}
+                              style={{ fontSize: 12, color: "var(--color-muted)" }}
                             >
                               {to12h(ride.startTime)} – {to12h(ride.endTime)}
                             </span>
@@ -1323,7 +1256,7 @@ export default function AdminRidesPage() {
                               style={{
                                 fontSize: 13,
                                 fontWeight: 600,
-                                color: "#0B1E3D",
+                                color: "var(--color-primary)",
                               }}
                             >
                               {vLabel}
@@ -1332,7 +1265,7 @@ export default function AdminRidesPage() {
                               style={{
                                 display: "block",
                                 fontSize: 11,
-                                color: "#5A6A7A",
+                                color: "var(--color-muted)",
                                 textTransform: "capitalize",
                               }}
                             >
@@ -1401,10 +1334,10 @@ export default function AdminRidesPage() {
               gap: 12,
               flexWrap: "wrap",
               padding: "14px 20px",
-              borderTop: "1px solid #EEF2F5",
+              borderTop: "1px solid var(--color-border)",
             }}
           >
-            <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+            <span style={{ fontSize: 13, color: "var(--color-muted)" }}>
               Page {page} of {totalPages}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
@@ -1455,7 +1388,7 @@ export default function AdminRidesPage() {
                 justifyContent: "space-between",
                 gap: 12,
                 padding: "20px 24px",
-                borderBottom: "1px solid #EEF2F5",
+                borderBottom: "1px solid var(--color-border)",
               }}
             >
               <div>
@@ -1467,7 +1400,7 @@ export default function AdminRidesPage() {
                     fontWeight: 600,
                     letterSpacing: "0.14em",
                     textTransform: "uppercase",
-                    color: "#00877A",
+                    color: "var(--color-secondary-deep)",
                   }}
                 >
                   Ride details
@@ -1478,7 +1411,7 @@ export default function AdminRidesPage() {
                     margin: "5px 0 0",
                     fontSize: 20,
                     fontWeight: 700,
-                    color: "#0B1E3D",
+                    color: "var(--color-primary)",
                   }}
                 >
                   {detail
@@ -1489,7 +1422,7 @@ export default function AdminRidesPage() {
                   <p
                     style={{
                       margin: "4px 0 0",
-                      color: "#5A6A7A",
+                      color: "var(--color-muted)",
                       fontSize: 13,
                     }}
                   >
@@ -1504,7 +1437,7 @@ export default function AdminRidesPage() {
                 aria-label="Close details"
                 style={{
                   padding: 4,
-                  color: "#5A6A7A",
+                  color: "var(--color-muted)",
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
@@ -1523,7 +1456,7 @@ export default function AdminRidesPage() {
               }}
             >
               {detailLoading ? (
-                <p style={{ margin: 0, color: "#5A6A7A", fontSize: 14 }}>
+                <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 14 }}>
                   Loading ride details...
                 </p>
               ) : detailError ? (
@@ -1533,9 +1466,9 @@ export default function AdminRidesPage() {
                     margin: 0,
                     padding: "12px 14px",
                     borderRadius: 8,
-                    background: "rgba(225,82,82,0.08)",
-                    color: "#C13E3E",
-                    border: "1px solid rgba(225,82,82,0.2)",
+                    background: "var(--color-danger-tint)",
+                    color: "var(--color-danger)",
+                    border: "1px solid var(--color-danger)",
                     fontSize: 14,
                   }}
                 >
@@ -1559,7 +1492,7 @@ export default function AdminRidesPage() {
                       ) : null}
                     </section>
                   ) : (
-                    <p style={{ margin: 0, color: "#5A6A7A", fontSize: 13 }}>
+                    <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}>
                       No route coordinates are available for this ride.
                     </p>
                   )}
@@ -1569,7 +1502,7 @@ export default function AdminRidesPage() {
                       className="display"
                       style={{
                         margin: "0 0 12px",
-                        color: "#0B1E3D",
+                        color: "var(--color-primary)",
                         fontSize: 15,
                       }}
                     >
@@ -1590,20 +1523,20 @@ export default function AdminRidesPage() {
                       </div>
                       <div>
                         <span className="detail-label">Passengers</span>
-                        <strong style={{ color: "#0B1E3D", fontSize: 14 }}>
+                        <strong style={{ color: "var(--color-primary)", fontSize: 14 }}>
                           {passengerCount(detail)}
                         </strong>
                       </div>
                       <div>
                         <span className="detail-label">Vehicle</span>
-                        <strong style={{ color: "#0B1E3D", fontSize: 14 }}>
+                        <strong style={{ color: "var(--color-primary)", fontSize: 14 }}>
                           {VEHICLES[detail.vehicleType as VehicleKey]?.label ??
                             detail.vehicleType}
                         </strong>
                       </div>
                       <div>
                         <span className="detail-label">Total cost</span>
-                        <strong style={{ color: "#0B1E3D", fontSize: 14 }}>
+                        <strong style={{ color: "var(--color-primary)", fontSize: 14 }}>
                           {detail.totalCost} EGP
                         </strong>
                       </div>
@@ -1611,7 +1544,7 @@ export default function AdminRidesPage() {
                         <span className="detail-label">Ride type</span>
                         <span
                           style={{
-                            color: "#0B1E3D",
+                            color: "var(--color-primary)",
                             fontSize: 14,
                             textTransform: "capitalize",
                           }}
@@ -1621,7 +1554,7 @@ export default function AdminRidesPage() {
                       </div>
                       <div>
                         <span className="detail-label">Availability</span>
-                        <span style={{ color: "#0B1E3D", fontSize: 14 }}>
+                        <span style={{ color: "var(--color-primary)", fontSize: 14 }}>
                           {detail.availability?.availabilityNumber != null
                             ? `#${detail.availability.availabilityNumber}`
                             : "—"}
@@ -1635,7 +1568,7 @@ export default function AdminRidesPage() {
                       className="display"
                       style={{
                         margin: "0 0 12px",
-                        color: "#0B1E3D",
+                        color: "var(--color-primary)",
                         fontSize: 15,
                       }}
                     >
@@ -1644,7 +1577,7 @@ export default function AdminRidesPage() {
                     <div className="detail-grid">
                       <div>
                         <span className="detail-label">Name</span>
-                        <span style={{ color: "#0B1E3D", fontSize: 14 }}>
+                        <span style={{ color: "var(--color-primary)", fontSize: 14 }}>
                           {detail.driverId?.name ??
                             detail.assignedDriver?.name ??
                             "Unassigned"}
@@ -1652,7 +1585,7 @@ export default function AdminRidesPage() {
                       </div>
                       <div>
                         <span className="detail-label">Phone</span>
-                        <span style={{ color: "#0B1E3D", fontSize: 14 }}>
+                        <span style={{ color: "var(--color-primary)", fontSize: 14 }}>
                           {detail.driverId?.phone ??
                             detail.assignedDriver?.phone ??
                             "—"}
@@ -1660,7 +1593,7 @@ export default function AdminRidesPage() {
                       </div>
                       <div>
                         <span className="detail-label">Vehicle</span>
-                        <span style={{ color: "#0B1E3D", fontSize: 14 }}>
+                        <span style={{ color: "var(--color-primary)", fontSize: 14 }}>
                           {[
                             detail.assignedDriver?.carBrand,
                             detail.assignedDriver?.carModel,
@@ -1673,7 +1606,7 @@ export default function AdminRidesPage() {
                         <span className="detail-label">Plate</span>
                         <span
                           className="mono"
-                          style={{ color: "#0B1E3D", fontSize: 14 }}
+                          style={{ color: "var(--color-primary)", fontSize: 14 }}
                         >
                           {detail.assignedDriver?.plate ?? "—"}
                         </span>
@@ -1686,7 +1619,7 @@ export default function AdminRidesPage() {
                       className="display"
                       style={{
                         margin: "0 0 4px",
-                        color: "#0B1E3D",
+                        color: "var(--color-primary)",
                         fontSize: 15,
                       }}
                     >
@@ -1695,7 +1628,7 @@ export default function AdminRidesPage() {
                     <p
                       style={{
                         margin: "0 0 8px",
-                        color: "#5A6A7A",
+                        color: "var(--color-muted)",
                         fontSize: 12,
                       }}
                     >
@@ -1709,8 +1642,8 @@ export default function AdminRidesPage() {
                           margin: "0 0 8px",
                           padding: "8px 10px",
                           borderRadius: 8,
-                          background: "rgba(231,76,60,0.08)",
-                          color: "#C0392B",
+                          background: "var(--color-danger-tint)",
+                          color: "var(--color-danger)",
                           fontSize: 12,
                         }}
                       >
@@ -1729,7 +1662,7 @@ export default function AdminRidesPage() {
                             style={
                               isNoShow
                                 ? {
-                                    background: "rgba(231,76,60,0.06)",
+                                    background: "var(--color-danger-tint)",
                                     borderRadius: 10,
                                   }
                                 : undefined
@@ -1747,7 +1680,7 @@ export default function AdminRidesPage() {
                                 style={{
                                   display: "block",
                                   overflow: "hidden",
-                                  color: isNoShow ? "#C0392B" : "#0B1E3D",
+                                  color: isNoShow ? "var(--color-danger)" : "var(--color-primary)",
                                   fontSize: 13,
                                   textOverflow: "ellipsis",
                                   whiteSpace: "nowrap",
@@ -1755,7 +1688,7 @@ export default function AdminRidesPage() {
                               >
                                 {passenger.user?.name ?? "Unknown passenger"}
                               </strong>
-                              <span style={{ color: "#5A6A7A", fontSize: 12 }}>
+                              <span style={{ color: "var(--color-muted)", fontSize: 12 }}>
                                 {passenger.user?.userNumber != null
                                   ? `User #${passenger.user.userNumber}`
                                   : "User number unavailable"}
@@ -1767,7 +1700,7 @@ export default function AdminRidesPage() {
                                 <span
                                   style={{
                                     display: "block",
-                                    color: "#C0392B",
+                                    color: "var(--color-danger)",
                                     fontSize: 11,
                                     fontWeight: 700,
                                     marginTop: 2,
@@ -1788,7 +1721,7 @@ export default function AdminRidesPage() {
                               <span
                                 className="mono"
                                 style={{
-                                  color: "#5A6A7A",
+                                  color: "var(--color-muted)",
                                   fontSize: 11,
                                   textAlign: "right",
                                 }}
@@ -1811,10 +1744,10 @@ export default function AdminRidesPage() {
                                     padding: "4px 10px",
                                     borderRadius: 999,
                                     border: isNoShow
-                                      ? "1px solid #27AE60"
-                                      : "1px solid rgba(231,76,60,0.35)",
-                                    background: "#fff",
-                                    color: isNoShow ? "#196F3D" : "#C0392B",
+                                      ? "1px solid var(--color-success)"
+                                      : "1px solid var(--color-danger)",
+                                    background: "var(--color-panel)",
+                                    color: isNoShow ? "var(--color-success)" : "var(--color-danger)",
                                     fontSize: 11,
                                     fontWeight: 700,
                                     cursor: isBusy ? "not-allowed" : "pointer",
@@ -1836,7 +1769,7 @@ export default function AdminRidesPage() {
                       <p
                         style={{
                           margin: "8px 0 0",
-                          color: "#5A6A7A",
+                          color: "var(--color-muted)",
                           fontSize: 13,
                         }}
                       >
@@ -1850,7 +1783,7 @@ export default function AdminRidesPage() {
                       className="display"
                       style={{
                         margin: "0 0 4px",
-                        color: "#0B1E3D",
+                        color: "var(--color-primary)",
                         fontSize: 15,
                       }}
                     >
@@ -1859,7 +1792,7 @@ export default function AdminRidesPage() {
                     <p
                       style={{
                         margin: "0 0 8px",
-                        color: "#5A6A7A",
+                        color: "var(--color-muted)",
                         fontSize: 12,
                       }}
                     >
@@ -1892,7 +1825,7 @@ export default function AdminRidesPage() {
                         </div>
                         <span
                           className="mono"
-                          style={{ color: "#5A6A7A", fontSize: 12 }}
+                          style={{ color: "var(--color-muted)", fontSize: 12 }}
                         >
                           {stop.waitingMinutes
                             ? `${stop.waitingMinutes} min`
@@ -1904,7 +1837,7 @@ export default function AdminRidesPage() {
                       <p
                         style={{
                           margin: "8px 0 0",
-                          color: "#5A6A7A",
+                          color: "var(--color-muted)",
                           fontSize: 13,
                         }}
                       >
@@ -1942,9 +1875,9 @@ export default function AdminRidesPage() {
               width: "min(620px, 100%)",
               maxHeight: "min(80dvh, 720px)",
               borderRadius: 14,
-              borderTop: "3px solid #00C2A8",
-              background: "#fff",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+              borderTop: "3px solid var(--color-secondary)",
+              background: "var(--color-panel)",
+              boxShadow: "0 20px 60px var(--color-shadow-strong)",
               overflow: "hidden",
             }}
           >
@@ -1955,7 +1888,7 @@ export default function AdminRidesPage() {
                 justifyContent: "space-between",
                 gap: 12,
                 padding: "18px 20px",
-                borderBottom: "1px solid #EEF2F5",
+                borderBottom: "1px solid var(--color-border)",
               }}
             >
               <div>
@@ -1967,7 +1900,7 @@ export default function AdminRidesPage() {
                     fontWeight: 600,
                     letterSpacing: "0.14em",
                     textTransform: "uppercase",
-                    color: "#00877A",
+                    color: "var(--color-secondary-deep)",
                   }}
                 >
                   Reassign driver
@@ -1978,13 +1911,13 @@ export default function AdminRidesPage() {
                     margin: "5px 0 0",
                     fontSize: 18,
                     fontWeight: 700,
-                    color: "#0B1E3D",
+                    color: "var(--color-primary)",
                   }}
                 >
                   Ride #{reassignRide.rideNumber ?? reassignRide._id.slice(-6)}
                 </h3>
                 <p
-                  style={{ margin: "4px 0 0", color: "#5A6A7A", fontSize: 13 }}
+                  style={{ margin: "4px 0 0", color: "var(--color-muted)", fontSize: 13 }}
                 >
                   Availabilities on {reassignRide.date}
                 </p>
@@ -1996,7 +1929,7 @@ export default function AdminRidesPage() {
                 disabled={Boolean(reassigningId)}
                 style={{
                   padding: 4,
-                  color: "#5A6A7A",
+                  color: "var(--color-muted)",
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
@@ -2009,7 +1942,7 @@ export default function AdminRidesPage() {
             <div
               style={{
                 padding: "14px 20px",
-                borderBottom: "1px solid #EEF2F5",
+                borderBottom: "1px solid var(--color-border)",
               }}
             >
               <label className="filter-field" style={{ minWidth: 0 }}>
@@ -2039,9 +1972,9 @@ export default function AdminRidesPage() {
                     margin: 0,
                     padding: "10px 12px",
                     borderRadius: 8,
-                    background: "rgba(225,82,82,0.08)",
-                    color: "#C13E3E",
-                    border: "1px solid rgba(225,82,82,0.2)",
+                    background: "var(--color-danger-tint)",
+                    color: "var(--color-danger)",
+                    border: "1px solid var(--color-danger)",
                     fontSize: 13,
                   }}
                 >
@@ -2049,11 +1982,11 @@ export default function AdminRidesPage() {
                 </p>
               ) : null}
               {availLoading ? (
-                <p style={{ margin: 0, color: "#5A6A7A", fontSize: 14 }}>
+                <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 14 }}>
                   Loading availabilities…
                 </p>
               ) : filteredAvailabilities.length === 0 ? (
-                <p style={{ margin: 0, color: "#5A6A7A", fontSize: 14 }}>
+                <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 14 }}>
                   No availability found for {reassignRide.date}. Create one from
                   the Availability page.
                 </p>
@@ -2070,7 +2003,7 @@ export default function AdminRidesPage() {
                       <strong
                         style={{
                           display: "block",
-                          color: "#0B1E3D",
+                          color: "var(--color-primary)",
                           fontSize: 14,
                         }}
                       >
@@ -2079,7 +2012,7 @@ export default function AdminRidesPage() {
                           className="mono"
                           style={{
                             marginLeft: 8,
-                            color: "#00877A",
+                            color: "var(--color-secondary-deep)",
                             fontSize: 12,
                             fontWeight: 600,
                           }}
@@ -2091,7 +2024,7 @@ export default function AdminRidesPage() {
                         style={{
                           display: "block",
                           marginTop: 2,
-                          color: "#5A6A7A",
+                          color: "var(--color-muted)",
                           fontSize: 12,
                         }}
                       >
@@ -2105,7 +2038,7 @@ export default function AdminRidesPage() {
                           display: "block",
                           marginTop: 4,
                           overflow: "hidden",
-                          color: "#5A6A7A",
+                          color: "var(--color-muted)",
                           fontSize: 12,
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
@@ -2118,7 +2051,7 @@ export default function AdminRidesPage() {
                     </span>
                     <span
                       style={{
-                        color: "#00877A",
+                        color: "var(--color-secondary-deep)",
                         fontSize: 13,
                         fontWeight: 600,
                         whiteSpace: "nowrap",
@@ -2157,8 +2090,8 @@ export default function AdminRidesPage() {
             aria-label="Confirm selected ride deletion"
             style={{
               width: "min(420px, 100%)",
-              background: "#fff",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+              background: "var(--color-panel)",
+              boxShadow: "0 20px 60px var(--color-shadow-strong)",
             }}
             onSubmit={(event) => {
               event.preventDefault();
@@ -2167,11 +2100,11 @@ export default function AdminRidesPage() {
           >
             <h3
               className="display"
-              style={{ margin: 0, color: "#0B1E3D", fontSize: 18 }}
+              style={{ margin: 0, color: "var(--color-primary)", fontSize: 18 }}
             >
               Delete selected rides
             </h3>
-            <p style={{ margin: "6px 0 16px", color: "#5A6A7A", fontSize: 13 }}>
+            <p style={{ margin: "6px 0 16px", color: "var(--color-muted)", fontSize: 13 }}>
               This cancels {pendingDeleteIds.length} ride
               {pendingDeleteIds.length === 1 ? "" : "s"} and unassigns their
               trips. Enter the admin password to confirm.
@@ -2189,7 +2122,7 @@ export default function AdminRidesPage() {
             {deleteError ? (
               <p
                 role="alert"
-                style={{ margin: "12px 0 0", color: "#C13E3E", fontSize: 13 }}
+                style={{ margin: "12px 0 0", color: "var(--color-danger)", fontSize: 13 }}
               >
                 {deleteError}
               </p>

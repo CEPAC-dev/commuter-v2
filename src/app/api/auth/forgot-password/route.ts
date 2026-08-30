@@ -1,21 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
+import { connectDB } from "@/lib/db/mongoose";
+import { User } from "@/models/User";
 import { validateMutationRequest } from "@/lib/security/request";
 import { enforceRateLimit } from "@/lib/security/rateLimit";
+import { isStrongPassword, normalizeEgyptPhone, PASSWORD_RULES_MESSAGE } from "@/lib/auth/validation";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
   if (invalidRequest) return invalidRequest;
   const limited = await enforceRateLimit(req, "password-recovery", {
-    limit: 5,
+    limit: 10,
     windowMs: 15 * 60 * 1000,
   });
   if (limited) return limited;
 
-  return NextResponse.json(
-    {
-      error:
-        "Password reset requires verified account recovery. Contact support until OTP recovery is available.",
-    },
-    { status: 503 },
-  );
+  try {
+    const { phone, role, newPassword, confirmPassword } = await req.json();
+
+    if (!phone || !newPassword || !confirmPassword) {
+      return NextResponse.json({ error: "Phone and password fields are required." }, { status: 400 });
+    }
+
+    if (role !== "passenger" && role !== "driver") {
+      return NextResponse.json({ error: "Invalid account role." }, { status: 400 });
+    }
+
+    const normalizedPhone = normalizeEgyptPhone(phone) ?? phone.trim();
+    if (!normalizedPhone) {
+      return NextResponse.json({ error: "Invalid phone number." }, { status: 400 });
+    }
+
+    if (!isStrongPassword(newPassword)) {
+      return NextResponse.json({ error: PASSWORD_RULES_MESSAGE }, { status: 400 });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return NextResponse.json({ error: "Passwords do not match." }, { status: 400 });
+    }
+
+    await connectDB();
+
+    const user = await User.findOne({ phone: normalizedPhone, role }).select("+passwordHash");
+    if (!user) {
+      return NextResponse.json(
+        { error: "No account found with this phone number." },
+        { status: 404 }
+      );
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    await user.save();
+
+    return NextResponse.json({ ok: true, message: "Password updated successfully." });
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    return NextResponse.json({ error: "Failed to reset password. Please try again." }, { status: 500 });
+  }
 }

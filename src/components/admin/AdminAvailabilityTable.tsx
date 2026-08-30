@@ -2,11 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, MapPin, Plus, Trash2, X } from "lucide-react";
+import { MapPin, Plus, Trash2, X } from "lucide-react";
 import AddressInput from "@/components/landing/AddressInput";
 import AdminTripMap, {
   type TripMapPoint,
 } from "@/components/admin/AdminTripMap";
+import {
+  AdminCard,
+  AdminEmptyState,
+  AdminErrorState,
+  AdminFormLayout,
+  AdminLoadingState,
+  AdminStatusBadge,
+  AdminTable,
+} from "@/components/admin/layout";
 import type { TripPoint } from "@/lib/store/useTripStore";
 
 interface AvailabilityRecord {
@@ -121,6 +130,7 @@ export default function AdminAvailabilityTable({
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRecords(initialRecords);
   }, [initialRecords]);
 
@@ -278,70 +288,11 @@ export default function AdminAvailabilityTable({
   }
 
   return (
-    <section
-      style={{
-        borderRadius: 24,
-        background: "#ffffff",
-        border: "1px solid #e8edf0",
-        boxShadow: "0 10px 35px rgba(11,30,61,0.05)",
-        overflow: "hidden",
-      }}
-    >
-      <style>{`
-        .avail-row { cursor: pointer; }
-        .avail-row:hover { background: rgba(0,194,168,0.04); }
-        .avail-overlay { position: fixed; inset: 0; z-index: 1200; background: rgba(11,30,61,0.55); display: flex; }
-        .avail-field { display: flex; flex-direction: column; gap: 6px; }
-        .avail-field > span { color: #5A6A7A; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
-        .avail-field input, .avail-field select { min-height: 40px; border: 1px solid #E6EAEC; border-radius: 8px; padding: 8px 10px; color: #0B1E3D; background: #fff; font: 600 14px inherit; }
-        .avail-field input:focus, .avail-field select:focus { outline: 2px solid rgba(0,194,168,0.3); border-color: #00C2A8; }
-        .avail-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 8px; border: 1px solid transparent; font-size: 13px; font-weight: 600; cursor: pointer; }
-        .avail-btn.primary { background: #00C2A8; color: #fff; }
-        .avail-btn.ghost { background: #fff; color: #5A6A7A; border-color: #E6EAEC; }
-        .avail-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .avail-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-        .avail-detail-label { display: block; margin-bottom: 3px; color: #5A6A7A; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
-        @media (max-width: 560px) { .avail-detail-grid { grid-template-columns: 1fr; } }
-      `}</style>
-
-      <div
-        style={{
-          padding: "18px 24px",
-          borderBottom: "1px solid #eef2f5",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div
-          style={{
-            width: 42,
-            height: 42,
-            borderRadius: 12,
-            background: "rgba(245,166,35,0.16)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <CalendarClock size={20} style={{ color: "#F5A623" }} />
-        </div>
-        <div style={{ flex: "1 1 240px" }}>
-          <h2
-            style={{
-              margin: 0,
-              fontSize: 18,
-              fontWeight: 700,
-              color: "#0B1E3D",
-            }}
-          >
-            Driver availability records
-          </h2>
-          <p style={{ margin: "4px 0 0", color: "#5A6A7A", fontSize: 14 }}>
-            Click a record to view its details, or delete it directly.
-          </p>
-        </div>
+    <AdminCard
+      padding={0}
+      title="Driver availability records"
+      description="Click a record to view its details, or delete it directly."
+      actions={
         <button
           type="button"
           className="avail-btn primary"
@@ -349,31 +300,45 @@ export default function AdminAvailabilityTable({
         >
           <Plus size={15} /> Add new availability
         </button>
-      </div>
+      }
+    >
+      <style>{`
+        .avail-row { cursor: pointer; }
+        .avail-row:hover { background: var(--color-secondary-tint); }
+        .avail-overlay { position: fixed; inset: 0; z-index: 1200; background: var(--color-overlay); display: flex; }
+        .avail-field { display: flex; flex-direction: column; gap: 6px; }
+        .avail-field > span { color: var(--color-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+        .avail-field input, .avail-field select { min-height: 40px; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; color: var(--color-primary); background: var(--color-panel); font: 600 14px inherit; }
+        .avail-field input:focus, .avail-field select:focus { outline: 2px solid var(--color-secondary-tint); border-color: var(--color-secondary); }
+        .avail-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--color-transparent); font-size: 13px; font-weight: 600; cursor: pointer; }
+        .avail-btn.primary { background: var(--color-secondary); color: var(--color-on-primary); }
+        .avail-btn.ghost { background: var(--color-panel); color: var(--color-muted); border-color: var(--color-border); }
+        .avail-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .avail-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .avail-detail-label { display: block; margin-bottom: 3px; color: var(--color-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+        @media (max-width: 560px) { .avail-detail-grid { grid-template-columns: 1fr; } }
+      `}</style>
+
       {error ? (
-        <p
-          role="alert"
-          style={{
-            margin: "16px 24px 0",
-            padding: "10px 12px",
-            borderRadius: 10,
-            background: "rgba(231,76,60,0.08)",
-            color: "#e74c3c",
-            border: "1px solid rgba(231,76,60,0.2)",
-          }}
-        >
-          {error}
-        </p>
+        <AdminErrorState
+          title="Unable to update availability"
+          description={error}
+        />
       ) : null}
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead style={{ background: "#f8f9fa" }}>
+      {records.length === 0 ? (
+        <AdminEmptyState
+          title="No availability records"
+          description="Driver availability submissions will appear here."
+        />
+      ) : (
+        <AdminTable ariaLabel="Driver availability records">
+          <thead style={{ background: "var(--color-surface)" }}>
             <tr>
               <th
                 style={{
                   textAlign: "left",
                   padding: "14px 16px",
-                  color: "#0B1E3D",
+                  color: "var(--color-primary)",
                   fontSize: 13,
                 }}
               >
@@ -383,7 +348,7 @@ export default function AdminAvailabilityTable({
                 style={{
                   textAlign: "left",
                   padding: "14px 16px",
-                  color: "#0B1E3D",
+                  color: "var(--color-primary)",
                   fontSize: 13,
                 }}
               >
@@ -393,7 +358,7 @@ export default function AdminAvailabilityTable({
                 style={{
                   textAlign: "left",
                   padding: "14px 16px",
-                  color: "#0B1E3D",
+                  color: "var(--color-primary)",
                   fontSize: 13,
                 }}
               >
@@ -403,7 +368,7 @@ export default function AdminAvailabilityTable({
                 style={{
                   textAlign: "left",
                   padding: "14px 16px",
-                  color: "#0B1E3D",
+                  color: "var(--color-primary)",
                   fontSize: 13,
                 }}
               >
@@ -413,7 +378,7 @@ export default function AdminAvailabilityTable({
                 style={{
                   textAlign: "left",
                   padding: "14px 16px",
-                  color: "#0B1E3D",
+                  color: "var(--color-primary)",
                   fontSize: 13,
                 }}
               >
@@ -423,7 +388,7 @@ export default function AdminAvailabilityTable({
                 style={{
                   textAlign: "left",
                   padding: "14px 16px",
-                  color: "#0B1E3D",
+                  color: "var(--color-primary)",
                   fontSize: 13,
                 }}
               >
@@ -446,12 +411,12 @@ export default function AdminAvailabilityTable({
                     openDetail(record._id);
                   }
                 }}
-                style={{ borderTop: "1px solid #eef2f5" }}
+                style={{ borderTop: "1px solid var(--color-border)" }}
               >
                 <td
                   style={{
                     padding: "14px 16px",
-                    color: "#0B1E3D",
+                    color: "var(--color-primary)",
                     fontWeight: 600,
                   }}
                 >
@@ -459,16 +424,24 @@ export default function AdminAvailabilityTable({
                     ? `#${record.driver.userNumber}`
                     : "—"}
                 </td>
-                <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>
+                <td
+                  style={{ padding: "14px 16px", color: "var(--color-muted)" }}
+                >
                   {record.driver?.name ?? "—"}
                 </td>
-                <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>
+                <td
+                  style={{ padding: "14px 16px", color: "var(--color-muted)" }}
+                >
                   {record.date ?? "—"}
                 </td>
-                <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>
+                <td
+                  style={{ padding: "14px 16px", color: "var(--color-muted)" }}
+                >
                   {CAR_TYPE_LABELS[record.driver?.carType ?? ""] ?? "—"}
                 </td>
-                <td style={{ padding: "14px 16px", color: "#5A6A7A" }}>
+                <td
+                  style={{ padding: "14px 16px", color: "var(--color-muted)" }}
+                >
                   {record.startTime ?? "—"} → {record.endTime ?? "—"}
                 </td>
                 <td
@@ -485,9 +458,9 @@ export default function AdminAvailabilityTable({
                       gap: 6,
                       padding: "8px 12px",
                       borderRadius: 999,
-                      border: "1px solid rgba(231,76,60,0.25)",
-                      background: "transparent",
-                      color: "#e74c3c",
+                      border: "1px solid var(--color-danger)",
+                      background: "var(--color-transparent)",
+                      color: "var(--color-danger)",
                       cursor:
                         deletingId === record._id ? "not-allowed" : "pointer",
                       fontWeight: 700,
@@ -500,8 +473,8 @@ export default function AdminAvailabilityTable({
               </tr>
             ))}
           </tbody>
-        </table>
-      </div>
+        </AdminTable>
+      )}
 
       {detailId ? (
         <div
@@ -519,9 +492,9 @@ export default function AdminAvailabilityTable({
               width: "min(560px, 100%)",
               height: "100dvh",
               overflowY: "auto",
-              background: "#fff",
-              borderTop: "3px solid #00C2A8",
-              boxShadow: "-12px 0 40px rgba(11,30,61,0.18)",
+              background: "var(--color-panel)",
+              borderTop: "3px solid var(--color-secondary)",
+              boxShadow: "-12px 0 40px var(--color-shadow-strong)",
             }}
           >
             <header
@@ -531,7 +504,7 @@ export default function AdminAvailabilityTable({
                 justifyContent: "space-between",
                 gap: 12,
                 padding: "20px 24px",
-                borderBottom: "1px solid #EEF2F5",
+                borderBottom: "1px solid var(--color-border)",
               }}
             >
               <div>
@@ -542,7 +515,7 @@ export default function AdminAvailabilityTable({
                     fontWeight: 600,
                     letterSpacing: "0.14em",
                     textTransform: "uppercase",
-                    color: "#00877A",
+                    color: "var(--color-secondary-deep)",
                   }}
                 >
                   Availability details
@@ -552,7 +525,7 @@ export default function AdminAvailabilityTable({
                     margin: "5px 0 0",
                     fontSize: 20,
                     fontWeight: 700,
-                    color: "#0B1E3D",
+                    color: "var(--color-primary)",
                   }}
                 >
                   {detail
@@ -563,7 +536,7 @@ export default function AdminAvailabilityTable({
                   <p
                     style={{
                       margin: "4px 0 0",
-                      color: "#5A6A7A",
+                      color: "var(--color-muted)",
                       fontSize: 13,
                     }}
                   >
@@ -577,8 +550,8 @@ export default function AdminAvailabilityTable({
                 aria-label="Close details"
                 style={{
                   padding: 4,
-                  color: "#5A6A7A",
-                  background: "transparent",
+                  color: "var(--color-muted)",
+                  background: "var(--color-transparent)",
                   border: "none",
                   cursor: "pointer",
                 }}
@@ -596,30 +569,18 @@ export default function AdminAvailabilityTable({
               }}
             >
               {detailLoading ? (
-                <p style={{ margin: 0, color: "#5A6A7A", fontSize: 14 }}>
-                  Loading availability details...
-                </p>
+                <AdminLoadingState title="Loading availability details..." />
               ) : detailError ? (
-                <p
-                  role="alert"
-                  style={{
-                    margin: 0,
-                    padding: "12px 14px",
-                    borderRadius: 8,
-                    background: "rgba(225,82,82,0.08)",
-                    color: "#C13E3E",
-                    border: "1px solid rgba(225,82,82,0.2)",
-                    fontSize: 14,
-                  }}
-                >
-                  {detailError}
-                </p>
+                <AdminErrorState
+                  title="Unable to load availability"
+                  description={detailError}
+                />
               ) : detail ? (
                 <>
                   {mapPoints.length ? (
                     <div
                       style={{
-                        border: "1px solid #E6EAEC",
+                        border: "1px solid var(--color-border)",
                         borderRadius: 8,
                         padding: 12,
                       }}
@@ -627,14 +588,20 @@ export default function AdminAvailabilityTable({
                       <AdminTripMap key={detail._id} points={mapPoints} />
                     </div>
                   ) : (
-                    <p style={{ margin: 0, color: "#5A6A7A", fontSize: 13 }}>
+                    <p
+                      style={{
+                        margin: 0,
+                        color: "var(--color-muted)",
+                        fontSize: 13,
+                      }}
+                    >
                       No coordinates recorded for this availability.
                     </p>
                   )}
 
                   <section
                     style={{
-                      border: "1px solid #E6EAEC",
+                      border: "1px solid var(--color-border)",
                       borderRadius: 8,
                       padding: 14,
                     }}
@@ -642,7 +609,7 @@ export default function AdminAvailabilityTable({
                     <h4
                       style={{
                         margin: "0 0 12px",
-                        color: "#0B1E3D",
+                        color: "var(--color-primary)",
                         fontSize: 15,
                       }}
                     >
@@ -651,31 +618,38 @@ export default function AdminAvailabilityTable({
                     <div className="avail-detail-grid">
                       <div>
                         <span className="avail-detail-label">Name</span>
-                        <span style={{ color: "#0B1E3D", fontSize: 14 }}>
+                        <span
+                          style={{
+                            color: "var(--color-primary)",
+                            fontSize: 14,
+                          }}
+                        >
                           {detail.driverId?.name ?? "—"}
                         </span>
                       </div>
                       <div>
                         <span className="avail-detail-label">Phone</span>
-                        <span style={{ color: "#0B1E3D", fontSize: 14 }}>
+                        <span
+                          style={{
+                            color: "var(--color-primary)",
+                            fontSize: 14,
+                          }}
+                        >
                           {detail.driverId?.phone ?? "—"}
                         </span>
                       </div>
                       <div>
                         <span className="avail-detail-label">Status</span>
-                        <span
-                          style={{
-                            color: "#0B1E3D",
-                            fontSize: 14,
-                            textTransform: "capitalize",
-                          }}
-                        >
-                          {detail.status ?? "—"}
-                        </span>
+                        <AdminStatusBadge status={detail.status ?? "unknown"} />
                       </div>
                       <div>
                         <span className="avail-detail-label">Matched</span>
-                        <span style={{ color: "#0B1E3D", fontSize: 14 }}>
+                        <span
+                          style={{
+                            color: "var(--color-primary)",
+                            fontSize: 14,
+                          }}
+                        >
                           {detail.matched ? "Yes" : "No"}
                         </span>
                       </div>
@@ -684,7 +658,7 @@ export default function AdminAvailabilityTable({
 
                   <section
                     style={{
-                      border: "1px solid #E6EAEC",
+                      border: "1px solid var(--color-border)",
                       borderRadius: 8,
                       padding: 14,
                     }}
@@ -692,7 +666,7 @@ export default function AdminAvailabilityTable({
                     <h4
                       style={{
                         margin: "0 0 12px",
-                        color: "#0B1E3D",
+                        color: "var(--color-primary)",
                         fontSize: 15,
                       }}
                     >
@@ -709,10 +683,18 @@ export default function AdminAvailabilityTable({
                         <span className="avail-detail-label">
                           Start location
                         </span>
-                        <span style={{ color: "#0B1E3D", fontSize: 13 }}>
+                        <span
+                          style={{
+                            color: "var(--color-primary)",
+                            fontSize: 13,
+                          }}
+                        >
                           <MapPin
                             size={12}
-                            style={{ verticalAlign: "-1px", color: "#00C2A8" }}
+                            style={{
+                              verticalAlign: "-1px",
+                              color: "var(--color-secondary)",
+                            }}
                           />{" "}
                           {detail.startLocation?.address ?? "—"}
                         </span>
@@ -721,16 +703,29 @@ export default function AdminAvailabilityTable({
                         <span className="avail-detail-label">
                           Nearest station to start
                         </span>
-                        <span style={{ color: "#0B1E3D", fontSize: 13 }}>
+                        <span
+                          style={{
+                            color: "var(--color-primary)",
+                            fontSize: 13,
+                          }}
+                        >
                           {detail.startNearestStation?.name ?? "—"}
                         </span>
                       </div>
                       <div>
                         <span className="avail-detail-label">End location</span>
-                        <span style={{ color: "#0B1E3D", fontSize: 13 }}>
+                        <span
+                          style={{
+                            color: "var(--color-primary)",
+                            fontSize: 13,
+                          }}
+                        >
                           <MapPin
                             size={12}
-                            style={{ verticalAlign: "-1px", color: "#0B1E3D" }}
+                            style={{
+                              verticalAlign: "-1px",
+                              color: "var(--color-primary)",
+                            }}
                           />{" "}
                           {detail.endLocation?.address ?? "—"}
                         </span>
@@ -739,7 +734,12 @@ export default function AdminAvailabilityTable({
                         <span className="avail-detail-label">
                           Nearest station to end
                         </span>
-                        <span style={{ color: "#0B1E3D", fontSize: 13 }}>
+                        <span
+                          style={{
+                            color: "var(--color-primary)",
+                            fontSize: 13,
+                          }}
+                        >
                           {detail.endNearestStation?.name ?? "—"}
                         </span>
                       </div>
@@ -765,7 +765,7 @@ export default function AdminAvailabilityTable({
               closeCreate();
           }}
         >
-          <form
+          <AdminFormLayout
             onSubmit={handleCreate}
             role="dialog"
             aria-modal="true"
@@ -779,9 +779,9 @@ export default function AdminAvailabilityTable({
               overflowY: "auto",
               padding: 20,
               borderRadius: 14,
-              borderTop: "3px solid #F5A623",
-              background: "#fff",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+              borderTop: "3px solid var(--color-accent)",
+              background: "var(--color-panel)",
+              boxShadow: "0 20px 60px var(--color-shadow-strong)",
             }}
           >
             <div
@@ -798,13 +798,17 @@ export default function AdminAvailabilityTable({
                     margin: 0,
                     fontSize: 18,
                     fontWeight: 700,
-                    color: "#0B1E3D",
+                    color: "var(--color-primary)",
                   }}
                 >
                   Add new availability
                 </h3>
                 <p
-                  style={{ margin: "4px 0 0", color: "#5A6A7A", fontSize: 13 }}
+                  style={{
+                    margin: "4px 0 0",
+                    color: "var(--color-muted)",
+                    fontSize: 13,
+                  }}
                 >
                   Assign a driver a new availability window.
                 </p>
@@ -816,8 +820,8 @@ export default function AdminAvailabilityTable({
                 disabled={creating}
                 style={{
                   padding: 4,
-                  color: "#5A6A7A",
-                  background: "transparent",
+                  color: "var(--color-muted)",
+                  background: "var(--color-transparent)",
                   border: "none",
                   cursor: "pointer",
                 }}
@@ -900,14 +904,18 @@ export default function AdminAvailabilityTable({
                 placeholder="Search end address"
                 value={endLocation}
                 onChange={setEndLocation}
-                iconColor="#0B1E3D"
+                iconColor="var(--color-primary)"
               />
             </div>
 
             {createError ? (
               <p
                 role="alert"
-                style={{ margin: 0, color: "#C13E3E", fontSize: 13 }}
+                style={{
+                  margin: 0,
+                  color: "var(--color-danger)",
+                  fontSize: 13,
+                }}
               >
                 {createError}
               </p>
@@ -932,9 +940,9 @@ export default function AdminAvailabilityTable({
                 {creating ? "Creating..." : "Create availability"}
               </button>
             </div>
-          </form>
+          </AdminFormLayout>
         </div>
       ) : null}
-    </section>
+    </AdminCard>
   );
 }

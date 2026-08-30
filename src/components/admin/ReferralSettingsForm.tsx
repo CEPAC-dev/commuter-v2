@@ -12,6 +12,12 @@ import {
   Users,
   UserRound,
 } from "lucide-react";
+import {
+  AdminCard,
+  AdminFormField,
+  AdminFormLayout,
+  AdminStatusBadge,
+} from "@/components/admin/layout";
 
 export interface ReferralSettingsValues {
   referrerBonusAmount: number;
@@ -96,14 +102,15 @@ export default function ReferralSettingsForm({
           .referral-settings-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
-      <form onSubmit={handleSubmit} style={panelStyle}>
+      <AdminCard padding={0}>
+      <AdminFormLayout onSubmit={handleSubmit}>
         {/* Role switch */}
-        <div style={{ padding: "18px 20px", borderBottom: "1px solid #eef1f3" }}>
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--color-border)" }}>
           <p style={eyebrowStyle}>Referral code owner</p>
           <div
             role="tablist"
             aria-label="Referral code owner"
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, padding: 4, marginTop: 10, background: "#eef2f3", borderRadius: 8 }}
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, padding: 4, marginTop: 10, background: "var(--color-background)", borderRadius: 8 }}
           >
             {ROLE_OPTIONS.map((option) => {
               const active = role === option.key;
@@ -121,9 +128,9 @@ export default function ReferralSettingsForm({
                     minHeight: 40,
                     border: 0,
                     borderRadius: 6,
-                    background: active ? "#ffffff" : "transparent",
-                    boxShadow: active ? "0 1px 4px rgba(11,30,61,0.14)" : "none",
-                    color: active ? "#0B1E3D" : "#5A6A7A",
+                    background: active ? "var(--color-panel)" : "var(--color-transparent)",
+                    boxShadow: active ? "0 1px 4px var(--color-shadow)" : "none",
+                    color: active ? "var(--color-primary)" : "var(--color-muted)",
                     fontWeight: 700,
                     fontSize: 13.5,
                     cursor: "pointer",
@@ -139,7 +146,7 @@ export default function ReferralSettingsForm({
                   {dirty ? (
                     <span
                       aria-label="Unsaved changes"
-                      style={{ position: "absolute", top: 6, right: 10, width: 6, height: 6, borderRadius: "50%", background: "#E8A33D" }}
+                      style={{ position: "absolute", top: 6, right: 10, width: 6, height: 6, borderRadius: "50%", background: "var(--color-accent)" }}
                     />
                   ) : null}
                 </button>
@@ -198,16 +205,16 @@ export default function ReferralSettingsForm({
               justifyContent: "space-between",
               gap: 16,
               padding: "14px 16px",
-              background: values.isActive ? "rgba(0,194,168,0.08)" : "#f4f6f7",
-              border: `1px solid ${values.isActive ? "rgba(0,194,168,0.28)" : "#e2e8ed"}`,
+              background: values.isActive ? "var(--color-secondary-tint)" : "var(--color-background)",
+              border: `1px solid ${values.isActive ? "var(--color-secondary)" : "var(--color-border)"}`,
               borderRadius: 8,
             }}
           >
             <div>
-              <label htmlFor={`referral-active-${role}`} style={{ display: "block", fontWeight: 800, color: "#0B1E3D", fontSize: 14, cursor: "pointer" }}>
+              <label htmlFor={`referral-active-${role}`} style={{ display: "block", fontWeight: 800, color: "var(--color-primary)", fontSize: 14, cursor: "pointer" }}>
                 {roleLabel} referrals active
               </label>
-              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#5A6A7A" }}>
+              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "var(--color-muted)" }}>
                 {values.isActive ? `New ${role} referral codes can be redeemed.` : `New ${role} referral codes are paused.`}
               </p>
             </div>
@@ -228,22 +235,22 @@ export default function ReferralSettingsForm({
             gap: 12,
             flexWrap: "wrap",
             padding: "16px 20px",
-            borderTop: "1px solid #eef1f3",
-            background: "#fafbfc",
+            borderTop: "1px solid var(--color-border)",
+            background: "var(--color-surface)",
           }}
         >
           <div style={{ minHeight: 20 }}>
             {message ? (
               <p
                 role={message.ok ? "status" : "alert"}
-                style={{ margin: 0, color: message.ok ? "#00877A" : "#e74c3c", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 }}
+                style={{ margin: 0, color: message.ok ? "var(--color-secondary-deep)" : "var(--color-danger)", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 }}
               >
                 {message.ok ? <Check size={15} /> : <AlertCircle size={15} />}
                 {message.text}
               </p>
             ) : isDirty ? (
-              <p style={{ margin: 0, color: "#B4790C", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E8A33D" }} />
+              <p style={{ margin: 0, color: "var(--color-accent-deep)", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-accent)" }} />
                 Unsaved changes
               </p>
             ) : null}
@@ -260,7 +267,8 @@ export default function ReferralSettingsForm({
             </button>
           </div>
         </div>
-      </form>
+      </AdminFormLayout>
+      </AdminCard>
 
       <SummarySidebar draftByRole={draftByRole} />
     </div>
@@ -285,16 +293,15 @@ function NumberField({
   onChange: (value: number) => void;
 }) {
   return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <span style={{ color: "#0B1E3D", fontSize: 13, fontWeight: 700 }}>{label}</span>
+    <AdminFormField label={label} hint={hint}>
       <span
         style={{
           display: "flex",
           alignItems: "center",
           height: 46,
-          border: "1px solid #cbd6dc",
+          border: "1px solid var(--color-border)",
           borderRadius: 7,
-          background: "#fbfcfc",
+          background: "var(--color-background)",
           overflow: "hidden",
         }}
       >
@@ -306,16 +313,15 @@ function NumberField({
           required
           value={String(value)}
           onChange={(event) => onChange(Number(event.target.value))}
-          style={{ flex: 1, minWidth: 0, height: "100%", border: 0, background: "transparent", padding: "0 14px", color: "#0B1E3D", fontSize: 15, fontFamily: "inherit", outline: "none" }}
+          style={{ flex: 1, minWidth: 0, height: "100%", border: 0, background: "transparent", padding: "0 14px", color: "var(--color-primary)", fontSize: 15, fontFamily: "inherit", outline: "none" }}
         />
         {suffix ? (
-          <span style={{ padding: "0 14px", height: "100%", display: "inline-flex", alignItems: "center", color: "#5A6A7A", fontSize: 12.5, fontWeight: 700, background: "#f1f4f5", borderLeft: "1px solid #e2e8ed" }}>
+          <span style={{ padding: "0 14px", height: "100%", display: "inline-flex", alignItems: "center", color: "var(--color-muted)", fontSize: 12.5, fontWeight: 700, background: "var(--color-surface)", borderLeft: "1px solid var(--color-border)" }}>
             {suffix}
           </span>
         ) : null}
       </span>
-      {hint ? <span style={{ fontSize: 12, color: "#5A6A7A" }}>{hint}</span> : null}
-    </label>
+    </AdminFormField>
   );
 }
 
@@ -333,7 +339,7 @@ function ToggleSwitch({ id, checked, onChange }: { id: string; checked: boolean;
         height: 26,
         borderRadius: 999,
         border: "none",
-        background: checked ? "#00C2A8" : "#c7d0d6",
+        background: checked ? "var(--color-secondary)" : "var(--color-border)",
         position: "relative",
         cursor: "pointer",
         transition: "background 0.15s ease",
@@ -347,8 +353,8 @@ function ToggleSwitch({ id, checked, onChange }: { id: string; checked: boolean;
           width: 20,
           height: 20,
           borderRadius: "50%",
-          background: "#ffffff",
-          boxShadow: "0 1px 3px rgba(11,30,61,0.3)",
+          background: "var(--color-panel)",
+          boxShadow: "0 1px 3px var(--color-shadow-strong)",
           transition: "left 0.15s ease",
         }}
       />
@@ -367,31 +373,22 @@ function SummarySidebar({ draftByRole }: { draftByRole: SettingsByRole }) {
   );
 
   return (
-    <aside style={{ ...panelStyle, padding: 20, display: "grid", gap: 16, position: "sticky", top: 20 }}>
+    <AdminCard padding={20} style={{ position: "sticky", top: 20 }}>
+      <div style={{ display: "grid", gap: 16 }}>
       <p style={{ ...eyebrowStyle, display: "flex", alignItems: "center", gap: 6 }}>
         <Sparkles size={13} aria-hidden="true" /> Live overview
       </p>
       {rows.map((row) => {
         const Icon = row.icon;
         return (
-          <div key={row.key} style={{ border: "1px solid #eef1f3", borderRadius: 8, padding: 14, display: "grid", gap: 10 }}>
+          <div key={row.key} style={{ border: "1px solid var(--color-border)", borderRadius: 8, padding: 14, display: "grid", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ width: 28, height: 28, borderRadius: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "rgba(0,194,168,0.12)", color: "#00877A" }}>
+              <span style={{ width: 28, height: 28, borderRadius: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--color-secondary-tint)", color: "var(--color-secondary)" }}>
                 <Icon size={14} aria-hidden="true" />
               </span>
-              <span style={{ fontWeight: 800, color: "#0B1E3D", fontSize: 13.5 }}>{row.label}</span>
-              <span
-                style={{
-                  marginInlineStart: "auto",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: "3px 8px",
-                  borderRadius: 999,
-                  color: row.values.isActive ? "#00877A" : "#5A6A7A",
-                  background: row.values.isActive ? "rgba(0,194,168,0.12)" : "#eef1f3",
-                }}
-              >
-                {row.values.isActive ? "Active" : "Paused"}
+              <span style={{ fontWeight: 800, color: "var(--color-primary)", fontSize: 13.5 }}>{row.label}</span>
+              <span style={{ marginInlineStart: "auto" }}>
+                <AdminStatusBadge status={row.values.isActive ? "active" : "paused"} />
               </span>
             </div>
             <dl style={{ margin: 0, display: "grid", gap: 6, fontSize: 12.5 }}>
@@ -402,30 +399,23 @@ function SummarySidebar({ draftByRole }: { draftByRole: SettingsByRole }) {
           </div>
         );
       })}
-    </aside>
+      </div>
+    </AdminCard>
   );
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-      <dt style={{ color: "#5A6A7A" }}>{label}</dt>
-      <dd style={{ margin: 0, color: "#0B1E3D", fontWeight: 700 }}>{value}</dd>
+      <dt style={{ color: "var(--color-muted)" }}>{label}</dt>
+      <dd style={{ margin: 0, color: "var(--color-primary)", fontWeight: 700 }}>{value}</dd>
     </div>
   );
 }
 
-const panelStyle: React.CSSProperties = {
-  background: "#ffffff",
-  border: "1px solid #e2e8ed",
-  borderRadius: 10,
-  boxShadow: "0 12px 28px rgba(11,30,61,0.05)",
-  overflow: "hidden",
-};
-
 const eyebrowStyle: React.CSSProperties = {
   margin: 0,
-  color: "#00877A",
+  color: "var(--color-secondary-deep)",
   fontSize: 11,
   fontWeight: 800,
   letterSpacing: "0.04em",
@@ -436,7 +426,7 @@ const fieldsetStyle: React.CSSProperties = {
   margin: 0,
   border: 0,
   padding: "18px 20px",
-  borderBottom: "1px solid #eef1f3",
+  borderBottom: "1px solid var(--color-border)",
   display: "grid",
   gap: 14,
 };
@@ -449,16 +439,16 @@ const legendStyle: React.CSSProperties = {
   gap: 6,
   fontSize: 13,
   fontWeight: 800,
-  color: "#0B1E3D",
+  color: "var(--color-primary)",
 };
 
 const ghostButtonStyle: React.CSSProperties = {
   minHeight: 44,
   padding: "0 16px",
-  border: "1px solid #d0d8e0",
+  border: "1px solid var(--color-border)",
   borderRadius: 7,
-  background: "#ffffff",
-  color: "#0B1E3D",
+  background: "var(--color-panel)",
+  color: "var(--color-primary)",
   fontWeight: 700,
   fontSize: 13.5,
   cursor: "pointer",
@@ -471,8 +461,8 @@ function primaryButtonStyle(disabled: boolean): React.CSSProperties {
     padding: "0 18px",
     border: 0,
     borderRadius: 7,
-    background: disabled ? "#a9b3ba" : "#0B1E3D",
-    color: "#ffffff",
+    background: disabled ? "var(--color-disabled)" : "var(--color-primary)",
+    color: "var(--color-on-primary)",
     fontWeight: 800,
     fontSize: 13.5,
     cursor: disabled ? "not-allowed" : "pointer",

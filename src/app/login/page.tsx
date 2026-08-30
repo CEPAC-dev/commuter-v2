@@ -643,23 +643,48 @@ function LoginForm() {
 
               {mode === "register" && (
                 <div>
-                  <label
-                    htmlFor="referral-code"
+                  <div
                     style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: "#0B1E3D",
-                      display: "block",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
                       marginBottom: 6,
                     }}
                   >
-                    {t("auth.referral_code")} {" "}
-                    <span style={{ fontWeight: 400, color: "#5A6A7A" }}>
-                      {t("auth.email_optional")}
-                    </span>
-                  </label>
+                    <label
+                      htmlFor="referral-code"
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "#0B1E3D",
+                      }}
+                    >
+                      {t("auth.referral_code")}{" "}
+                      <span style={{ fontWeight: 400, color: "#5A6A7A" }}>
+                        {t("auth.email_optional")}
+                      </span>
+                    </label>
+                    {referralCodeFromUrl ? (
+                      <span
+                        style={{
+                          background: "rgba(0,194,168,0.12)",
+                          color: "#00877A",
+                          padding: "2px 8px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                        }}
+                      >
+                        Applied from link
+                      </span>
+                    ) : null}
+                  </div>
                   <div
-                    style={fieldStyle}
+                    style={{
+                      ...fieldStyle,
+                      background: referralCodeFromUrl ? "#f1fcf9" : "#f8f9fa",
+                      borderColor: referralCodeFromUrl ? "#00C2A8" : "#e8edf0",
+                    }}
                     onFocusCapture={(e) =>
                       focusField(e.currentTarget as HTMLDivElement)
                     }
@@ -669,7 +694,10 @@ function LoginForm() {
                   >
                     <TicketPercent
                       size={17}
-                      style={{ color: "#5A6A7A", flexShrink: 0 }}
+                      style={{
+                        color: referralCodeFromUrl ? "#00877A" : "#5A6A7A",
+                        flexShrink: 0,
+                      }}
                       aria-hidden="true"
                     />
                     <input
@@ -677,9 +705,16 @@ function LoginForm() {
                       type="text"
                       autoComplete="off"
                       placeholder="REF-XXXXXX"
+                      readOnly={Boolean(referralCodeFromUrl)}
                       value={referralCode}
-                      onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                      style={inputStyle}
+                      onChange={(e) =>
+                        setReferralCode(e.target.value.toUpperCase())
+                      }
+                      style={{
+                        ...inputStyle,
+                        fontWeight: referralCodeFromUrl ? 700 : 400,
+                        color: referralCodeFromUrl ? "#00877A" : "#0B1E3D",
+                      }}
                     />
                   </div>
                 </div>

@@ -9,6 +9,8 @@ interface ReferralData {
   shareUrl: string;
   balanceEgp: number;
   referrerBonusAmount: number;
+  maxUsersPerCode: number;
+  referralUnlimited: boolean;
   stats: {
     total: number;
     pending: number;
@@ -64,6 +66,20 @@ export default function ReferralCard() {
     await copyLink();
   }
 
+  const remaining = data
+    ? data.referralUnlimited
+      ? Infinity
+      : Math.max(0, data.maxUsersPerCode - data.stats.total)
+    : null;
+
+  const cardTitle = !data
+    ? t("referral.title")
+    : data.referralUnlimited
+      ? t("referral.title_unlimited")
+      : (remaining ?? 0) <= 0
+        ? t("referral.title_finished")
+        : t("referral.title_invite").replace("{count}", String(remaining));
+
   return (
     <section
       style={{
@@ -82,15 +98,15 @@ export default function ReferralCard() {
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "rgba(0,194,168,0.12)",
-            color: "#00877A",
+            background: (remaining === 0 && !data?.referralUnlimited) ? "rgba(231,76,60,0.12)" : "rgba(0,194,168,0.12)",
+            color: (remaining === 0 && !data?.referralUnlimited) ? "#e74c3c" : "#00877A",
           }}
         >
           <WalletCards size={20} aria-hidden="true" />
         </span>
         <div>
           <h2 style={{ margin: 0, fontSize: 16, color: "#0B1E3D" }}>
-            {t("referral.title")}
+            {cardTitle}
           </h2>
           <p style={{ margin: "3px 0 0", fontSize: 13, color: "#5A6A7A" }}>
             {t("referral.description").replace(

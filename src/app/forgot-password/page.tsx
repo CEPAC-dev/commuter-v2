@@ -1,15 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Lock, Phone, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, Phone, Eye, EyeOff, Globe } from "lucide-react";
 import Image from "next/image";
+import { isStrongPassword } from "@/lib/auth/validation";
+import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
+import { useClientLocale, setLocaleCookie } from "@/lib/i18n/client";
+import { localeDirection } from "@/lib/i18n/config";
 
 type Role = "passenger" | "driver";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
+  const { t, locale } = useClientLocale();
+  const [isPending, startTransition] = useTransition();
+
   const [role, setRole] = useState<Role>("passenger");
   const [phone, setPhone] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -19,6 +26,12 @@ export default function ForgotPasswordPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  function toggleLanguage() {
+    const next = locale === "en" ? "ar" : "en";
+    setLocaleCookie(next);
+    startTransition(() => router.refresh());
+  }
 
   const inputStyle: React.CSSProperties = {
     flex: 1,
@@ -57,6 +70,22 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setError("");
     setSuccess("");
+
+    if (!phone.trim()) {
+      setError(t("auth.phone_required"));
+      return;
+    }
+
+    if (!isStrongPassword(newPassword)) {
+      setError(t("auth.password_weak"));
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError(t("auth.passwords_do_not_match"));
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -75,19 +104,23 @@ export default function ForgotPasswordPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Something went wrong.");
+        setError(data.error ?? t("auth.something_went_wrong"));
         setLoading(false);
         return;
       }
 
-      setSuccess("Password updated successfully. You can now log in.");
+      setSuccess(t("auth.password_updated_success"));
       setTimeout(() => router.replace("/login"), 1200);
     } catch {
-      setError("Network error. Please try again.");
+      setError(t("auth.network_error"));
     } finally {
       setLoading(false);
     }
   }
+
+  const roleLabel = role === "passenger" 
+    ? (locale === "ar" ? "الراكب" : "passenger") 
+    : (locale === "ar" ? "السائق" : "driver");
 
   return (
     <div
@@ -99,9 +132,10 @@ export default function ForgotPasswordPage() {
         alignItems: "center",
         justifyContent: "center",
         padding: "24px 16px",
+        direction: localeDirection(locale),
       }}
     >
-      <div style={{ width: "100%", maxWidth: 440, marginBottom: 16 }}>
+      <div style={{ width: "100%", maxWidth: 440, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Link
           href="/login"
           style={{
@@ -112,11 +146,51 @@ export default function ForgotPasswordPage() {
             textDecoration: "none",
             fontSize: 14,
             fontWeight: 500,
+            transition: "color 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "#ffffff";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "rgba(255,255,255,0.6)";
           }}
         >
-          <ArrowLeft size={16} aria-hidden="true" />
-          Back to login
+          <ArrowLeft size={16} aria-hidden="true" style={{ transform: locale === "ar" ? "scaleX(-1)" : "none" }} />
+          {t("auth.back_to_login")}
         </Link>
+
+        <button
+          onClick={toggleLanguage}
+          disabled={isPending}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 8,
+            border: "1px solid rgba(255,255,255,0.3)",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            background: "transparent",
+            color: "rgba(255,255,255,0.8)",
+            transition: "border-color 0.15s, color 0.15s",
+            opacity: isPending ? 0.5 : 1,
+            fontFamily: "inherit",
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+          onMouseEnter={(e) => {
+            (e.target as HTMLButtonElement).style.borderColor = "#00C2A8";
+            (e.target as HTMLButtonElement).style.color = "#00C2A8";
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.3)";
+            (e.target as HTMLButtonElement).style.color = "rgba(255,255,255,0.8)";
+          }}
+          aria-label={locale === "en" ? "Switch to Arabic" : "Switch to English"}
+        >
+          <Globe size={14} aria-hidden="true" />
+          {locale === "en" ? "العربية" : "English"}
+        </button>
       </div>
 
       <div
@@ -173,44 +247,58 @@ export default function ForgotPasswordPage() {
                 minHeight: 44,
               }}
             >
-              {r === "passenger" ? "Passenger" : "Driver"}
+              {r === "passenger" ? t("auth.passenger.role") : t("auth.driver.role")}
             </button>
           ))}
         </div>
 
         <h1 style={{ fontSize: 28, fontWeight: 800, color: "#0B1E3D", margin: "0 0 8px" }}>
-          Reset your password
+          {t("auth.reset_password_title")}
         </h1>
         <p style={{ margin: "0 0 20px", color: "#5A6A7A", lineHeight: 1.6 }}>
-          Enter your phone number and choose a new password for your {role} account.
+          {t("auth.reset_password_desc", { role: roleLabel })}
         </p>
 
         <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label htmlFor="phone" style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#0B1E3D", marginBottom: 6 }}>
-              Phone number
+              {t("auth.phone_number")}
             </label>
             <div
-              style={{ ...fieldStyle, padding: 0, overflow: "hidden" }}
+              dir="ltr"
+              style={{
+                ...fieldStyle,
+                padding: 0,
+                overflow: "hidden",
+                flexDirection: "row",
+                direction: "ltr",
+                unicodeBidi: "isolate",
+              }}
               onFocusCapture={(e) => focusField(e.currentTarget as HTMLDivElement)}
               onBlurCapture={(e) => blurField(e.currentTarget as HTMLDivElement)}
             >
               <span
+                dir="ltr"
                 style={{
                   display: "flex",
+                  flexDirection: "row",
                   alignItems: "center",
+                  justifyContent: "center",
                   gap: 6,
                   height: "100%",
                   padding: "0 12px",
                   background: "#eef1f3",
                   borderRight: "1.5px solid #e8edf0",
+                  borderLeft: "none",
                   fontWeight: 600,
                   color: "#0B1E3D",
                   flexShrink: 0,
+                  direction: "ltr",
+                  unicodeBidi: "isolate",
                 }}
               >
                 <Phone size={17} style={{ color: "#5A6A7A" }} aria-hidden="true" />
-                +20
+                <span dir="ltr" style={{ direction: "ltr", unicodeBidi: "plaintext" }}>+20</span>
               </span>
               <input
                 id="phone"
@@ -220,64 +308,66 @@ export default function ForgotPasswordPage() {
                 placeholder="1000000000"
                 maxLength={10}
                 required
+                dir="ltr"
                 value={phone.replace(/^\+?20/, "")}
                 onChange={(e) => {
                   const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
                   setPhone(digits ? `+20${digits}` : "");
                 }}
-                style={{ ...inputStyle, padding: "0 14px" }}
+                style={{ ...inputStyle, padding: "0 14px", direction: "ltr", textAlign: "left" }}
               />
             </div>
           </div>
 
           <div>
             <label htmlFor="newPassword" style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#0B1E3D", marginBottom: 6 }}>
-              New password
+              {t("auth.new_password")}
             </label>
-            <div style={fieldStyle}>
+            <div style={fieldStyle} className="ltr-field">
               <Lock size={17} style={{ color: "#5A6A7A" }} aria-hidden="true" />
               <input
                 id="newPassword"
                 type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
-                placeholder="At least 8 characters"
+                placeholder={t("auth.password_placeholder_register")}
                 required
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                style={{ ...inputStyle }}
+                style={{ ...inputStyle, direction: "ltr", textAlign: "left" }}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 style={{ border: "none", background: "transparent", cursor: "pointer", color: "#5A6A7A" }}
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-label={showPassword ? t("auth.hide_password") : t("auth.show_password")}
               >
                 {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
               </button>
             </div>
+            <PasswordStrengthMeter password={newPassword} />
           </div>
 
           <div>
             <label htmlFor="confirmPassword" style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#0B1E3D", marginBottom: 6 }}>
-              Confirm password
+              {t("auth.confirm_password")}
             </label>
-            <div style={fieldStyle}>
+            <div style={fieldStyle} className="ltr-field">
               <Lock size={17} style={{ color: "#5A6A7A" }} aria-hidden="true" />
               <input
                 id="confirmPassword"
                 type={showConfirmPassword ? "text" : "password"}
                 autoComplete="new-password"
-                placeholder="Re-enter password"
+                placeholder={t("auth.confirm_password_placeholder")}
                 required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                style={{ ...inputStyle }}
+                style={{ ...inputStyle, direction: "ltr", textAlign: "left" }}
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword((v) => !v)}
                 style={{ border: "none", background: "transparent", cursor: "pointer", color: "#5A6A7A" }}
-                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                aria-label={showConfirmPassword ? t("auth.hide_password") : t("auth.show_password")}
               >
                 {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
               </button>
@@ -299,7 +389,7 @@ export default function ForgotPasswordPage() {
               borderRadius: 12,
               border: "none",
               cursor: loading ? "not-allowed" : "pointer",
-              background: "#0B1E3D",
+              background: loading ? "#5A6A7A" : "#0B1E3D",
               color: "#ffffff",
               fontWeight: 700,
               fontSize: 15,
@@ -308,12 +398,15 @@ export default function ForgotPasswordPage() {
               justifyContent: "center",
               gap: 8,
               boxShadow: "0 8px 20px rgba(11, 30, 61, 0.18)",
+              fontFamily: "inherit",
+              transition: "background 0.2s",
             }}
           >
-            {loading ? <><Loader2 size={16} className="animate-spin" /> Updating...</> : "Update password"}
+            {loading ? <><Loader2 size={16} className="animate-spin" /> {t("auth.updating_password")}</> : t("auth.update_password_button")}
           </button>
         </form>
       </div>
     </div>
   );
 }
+
