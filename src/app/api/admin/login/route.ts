@@ -9,7 +9,6 @@ import {
   validateMutationRequest,
 } from "@/lib/security/request";
 import { normalizeEgyptPhone } from "@/lib/auth/validation";
-
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
   if (invalidRequest) return invalidRequest;

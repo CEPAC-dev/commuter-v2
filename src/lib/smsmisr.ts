@@ -15,11 +15,27 @@ function getAccountCredentials() {
   return { username, password };
 }
 
+function isPlaceholderValue(value: string | undefined) {
+  return (
+    !value ||
+    value.trim() === "" ||
+    /^(your_otp_template|your_sender|test|placeholder|dummy)$/i.test(
+      value.trim(),
+    )
+  );
+}
+
 function getOtpCredentials() {
   const { username, password } = getAccountCredentials();
-  const sender = process.env.SMS_MISR_SENDER;
-  const template = process.env.SMS_MISR_OTP_TEMPLATE;
-  if (!sender || !template) throw new Error("SMS Misr OTP is not configured.");
+  const sender = process.env.SMS_MISR_SENDER?.trim();
+  const template = process.env.SMS_MISR_OTP_TEMPLATE?.trim();
+
+  if (isPlaceholderValue(sender) || isPlaceholderValue(template)) {
+    throw new Error(
+      "SMS Misr OTP is not configured. Set valid SMS_MISR_SENDER and SMS_MISR_OTP_TEMPLATE values in .env.local.",
+    );
+  }
+
   return { username, password, sender, template };
 }
 
@@ -36,7 +52,13 @@ function isSuccess(response: SmsMisrResponse) {
   return String(response.code ?? "") === "1901";
 }
 
-export async function sendSmsMisrOtp({ phone, otp }: { phone: string; otp: string }) {
+export async function sendSmsMisrOtp({
+  phone,
+  otp,
+}: {
+  phone: string;
+  otp: string;
+}) {
   const { username, password, sender, template } = getOtpCredentials();
   const payload = new URLSearchParams({
     environment: process.env.SMS_MISR_ENVIRONMENT === "1" ? "1" : "2",
@@ -57,8 +79,16 @@ export async function sendSmsMisrOtp({ phone, otp }: { phone: string; otp: strin
   });
   const result = await parseResponse(response);
   if (!response.ok || !isSuccess(result)) {
-    console.error("SMS Misr OTP request failed", { status: response.status, code: result.code });
-    throw new Error("SMS Misr could not send the verification code.");
+    const providerCode = result.code ?? "unknown";
+    console.error("SMS Misr OTP request failed", {
+      status: response.status,
+      code: providerCode,
+      body: result,
+      phone: phone.replace(/^\+/, ""),
+    });
+    throw new Error(
+      `SMS Misr rejected the OTP request (code ${providerCode}). Check SMS_MISR_SENDER and SMS_MISR_OTP_TEMPLATE in .env.local.`,
+    );
   }
 }
 
@@ -71,7 +101,9 @@ export async function getSmsMisrBalance(): Promise<unknown> {
   const response = await fetch(url, { cache: "no-store" });
   const text = await response.text();
   if (!response.ok) {
-    console.error("SMS Misr balance request failed", { status: response.status });
+    console.error("SMS Misr balance request failed", {
+      status: response.status,
+    });
     throw new Error("SMS Misr could not retrieve the balance.");
   }
 
