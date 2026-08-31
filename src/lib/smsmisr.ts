@@ -2,7 +2,11 @@ import "server-only";
 
 const API_BASE_URL = "https://smsmisr.com/api";
 
-type SmsMisrResponse = { code?: string | number; [key: string]: unknown };
+type SmsMisrResponse = {
+  code?: string | number;
+  Code?: string | number;
+  [key: string]: unknown;
+};
 
 function getAccountCredentials() {
   const username = process.env.SMS_MISR_USERNAME;
@@ -48,8 +52,13 @@ async function parseResponse(response: Response): Promise<SmsMisrResponse> {
   }
 }
 
+function getProviderCode(response: SmsMisrResponse) {
+  return String(response.code ?? response.Code ?? "");
+}
+
 function isSuccess(response: SmsMisrResponse) {
-  return String(response.code ?? "") === "1901";
+  // SMS Misr's OTP endpoint uses 4901; 1901 is for the general SMS endpoint.
+  return getProviderCode(response) === "4901";
 }
 
 export async function sendSmsMisrOtp({
@@ -79,7 +88,7 @@ export async function sendSmsMisrOtp({
   });
   const result = await parseResponse(response);
   if (!response.ok || !isSuccess(result)) {
-    const providerCode = result.code ?? "unknown";
+    const providerCode = getProviderCode(result) || "unknown";
     console.error("SMS Misr OTP request failed", {
       status: response.status,
       code: providerCode,
