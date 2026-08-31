@@ -14,9 +14,9 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import AdminDateRangeCalendar from "@/components/admin/AdminDateRangeCalendar";
 import AdminTripMap, { type TripMapPoint } from "@/components/admin/AdminTripMap";
+import { AdminPageHeader } from "@/components/admin/layout";
 
 interface DriverOption {
   _id: string;
@@ -80,21 +80,21 @@ const SEARCH_MODES: { value: SearchMode; label: string; placeholder: string }[] 
 const PAGE_SIZE = 20;
 
 const STATUS_STYLES: Record<string, { bg: string; color: string; label?: string }> = {
-  pending_payment: { bg: "rgba(232,163,61,0.16)", color: "#B4790C", label: "Pending payment" },
-  submitted: { bg: "rgba(0,194,168,0.12)", color: "#00877A" },
-  matched: { bg: "rgba(0,194,168,0.12)", color: "#00877A" },
-  scheduled: { bg: "rgba(0,194,168,0.12)", color: "#00877A" },
-  confirmed: { bg: "rgba(0,194,168,0.12)", color: "#00877A" },
-  in_progress: { bg: "rgba(232,163,61,0.16)", color: "#B4790C", label: "In progress" },
-  active: { bg: "rgba(232,163,61,0.16)", color: "#B4790C" },
-  completed: { bg: "rgba(90,106,122,0.12)", color: "#4A5A6A" },
-  cancelled: { bg: "rgba(225,82,82,0.12)", color: "#C13E3E" },
-  time_out: { bg: "rgba(225,82,82,0.12)", color: "#C13E3E", label: "Timed out" },
+  pending_payment: { bg: "var(--color-warning-tint)", color: "var(--color-warning)", label: "Pending payment" },
+  submitted: { bg: "var(--color-secondary-tint)", color: "var(--color-secondary)" },
+  matched: { bg: "var(--color-secondary-tint)", color: "var(--color-secondary)" },
+  scheduled: { bg: "var(--color-secondary-tint)", color: "var(--color-secondary)" },
+  confirmed: { bg: "var(--color-secondary-tint)", color: "var(--color-secondary)" },
+  in_progress: { bg: "var(--color-warning-tint)", color: "var(--color-warning)", label: "In progress" },
+  active: { bg: "var(--color-warning-tint)", color: "var(--color-warning)" },
+  completed: { bg: "var(--color-primary-tint)", color: "var(--color-muted)" },
+  cancelled: { bg: "var(--color-danger-tint)", color: "var(--color-danger)" },
+  time_out: { bg: "var(--color-danger-tint)", color: "var(--color-danger)", label: "Timed out" },
 };
 
 function getStatusStyle(status: string) {
   const key = status?.toLowerCase().replace(/\s+/g, "_") ?? "";
-  return STATUS_STYLES[key] ?? { bg: "rgba(90,106,122,0.1)", color: "#5A6A7A" };
+  return STATUS_STYLES[key] ?? { bg: "var(--color-primary-tint)", color: "var(--color-muted)" };
 }
 
 function initials(name?: string) {
@@ -527,15 +527,15 @@ export default function AdminTripsPage() {
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
 
         .trips-board {
-          --ink: #0B1E3D;
-          --teal: #00C2A8;
-          --teal-deep: #00877A;
-          --amber: #E8A33D;
-          --rose: #E15252;
-          --slate: #5A6A7A;
-          --line: #E6EAEC;
-          --canvas: #F6F8F7;
-          --surface: #FFFFFF;
+          --ink: var(--color-primary);
+          --teal: var(--color-secondary);
+          --teal-deep: var(--color-secondary-deep);
+          --amber: var(--color-accent);
+          --rose: var(--color-danger);
+          --slate: var(--color-muted);
+          --line: var(--color-border);
+          --canvas: var(--color-surface);
+          --surface: var(--color-panel);
           font-family: 'Inter', system-ui, sans-serif;
           min-height: 100dvh;
           background: var(--canvas);
@@ -556,20 +556,20 @@ export default function AdminTripsPage() {
           color: var(--slate);
           border-bottom: 1px solid var(--line);
           white-space: nowrap;
-          background: #FBFCFC;
+          background: var(--color-background);
         }
         .trips-board tbody tr {
           border-bottom: 1px solid var(--line);
           transition: background 0.12s ease;
         }
-        .trips-board tbody tr:hover { background: rgba(0,194,168,0.035); }
-        .trips-board tbody tr.selected { background: rgba(0,194,168,0.07); }
+        .trips-board tbody tr:hover { background: var(--color-secondary-tint); }
+        .trips-board tbody tr.selected { background: var(--color-secondary-tint); }
         .trips-board tbody tr:last-child { border-bottom: none; }
         .trips-board td { padding: 14px; vertical-align: middle; }
 
         .trips-board input[type="checkbox"] {
           width: 16px; height: 16px;
-          accent-color: #00877A;
+          accent-color: var(--color-secondary-deep);
           cursor: pointer;
         }
 
@@ -593,7 +593,7 @@ export default function AdminTripsPage() {
           font-size: 14px;
           font-family: inherit;
           color: var(--ink);
-          background: #fff;
+          background: var(--color-panel);
           outline: none;
         }
         .filter-field input:focus { border-color: var(--teal); }
@@ -605,7 +605,7 @@ export default function AdminTripsPage() {
           font-family: inherit;
           font-weight: 600;
           color: var(--ink);
-          background: #fff;
+          background: var(--color-panel);
           outline: none;
           min-height: 40px;
           cursor: pointer;
@@ -624,8 +624,8 @@ export default function AdminTripsPage() {
           inset-inline-end: 0;
           height: 100dvh;
           width: min(560px, 100%);
-          background: #fff;
-          box-shadow: -12px 0 40px rgba(11,30,61,0.18);
+          background: var(--color-panel);
+          box-shadow: -12px 0 40px var(--color-shadow-strong);
           display: flex;
           flex-direction: column;
           animation: drawerIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -687,7 +687,7 @@ export default function AdminTripsPage() {
           display: flex; align-items: center; justify-content: space-between;
           gap: 12px; flex-wrap: wrap;
           padding: 12px 20px;
-          background: rgba(0,194,168,0.08);
+          background: var(--color-secondary-tint);
           border-bottom: 1px solid var(--line);
         }
 
@@ -721,7 +721,7 @@ export default function AdminTripsPage() {
         .driver-chip .avatar {
           width: 28px; height: 28px; border-radius: 50%;
           background: var(--ink);
-          color: #fff;
+          color: var(--color-on-primary);
           font-size: 11px;
           font-weight: 600;
           display: flex; align-items: center; justify-content: center;
@@ -744,17 +744,17 @@ export default function AdminTripsPage() {
         }
         .action-btn:hover:not(:disabled) { opacity: 0.75; }
         .action-btn:disabled { opacity: 0.45; cursor: default; }
-        .action-btn.assign { background: rgba(0,194,168,0.1); color: var(--teal-deep); }
-        .action-btn.delete { background: rgba(225,82,82,0.08); color: var(--rose); }
-        .action-btn.solid-danger { background: var(--rose); color: #fff; }
-        .action-btn.solid-ink { background: var(--ink); color: #fff; }
-        .action-btn.ghost { background: #fff; color: var(--slate); border-color: var(--line); }
+        .action-btn.assign { background: var(--color-secondary-tint); color: var(--teal-deep); }
+        .action-btn.delete { background: var(--color-danger-tint); color: var(--rose); }
+        .action-btn.solid-danger { background: var(--rose); color: var(--color-on-primary); }
+        .action-btn.solid-ink { background: var(--ink); color: var(--color-on-primary); }
+        .action-btn.ghost { background: var(--color-panel); color: var(--slate); border-color: var(--line); }
 
         .skeleton-row td { padding: 14px; }
         .skeleton-bar {
           height: 12px;
           border-radius: 4px;
-          background: linear-gradient(90deg, var(--line) 25%, #EEF1F2 37%, var(--line) 63%);
+          background: linear-gradient(90deg, var(--line) 25%, var(--color-background) 37%, var(--line) 63%);
           background-size: 400% 100%;
           animation: shimmer 1.4s ease infinite;
         }
@@ -768,7 +768,7 @@ export default function AdminTripsPage() {
 
         .modal-overlay {
           position: fixed; inset: 0;
-          background: rgba(11,30,61,0.55);
+          background: var(--color-overlay);
           display: flex; align-items: center; justify-content: center;
           padding: 20px;
           z-index: 1200;
@@ -776,10 +776,10 @@ export default function AdminTripsPage() {
         }
         .modal-panel {
           width: 100%; max-width: 460px;
-          background: #ffffff;
+          background: var(--color-panel);
           border-radius: 18px;
           padding: 24px;
-          box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+          box-shadow: 0 20px 60px var(--color-shadow-strong);
           animation: panelIn 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
           max-height: 84vh;
           display: flex;
@@ -794,22 +794,22 @@ export default function AdminTripsPage() {
         .driver-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding-right: 2px; }
         .driver-row {
           display: flex; align-items: center; justify-content: space-between;
-          border: 1px solid #E6EAEC; border-radius: 12px; padding: 11px 13px;
-          background: #F6F8F7; cursor: pointer; text-align: left; width: 100%;
+          border: 1px solid var(--color-border); border-radius: 12px; padding: 11px 13px;
+          background: var(--color-surface); cursor: pointer; text-align: left; width: 100%;
           transition: border-color 0.12s ease, background 0.12s ease;
         }
-        .driver-row:hover:not(:disabled) { border-color: #00C2A8; background: rgba(0,194,168,0.05); }
+        .driver-row:hover:not(:disabled) { border-color: var(--color-secondary); background: var(--color-secondary-tint); }
         .driver-row:disabled { cursor: default; opacity: 0.6; }
         .avail-chip {
           font-size: 11px; font-weight: 600;
-          color: #5A6A7A; background: #EEF2F5;
+          color: var(--color-muted); background: var(--color-border);
           padding: 3px 8px; border-radius: 999px;
           margin-top: 3px; display: inline-block;
         }
         .spinner {
           width: 14px; height: 14px;
-          border: 2px solid rgba(0,194,168,0.25);
-          border-top-color: #00877A;
+          border: 2px solid var(--color-secondary-tint);
+          border-top-color: var(--color-secondary-deep);
           border-radius: 50%;
           animation: spin 0.7s linear infinite;
         }
@@ -818,51 +818,36 @@ export default function AdminTripsPage() {
       `}</style>
 
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <p className="mono" style={{ margin: 0, fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "#00877A" }}>
-              Admin · Dispatch
-            </p>
-            <h1 className="display" style={{ margin: "6px 0 0", fontSize: "clamp(28px, 4vw, 38px)", fontWeight: 700, color: "#0B1E3D" }}>
-              Trips
-            </h1>
-            <p style={{ margin: "6px 0 0", fontSize: 14, color: "#5A6A7A" }}>
-              {loading
-                ? "Loading the board…"
-                : `${totalCount} trip${totalCount === 1 ? "" : "s"} match the current filters`}
-            </p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <AdminPageHeader
+          title="Trips"
+          description={loading ? "Loading the board…" : `${totalCount} trip${totalCount === 1 ? "" : "s"} match the current filters`}
+          icon={Route}
+          actions={
+            <>
             <Link
               href="/admin/trips"
-              style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none", background: "#0B1E3D", color: "#ffffff" }}
+              style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none", background: "var(--color-primary)", color: "var(--color-on-primary)" }}
             >
               Single Trips
             </Link>
             <Link
               href="/admin/rides"
-              style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none", background: "#ffffff", color: "#5A6A7A", border: "1px solid #E6EAEC" }}
+              style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none", background: "var(--color-panel)", color: "var(--color-muted)", border: "1px solid var(--color-border)" }}
             >
               Matched Rides
             </Link>
-            <a
-              href="/admin/dashboard"
-              style={{ textDecoration: "none", padding: "11px 18px", borderRadius: 10, color: "#0B1E3D", fontWeight: 600, fontSize: 14, background: "#ffffff", border: "1px solid #E6EAEC" }}
-            >
-              Dashboard
-            </a>
-            <AdminLogoutButton />
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {error ? (
-          <p role="alert" style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 10, background: "rgba(225,82,82,0.08)", color: "#C13E3E", border: "1px solid rgba(225,82,82,0.2)", fontSize: 14 }}>
+          <p role="alert" style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)", fontSize: 14 }}>
             {error}
           </p>
         ) : null}
 
         {notice ? (
-          <p role="status" style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 10, background: "rgba(0,194,168,0.1)", color: "#00877A", border: "1px solid rgba(0,194,168,0.25)", fontSize: 14 }}>
+          <p role="status" style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 10, background: "var(--color-secondary-tint)", color: "var(--color-secondary)", border: "1px solid var(--color-secondary)", fontSize: 14 }}>
             {notice}
           </p>
         ) : null}
@@ -873,12 +858,12 @@ export default function AdminTripsPage() {
             gap: 12,
             flexWrap: "wrap",
             alignItems: "flex-end",
-            background: "#ffffff",
-            border: "1px solid #E6EAEC",
+            background: "var(--color-panel)",
+            border: "1px solid var(--color-border)",
             borderRadius: 16,
             padding: 16,
             marginBottom: 16,
-            boxShadow: "0 6px 20px rgba(11,30,61,0.04)",
+            boxShadow: "0 6px 20px var(--color-shadow)",
           }}
         >
           <label className="filter-field">
@@ -918,20 +903,20 @@ export default function AdminTripsPage() {
           </button>
         </div>
 
-        <section style={{ borderRadius: 20, background: "#ffffff", border: "1px solid #E6EAEC", boxShadow: "0 10px 35px rgba(11,30,61,0.05)", overflow: "hidden" }}>
-          <div style={{ padding: "18px 24px", borderBottom: "1px solid #EEF2F5", display: "flex", alignItems: "center", gap: 12, borderTop: "3px solid #00C2A8" }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(0,194,168,0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Route size={18} style={{ color: "#00877A" }} />
+        <section style={{ borderRadius: "var(--radius-md)", background: "var(--color-panel)", border: "1px solid var(--color-border)", boxShadow: "0 10px 35px var(--color-shadow)", overflow: "hidden" }}>
+          <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: 12, borderTop: "3px solid var(--color-secondary)" }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--color-secondary-tint)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Route size={18} style={{ color: "var(--color-secondary-deep)" }} />
             </div>
             <div>
-              <h2 className="display" style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0B1E3D" }}>Manage trips</h2>
-              <p style={{ margin: "3px 0 0", color: "#5A6A7A", fontSize: 13 }}>Select trips to delete in bulk, assign a driver, or remove a single trip.</p>
+              <h2 className="display" style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--color-primary)" }}>Manage trips</h2>
+              <p style={{ margin: "3px 0 0", color: "var(--color-muted)", fontSize: 13 }}>Select trips to delete in bulk, assign a driver, or remove a single trip.</p>
             </div>
           </div>
 
           {selectedIds.length > 0 ? (
             <div className="bulk-bar">
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
                 {selectedIds.length} trip{selectedIds.length === 1 ? "" : "s"} selected
               </span>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -995,9 +980,9 @@ export default function AdminTripsPage() {
                   <tr>
                     <td colSpan={12} style={{ padding: "56px 16px" }}>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
-                        <Inbox size={28} style={{ color: "#C7D0D4" }} />
-                        <p style={{ margin: 0, fontWeight: 600, color: "#0B1E3D", fontSize: 15 }}>No trips found</p>
-                        <p style={{ margin: 0, color: "#5A6A7A", fontSize: 13 }}>Try clearing the filters or widening the date range.</p>
+                        <Inbox size={28} style={{ color: "var(--color-border)" }} />
+                        <p style={{ margin: 0, fontWeight: 600, color: "var(--color-primary)", fontSize: 15 }}>No trips found</p>
+                        <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}>Try clearing the filters or widening the date range.</p>
                       </div>
                     </td>
                   </tr>
@@ -1033,19 +1018,19 @@ export default function AdminTripsPage() {
                           />
                         </td>
                         <td>
-                          <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+                          <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
                             {tripLabel}
                           </span>
                         </td>
                         <td>
-                          <div style={{ fontSize: 13, color: "#0B1E3D", fontWeight: 500 }}>{tripDay.pretty}</div>
-                          <div style={{ fontSize: 12, color: "#00877A", marginTop: 2, fontWeight: 600 }}>{tripDay.weekday}</div>
+                          <div style={{ fontSize: 13, color: "var(--color-primary)", fontWeight: 500 }}>{tripDay.pretty}</div>
+                          <div style={{ fontSize: 12, color: "var(--color-secondary-deep)", marginTop: 2, fontWeight: 600 }}>{tripDay.weekday}</div>
                         </td>
                         <td>
-                          <div style={{ fontSize: 13, color: "#0B1E3D", fontWeight: 500 }}>
+                          <div style={{ fontSize: 13, color: "var(--color-primary)", fontWeight: 500 }}>
                             {trip.userId?.name ?? "Unknown user"}
                           </div>
-                          <div style={{ fontSize: 12, color: "#5A6A7A", marginTop: 2 }}>
+                          <div style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>
                             {trip.userId?.userNumber != null
                               ? `User #${trip.userId.userNumber}`
                               : (trip.userId?.email ?? "—")}
@@ -1064,14 +1049,14 @@ export default function AdminTripsPage() {
                           </div>
                         </td>
                         <td>
-                          <div style={{ fontSize: 13, color: "#0B1E3D" }}>{created.date}</div>
-                          <div className="mono" style={{ fontSize: 12, color: "#5A6A7A", marginTop: 2 }}>{created.time}</div>
+                          <div style={{ fontSize: 13, color: "var(--color-primary)" }}>{created.date}</div>
+                          <div className="mono" style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>{created.time}</div>
                         </td>
                         <td>
-                          <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>{trip.pickupTime}</div>
+                          <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>{trip.pickupTime}</div>
                         </td>
                         <td>
-                          <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>{trip.arrivalTime}</div>
+                          <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>{trip.arrivalTime}</div>
                         </td>
                         <td>
                           <span className="status-pill" style={{ background: statusStyle.bg, color: statusStyle.color }}>
@@ -1120,10 +1105,10 @@ export default function AdminTripsPage() {
               gap: 12,
               flexWrap: "wrap",
               padding: "14px 20px",
-              borderTop: "1px solid #EEF2F5",
+              borderTop: "1px solid var(--color-border)",
             }}
           >
-            <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+            <span style={{ fontSize: 13, color: "var(--color-muted)" }}>
               Page {page} of {totalPages}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
@@ -1155,8 +1140,8 @@ export default function AdminTripsPage() {
             <header
               style={{
                 padding: "20px 24px",
-                borderBottom: "1px solid #EEF2F5",
-                borderTop: "3px solid #00C2A8",
+                borderBottom: "1px solid var(--color-border)",
+                borderTop: "3px solid var(--color-secondary)",
                 display: "flex",
                 alignItems: "flex-start",
                 justifyContent: "space-between",
@@ -1164,14 +1149,14 @@ export default function AdminTripsPage() {
               }}
             >
               <div>
-                <p className="mono" style={{ margin: 0, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "#00877A" }}>
+                <p className="mono" style={{ margin: 0, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-secondary-deep)" }}>
                   Trip details
                 </p>
-                <h3 className="display" style={{ margin: "5px 0 0", fontSize: 20, fontWeight: 700, color: "#0B1E3D" }}>
+                <h3 className="display" style={{ margin: "5px 0 0", fontSize: 20, fontWeight: 700, color: "var(--color-primary)" }}>
                   {detail ? tripLabelOf(detail) : "Loading…"}
                 </h3>
                 {detail ? (
-                  <p style={{ margin: "4px 0 0", fontSize: 13, color: "#5A6A7A" }}>
+                  <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--color-muted)" }}>
                     {detail.date} · {detail.pickupTime} → {detail.arrivalTime}
                   </p>
                 ) : null}
@@ -1180,7 +1165,7 @@ export default function AdminTripsPage() {
                 type="button"
                 onClick={closeDetail}
                 aria-label="Close details"
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#5A6A7A", padding: 4, flexShrink: 0 }}
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--color-muted)", padding: 4, flexShrink: 0 }}
               >
                 <X size={20} />
               </button>
@@ -1194,7 +1179,7 @@ export default function AdminTripsPage() {
                   ))}
                 </div>
               ) : detailError ? (
-                <p role="alert" style={{ margin: 0, padding: "12px 14px", borderRadius: 10, background: "rgba(225,82,82,0.08)", color: "#C13E3E", border: "1px solid rgba(225,82,82,0.2)", fontSize: 13 }}>
+                <p role="alert" style={{ margin: 0, padding: "12px 14px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)", fontSize: 13 }}>
                   {detailError}
                 </p>
               ) : detail ? (
@@ -1203,10 +1188,10 @@ export default function AdminTripsPage() {
                     <div className="detail-section" style={{ padding: 12 }}>
                       <AdminTripMap key={detail._id} points={mapPoints} />
                       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, paddingInline: 4 }}>
-                        <span className="map-legend"><i style={{ background: "#00C2A8" }} /> Origin</span>
-                        <span className="map-legend"><i style={{ background: "#0B1E3D" }} /> Destination</span>
+                        <span className="map-legend"><i style={{ background: "var(--color-secondary)" }} /> Origin</span>
+                        <span className="map-legend"><i style={{ background: "var(--color-primary)" }} /> Destination</span>
                         {detail.pickupStation || detail.dropoffStation ? (
-                          <span className="map-legend"><i style={{ background: "#F5A623" }} /> Station</span>
+                          <span className="map-legend"><i style={{ background: "var(--color-accent)" }} /> Station</span>
                         ) : null}
                       </div>
                     </div>
@@ -1395,7 +1380,7 @@ export default function AdminTripsPage() {
             <footer
               style={{
                 padding: "14px 24px",
-                borderTop: "1px solid #EEF2F5",
+                borderTop: "1px solid var(--color-border)",
                 display: "flex",
                 gap: 8,
                 justifyContent: "flex-end",
@@ -1451,14 +1436,14 @@ export default function AdminTripsPage() {
             }}
           >
             <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(225,82,82,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <ShieldAlert size={18} style={{ color: "#E15252" }} />
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: "var(--color-danger-tint)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <ShieldAlert size={18} style={{ color: "var(--color-danger)" }} />
               </div>
               <div>
-                <h3 className="display" style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#0B1E3D" }}>
+                <h3 className="display" style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--color-primary)" }}>
                   Delete {pendingDelete.label}
                 </h3>
-                <p style={{ margin: "4px 0 0", fontSize: 13, color: "#5A6A7A" }}>
+                <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--color-muted)" }}>
                   This permanently removes the record from the database. Enter the admin password to confirm.
                 </p>
               </div>
@@ -1477,7 +1462,7 @@ export default function AdminTripsPage() {
             </label>
 
             {deleteError ? (
-              <p role="alert" style={{ margin: "12px 0 0", padding: "10px 12px", borderRadius: 10, background: "rgba(225,82,82,0.08)", color: "#C13E3E", border: "1px solid rgba(225,82,82,0.2)", fontSize: 13 }}>
+              <p role="alert" style={{ margin: "12px 0 0", padding: "10px 12px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)", fontSize: 13 }}>
                 {deleteError}
               </p>
             ) : null}
@@ -1505,27 +1490,27 @@ export default function AdminTripsPage() {
           <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Assign driver">
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
               <div>
-                <h3 className="display" style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#0B1E3D" }}>Assign driver</h3>
+                <h3 className="display" style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--color-primary)" }}>Assign driver</h3>
                 {(() => {
                   const trip = trips.find((t) => t._id === modalTripId);
                   return trip ? (
-                    <p style={{ margin: "3px 0 0", fontSize: 13, color: "#5A6A7A" }}>
+                    <p style={{ margin: "3px 0 0", fontSize: 13, color: "var(--color-muted)" }}>
                       {trip.tripNumber != null ? `#${String(trip.tripNumber).padStart(3, "0")}` : ""} · {trip.date} · {trip.pickupTime}
                     </p>
                   ) : null;
                 })()}
               </div>
-              <button type="button" onClick={closeModal} aria-label="Close" style={{ background: "transparent", border: "none", cursor: "pointer", color: "#5A6A7A", padding: 4, flexShrink: 0 }}>
+              <button type="button" onClick={closeModal} aria-label="Close" style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--color-muted)", padding: 4, flexShrink: 0 }}>
                 <X size={18} />
               </button>
             </div>
 
-            <p style={{ margin: "6px 0 16px", fontSize: 13, color: "#5A6A7A" }}>
+            <p style={{ margin: "6px 0 16px", fontSize: 13, color: "var(--color-muted)" }}>
               Showing drivers available for this trip&apos;s date and time.
             </p>
 
             {driversError ? (
-              <p role="alert" style={{ margin: "0 0 14px", padding: "10px 12px", borderRadius: 10, background: "rgba(225,82,82,0.08)", color: "#C13E3E", border: "1px solid rgba(225,82,82,0.2)", fontSize: 13 }}>
+              <p role="alert" style={{ margin: "0 0 14px", padding: "10px 12px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)", fontSize: 13 }}>
                 {driversError}
               </p>
             ) : null}
@@ -1544,8 +1529,8 @@ export default function AdminTripsPage() {
               </div>
             ) : drivers.length === 0 ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "24px 8px", textAlign: "center" }}>
-                <MapPin size={22} style={{ color: "#C7D0D4" }} />
-                <p style={{ margin: 0, fontSize: 14, color: "#5A6A7A" }}>No drivers are available for this trip&apos;s date.</p>
+                <MapPin size={22} style={{ color: "var(--color-border)" }} />
+                <p style={{ margin: 0, fontSize: 14, color: "var(--color-muted)" }}>No drivers are available for this trip&apos;s date.</p>
               </div>
             ) : (
               <div className="driver-list">
@@ -1561,18 +1546,18 @@ export default function AdminTripsPage() {
                       className="driver-row"
                     >
                       <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                        <span style={{ width: 30, height: 30, borderRadius: "50%", background: "#0B1E3D", color: "#fff", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--color-primary)", color: "var(--color-on-primary)", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           {initials(driver.name)}
                         </span>
                         <span style={{ minWidth: 0 }}>
-                          <strong style={{ color: "#0B1E3D", fontSize: 14, display: "block" }}>{driver.name ?? "Driver"}</strong>
-                          <span style={{ color: "#5A6A7A", fontSize: 12.5 }}>{driver.phone ?? "No phone on file"}</span>
+                          <strong style={{ color: "var(--color-primary)", fontSize: 14, display: "block" }}>{driver.name ?? "Driver"}</strong>
+                          <span style={{ color: "var(--color-muted)", fontSize: 12.5 }}>{driver.phone ?? "No phone on file"}</span>
                           {driver.startTime && driver.endTime ? (
                             <span className="mono avail-chip">{driver.startTime}–{driver.endTime}</span>
                           ) : null}
                         </span>
                       </span>
-                      <span style={{ color: "#00877A", fontWeight: 700, fontSize: 13, flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ color: "var(--color-secondary-deep)", fontWeight: 700, fontSize: 13, flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
                         {isAssigning ? <span className="spinner" /> : null}
                         {isAssigning ? "Assigning…" : "Assign"}
                       </span>

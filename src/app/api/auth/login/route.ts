@@ -10,24 +10,21 @@ import {
   validateMutationRequest,
 } from "@/lib/security/request";
 import bcrypt from "bcryptjs";
-import { enforceRateLimit } from "@/lib/security/rateLimit";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
   if (invalidRequest) return invalidRequest;
-  const limited = await enforceRateLimit(req, "auth-login", {
-    limit: 10,
-    windowMs: 15 * 60 * 1000,
-  });
-  if (limited) return limited;
-
   try {
     const { phone, password, role: rawRole } = await req.json();
     if (rawRole !== "driver" && rawRole !== "passenger")
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });
     const role = rawRole;
 
-    if (typeof phone !== "string" || !phone.trim() || !isPasswordInput(password))
+    if (
+      typeof phone !== "string" ||
+      !phone.trim() ||
+      !isPasswordInput(password)
+    )
       return NextResponse.json(
         { error: "Phone and password are required." },
         { status: 400 },
@@ -51,7 +48,7 @@ export async function POST(req: NextRequest) {
     const user = await User.findOne(
       isEmail
         ? { email: identifier.toLowerCase(), role }
-        : { phone: identifier, role }
+        : { phone: identifier, role },
     ).select("+passwordHash");
 
     if (!user) {
@@ -65,7 +62,7 @@ export async function POST(req: NextRequest) {
     if (!valid)
       return NextResponse.json(
         { error: "Invalid phone or password." },
-        { status: 401 }
+        { status: 401 },
       );
 
     await createSession({

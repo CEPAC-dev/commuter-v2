@@ -10,7 +10,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useClientLocale } from "@/lib/locale.client";
-import { formatTime, formatDistanceKm, formatMinutes } from "@/lib/i18n";
+import { formatTime, formatDistanceKm, formatMinutes, toArabicDigits } from "@/lib/i18n";
 import AddressInput from "@/components/landing/AddressInput";
 import {
   VEHICLES,
@@ -424,6 +424,10 @@ export default function TripCycle({
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
   const previousStopErrorRef = useRef<string | null>(null);
+  const selectedVehicle = data.vehicleType ? vMap[data.vehicleType] : null;
+  const vehicleTimeMarginMin = selectedVehicle
+    ? Math.max(5, Math.round(selectedVehicle.window / 2))
+    : 0;
 
   useEffect(() => {
     const nextError = stopError || null;
@@ -594,11 +598,11 @@ export default function TripCycle({
         const extraWalk = walkMinFromStation ?? 0;
         const pt = data.arrivalTime
           ? computePickupTime(
-              data.arrivalTime,
-              duration_minutes + extraWalk,
-              vehicleType,
-              vMap,
-            )
+            data.arrivalTime,
+            duration_minutes + extraWalk,
+            vehicleType,
+            vMap,
+          )
           : "";
         onChange({
           ...data,
@@ -616,7 +620,7 @@ export default function TripCycle({
           baseDistanceKm: distance_km,
         });
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         if (!cancelled) setRouteLoading(false);
       });
@@ -713,7 +717,7 @@ export default function TripCycle({
         });
         const price = Math.round(
           legPrices.reduce((sum, legPrice) => sum + legPrice, 0) +
-            waitingCostEgp(totalWaitingMinutes, vehicleType, vMap),
+          waitingCostEgp(totalWaitingMinutes, vehicleType, vMap),
         );
         onChange({
           ...data,
@@ -722,11 +726,11 @@ export default function TripCycle({
           priceEgp: price,
           arrivalTime: data.pickupTime
             ? computeArrivalTime(
-                data.pickupTime,
-                duration_minutes,
-                totalWaitingMinutes,
-                10,
-              )
+              data.pickupTime,
+              duration_minutes,
+              totalWaitingMinutes,
+              10,
+            )
             : "",
           routeCoordinates: coordinates,
           routeLegs,
@@ -740,7 +744,7 @@ export default function TripCycle({
           passengerDetourKm: null,
         });
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         if (!cancelled) setRouteLoading(false);
       });
@@ -765,8 +769,8 @@ export default function TripCycle({
     const isPrivate = !isSharedVehicle(vehicleType);
     const distinct = isPrivate
       ? (data.passengers ?? []).filter(
-          (p) => !p.sameAsMain && p.pickup && p.dropoff,
-        )
+        (p) => !p.sameAsMain && p.pickup && p.dropoff,
+      )
       : [];
 
     let cancelled = false;
@@ -781,11 +785,11 @@ export default function TripCycle({
           const price = priceFor(distance_km, vehicleType, vMap);
           const pt = data.arrivalTime
             ? computePickupTime(
-                data.arrivalTime,
-                duration_minutes,
-                vehicleType,
-                vMap,
-              )
+              data.arrivalTime,
+              duration_minutes,
+              vehicleType,
+              vMap,
+            )
             : data.pickupTime;
           onChange({
             ...data,
@@ -798,7 +802,7 @@ export default function TripCycle({
             passengerDetourKm: null,
           });
         })
-        .catch(() => {});
+        .catch(() => { });
       return () => {
         cancelled = true;
       };
@@ -821,11 +825,11 @@ export default function TripCycle({
           const price = priceFor(distance_km, vehicleType, vMap);
           const pt = data.arrivalTime
             ? computePickupTime(
-                data.arrivalTime,
-                duration_minutes,
-                vehicleType,
-                vMap,
-              )
+              data.arrivalTime,
+              duration_minutes,
+              vehicleType,
+              vMap,
+            )
             : data.pickupTime;
           onChange({
             ...data,
@@ -840,7 +844,7 @@ export default function TripCycle({
           onChange({ ...data, passengerDetourKm: distance_km });
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       cancelled = true;
@@ -936,7 +940,7 @@ export default function TripCycle({
             const result = await res.json();
             if (result.address) address = result.address;
           }
-        } catch {}
+        } catch { }
         onChange({ ...data, [field]: { address, lat, lng } });
         setLocating(null);
       },
@@ -1070,9 +1074,15 @@ export default function TripCycle({
   }
 
   const isPrivate = !!data.vehicleType && !isSharedVehicle(data.vehicleType);
-  const displayedPrice = !data.vehicleType
-    ? data.priceEgp
-    : computeTripPriceEgp({
+  const hasPickup = !!(data.pickup?.address || (data.pickup?.lat && data.pickup?.lng));
+  const hasDropoff = !!(data.dropoff?.address || (data.dropoff?.lat && data.dropoff?.lng));
+  const hasTime = !!(data.arrivalTime && data.arrivalTime.trim().length > 0);
+  const hasRequiredFieldsForPrice = hasPickup && hasDropoff && hasTime;
+
+  const displayedPrice =
+    !data.vehicleType || !hasRequiredFieldsForPrice
+      ? null
+      : computeTripPriceEgp({
         basePrice: data.priceEgp ?? 0,
         vehicleType: data.vehicleType,
         extraPassengers: data.extraPassengers ?? 0,
@@ -1105,7 +1115,10 @@ export default function TripCycle({
         }}
       >
         <span style={{ fontWeight: 700, fontSize: 14, color: "#0B1E3D" }}>
-          Trip {index + 1}
+          {t("create.trip_number").replace(
+            "{n}",
+            locale === "ar" ? toArabicDigits(String(index + 1)) : String(index + 1),
+          )}
         </span>
 
         {/* Return trip checkbox — only for trips after the first */}
@@ -1141,7 +1154,7 @@ export default function TripCycle({
               }}
             />
             <RotateCcw size={12} aria-hidden="true" />
-            Return trip
+            {t("create.return_trip")}
           </label>
         )}
 
@@ -1187,7 +1200,7 @@ export default function TripCycle({
               e.currentTarget.style.background = "rgba(231,76,60,0.08)";
             }}
           >
-            <X size={14} /> Remove
+            <X size={14} /> {t("create.remove_trip")}
           </button>
         )}
       </div>
@@ -1249,11 +1262,11 @@ export default function TripCycle({
               const newPickupTime =
                 data.arrivalTime && data.durationMinutes
                   ? computePickupTime(
-                      data.arrivalTime,
-                      data.durationMinutes,
-                      newVehicle,
-                      vMap,
-                    )
+                    data.arrivalTime,
+                    data.durationMinutes,
+                    newVehicle,
+                    vMap,
+                  )
                   : data.pickupTime;
               onChange({
                 ...data,
@@ -1261,9 +1274,9 @@ export default function TripCycle({
                 extraPassengers: isPrivate ? 0 : clampedPassengers,
                 numberOfPassengers: isPrivate
                   ? Math.min(
-                      Math.max(1, data.numberOfPassengers),
-                      vMap[newVehicle].occupancy,
-                    )
+                    Math.max(1, data.numberOfPassengers),
+                    vMap[newVehicle].occupancy,
+                  )
                   : 1,
                 stops: isPrivate ? data.stops : [],
                 passengers: isPrivate ? [] : syncedPassengers,
@@ -1308,6 +1321,40 @@ export default function TripCycle({
               </option>
             ))}
           </select>
+          {data.vehicleType && selectedVehicle && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "rgba(245,166,35,0.12)",
+                border: "1.5px solid rgba(245,166,35,0.55)",
+                color: "#7A5000",
+                fontSize: 12,
+                fontWeight: 700,
+                lineHeight: 1.6,
+              }}
+            >
+              {locale === "ar"
+                ? "هام: يختلف وقت الالتقاء بحوالي"
+                : "Time can shift by about"}{" "}
+              <strong
+                style={{
+                  color: "#0B1E3D",
+                  fontSize: 13,
+                  fontVariantNumeric: "tabular-nums",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span>+</span>
+                {vehicleTimeMarginMin}
+                {locale === "ar" ? "دقيقة" : "min"}
+                <span>-</span>
+              </strong>
+              {" "}
+              {locale === "ar" ? "لنوع هذه السيارة." : "for this vehicle type."}
+            </div>
+          )}
         </div>
 
         {/* Everything below is exclusive to shared rides for now — private ride
@@ -1609,18 +1656,6 @@ export default function TripCycle({
                   ⚠ {timeError}
                 </p>
               )}
-              {data.arrivalTime && (
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: "#00C2A8",
-                    margin: "6px 0 0",
-                    fontWeight: 600,
-                  }}
-                >
-                  Appointments are subject to change by 10 minutes.
-                </p>
-              )}
               {arrivalTooEarly && minArrivalTime ? (
                 <p
                   role="alert"
@@ -1708,18 +1743,6 @@ export default function TripCycle({
                         : t("create.calculating")}
                   </span>
                 </div>
-              )}
-              {data.pickupTime && (
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: "#A56A00",
-                    margin: "6px 0 0",
-                    fontWeight: 600,
-                  }}
-                >
-                  Appointments are subject to change by 10 minutes.
-                </p>
               )}
               {/* {isSharedVehicle(data.vehicleType) &&
                 data.pickupTime &&
@@ -1828,7 +1851,7 @@ export default function TripCycle({
                     background: "#f8f9fa",
                     cursor:
                       (data.extraPassengers ?? 0) >=
-                      maxExtraPassengers(data.vehicleType)
+                        maxExtraPassengers(data.vehicleType)
                         ? "not-allowed"
                         : "pointer",
                     fontSize: 20,
@@ -2062,7 +2085,7 @@ export default function TripCycle({
                 const maxBoarding = Math.max(
                   0,
                   vMap[data.vehicleType as VehicleKey].occupancy -
-                    (onboardBefore - stop.alighting),
+                  (onboardBefore - stop.alighting),
                 );
                 return (
                   <div
@@ -2372,7 +2395,7 @@ export default function TripCycle({
                   aria-label={t("create.increase_passengers_aria")}
                   style={counterButtonStyle(
                     data.numberOfPassengers >=
-                      vMap[data.vehicleType as VehicleKey].occupancy,
+                    vMap[data.vehicleType as VehicleKey].occupancy,
                   )}
                 >
                   +

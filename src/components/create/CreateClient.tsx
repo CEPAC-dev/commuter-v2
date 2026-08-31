@@ -268,7 +268,12 @@ export default function CreateClient({
 
   const getTripPriceForSubmission = useCallback(
     (trip: TripData) => {
-      if (!trip.vehicleType) return 0;
+      const hasPickup = !!(trip.pickup?.address || (trip.pickup?.lat && trip.pickup?.lng));
+      const hasDropoff = !!(trip.dropoff?.address || (trip.dropoff?.lat && trip.dropoff?.lng));
+      const hasTime = !!(trip.arrivalTime && trip.arrivalTime.trim().length > 0);
+
+      if (!trip.vehicleType || !hasPickup || !hasDropoff || !hasTime) return 0;
+
       return computeTripPriceForSelection({
         basePrice: trip.priceEgp ?? 0,
         vehicleType: trip.vehicleType,
@@ -892,11 +897,11 @@ export default function CreateClient({
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  Estimated total:{" "}
+                  {locale === "ar" ? "السعر المتوقع :" : "Estimated total:"}{" "}
                   <strong
                     style={{ color: "#00C2A8", fontSize: 15, fontWeight: 800 }}
                   >
-                    {grandTotalEgp} EGP
+                    {formatEgp(locale, grandTotalEgp)}
                   </strong>
                   {
                     selectedDates.length > 1
@@ -1145,6 +1150,53 @@ export default function CreateClient({
                         gap: 8,
                       }}
                     >
+                      {trip.vehicleType && (
+                        (() => {
+                          const vehicle =
+                            vehiclesMap?.[trip.vehicleType] ??
+                            VEHICLES[trip.vehicleType];
+                          const marginMinutes = Math.max(
+                            5,
+                            Math.round(vehicle.window / 2),
+                          );
+                          return (
+                            <span
+                              style={{
+                                display: "block",
+                                padding: "10px 12px",
+                                borderRadius: 10,
+                                background: "rgba(245,166,35,0.12)",
+                                border: "1.5px solid rgba(245,166,35,0.55)",
+                                color: "#7A5000",
+                                fontWeight: 700,
+                                lineHeight: 1.6,
+                                fontSize: 12,
+                              }}
+                            >
+                              {locale === "ar"
+                                ? "هام: يختلف وقت الالتقاء بحوالي"
+                                : "Pickup time may vary by about"}{" "}
+                              <strong
+                                style={{
+                                  color: "#0B1E3D",
+                                  fontSize: 13,
+                                  fontVariantNumeric: "tabular-nums",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                <span>+</span>
+                                {marginMinutes}
+                                {locale === "ar" ? "دقيقة" : "min"}
+                                <span>-</span>
+                              </strong>
+                              {" "}
+                              {locale === "ar"
+                                ? " لنوع هذه المركبة."
+                                : " for this vehicle type."}
+                            </span>
+                          );
+                        })()
+                      )}
                       {isPrivate ? (
                         <span
                           style={{
@@ -1246,27 +1298,7 @@ export default function CreateClient({
                                       : "—"}
                                   </span>
                                 </span>
-                                {leg && pointIndex < routePoints.length - 1 && (
-                                  <span
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 6,
-                                      margin: "5px 0 0 22px",
-                                      fontSize: 12,
-                                      color: "#5A6A7A",
-                                    }}
-                                  >
-                                    <Route size={13} aria-hidden="true" />
-                                    To {routePoints[pointIndex + 1].label}:{" "}
-                                    {leg.distanceKm} km · {leg.durationMinutes}{" "}
-                                    min
-                                    {leg.passengers != null &&
-                                      ` · ${leg.passengers} passenger${leg.passengers === 1 ? "" : "s"}`}
-                                    {leg.priceEgp != null &&
-                                      ` · ${Math.round(leg.priceEgp)} EGP`}
-                                  </span>
-                                )}
+
                                 {trip.stops[pointIndex - 1] && (
                                   <span
                                     style={{

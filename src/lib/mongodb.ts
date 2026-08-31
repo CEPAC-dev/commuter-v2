@@ -16,7 +16,7 @@ if (!MONGODB_URI) {
   // Don't crash the Next.js dev server when env is missing — surface a helpful message instead.
   // In production we still want a hard failure, but during local development allow the app
   // to continue so pages that don't require the DB can render.
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.APP_ENV === "production") {
     throw new Error("Please define the MONGODB_URI environment variable");
   } else {
     console.warn(
@@ -48,7 +48,7 @@ export async function dbConnect() {
           "Failed to connect to MongoDB:",
           err && err.message ? err.message : err,
         );
-        if (process.env.NODE_ENV === "production") {
+        if (process.env.APP_ENV === "production") {
           throw err;
         }
         // Reset promise so future attempts can retry.

@@ -75,6 +75,11 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    if (typeof userUpdate.phone === "string") {
+      const currentUser = await User.findById(session.userId).select("phone").lean();
+      if (currentUser?.phone !== userUpdate.phone) userUpdate.phoneVerifiedAt = null;
+    }
+
     const user = await User.findByIdAndUpdate(session.userId, userUpdate, {
       returnDocument: "after",
       select: "name email phone role profilePic region",

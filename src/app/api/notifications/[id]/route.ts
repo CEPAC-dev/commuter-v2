@@ -22,7 +22,7 @@ export async function PATCH(
   const notification = await Notification.findOneAndUpdate(
     { _id: id, userId: session.userId },
     { $set: { isRead: true, readAt: new Date() } },
-    { new: true },
+    { returnDocument: "after" },
   ).lean();
 
   if (!notification) {

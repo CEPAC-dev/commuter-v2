@@ -14,7 +14,7 @@ export type TripMapPoint = {
 
 function markerHtml(color: string, ring: string, order?: number) {
   const label = order == null ? "" : String(order);
-  return `<span style="display:flex;width:22px;height:22px;border-radius:50%;background:${color};border:3px solid ${ring};box-shadow:0 2px 6px rgba(11,30,61,0.35);align-items:center;justify-content:center;color:#fff;font:700 10px/1 sans-serif">${label}</span>`;
+  return `<span style="display:flex;width:22px;height:22px;border-radius:50%;background:${color};border:3px solid ${ring};box-shadow:0 2px 6px var(--color-shadow-strong);align-items:center;justify-content:center;color:var(--color-on-primary);font:700 10px/1 sans-serif">${label}</span>`;
 }
 
 export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
@@ -50,7 +50,7 @@ export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
         L.marker([point.lat, point.lng], {
           icon: L.divIcon({
             className: "",
-            html: markerHtml(color, "#ffffff", point.order),
+            html: markerHtml(color, "var(--color-panel)", point.order),
             iconSize: [22, 22],
             iconAnchor: [11, 11],
           }),
@@ -128,7 +128,7 @@ export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
         height: 260,
         borderRadius: 12,
         overflow: "hidden",
-        border: "1px solid #E6EAEC",
+        border: "1px solid var(--color-border)",
       }}
     />
   );

@@ -220,11 +220,11 @@ export default function PromoCodesManager() {
     <section style={{ display: "grid", gap: 18, maxWidth: 1200, margin: "0 auto" }}>
       <div
         style={{
-          background: "linear-gradient(135deg, #0B1E3D 0%, #113465 100%)",
+          background: "var(--color-primary)",
           borderRadius: 18,
-          border: "1px solid rgba(255,255,255,0.08)",
+          border: "1px solid var(--color-primary)",
           padding: "18px 20px",
-          color: "#fff",
+          color: "var(--color-on-primary)",
           display: "grid",
           gap: 14,
         }}
@@ -232,11 +232,11 @@ export default function PromoCodesManager() {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 22, letterSpacing: "-0.01em" }}>Promo Codes</h2>
-            <p style={{ margin: "6px 0 0", color: "rgba(255,255,255,0.78)", fontSize: 13 }}>
+            <p style={{ margin: "6px 0 0", color: "var(--color-on-primary-muted)", fontSize: 13 }}>
               Create, edit, and monitor discount campaigns from one place.
             </p>
           </div>
-          <button type="button" onClick={() => void loadCodes()} style={{ ...secondaryButtonStyle, background: "rgba(255,255,255,0.14)", color: "#fff", borderColor: "rgba(255,255,255,0.3)" }}>
+          <button type="button" onClick={() => void loadCodes()} style={{ ...secondaryButtonStyle, background: "var(--color-on-primary-tint)", color: "var(--color-on-primary)", borderColor: "var(--color-on-primary-muted)" }}>
             Refresh
           </button>
         </div>
@@ -256,35 +256,35 @@ export default function PromoCodesManager() {
         </div>
       </div>
 
-      <form onSubmit={createCode} style={{ background: "#fff", border: "1px solid #e3ebf0", borderRadius: 18, padding: 20, display: "grid", gap: 16, boxShadow: "0 8px 22px rgba(11,30,61,0.04)" }}>
+      <form onSubmit={createCode} style={{ background: "var(--color-panel)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: 20, display: "grid", gap: 16, boxShadow: "0 8px 22px var(--color-shadow)" }}>
         <div>
-          <h3 style={{ margin: 0, color: "#0B1E3D", fontSize: 18 }}>Generate promo code</h3>
-          <p style={{ margin: "6px 0 0", color: "#5A6A7A", fontSize: 13 }}>
+          <h3 style={{ margin: 0, color: "var(--color-primary)", fontSize: 18 }}>Generate promo code</h3>
+          <p style={{ margin: "6px 0 0", color: "var(--color-muted)", fontSize: 13 }}>
             Configure discount mode, usage limits, and optional expiration.
           </p>
         </div>
-        <div style={{ display: "grid", gap: 14, background: "#FAFCFD", border: "1px solid #E9F0F4", borderRadius: 14, padding: 14 }}>
+        <div style={{ display: "grid", gap: 14, background: "var(--color-background)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
           <label style={labelStyle}>
             {t("admin.promo.discount_type")}
             <div style={{ display: "flex", gap: 8, height: 44, alignItems: "center" }}>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
                 <input
                   type="radio"
                   name="discountType"
                   checked={form.discountType === "percentage"}
                   onChange={() => setForm((prev) => ({ ...prev, discountType: "percentage" }))}
-                  style={{ accentColor: "#00C2A8" }}
+                  style={{ accentColor: "var(--color-secondary)" }}
                 />
                 {t("admin.promo.discount_type_percentage")}
               </label>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
                 <input
                   type="radio"
                   name="discountType"
                   checked={form.discountType === "fixed"}
                   onChange={() => setForm((prev) => ({ ...prev, discountType: "fixed" }))}
-                  style={{ accentColor: "#00C2A8" }}
+                  style={{ accentColor: "var(--color-secondary)" }}
                 />
                 {t("admin.promo.discount_type_fixed")}
               </label>
@@ -311,9 +311,9 @@ export default function PromoCodesManager() {
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, unlimitedUses: event.target.checked }))
                 }
-                style={{ width: 16, height: 16, accentColor: "#00C2A8" }}
+                style={{ width: 16, height: 16, accentColor: "var(--color-secondary)" }}
               />
-              <span style={{ color: "#5A6A7A", fontWeight: 600, fontSize: 12 }}>
+              <span style={{ color: "var(--color-muted)", fontWeight: 600, fontSize: 12 }}>
                 {form.unlimitedUses ? t("admin.promo.unlimited") : t("admin.promo.limited")}
               </span>
             </span>
@@ -377,15 +377,15 @@ export default function PromoCodesManager() {
           </div>
         </div>
         {createError ? (
-          <p style={{ margin: 0, color: "#e74c3c", fontSize: 13 }}>{createError}</p>
+          <p style={{ margin: 0, color: "var(--color-danger)", fontSize: 13 }}>{createError}</p>
         ) : null}
         <button type="submit" disabled={saving} style={primaryButtonStyle(saving)}>
           {saving ? <Loader2 size={16} className="animate-spin" /> : null}
           {saving ? "Generating..." : "Generate code"}
         </button>
         {lastCreatedCode ? (
-          <div style={{ border: "1px dashed #00C2A8", borderRadius: 12, padding: "10px 12px", background: "rgba(0,194,168,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-            <strong style={{ color: "#0B1E3D" }}>{lastCreatedCode}</strong>
+          <div style={{ border: "1px dashed var(--color-secondary)", borderRadius: 12, padding: "10px 12px", background: "var(--color-secondary-tint)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <strong style={{ color: "var(--color-primary)" }}>{lastCreatedCode}</strong>
             <button type="button" onClick={() => copyCode(lastCreatedCode)} style={copyButtonStyle}>
               {copiedCode === lastCreatedCode ? <Check size={14} /> : <Copy size={14} />}
               {copiedCode === lastCreatedCode ? "Copied" : "Copy"}
@@ -394,24 +394,24 @@ export default function PromoCodesManager() {
         ) : null}
       </form>
 
-      <div style={{ background: "#fff", border: "1px solid #e3ebf0", borderRadius: 18, overflow: "hidden", boxShadow: "0 8px 22px rgba(11,30,61,0.04)" }}>
-        <div style={{ padding: "14px 16px", borderBottom: "1px solid #eef2f5", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ background: "var(--color-panel)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", overflow: "hidden", boxShadow: "0 8px 22px var(--color-shadow)" }}>
+        <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <h3 style={{ margin: 0, color: "#0B1E3D", fontSize: 16 }}>Promo code list</h3>
-            <p style={{ margin: "4px 0 0", color: "#5A6A7A", fontSize: 12 }}>Inline editing is enabled for discounts, limits, and status.</p>
+            <h3 style={{ margin: 0, color: "var(--color-primary)", fontSize: 16 }}>Promo code list</h3>
+            <p style={{ margin: "4px 0 0", color: "var(--color-muted)", fontSize: 12 }}>Inline editing is enabled for discounts, limits, and status.</p>
           </div>
-          <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700, color: "#0B1E3D", background: "#EDF3F8", border: "1px solid #DCE7F1" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700, color: "var(--color-primary)", background: "var(--color-primary-tint)", border: "1px solid var(--color-border)" }}>
             {summary.total} total
           </span>
         </div>
 
-        {error ? <p style={{ margin: "12px 16px", color: "#e74c3c", fontSize: 13 }}>{error}</p> : null}
+        {error ? <p style={{ margin: "12px 16px", color: "var(--color-danger)", fontSize: 13 }}>{error}</p> : null}
         {loading ? (
-          <p style={{ margin: "12px 16px", color: "#5A6A7A", fontSize: 13 }}>Loading...</p>
+          <p style={{ margin: "12px 16px", color: "var(--color-muted)", fontSize: 13 }}>Loading...</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead style={{ background: "#f8f9fa" }}>
+              <thead style={{ background: "var(--color-surface)" }}>
                 <tr>
                   <th style={thStyle}>Code</th>
                   <th style={thStyle}>{t("admin.promo.discount_type")}</th>
@@ -433,7 +433,7 @@ export default function PromoCodesManager() {
                       : t("admin.promo.inactive");
 
                   return (
-                  <tr key={item._id} style={{ borderTop: "1px solid #eef2f5", background: item.isActive ? "#fff" : "#fcfdfe" }}>
+                  <tr key={item._id} style={{ borderTop: "1px solid var(--color-border)", background: item.isActive ? "var(--color-panel)" : "var(--color-background)" }}>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <strong>{item.code}</strong>
@@ -452,7 +452,7 @@ export default function PromoCodesManager() {
                             discountValue: nextType === "percentage" ? Math.min(item.discountValue, 100) : item.discountValue,
                           });
                         }}
-                        style={{ height: 32, borderRadius: 8, border: "1px solid #d0d8e0", fontSize: 12, padding: "0 6px" }}
+                        style={{ height: 32, borderRadius: 8, border: "1px solid var(--color-border)", fontSize: 12, padding: "0 6px" }}
                       >
                         <option value="percentage">{t("admin.promo.discount_type_percentage")}</option>
                         <option value="fixed">{t("admin.promo.discount_type_fixed")}</option>
@@ -471,7 +471,7 @@ export default function PromoCodesManager() {
                     </td>
                     <td style={tdStyle}>
                       <div style={{ display: "grid", gap: 6 }}>
-                        <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 12, color: "#5A6A7A" }}>
+                        <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 12, color: "var(--color-muted)" }}>
                           <input
                             type="checkbox"
                             checked={item.maxUses === null}
@@ -485,13 +485,13 @@ export default function PromoCodesManager() {
                                 });
                               }
                             }}
-                            style={{ width: 14, height: 14, accentColor: "#00C2A8" }}
+                            style={{ width: 14, height: 14, accentColor: "var(--color-secondary)" }}
                           />
                           {t("admin.promo.unlimited_uses")}
                         </label>
 
                         {item.maxUses === null ? (
-                          <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                          <span style={{ fontSize: 12, color: "var(--color-muted)" }}>
                             {t("admin.promo.unlimited_used", {
                               count: String(item.usedCount),
                             })}
@@ -522,12 +522,12 @@ export default function PromoCodesManager() {
                             width: "fit-content",
                             fontSize: 12,
                             fontWeight: 700,
-                            color: isExpired ? "#B4790C" : item.isActive ? "#00877A" : "#5A6A7A",
+                            color: isExpired ? "var(--color-accent-deep)" : item.isActive ? "var(--color-secondary-deep)" : "var(--color-muted)",
                           }}
                         >
                           {statusLabel}
                         </span>
-                        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12, color: "#5A6A7A" }}>
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--color-muted)" }}>
                           <input
                             type="checkbox"
                             checked={item.isActive}
@@ -536,7 +536,7 @@ export default function PromoCodesManager() {
                                 isActive: event.target.checked,
                               });
                             }}
-                            style={{ width: 16, height: 16, accentColor: "#00C2A8" }}
+                            style={{ width: 16, height: 16, accentColor: "var(--color-secondary)" }}
                           />
                           {t("admin.promo.active")}
                         </label>
@@ -562,29 +562,29 @@ export default function PromoCodesManager() {
       </div>
 
       {selectedCodeId ? (
-        <div style={{ background: "#fff", border: "1px solid #e3ebf0", borderRadius: 18, padding: 16, boxShadow: "0 8px 22px rgba(11,30,61,0.04)" }}>
-          <h3 style={{ margin: "0 0 10px", color: "#0B1E3D", fontSize: 16 }}>Usage logs</h3>
-          <p style={{ margin: "0 0 12px", color: "#5A6A7A", fontSize: 12 }}>
+        <div style={{ background: "var(--color-panel)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: 16, boxShadow: "0 8px 22px var(--color-shadow)" }}>
+          <h3 style={{ margin: "0 0 10px", color: "var(--color-primary)", fontSize: 16 }}>Usage logs</h3>
+          <p style={{ margin: "0 0 12px", color: "var(--color-muted)", fontSize: 12 }}>
             Historical snapshots preserve the discount type and value used at booking time.
           </p>
           {logsLoading ? (
-            <p style={{ margin: 0, color: "#5A6A7A", fontSize: 13 }}>Loading logs...</p>
+            <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}>Loading logs...</p>
           ) : logs.length === 0 ? (
-            <p style={{ margin: 0, color: "#5A6A7A", fontSize: 13 }}>No usage logs yet.</p>
+            <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}>No usage logs yet.</p>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
               {logs.map((log) => (
-                <div key={log._id} style={{ border: "1px solid #e8eff4", borderRadius: 12, padding: "12px 14px", background: "linear-gradient(180deg, #FAFCFD 0%, #F6F9FB 100%)" }}>
-                  <p style={{ margin: 0, color: "#0B1E3D", fontWeight: 700, fontSize: 13 }}>
+                <div key={log._id} style={{ border: "1px solid var(--color-border)", borderRadius: 12, padding: "12px 14px", background: "var(--color-background)" }}>
+                  <p style={{ margin: 0, color: "var(--color-primary)", fontWeight: 700, fontSize: 13 }}>
                     {log.user?.name ?? "Unknown user"} · {log.user?.phone ?? "No phone"}
                   </p>
-                  <p style={{ margin: "4px 0 0", color: "#5A6A7A", fontSize: 12 }}>
+                  <p style={{ margin: "4px 0 0", color: "var(--color-muted)", fontSize: 12 }}>
                     Trip #{log.trip?.tripNumber ?? "-"} · {log.trip?.date ?? "-"}
                   </p>
-                  <p style={{ margin: "4px 0 0", color: "#5A6A7A", fontSize: 12 }}>
+                  <p style={{ margin: "4px 0 0", color: "var(--color-muted)", fontSize: 12 }}>
                     {(log.trip?.pickup?.address ?? "-")} → {(log.trip?.dropoff?.address ?? "-")}
                   </p>
-                  <p style={{ margin: "4px 0 0", color: "#00877A", fontSize: 12, fontWeight: 700 }}>
+                  <p style={{ margin: "4px 0 0", color: "var(--color-secondary-deep)", fontSize: 12, fontWeight: 700 }}>
                     {formatDiscount(log.discountType, log.discountValue)} used at {new Date(log.createdAt).toLocaleString()}
                   </p>
                 </div>
@@ -655,25 +655,25 @@ function InlineNumberEditor({
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      {prefix ? <span style={{ fontSize: 12, color: "#5A6A7A" }}>{prefix}</span> : null}
+      {prefix ? <span style={{ fontSize: 12, color: "var(--color-muted)" }}>{prefix}</span> : null}
       <input
         type="number"
         min={min}
         max={max}
         defaultValue={String(value)}
         onBlur={(event) => void save(event.currentTarget.value)}
-        style={{ width: 64, height: 30, border: "1px solid #d0d8e0", borderRadius: 8, padding: "0 8px", fontSize: 13 }}
+        style={{ width: 64, height: 30, border: "1px solid var(--color-border)", borderRadius: 8, padding: "0 8px", fontSize: 13 }}
       />
-      {suffix ? <span style={{ fontSize: 12, color: "#5A6A7A" }}>{suffix}</span> : null}
+      {suffix ? <span style={{ fontSize: 12, color: "var(--color-muted)" }}>{suffix}</span> : null}
       {saving ? <Loader2 size={13} className="animate-spin" /> : null}
     </div>
   );
 }
 
 const heroStatCardStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.18)",
+  border: "1px solid var(--color-on-primary-muted)",
   borderRadius: 12,
-  background: "rgba(255,255,255,0.09)",
+  background: "var(--color-on-primary-tint)",
   padding: "10px 12px",
 };
 
@@ -683,30 +683,30 @@ const heroStatLabelStyle: React.CSSProperties = {
   textTransform: "uppercase",
   letterSpacing: "0.06em",
   fontWeight: 700,
-  color: "rgba(255,255,255,0.78)",
+  color: "var(--color-on-primary-muted)",
 };
 
 const heroStatValueStyle: React.CSSProperties = {
   margin: "4px 0 0",
   fontSize: 20,
   fontWeight: 800,
-  color: "#fff",
+  color: "var(--color-on-primary)",
 };
 
 const labelStyle: React.CSSProperties = {
   display: "grid",
   gap: 6,
-  color: "#0B1E3D",
+  color: "var(--color-primary)",
   fontWeight: 700,
   fontSize: 13,
 };
 
 const inputStyle: React.CSSProperties = {
   height: 44,
-  border: "1.5px solid #d0d8e0",
+  border: "1.5px solid var(--color-border)",
   borderRadius: 10,
   padding: "0 12px",
-  color: "#0B1E3D",
+  color: "var(--color-primary)",
   fontSize: 14,
   fontFamily: "inherit",
 };
@@ -716,8 +716,8 @@ function primaryButtonStyle(disabled: boolean): React.CSSProperties {
     minHeight: 46,
     border: 0,
     borderRadius: 10,
-    background: disabled ? "#5A6A7A" : "#0B1E3D",
-    color: "#ffffff",
+    background: disabled ? "var(--color-muted)" : "var(--color-primary)",
+    color: "var(--color-on-primary)",
     fontWeight: 700,
     cursor: disabled ? "not-allowed" : "pointer",
     display: "inline-flex",
@@ -732,10 +732,10 @@ function primaryButtonStyle(disabled: boolean): React.CSSProperties {
 const secondaryButtonStyle: React.CSSProperties = {
   minHeight: 34,
   padding: "0 12px",
-  border: "1px solid #d0d8e0",
+  border: "1px solid var(--color-border)",
   borderRadius: 8,
-  background: "#ffffff",
-  color: "#0B1E3D",
+  background: "var(--color-panel)",
+  color: "var(--color-primary)",
   fontWeight: 700,
   cursor: "pointer",
   fontSize: 12,
@@ -743,8 +743,8 @@ const secondaryButtonStyle: React.CSSProperties = {
 
 const dangerButtonStyle: React.CSSProperties = {
   ...secondaryButtonStyle,
-  borderColor: "rgba(231,76,60,0.45)",
-  color: "#e74c3c",
+  borderColor: "var(--color-danger)",
+  color: "var(--color-danger)",
 };
 
 const copyButtonStyle: React.CSSProperties = {
@@ -757,7 +757,7 @@ const copyButtonStyle: React.CSSProperties = {
 const iconButtonStyle: React.CSSProperties = {
   border: 0,
   background: "transparent",
-  color: "#00877A",
+  color: "var(--color-secondary-deep)",
   cursor: "pointer",
   padding: 2,
 };
@@ -765,7 +765,7 @@ const iconButtonStyle: React.CSSProperties = {
 const thStyle: React.CSSProperties = {
   textAlign: "left",
   padding: "12px 14px",
-  color: "#5A6A7A",
+  color: "var(--color-muted)",
   fontSize: 12,
   textTransform: "uppercase",
   letterSpacing: "0.06em",
@@ -773,7 +773,7 @@ const thStyle: React.CSSProperties = {
 
 const tdStyle: React.CSSProperties = {
   padding: "12px 14px",
-  color: "#0B1E3D",
+  color: "var(--color-primary)",
   fontSize: 13,
   verticalAlign: "top",
 };

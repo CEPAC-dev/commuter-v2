@@ -16,6 +16,12 @@ const WalletSchema = new Schema(
       min: 0,
       max: 1000000000,
     },
+    // Non-withdrawable reserve balance for drivers (falls back to global AdminSettings default if not set).
+    reserveAmount: { type: Number, required: false },
+    // Max withdrawal limit override for drivers (falls back to global AdminSettings default if not set).
+    withdrawalLimit: { type: Number, required: false },
+    // Amount currently tied up in pending withdrawal requests.
+    pendingWithdrawalAmount: { type: Number, required: true, default: 0, min: 0 },
     // Funds held for in-flight mixed payments; available = balanceEgp - reservedBalanceEgp.
     reservedBalanceEgp: {
       type: Number,

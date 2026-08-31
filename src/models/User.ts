@@ -39,6 +39,7 @@ const UserSchema = new Schema(
       maxlength: 13,
       match: /^\+20\d{10}$/,
     },
+    phoneVerifiedAt: { type: Date, default: null },
     passwordHash: { type: String, required: true, select: false },
     email: {
       type: String,
@@ -57,7 +58,7 @@ const UserSchema = new Schema(
     region: {
       type: String,
       default: null,
-      enum: ["EG", "SA", null],
+      enum: ["EG", "KSA", null],
       index: true,
     },
     savedAddresses: { type: [SavedAddressSchema], default: [] },
@@ -66,20 +67,31 @@ const UserSchema = new Schema(
     permissions: { type: [String], default: [] },
     referralCode: { type: String, unique: true, sparse: true, index: true },
     referredBy: { type: Types.ObjectId, ref: "User", default: null },
+    referralUnlimited: { type: Boolean, default: false },
   },
   { timestamps: true }, // createdAt, updatedAt
 );
 
 const existingUserModel = models.User;
-if (existingUserModel && !existingUserModel.schema.path("region")) {
-  existingUserModel.schema.add({
-    region: {
-      type: String,
-      default: null,
-      enum: ["EG", "SA", null],
-      index: true,
-    },
-  });
+if (existingUserModel) {
+  if (!existingUserModel.schema.path("region")) {
+    existingUserModel.schema.add({
+      region: {
+        type: String,
+        default: null,
+        enum: ["EG", "KSA", null],
+        index: true,
+      },
+    });
+  }
+  if (!existingUserModel.schema.path("referralUnlimited")) {
+    existingUserModel.schema.add({
+      referralUnlimited: { type: Boolean, default: false },
+    });
+  }
+  if (!existingUserModel.schema.path("phoneVerifiedAt")) {
+    existingUserModel.schema.add({ phoneVerifiedAt: { type: Date, default: null } });
+  }
 }
 
 // Same phone/email may exist once per role (one person can hold a passenger

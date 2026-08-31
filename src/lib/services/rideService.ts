@@ -3,6 +3,9 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Ride } from "../../models/Ride";
 import { Trip } from "../../models/Trip";
 import { Availability } from "../../models/Availability";
+import { Wallet } from "../../models/Wallet";
+import { WalletTransaction } from "../../models/WalletTransaction";
+import { getAdminSettings, getCancellationTier } from "@/lib/cancellationPolicy";
 import type {
   RideDetailView,
   RideListRow,
@@ -947,6 +950,134 @@ async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
   }
 }
 
+async function cancelRideByDriver(
+  rideId: string | Types.ObjectId,
+  driverUserId: string | Types.ObjectId,
+  reason?: string,
+) {
+  const settings = await getAdminSettings();
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const ride = await Ride.findById(rideId).session(session);
+    if (!ride) throw new Error("Ride not found");
+    if (ride.status === "completed") {
+      throw new Error("Completed rides cannot be cancelled");
+    }
+    if (ride.status === "cancelled") {
+      throw new Error("Ride is already cancelled");
+    }
+    if (String(ride.driverId) !== String(driverUserId)) {
+      throw new Error("Unauthorized to cancel this ride");
+    }
+
+    const evaluation = getCancellationTier(
+      ride.date,
+      new Date(),
+      settings.availabilityLockTime,
+      settings.cancellationTiers,
+    );
+
+    if (evaluation.action === "blocked") {
+      throw new Error("Cancellation is not allowed between 5:00 PM and 7:00 PM.");
+    }
+
+    let penaltyAmount = 0;
+    let availabilityRemoved = false;
+
+    if (evaluation.action === "free") {
+      availabilityRemoved = true;
+      if (ride.availabilityId) {
+        await Availability.deleteOne({ _id: ride.availabilityId }, { session });
+      }
+    } else {
+      // Penalty applies
+      penaltyAmount = Math.round((ride.totalCost * evaluation.penaltyPercent) / 100);
+
+      if (penaltyAmount > 0) {
+        let wallet = await Wallet.findOne({ userId: driverUserId }).session(session);
+        if (!wallet) {
+          wallet = new Wallet({
+            userId: driverUserId,
+            balanceEgp: 0,
+            reservedBalanceEgp: 0,
+            totalCreditedEgp: 0,
+            totalDebitedEgp: 0,
+            status: "active",
+          });
+        }
+
+        wallet.balanceEgp -= penaltyAmount;
+        wallet.totalDebitedEgp = (wallet.totalDebitedEgp || 0) + penaltyAmount;
+        wallet.lastTransactionAt = new Date();
+        await wallet.save({ session });
+
+        const tx = new WalletTransaction({
+          userId: driverUserId,
+          type: "cancellation_penalty",
+          amountEgp: penaltyAmount,
+          status: "completed",
+          description: `Cancellation penalty (${evaluation.penaltyPercent}%) for ride #${ride.rideNumber || ride._id}`,
+          balanceAfterEgp: wallet.balanceEgp,
+          rideId: ride._id,
+        });
+        await tx.save({ session });
+      }
+
+      // Availability stays open / unlocked / untouched
+      if (ride.availabilityId) {
+        await Availability.updateOne(
+          { _id: ride.availabilityId },
+          { $set: { rideId: null, status: "open" } },
+          { session },
+        );
+      }
+    }
+
+    // Set ride status and cancellation metadata
+    ride.status = "cancelled";
+    ride.cancellation = {
+      cancelledAt: new Date(),
+      tier: evaluation.tierLabel,
+      penaltyPercent: evaluation.penaltyPercent,
+      penaltyAmount,
+      availabilityRemoved,
+      reason: reason || "Cancelled by driver",
+    } as any;
+    await ride.save({ session });
+
+    // Unlink trips / notify passengers
+    const ridePassengers = (ride.passengers || []) as Array<{ tripId?: unknown }>;
+    const tripIds = ridePassengers
+      .map((p) => String(p.tripId))
+      .filter((id) => Types.ObjectId.isValid(id));
+
+    if (tripIds.length > 0) {
+      await Trip.updateMany(
+        { _id: { $in: tripIds } },
+        {
+          $set: {
+            rideId: null,
+            status: "submitted",
+            driverId: null,
+            assignedDriver: null,
+            seatNumbers: [],
+          },
+        },
+        { session },
+      );
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+    return ride;
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
+}
+
 export {
   createRide,
   getRideById,
@@ -962,4 +1093,5 @@ export {
   removePassengerFromRide,
   recalculateRoute,
   cancelRide,
+  cancelRideByDriver,
 };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { AdminCard } from "@/components/admin/layout";
 
 type AvailabilitySummary = {
   totalCount?: number;
@@ -31,9 +32,8 @@ export default function OperationConsole() {
   const [valhallaDateTime, setValhallaDateTime] = useState("");
   const [travelTimeTransportation, setTravelTimeTransportation] =
     useState("driving");
-  const [travelTimeDepartureTime, setTravelTimeDepartureTime] = useState(
-    currentLocalDateTime,
-  );
+  const [travelTimeDepartureTime, setTravelTimeDepartureTime] =
+    useState(currentLocalDateTime);
   const [availabilityDate, setAvailabilityDate] = useState("");
   const [loadingMatchData, setLoadingMatchData] = useState(false);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
@@ -69,6 +69,22 @@ export default function OperationConsole() {
   const [stationsImportLoading, setStationsImportLoading] = useState(false);
   const [stationsMessage, setStationsMessage] = useState<string | null>(null);
   const [stationsData, setStationsData] = useState<StationRecord[]>([]);
+  const [stationsMatrixProvider, setStationsMatrixProvider] = useState("osrm");
+  const [stationsValhallaCosting, setStationsValhallaCosting] =
+    useState("auto");
+  const [stationsValhallaDateTimeType, setStationsValhallaDateTimeType] =
+    useState("current");
+  const [stationsValhallaDateTime, setStationsValhallaDateTime] = useState("");
+  const [
+    stationsTravelTimeTransportation,
+    setStationsTravelTimeTransportation,
+  ] = useState("driving");
+  const [stationsTravelTimeDepartureTime, setStationsTravelTimeDepartureTime] =
+    useState(currentLocalDateTime);
+  const [stationsMatrixLoading, setStationsMatrixLoading] = useState(false);
+  const [stationsMatrixMessage, setStationsMatrixMessage] = useState<
+    string | null
+  >(null);
   const [ridesDatePurge, setRidesDatePurge] = useState("");
   const [ridesPurgeLoading, setRidesPurgeLoading] = useState(false);
   const [ridesPurgeTodayLoading, setRidesPurgeTodayLoading] = useState(false);
@@ -384,6 +400,70 @@ export default function OperationConsole() {
     }
   }
 
+  async function handleGenerateStationsMatrix(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    setStationsMatrixLoading(true);
+    setStationsMatrixMessage(null);
+
+    try {
+      const target = new URL(
+        "/api/admin/stations/matrix",
+        window.location.origin,
+      );
+      target.searchParams.set("matrixProvider", stationsMatrixProvider);
+      if (stationsMatrixProvider === "valhalla") {
+        target.searchParams.set("valhallaCosting", stationsValhallaCosting);
+        target.searchParams.set(
+          "valhallaDateTimeType",
+          stationsValhallaDateTimeType,
+        );
+        if (
+          stationsValhallaDateTimeType !== "current" &&
+          stationsValhallaDateTime
+        ) {
+          target.searchParams.set("valhallaDateTime", stationsValhallaDateTime);
+        }
+      }
+      if (stationsMatrixProvider === "traveltime") {
+        target.searchParams.set(
+          "travelTimeTransportation",
+          stationsTravelTimeTransportation,
+        );
+        target.searchParams.set(
+          "travelTimeDepartureTime",
+          new Date(stationsTravelTimeDepartureTime).toISOString(),
+        );
+      }
+
+      const response = await fetch(target.toString());
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || "Unable to generate station matrix.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "stations-matrix.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setStationsMatrixMessage("Station matrix downloaded successfully.");
+    } catch (error) {
+      setStationsMatrixMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to generate station matrix.",
+      );
+    } finally {
+      setStationsMatrixLoading(false);
+    }
+  }
+
   async function handleCreateStation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStationsCreateLoading(true);
@@ -690,15 +770,7 @@ export default function OperationConsole() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <section
-        style={{
-          background: "#ffffff",
-          border: "1px solid #E6EAEC",
-          borderRadius: 18,
-          padding: 20,
-          boxShadow: "0 10px 30px rgba(11,30,61,0.05)",
-        }}
-      >
+      <AdminCard padding={20}>
         <div
           style={{
             display: "flex",
@@ -714,12 +786,12 @@ export default function OperationConsole() {
                 margin: 0,
                 fontSize: 18,
                 fontWeight: 700,
-                color: "#0B1E3D",
+                color: "var(--color-primary)",
               }}
             >
               Export match data
             </h2>
-            <p style={{ margin: "6px 0 0", color: "#5A6A7A", fontSize: 14 }}>
+            <p style={{ margin: "6px 0 0", color: "var(--color-muted)", fontSize: 14 }}>
               Create the compressed match-data bundle for a chosen date. Leave
               the date blank to use the default next day.
             </p>
@@ -743,7 +815,7 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
               Date (optional)
             </span>
             <input
@@ -751,7 +823,7 @@ export default function OperationConsole() {
               onChange={(event) => setMatchDate(event.target.value)}
               type="date"
               style={{
-                border: "1px solid #D8E0E4",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: "10px 12px",
                 fontSize: 14,
@@ -766,18 +838,18 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
               Matrix API calculator
             </span>
             <select
               value={matrixProvider}
               onChange={(event) => setMatrixProvider(event.target.value)}
               style={{
-                border: "1px solid #D8E0E4",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: "10px 12px",
                 fontSize: 14,
-                background: "#ffffff",
+                background: "var(--color-panel)",
               }}
             >
               <option value="osrm">OSRM</option>
@@ -798,7 +870,7 @@ export default function OperationConsole() {
                 }}
               >
                 <span
-                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                  style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}
                 >
                   Valhalla costing
                 </span>
@@ -806,11 +878,11 @@ export default function OperationConsole() {
                   value={valhallaCosting}
                   onChange={(event) => setValhallaCosting(event.target.value)}
                   style={{
-                    border: "1px solid #D8E0E4",
+                    border: "1px solid var(--color-border)",
                     borderRadius: 10,
                     padding: "10px 12px",
                     fontSize: 14,
-                    background: "#ffffff",
+                    background: "var(--color-panel)",
                   }}
                 >
                   <option value="auto">Auto</option>
@@ -827,7 +899,7 @@ export default function OperationConsole() {
                 }}
               >
                 <span
-                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                  style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}
                 >
                   Traffic time
                 </span>
@@ -837,11 +909,11 @@ export default function OperationConsole() {
                     setValhallaDateTimeType(event.target.value)
                   }
                   style={{
-                    border: "1px solid #D8E0E4",
+                    border: "1px solid var(--color-border)",
                     borderRadius: 10,
                     padding: "10px 12px",
                     fontSize: 14,
-                    background: "#ffffff",
+                    background: "var(--color-panel)",
                   }}
                 >
                   <option value="current">Current time</option>
@@ -859,7 +931,7 @@ export default function OperationConsole() {
                   }}
                 >
                   <span
-                    style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                    style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}
                   >
                     Traffic date and time
                   </span>
@@ -871,7 +943,7 @@ export default function OperationConsole() {
                     type="datetime-local"
                     required
                     style={{
-                      border: "1px solid #D8E0E4",
+                      border: "1px solid var(--color-border)",
                       borderRadius: 10,
                       padding: "10px 12px",
                       fontSize: 14,
@@ -892,7 +964,7 @@ export default function OperationConsole() {
                 }}
               >
                 <span
-                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                  style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}
                 >
                   Transportation type
                 </span>
@@ -902,11 +974,11 @@ export default function OperationConsole() {
                     setTravelTimeTransportation(event.target.value)
                   }
                   style={{
-                    border: "1px solid #D8E0E4",
+                    border: "1px solid var(--color-border)",
                     borderRadius: 10,
                     padding: "10px 12px",
                     fontSize: 14,
-                    background: "#ffffff",
+                    background: "var(--color-panel)",
                   }}
                 >
                   <option value="driving">Driving</option>
@@ -923,7 +995,7 @@ export default function OperationConsole() {
                 }}
               >
                 <span
-                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                  style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}
                 >
                   Departure time
                 </span>
@@ -935,7 +1007,7 @@ export default function OperationConsole() {
                   type="datetime-local"
                   required
                   style={{
-                    border: "1px solid #D8E0E4",
+                    border: "1px solid var(--color-border)",
                     borderRadius: 10,
                     padding: "10px 12px",
                     fontSize: 14,
@@ -950,8 +1022,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: loadingMatchData ? "#7BD7CB" : "#00C2A8",
-              color: "#ffffff",
+              background: loadingMatchData ? "var(--color-disabled)" : "var(--color-secondary)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: loadingMatchData ? "wait" : "pointer",
@@ -968,8 +1040,8 @@ export default function OperationConsole() {
               margin: "10px 0 0",
               fontSize: 14,
               color: matchDataMessage.includes("success")
-                ? "#00877A"
-                : "#B94A48",
+                ? "var(--color-secondary-deep)"
+                : "var(--color-danger)",
             }}
           >
             {matchDataMessage}
@@ -994,7 +1066,7 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
               From date
             </span>
             <input
@@ -1002,7 +1074,7 @@ export default function OperationConsole() {
               onChange={(event) => setShiftFromDate(event.target.value)}
               type="date"
               style={{
-                border: "1px solid #D8E0E4",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: "10px 12px",
                 fontSize: 14,
@@ -1017,7 +1089,7 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
               To date
             </span>
             <input
@@ -1025,7 +1097,7 @@ export default function OperationConsole() {
               onChange={(event) => setShiftToDate(event.target.value)}
               type="date"
               style={{
-                border: "1px solid #D8E0E4",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: "10px 12px",
                 fontSize: 14,
@@ -1038,8 +1110,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: loadingShiftDates ? "#7BD7CB" : "#0B1E3D",
-              color: "#ffffff",
+              background: loadingShiftDates ? "var(--color-disabled)" : "var(--color-primary)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: loadingShiftDates ? "wait" : "pointer",
@@ -1055,8 +1127,8 @@ export default function OperationConsole() {
               margin: "10px 0 0",
               fontSize: 14,
               color: shiftDatesMessage.includes("Shifted")
-                ? "#00877A"
-                : "#B94A48",
+                ? "var(--color-secondary-deep)"
+                : "var(--color-danger)",
             }}
           >
             {shiftDatesMessage}
@@ -1081,7 +1153,7 @@ export default function OperationConsole() {
               minWidth: 260,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
               Import workbook
             </span>
             <input
@@ -1091,11 +1163,11 @@ export default function OperationConsole() {
                 setSelectedFile(event.target.files?.[0] ?? null)
               }
               style={{
-                border: "1px solid #D8E0E4",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: "10px 12px",
                 fontSize: 14,
-                background: "#ffffff",
+                background: "var(--color-panel)",
               }}
             />
           </label>
@@ -1105,8 +1177,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: loadingImport ? "#7BD7CB" : "#0B1E3D",
-              color: "#ffffff",
+              background: loadingImport ? "var(--color-disabled)" : "var(--color-primary)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: loadingImport ? "wait" : "pointer",
@@ -1121,35 +1193,27 @@ export default function OperationConsole() {
             style={{
               margin: "10px 0 0",
               fontSize: 14,
-              color: importMessage.includes("success") ? "#00877A" : "#B94A48",
+              color: importMessage.includes("success") ? "var(--color-secondary-deep)" : "var(--color-danger)",
             }}
           >
             {importMessage}
           </p>
         ) : null}
-      </section>
+      </AdminCard>
 
-      <section
-        style={{
-          background: "#ffffff",
-          border: "1px solid #E6EAEC",
-          borderRadius: 18,
-          padding: 20,
-          boxShadow: "0 10px 30px rgba(11,30,61,0.05)",
-        }}
-      >
+      <AdminCard padding={20}>
         <div style={{ marginBottom: 12 }}>
           <h2
             style={{
               margin: 0,
               fontSize: 18,
               fontWeight: 700,
-              color: "#0B1E3D",
+              color: "var(--color-primary)",
             }}
           >
             Rides cleanup
           </h2>
-          <p style={{ margin: "6px 0 0", color: "#5A6A7A", fontSize: 14 }}>
+          <p style={{ margin: "6px 0 0", color: "var(--color-muted)", fontSize: 14 }}>
             Delete rides by a specific date, clear all rides, or remove only
             rides created for today.
           </p>
@@ -1172,7 +1236,7 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
               Date (optional)
             </span>
             <input
@@ -1180,7 +1244,7 @@ export default function OperationConsole() {
               onChange={(event) => setRidesDatePurge(event.target.value)}
               type="date"
               style={{
-                border: "1px solid #D8E0E4",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: "10px 12px",
                 fontSize: 14,
@@ -1193,8 +1257,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: ridesPurgeLoading ? "#EFA8A8" : "#B94A48",
-              color: "#ffffff",
+              background: ridesPurgeLoading ? "var(--color-disabled)" : "var(--color-danger)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: ridesPurgeLoading ? "wait" : "pointer",
@@ -1217,8 +1281,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: ridesPurgeTodayLoading ? "#EFA8A8" : "#5A6A7A",
-              color: "#ffffff",
+              background: ridesPurgeTodayLoading ? "var(--color-disabled)" : "var(--color-muted)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: ridesPurgeTodayLoading ? "wait" : "pointer",
@@ -1236,24 +1300,16 @@ export default function OperationConsole() {
               margin: "12px 0 0",
               fontSize: 14,
               color: ridesPurgeMessage.includes("Deleted")
-                ? "#00877A"
-                : "#B94A48",
+                ? "var(--color-secondary-deep)"
+                : "var(--color-danger)",
             }}
           >
             {ridesPurgeMessage}
           </p>
         ) : null}
-      </section>
+      </AdminCard>
 
-      <section
-        style={{
-          background: "#ffffff",
-          border: "1px solid #E6EAEC",
-          borderRadius: 18,
-          padding: 20,
-          boxShadow: "0 10px 30px rgba(11,30,61,0.05)",
-        }}
-      >
+      <AdminCard padding={20}>
         <div
           style={{
             display: "flex",
@@ -1269,12 +1325,12 @@ export default function OperationConsole() {
                 margin: 0,
                 fontSize: 18,
                 fontWeight: 700,
-                color: "#0B1E3D",
+                color: "var(--color-primary)",
               }}
             >
               Availabilities
             </h2>
-            <p style={{ margin: "6px 0 0", color: "#5A6A7A", fontSize: 14 }}>
+            <p style={{ margin: "6px 0 0", color: "var(--color-muted)", fontSize: 14 }}>
               Inspect current records, download a JSON backup, or restore a
               saved availability snapshot.
             </p>
@@ -1297,8 +1353,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: availabilityBackupLoading ? "#7BD7CB" : "#00C2A8",
-              color: "#ffffff",
+              background: availabilityBackupLoading ? "var(--color-disabled)" : "var(--color-secondary)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: availabilityBackupLoading ? "wait" : "pointer",
@@ -1328,7 +1384,7 @@ export default function OperationConsole() {
               minWidth: 260,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
               Restore JSON backup
             </span>
             <input
@@ -1338,11 +1394,11 @@ export default function OperationConsole() {
                 setAvailabilityImportFile(event.target.files?.[0] ?? null)
               }
               style={{
-                border: "1px solid #D8E0E4",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: "10px 12px",
                 fontSize: 14,
-                background: "#ffffff",
+                background: "var(--color-panel)",
               }}
             />
           </label>
@@ -1352,8 +1408,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: availabilityRestoreLoading ? "#7BD7CB" : "#0B1E3D",
-              color: "#ffffff",
+              background: availabilityRestoreLoading ? "var(--color-disabled)" : "var(--color-primary)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: availabilityRestoreLoading ? "wait" : "pointer",
@@ -1382,7 +1438,7 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
               Date (optional)
             </span>
             <input
@@ -1390,7 +1446,7 @@ export default function OperationConsole() {
               onChange={(event) => setAvailabilityDate(event.target.value)}
               type="date"
               style={{
-                border: "1px solid #D8E0E4",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: "10px 12px",
                 fontSize: 14,
@@ -1402,8 +1458,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: "#0B1E3D",
-              color: "#ffffff",
+              background: "var(--color-primary)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: "pointer",
@@ -1415,7 +1471,7 @@ export default function OperationConsole() {
         </form>
 
         {availabilityError ? (
-          <p style={{ margin: 0, color: "#B94A48", fontSize: 14 }}>
+          <p style={{ margin: 0, color: "var(--color-danger)", fontSize: 14 }}>
             {availabilityError}
           </p>
         ) : null}
@@ -1428,8 +1484,8 @@ export default function OperationConsole() {
               color:
                 availabilityActionMessage.includes("success") ||
                 availabilityActionMessage.includes("Restored")
-                  ? "#00877A"
-                  : "#B94A48",
+                  ? "var(--color-secondary-deep)"
+                  : "var(--color-danger)",
             }}
           >
             {availabilityActionMessage}
@@ -1439,13 +1495,13 @@ export default function OperationConsole() {
         {availabilitySummary ? (
           <div
             style={{
-              background: "#F8FAFB",
-              border: "1px solid #E6EAEC",
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
               borderRadius: 12,
               padding: 12,
             }}
           >
-            <p style={{ margin: "0 0 8px", color: "#0B1E3D", fontWeight: 700 }}>
+            <p style={{ margin: "0 0 8px", color: "var(--color-primary)", fontWeight: 700 }}>
               Found {availabilitySummary.totalCount ?? 0} record(s)
             </p>
             {availabilitySummary.records?.length ? (
@@ -1453,7 +1509,7 @@ export default function OperationConsole() {
                 style={{
                   margin: 0,
                   paddingLeft: 18,
-                  color: "#5A6A7A",
+                  color: "var(--color-muted)",
                   display: "grid",
                   gap: 6,
                 }}
@@ -1471,39 +1527,265 @@ export default function OperationConsole() {
                   ))}
               </ul>
             ) : (
-              <p style={{ margin: 0, color: "#5A6A7A", fontSize: 13 }}>
+              <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}>
                 No records available for this filter.
               </p>
             )}
           </div>
         ) : null}
-      </section>
+      </AdminCard>
 
-      <section
-        style={{
-          background: "#ffffff",
-          border: "1px solid #E6EAEC",
-          borderRadius: 18,
-          padding: 20,
-          boxShadow: "0 10px 30px rgba(11,30,61,0.05)",
-        }}
-      >
+      <AdminCard padding={20}>
         <div style={{ marginBottom: 12 }}>
           <h2
             style={{
               margin: 0,
               fontSize: 18,
               fontWeight: 700,
-              color: "#0B1E3D",
+              color: "var(--color-primary)",
             }}
           >
             Stations operations
           </h2>
-          <p style={{ margin: "6px 0 0", color: "#5A6A7A", fontSize: 14 }}>
+          <p style={{ margin: "6px 0 0", color: "var(--color-muted)", fontSize: 14 }}>
             Use station APIs to list/search, create, update, delete, and bulk
             import station points.
           </p>
         </div>
+
+        <form
+          onSubmit={handleGenerateStationsMatrix}
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+            marginBottom: 16,
+            paddingBottom: 16,
+            borderBottom: "1px solid #E6EAEC",
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              minWidth: 220,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+              Matrix API calculator
+            </span>
+            <select
+              value={stationsMatrixProvider}
+              onChange={(event) =>
+                setStationsMatrixProvider(event.target.value)
+              }
+              style={{
+                border: "1px solid #D8E0E4",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+                background: "#ffffff",
+              }}
+            >
+              <option value="osrm">OSRM</option>
+              <option value="openrouteservice">OpenRouteService</option>
+              <option value="valhalla">Valhalla</option>
+              <option value="graphhopper">GraphHopper</option>
+              <option value="traveltime">TravelTime</option>
+            </select>
+          </label>
+          {stationsMatrixProvider === "valhalla" ? (
+            <>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 160,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Valhalla costing
+                </span>
+                <select
+                  value={stationsValhallaCosting}
+                  onChange={(event) =>
+                    setStationsValhallaCosting(event.target.value)
+                  }
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="taxi">Taxi</option>
+                  <option value="bus">Bus</option>
+                </select>
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 160,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Traffic time
+                </span>
+                <select
+                  value={stationsValhallaDateTimeType}
+                  onChange={(event) =>
+                    setStationsValhallaDateTimeType(event.target.value)
+                  }
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="current">Current time</option>
+                  <option value="depart_at">Depart at</option>
+                  <option value="arrive_by">Arrive by</option>
+                </select>
+              </label>
+              {stationsValhallaDateTimeType !== "current" ? (
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    minWidth: 220,
+                  }}
+                >
+                  <span
+                    style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                  >
+                    Traffic date and time
+                  </span>
+                  <input
+                    value={stationsValhallaDateTime}
+                    onChange={(event) =>
+                      setStationsValhallaDateTime(event.target.value)
+                    }
+                    type="datetime-local"
+                    required
+                    style={{
+                      border: "1px solid #D8E0E4",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      fontSize: 14,
+                    }}
+                  />
+                </label>
+              ) : null}
+            </>
+          ) : null}
+          {stationsMatrixProvider === "traveltime" ? (
+            <>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 180,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Transportation type
+                </span>
+                <select
+                  value={stationsTravelTimeTransportation}
+                  onChange={(event) =>
+                    setStationsTravelTimeTransportation(event.target.value)
+                  }
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="driving">Driving</option>
+                  <option value="walking">Walking</option>
+                  <option value="cycling">Cycling</option>
+                </select>
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 220,
+                }}
+              >
+                <span
+                  style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}
+                >
+                  Departure time
+                </span>
+                <input
+                  value={stationsTravelTimeDepartureTime}
+                  onChange={(event) =>
+                    setStationsTravelTimeDepartureTime(event.target.value)
+                  }
+                  type="datetime-local"
+                  required
+                  style={{
+                    border: "1px solid #D8E0E4",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+            </>
+          ) : null}
+          <button
+            type="submit"
+            disabled={stationsMatrixLoading}
+            style={{
+              border: "none",
+              borderRadius: 10,
+              background: stationsMatrixLoading ? "#7BD7CB" : "#00C2A8",
+              color: "#ffffff",
+              fontWeight: 700,
+              padding: "10px 16px",
+              cursor: stationsMatrixLoading ? "wait" : "pointer",
+              alignSelf: "flex-end",
+            }}
+          >
+            {stationsMatrixLoading ? "Generating matrix..." : "Generate Matrix"}
+          </button>
+          {stationsMatrixMessage ? (
+            <p
+              style={{
+                flexBasis: "100%",
+                margin: 0,
+                fontSize: 14,
+                color: stationsMatrixMessage.includes("success")
+                  ? "#00877A"
+                  : "#B94A48",
+              }}
+            >
+              {stationsMatrixMessage}
+            </p>
+          ) : null}
+        </form>
 
         <form
           onSubmit={handleFetchStations}
@@ -1522,7 +1804,7 @@ export default function OperationConsole() {
               minWidth: 240,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
               Station number (optional)
             </span>
             <input
@@ -1530,7 +1812,7 @@ export default function OperationConsole() {
               onChange={(event) => setStationNumberQuery(event.target.value)}
               placeholder="e.g. 101"
               style={{
-                border: "1px solid #D8E0E4",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: "10px 12px",
                 fontSize: 14,
@@ -1543,8 +1825,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: stationsLoading ? "#7BD7CB" : "#00C2A8",
-              color: "#ffffff",
+              background: stationsLoading ? "var(--color-disabled)" : "var(--color-secondary)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: stationsLoading ? "wait" : "pointer",
@@ -1569,7 +1851,7 @@ export default function OperationConsole() {
             onChange={(event) => setStationFormName(event.target.value)}
             placeholder="Name"
             style={{
-              border: "1px solid #D8E0E4",
+              border: "1px solid var(--color-border)",
               borderRadius: 10,
               padding: "10px 12px",
               fontSize: 14,
@@ -1580,7 +1862,7 @@ export default function OperationConsole() {
             onChange={(event) => setStationFormDirection(event.target.value)}
             placeholder="Direction"
             style={{
-              border: "1px solid #D8E0E4",
+              border: "1px solid var(--color-border)",
               borderRadius: 10,
               padding: "10px 12px",
               fontSize: 14,
@@ -1591,7 +1873,7 @@ export default function OperationConsole() {
             onChange={(event) => setStationFormType(event.target.value)}
             placeholder="Station type"
             style={{
-              border: "1px solid #D8E0E4",
+              border: "1px solid var(--color-border)",
               borderRadius: 10,
               padding: "10px 12px",
               fontSize: 14,
@@ -1602,7 +1884,7 @@ export default function OperationConsole() {
             onChange={(event) => setStationFormLandmark(event.target.value)}
             placeholder="Landmark"
             style={{
-              border: "1px solid #D8E0E4",
+              border: "1px solid var(--color-border)",
               borderRadius: 10,
               padding: "10px 12px",
               fontSize: 14,
@@ -1613,7 +1895,7 @@ export default function OperationConsole() {
             onChange={(event) => setStationFormLat(event.target.value)}
             placeholder="Latitude"
             style={{
-              border: "1px solid #D8E0E4",
+              border: "1px solid var(--color-border)",
               borderRadius: 10,
               padding: "10px 12px",
               fontSize: 14,
@@ -1624,7 +1906,7 @@ export default function OperationConsole() {
             onChange={(event) => setStationFormLng(event.target.value)}
             placeholder="Longitude"
             style={{
-              border: "1px solid #D8E0E4",
+              border: "1px solid var(--color-border)",
               borderRadius: 10,
               padding: "10px 12px",
               fontSize: 14,
@@ -1636,8 +1918,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: stationsCreateLoading ? "#7BD7CB" : "#0B1E3D",
-              color: "#ffffff",
+              background: stationsCreateLoading ? "var(--color-disabled)" : "var(--color-primary)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: stationsCreateLoading ? "wait" : "pointer",
@@ -1661,7 +1943,7 @@ export default function OperationConsole() {
             onChange={(event) => setStationPatchId(event.target.value)}
             placeholder="Station id for update"
             style={{
-              border: "1px solid #D8E0E4",
+              border: "1px solid var(--color-border)",
               borderRadius: 10,
               padding: "10px 12px",
               fontSize: 14,
@@ -1673,8 +1955,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: stationsPatchLoading ? "#9AA8B6" : "#5A6A7A",
-              color: "#ffffff",
+              background: stationsPatchLoading ? "var(--color-muted)" : "var(--color-muted)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: stationsPatchLoading ? "wait" : "pointer",
@@ -1701,7 +1983,7 @@ export default function OperationConsole() {
             onChange={(event) => setStationDeleteId(event.target.value)}
             placeholder="Station id for delete"
             style={{
-              border: "1px solid #D8E0E4",
+              border: "1px solid var(--color-border)",
               borderRadius: 10,
               padding: "10px 12px",
               fontSize: 14,
@@ -1714,8 +1996,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: stationsDeleteLoading ? "#EFA8A8" : "#B94A48",
-              color: "#ffffff",
+              background: stationsDeleteLoading ? "var(--color-disabled)" : "var(--color-danger)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: stationsDeleteLoading ? "wait" : "pointer",
@@ -1742,7 +2024,7 @@ export default function OperationConsole() {
               setStationsFile(event.target.files?.[0] ?? null)
             }
             style={{
-              border: "1px solid #D8E0E4",
+              border: "1px solid var(--color-border)",
               borderRadius: 10,
               padding: "10px 12px",
               fontSize: 14,
@@ -1755,8 +2037,8 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: stationsImportLoading ? "#7BD7CB" : "#00C2A8",
-              color: "#ffffff",
+              background: stationsImportLoading ? "var(--color-disabled)" : "var(--color-secondary)",
+              color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
               cursor: stationsImportLoading ? "wait" : "pointer",
@@ -1773,8 +2055,8 @@ export default function OperationConsole() {
               color:
                 stationsMessage.includes("success") ||
                 stationsMessage.includes("Loaded")
-                  ? "#00877A"
-                  : "#B94A48",
+                  ? "var(--color-secondary-deep)"
+                  : "var(--color-danger)",
               fontSize: 14,
             }}
           >
@@ -1786,13 +2068,13 @@ export default function OperationConsole() {
           <div
             style={{
               marginTop: 12,
-              border: "1px solid #E6EAEC",
+              border: "1px solid var(--color-border)",
               borderRadius: 12,
-              background: "#F8FAFB",
+              background: "var(--color-surface)",
               padding: 12,
             }}
           >
-            <p style={{ margin: "0 0 8px", color: "#0B1E3D", fontWeight: 700 }}>
+            <p style={{ margin: "0 0 8px", color: "var(--color-primary)", fontWeight: 700 }}>
               Showing {Math.min(stationsData.length, 10)} of{" "}
               {stationsData.length} station(s)
             </p>
@@ -1800,7 +2082,7 @@ export default function OperationConsole() {
               style={{
                 margin: 0,
                 paddingLeft: 18,
-                color: "#5A6A7A",
+                color: "var(--color-muted)",
                 display: "grid",
                 gap: 6,
               }}
@@ -1815,7 +2097,7 @@ export default function OperationConsole() {
             </ul>
           </div>
         ) : null}
-      </section>
+      </AdminCard>
     </div>
   );
 }

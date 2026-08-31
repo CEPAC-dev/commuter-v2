@@ -12,6 +12,7 @@ import {
 import AppHeader from "@/components/layout/AppHeader";
 import Section from "@/components/shared/Section";
 import ChangePasswordSection from "@/components/shared/ChangePasswordSection";
+import PhoneVerificationCard from "@/components/shared/PhoneVerificationCard";
 import ReferralCard from "@/components/shared/ReferralCard";
 import SavedAddressesSection from "@/components/shared/SavedAddressesSection";
 import type { CarType } from "@/lib/config/driver";
@@ -23,6 +24,7 @@ interface Props {
   initialName: string;
   email: string;
   initialPhone: string;
+  initialPhoneVerified: boolean;
   gender: "male" | "female";
   carType: CarType | "";
   carBrand?: string;
@@ -120,6 +122,7 @@ export default function DriverProfileClient({
   initialName,
   email,
   initialPhone,
+  initialPhoneVerified,
   gender: initialGender,
   documents,
   verificationStatus,
@@ -493,6 +496,9 @@ export default function DriverProfileClient({
               {t("profile.account_section")}
             </p>
             <ChangePasswordSection />
+            <div style={{ marginTop: 20 }}>
+              <PhoneVerificationCard initialVerified={initialPhoneVerified} />
+            </div>
             <div style={{ marginTop: 20 }}>
               <ReferralCard />
             </div>

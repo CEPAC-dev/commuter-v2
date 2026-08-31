@@ -28,7 +28,7 @@ export interface VehicleConfig {
 export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   private_car: {
     key: "private_car",
-    label: "Private car",
+    label: "Private Car",
     rate: 8,
     additional_rate: 0.25, // EGP per km for extra passengers
     ride: "private",

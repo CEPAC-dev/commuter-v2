@@ -28,9 +28,24 @@ interface Tx {
 
 interface WalletData {
   balanceEgp: number;
+  reserveAmount?: number;
+  pendingWithdrawalAmount?: number;
+  withdrawalLimit?: number | null;
+  withdrawableEgp?: number;
   status: string;
   role?: string;
   transactions: Tx[];
+}
+
+interface WithdrawalRequestItem {
+  id: string;
+  amountEgp: number;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  payoutMethod: "mobile_wallet" | "bank";
+  payoutDestination: string;
+  rejectionReason?: string | null;
+  requestedAt: string;
+  resolvedAt?: string | null;
 }
 
 interface PayoutMethod {
@@ -73,6 +88,8 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
     payoutAccountNumber: "",
     payoutAccountHolder: "",
   });
+  const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequestItem[]>([]);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const role = data?.role ?? initialRole ?? "passenger";
   const isDriver = role === "driver";
@@ -139,6 +156,14 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
     if (res.ok) setData(await res.json());
   }, []);
 
+  const loadRequests = useCallback(async () => {
+    const res = await fetch("/api/wallet/withdraw", { cache: "no-store" });
+    if (res.ok) {
+      const json = await res.json();
+      setWithdrawalRequests(json.requests ?? []);
+    }
+  }, []);
+
   const loadPayoutMethod = useCallback(async () => {
     const res = await fetch("/api/wallet/payout-method", { cache: "no-store" });
     if (!res.ok) return;
@@ -195,6 +220,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
       await load();
       if (initialRole === "driver") {
         await loadPayoutMethod();
+        await loadRequests();
       }
     })();
     return () => {
@@ -298,10 +324,32 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
       }
       setNotice(json.message ?? t("wallet.saved_notice"));
       await load();
+      await loadRequests();
     } catch {
       setWithdrawError(t("wallet.network_error"));
     } finally {
       setWithdrawBusy(false);
+    }
+  }
+
+  async function handleCancelRequest(requestId: string) {
+    setCancellingId(requestId);
+    try {
+      const res = await fetch(`/api/wallet/withdraw/${requestId}/cancel`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setNotice(json.error ?? "Failed to cancel request.");
+      } else {
+        setNotice(json.message ?? "Request cancelled.");
+        await load();
+        await loadRequests();
+      }
+    } catch {
+      setNotice("Network error.");
+    } finally {
+      setCancellingId(null);
     }
   }
 
@@ -370,6 +418,43 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
         >
           {data ? formatNumber(data.balanceEgp) + " " + t("wallet.egp_suffix") : "—"}
         </div>
+
+        {isDriver && data && (
+          <div
+            style={{
+              marginTop: 16,
+              paddingTop: 14,
+              borderTop: "1px solid rgba(255,255,255,0.15)",
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "12px 16px",
+              fontSize: 12,
+              color: "rgba(255,255,255,0.9)",
+            }}
+          >
+            <div>
+              <span style={{ opacity: 0.75, display: "block", marginBottom: 2 }}>Total Balance</span>
+              <strong style={{ fontSize: 14 }}>{formatNumber(data.balanceEgp)} {t("wallet.egp_suffix")}</strong>
+            </div>
+            <div>
+              <span style={{ opacity: 0.75, display: "block", marginBottom: 2 }}>Reserve (Floor)</span>
+              <strong style={{ fontSize: 14 }}>{formatNumber(data.reserveAmount ?? 200)} {t("wallet.egp_suffix")}</strong>
+            </div>
+            <div>
+              <span style={{ opacity: 0.75, display: "block", marginBottom: 2 }}>Pending Withdrawal</span>
+              <strong style={{ fontSize: 14, color: "#F5A623" }}>{formatNumber(data.pendingWithdrawalAmount ?? 0)} {t("wallet.egp_suffix")}</strong>
+            </div>
+            <div>
+              <span style={{ opacity: 0.75, display: "block", marginBottom: 2 }}>Withdrawable</span>
+              <strong style={{ fontSize: 14, color: "#00C2A8" }}>{formatNumber(data.withdrawableEgp ?? 0)} {t("wallet.egp_suffix")}</strong>
+            </div>
+            {data.withdrawalLimit != null && (
+              <div style={{ gridColumn: "1 / -1", fontSize: 11, opacity: 0.8, marginTop: 2 }}>
+                Max withdrawal limit per request: <strong>{formatNumber(data.withdrawalLimit)} {t("wallet.egp_suffix")}</strong>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {notice && (
@@ -637,6 +722,102 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                 : formatAmountLabel("wallet.withdraw_button", withdrawAmount)}
             </button>
           </section>
+
+          {/* Withdrawal Requests List */}
+          {withdrawalRequests.length > 0 && (
+            <section style={cardStyle}>
+              <h2
+                style={{
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: "#0B1E3D",
+                  margin: "0 0 14px",
+                }}
+              >
+                Withdrawal Requests
+              </h2>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {withdrawalRequests.map((req) => {
+                  const isPending = req.status === "pending";
+                  const isApproved = req.status === "approved";
+                  const isRejected = req.status === "rejected";
+                  return (
+                    <div
+                      key={req.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "12px 14px",
+                        borderRadius: 10,
+                        background: "#F8FAFC",
+                        border: "1px solid #E2E8F0",
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <strong style={{ fontSize: 15, color: "#0B1E3D" }}>
+                            {formatNumber(req.amountEgp)} {t("wallet.egp_suffix")}
+                          </strong>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: "2px 8px",
+                              borderRadius: 12,
+                              background: isPending
+                                ? "rgba(245, 166, 35, 0.15)"
+                                : isApproved
+                                ? "rgba(0, 194, 168, 0.15)"
+                                : isRejected
+                                ? "rgba(231, 76, 60, 0.15)"
+                                : "#E2E8F0",
+                              color: isPending
+                                ? "#D97706"
+                                : isApproved
+                                ? "#00A38D"
+                                : isRejected
+                                ? "#E74C3C"
+                                : "#64748B",
+                            }}
+                          >
+                            {req.status.toUpperCase()}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: 12, color: "#64748B", margin: "4px 0 0" }}>
+                          To: {req.payoutDestination} &bull; {new Date(req.requestedAt).toLocaleDateString()}
+                        </p>
+                        {req.rejectionReason && (
+                          <p style={{ fontSize: 12, color: "#E74C3C", margin: "4px 0 0" }}>
+                            Reason: {req.rejectionReason}
+                          </p>
+                        )}
+                      </div>
+                      {isPending && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelRequest(req.id)}
+                          disabled={cancellingId === req.id}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 8,
+                            border: "1px solid #E2E8F0",
+                            background: "#fff",
+                            color: "#E74C3C",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {cancellingId === req.id ? "Cancelling..." : "Cancel"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
         </>
       ) : (
         <section style={cardStyle}>

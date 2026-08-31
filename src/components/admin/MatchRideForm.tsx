@@ -62,11 +62,12 @@ type PassengerInput = {
 };
 
 const VEHICLE_OPTIONS = [
-  { value: "taxi_shared", label: "Taxi shared" },
-  { value: "van_shared", label: "Van shared" },
-  { value: "microbus_shared", label: "Microbus shared" },
-  { value: "private_car", label: "Private car" },
-  { value: "taxi_private", label: "Taxi private" },
+  { value: "private_car", label: "Private Car" },
+  { value: "shared_car", label: "Shared Car" },
+  { value: "taxi_private", label: "Private Taxi" },
+  { value: "taxi_shared", label: "Shared Taxi" },
+  { value: "van_shared", label: "Shared Van" },
+  { value: "microbus_shared", label: "Shared Microbus" },
 ];
 
 export default function MatchRideForm({
@@ -84,27 +85,36 @@ export default function MatchRideForm({
   const [startTime, setStartTime] = useState("07:00");
   const [endTime, setEndTime] = useState("18:30");
   const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
-  const [passengerInputs, setPassengerInputs] = useState<Record<string, PassengerInput>>({});
+  const [passengerInputs, setPassengerInputs] = useState<
+    Record<string, PassengerInput>
+  >({});
   const [submitting, setSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
-  const [orderedPoints, setOrderedPoints] = useState<Array<{
-    id: string;
-    type: "pickup" | "dropoff";
-    tripId: string;
-    tripNumber?: number;
-    address: string;
-    point: PointLike;
-  }>>([]);
+  const [orderedPoints, setOrderedPoints] = useState<
+    Array<{
+      id: string;
+      type: "pickup" | "dropoff";
+      tripId: string;
+      tripNumber?: number;
+      address: string;
+      point: PointLike;
+    }>
+  >([]);
 
   useEffect(() => {
     if (!availabilityId && availabilities[0]) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvailabilityId(String(availabilities[0]._id));
     }
   }, [availabilityId, availabilities]);
 
   useEffect(() => {
     if (!driverId && drivers[0]) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDriverId(String(drivers[0]._id));
     }
   }, [driverId, drivers]);
@@ -114,17 +124,22 @@ export default function MatchRideForm({
   }, [trips, tripDateFilter]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPassengerInputs((current) => {
       const next: Record<string, PassengerInput> = { ...current };
       selectedTripIds.forEach((tripId, index) => {
         const existing = next[tripId] ?? {};
         const selectedTrip = trips.find((trip) => String(trip._id) === tripId);
         const pickupOrder = rideType === "shared" ? index + 1 : 1;
-        const dropoffOrder = rideType === "shared" ? selectedTripIds.length - index : 1;
+        const dropoffOrder =
+          rideType === "shared" ? selectedTripIds.length - index : 1;
         next[tripId] = {
           pickupOrder: existing.pickupOrder ?? pickupOrder,
           dropoffOrder: existing.dropoffOrder ?? dropoffOrder,
-          numberOfPassengers: existing.numberOfPassengers ?? selectedTrip?.numberOfPassengers ?? 1,
+          numberOfPassengers:
+            existing.numberOfPassengers ??
+            selectedTrip?.numberOfPassengers ??
+            1,
           priceEgp: existing.priceEgp ?? selectedTrip?.priceEgp ?? 0,
         };
       });
@@ -152,10 +167,18 @@ export default function MatchRideForm({
 
       // Shared rides route via stations, not raw origin/destination
       const pickupPoint = trip.pickupStation
-        ? { lat: trip.pickupStation.lat, lng: trip.pickupStation.lng, address: trip.pickupStation.name ?? "Pickup station" }
+        ? {
+            lat: trip.pickupStation.lat,
+            lng: trip.pickupStation.lng,
+            address: trip.pickupStation.name ?? "Pickup station",
+          }
         : trip.pickup;
       const dropoffPoint = trip.dropoffStation
-        ? { lat: trip.dropoffStation.lat, lng: trip.dropoffStation.lng, address: trip.dropoffStation.name ?? "Dropoff station" }
+        ? {
+            lat: trip.dropoffStation.lat,
+            lng: trip.dropoffStation.lng,
+            address: trip.dropoffStation.name ?? "Dropoff station",
+          }
         : trip.dropoff;
 
       if (!currentIds.has(pickupId)) {
@@ -164,7 +187,10 @@ export default function MatchRideForm({
           type: "pickup",
           tripId,
           tripNumber: trip.tripNumber,
-          address: trip.pickupStation?.name ?? trip.pickup?.address ?? "Pickup location",
+          address:
+            trip.pickupStation?.name ??
+            trip.pickup?.address ??
+            "Pickup location",
           point: pickupPoint,
         });
       }
@@ -175,7 +201,10 @@ export default function MatchRideForm({
           type: "dropoff",
           tripId,
           tripNumber: trip.tripNumber,
-          address: trip.dropoffStation?.name ?? trip.dropoff?.address ?? "Dropoff location",
+          address:
+            trip.dropoffStation?.name ??
+            trip.dropoff?.address ??
+            "Dropoff location",
           point: dropoffPoint,
         });
       }
@@ -211,16 +240,23 @@ export default function MatchRideForm({
     });
   }
 
-  function updatePassengerInput(tripId: string, field: keyof PassengerInput, value: string | number | number[]) {
+  function updatePassengerInput(
+    tripId: string,
+    field: keyof PassengerInput,
+    value: string | number | number[],
+  ) {
     setPassengerInputs((current) => ({
       ...current,
       [tripId]: {
         ...current[tripId],
         [field]: Array.isArray(value)
           ? value
-          : field === "numberOfPassengers" || field === "priceEgp" || field === "pickupOrder" || field === "dropoffOrder"
-          ? Number(value)
-          : value,
+          : field === "numberOfPassengers" ||
+              field === "priceEgp" ||
+              field === "pickupOrder" ||
+              field === "dropoffOrder"
+            ? Number(value)
+            : value,
       },
     }));
   }
@@ -230,12 +266,18 @@ export default function MatchRideForm({
     setFeedback(null);
 
     if (!availabilityId || !driverId) {
-      setFeedback({ type: "error", message: "Select an availability slot and a driver first." });
+      setFeedback({
+        type: "error",
+        message: "Select an availability slot and a driver first.",
+      });
       return;
     }
 
     if (selectedTripIds.length === 0) {
-      setFeedback({ type: "error", message: "Choose at least one trip to match into a ride." });
+      setFeedback({
+        type: "error",
+        message: "Choose at least one trip to match into a ride.",
+      });
       return;
     }
 
@@ -252,7 +294,12 @@ export default function MatchRideForm({
 
     const passengers = selectedTripIds.map((tripId) => {
       const trip = trips.find((item) => String(item._id) === tripId);
-      const input = passengerInputs[tripId] ?? { pickupOrder: 1, dropoffOrder: 1, numberOfPassengers: 1, priceEgp: 0 };
+      const input = passengerInputs[tripId] ?? {
+        pickupOrder: 1,
+        dropoffOrder: 1,
+        numberOfPassengers: 1,
+        priceEgp: 0,
+      };
       const pIdx = orderedPoints.findIndex((p) => p.id === `pickup-${tripId}`);
       const dIdx = orderedPoints.findIndex((p) => p.id === `dropoff-${tripId}`);
       return {
@@ -292,12 +339,18 @@ export default function MatchRideForm({
         throw new Error(payload?.error || "The ride could not be created.");
       }
 
-      setFeedback({ type: "success", message: `Ride created successfully with ${passengers.length} trip${passengers.length > 1 ? "s" : ""}.` });
+      setFeedback({
+        type: "success",
+        message: `Ride created successfully with ${passengers.length} trip${passengers.length > 1 ? "s" : ""}.`,
+      });
       setSelectedTripIds([]);
       setPassengerInputs({});
       setOrderedPoints([]);
     } catch (error) {
-      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Unexpected error" });
+      setFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "Unexpected error",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -313,19 +366,19 @@ export default function MatchRideForm({
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
 
         .match-form {
-          --ink: #0B1E3D;
-          --teal: #00C2A8;
-          --teal-deep: #00877A;
-          --amber: #E8A33D;
-          --amber-deep: #A96A00;
-          --slate: #5A6A7A;
-          --line: #E6EAEC;
-          --canvas: #F6F8F7;
+          --ink: var(--color-primary);
+          --teal: var(--color-secondary);
+          --teal-deep: var(--color-secondary-deep);
+          --amber: var(--color-accent);
+          --amber-deep: var(--color-accent-deep);
+          --slate: var(--color-muted);
+          --line: var(--color-border);
+          --canvas: var(--color-surface);
           font-family: 'Inter', system-ui, sans-serif;
-          background: #ffffff;
+          background: var(--color-panel);
           border: 1px solid var(--line);
           border-radius: 18px;
-          box-shadow: 0 10px 35px rgba(11,30,61,0.05);
+          box-shadow: 0 10px 35px var(--color-shadow);
           padding: 24px;
           margin-top: 20px;
           border-top: 3px solid var(--teal);
@@ -343,33 +396,33 @@ export default function MatchRideForm({
         }
 
         .match-form .field {
-          border: 1px solid #DDE4E7;
+          border: 1px solid var(--color-border);
           border-radius: 10px;
           padding: 10px 12px;
           font-size: 14px;
           color: var(--ink);
-          background: #ffffff;
+          background: var(--color-panel);
           width: 100%;
           font-family: 'Inter', system-ui, sans-serif;
           transition: border-color 0.12s ease, box-shadow 0.12s ease;
         }
-        .match-form .field:hover { border-color: #C7D1D6; }
+        .match-form .field:hover { border-color: var(--color-muted); }
         .match-form .field:focus-visible {
           outline: none;
           border-color: var(--teal);
-          box-shadow: 0 0 0 3px rgba(0,194,168,0.14);
+          box-shadow: 0 0 0 3px var(--color-secondary-tint);
         }
 
         .match-form .trip-card {
           border: 1px solid var(--line);
           border-radius: 12px;
           padding: 12px;
-          background: #fbfcfd;
+          background: var(--color-background);
           transition: border-color 0.12s ease, background 0.12s ease;
         }
         .match-form .trip-card.selected {
           border-color: var(--teal);
-          background: rgba(0,194,168,0.06);
+          background: var(--color-secondary-tint);
         }
         .match-form .trip-check {
           display: flex;
@@ -408,12 +461,12 @@ export default function MatchRideForm({
           font-size: 12px;
           font-weight: 600;
           background: var(--ink);
-          color: #ffffff;
+          color: var(--color-on-primary);
         }
         .order-track {
           flex: 1;
           height: 1px;
-          background-image: repeating-linear-gradient(to right, var(--teal) 0 6px, transparent 6px 11px);
+          background-image: repeating-linear-gradient(to right, var(--teal) 0 6px, var(--color-transparent) 6px 11px);
           opacity: 0.6;
         }
         .order-badge.drop { background: var(--amber-deep); }
@@ -423,7 +476,7 @@ export default function MatchRideForm({
           border-radius: 999px;
           padding: 12px 20px;
           background: var(--ink);
-          color: #ffffff;
+          color: var(--color-on-primary);
           font-weight: 700;
           font-size: 14px;
           width: fit-content;
@@ -454,23 +507,68 @@ export default function MatchRideForm({
         }
       `}</style>
 
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 18,
+        }}
+      >
         <div>
-          <h2 className="display" style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "var(--ink)" }}>Create ride from matched trips</h2>
-          <p style={{ margin: "4px 0 0", color: "var(--slate)", fontSize: 14 }}>Pick a driver, availability slot, and one or more trips to turn into a shared or private ride.</p>
+          <h2
+            className="display"
+            style={{
+              margin: 0,
+              fontSize: 20,
+              fontWeight: 700,
+              color: "var(--ink)",
+            }}
+          >
+            Create ride from matched trips
+          </h2>
+          <p style={{ margin: "4px 0 0", color: "var(--slate)", fontSize: 14 }}>
+            Pick a driver, availability slot, and one or more trips to turn into
+            a shared or private ride.
+          </p>
         </div>
         {selectedTripIds.length > 0 && (
-          <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: "var(--teal-deep)", background: "rgba(0,194,168,0.09)", border: "1px solid rgba(0,194,168,0.25)", borderRadius: 999, padding: "6px 12px" }}>
-            {selectedTripIds.length} trip{selectedTripIds.length > 1 ? "s" : ""} · {totalSelectedPassengers} passenger{totalSelectedPassengers !== 1 ? "s" : ""}
+          <span
+            className="mono"
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--teal-deep)",
+              background: "var(--color-secondary-tint)",
+              border: "1px solid var(--color-secondary)",
+              borderRadius: 999,
+              padding: "6px 12px",
+            }}
+          >
+            {selectedTripIds.length} trip{selectedTripIds.length > 1 ? "s" : ""}{" "}
+            · {totalSelectedPassengers} passenger
+            {totalSelectedPassengers !== 1 ? "s" : ""}
           </span>
         )}
       </div>
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 12,
+          }}
+        >
           <label style={{ display: "grid", gap: 6 }}>
             <span className="field-label">Availability</span>
-            <select value={availabilityId} onChange={(e) => setAvailabilityId(e.target.value)} className="field">
+            <select
+              value={availabilityId}
+              onChange={(e) => setAvailabilityId(e.target.value)}
+              className="field"
+            >
               <option value="">Select availability</option>
               {availabilities.map((item) => (
                 <option key={String(item._id)} value={String(item._id)}>
@@ -482,7 +580,11 @@ export default function MatchRideForm({
 
           <label style={{ display: "grid", gap: 6 }}>
             <span className="field-label">Driver</span>
-            <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="field">
+            <select
+              value={driverId}
+              onChange={(e) => setDriverId(e.target.value)}
+              className="field"
+            >
               <option value="">Select driver</option>
               {drivers.map((driver) => (
                 <option key={String(driver._id)} value={String(driver._id)}>
@@ -494,12 +596,21 @@ export default function MatchRideForm({
 
           <label style={{ display: "grid", gap: 6 }}>
             <span className="field-label">Ride date</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field" />
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="field"
+            />
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
             <span className="field-label">Ride type</span>
-            <select value={rideType} onChange={(e) => setRideType(e.target.value)} className="field">
+            <select
+              value={rideType}
+              onChange={(e) => setRideType(e.target.value)}
+              className="field"
+            >
               <option value="shared">Shared</option>
               <option value="private">Private</option>
             </select>
@@ -507,76 +618,188 @@ export default function MatchRideForm({
 
           <label style={{ display: "grid", gap: 6 }}>
             <span className="field-label">Vehicle type</span>
-            <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)} className="field">
+            <select
+              value={vehicleType}
+              onChange={(e) => setVehicleType(e.target.value)}
+              className="field"
+            >
               {VEHICLE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
               ))}
             </select>
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
             <span className="field-label">Start time</span>
-            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="field" />
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="field"
+            />
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
             <span className="field-label">End time</span>
-            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="field" />
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              className="field"
+            />
           </label>
         </div>
 
         <div style={{ display: "grid", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
             <label style={{ display: "grid", gap: 6, minWidth: 220 }}>
               <span className="field-label">Trip date filter</span>
-              <input type="date" value={tripDateFilter} onChange={(e) => setTripDateFilter(e.target.value)} className="field" />
+              <input
+                type="date"
+                value={tripDateFilter}
+                onChange={(e) => setTripDateFilter(e.target.value)}
+                className="field"
+              />
             </label>
-            <span style={{ color: "var(--slate)", fontSize: 13 }}>{filteredTrips.length} trips available</span>
+            <span style={{ color: "var(--slate)", fontSize: 13 }}>
+              {filteredTrips.length} trips available
+            </span>
           </div>
 
-          <div style={{ display: "grid", gap: 10, maxHeight: 320, overflowY: "auto", paddingRight: 4 }}>
+          <div
+            style={{
+              display: "grid",
+              gap: 10,
+              maxHeight: 320,
+              overflowY: "auto",
+              paddingRight: 4,
+            }}
+          >
             {filteredTrips.length === 0 ? (
-              <div style={{ border: "1px dashed #DDE4E7", borderRadius: 12, padding: 16, color: "var(--slate)" }}>No trips are available for this date yet.</div>
+              <div
+                style={{
+                  border: "1px dashed var(--color-border)",
+                  borderRadius: 12,
+                  padding: 16,
+                  color: "var(--slate)",
+                }}
+              >
+                No trips are available for this date yet.
+              </div>
             ) : (
               filteredTrips.map((trip) => {
                 const tripId = String(trip._id);
                 const isSelected = selectedTripIds.includes(tripId);
-                const input = passengerInputs[tripId] ?? { pickupOrder: 1, dropoffOrder: 1, numberOfPassengers: trip.numberOfPassengers ?? 1, priceEgp: trip.priceEgp ?? 0 };
+                const input = passengerInputs[tripId] ?? {
+                  pickupOrder: 1,
+                  dropoffOrder: 1,
+                  numberOfPassengers: trip.numberOfPassengers ?? 1,
+                  priceEgp: trip.priceEgp ?? 0,
+                };
                 return (
-                  <div key={tripId} className={`trip-card${isSelected ? " selected" : ""}`}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                  <div
+                    key={tripId}
+                    className={`trip-card${isSelected ? " selected" : ""}`}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: 10,
+                      }}
+                    >
                       <label className="trip-check">
-                        <input type="checkbox" checked={isSelected} onChange={() => toggleTrip(tripId)} />
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleTrip(tripId)}
+                        />
                         <span>
-                          Trip #{trip.tripNumber ?? "—"} · {trip.pickupTime} → {trip.arrivalTime}
+                          Trip #{trip.tripNumber ?? "—"} · {trip.pickupTime} →{" "}
+                          {trip.arrivalTime}
                         </span>
                       </label>
-                      <span className="mono" style={{ color: "var(--teal-deep)", fontWeight: 700, fontSize: 13 }}>EGP {trip.priceEgp}</span>
+                      <span
+                        className="mono"
+                        style={{
+                          color: "var(--teal-deep)",
+                          fontWeight: 700,
+                          fontSize: 13,
+                        }}
+                      >
+                        EGP {trip.priceEgp}
+                      </span>
                     </div>
 
                     {isSelected && (
                       <>
                         <div className="order-strip">
-                          <span className="order-badge" title="Pickup order">{input.pickupOrder}</span>
+                          <span className="order-badge" title="Pickup order">
+                            {input.pickupOrder}
+                          </span>
                           <span className="order-track" aria-hidden="true" />
-                          <span className="order-badge drop" title="Dropoff order">{input.dropoffOrder}</span>
+                          <span
+                            className="order-badge drop"
+                            title="Dropoff order"
+                          >
+                            {input.dropoffOrder}
+                          </span>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginTop: 10 }}>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(110px, 1fr))",
+                            gap: 10,
+                            marginTop: 10,
+                          }}
+                        >
                           <label style={{ display: "grid", gap: 5 }}>
-                            <span className="field-label" style={{ fontSize: 11 }}>Assign Chair</span>
+                            <span
+                              className="field-label"
+                              style={{ fontSize: 11 }}
+                            >
+                              Assign Chair
+                            </span>
                             <select
                               value={input.seatNumbers?.[0] ?? ""}
                               onChange={(e) => {
                                 const startSeat = Number(e.target.value);
                                 const count = input.numberOfPassengers || 1;
-                                const seats = startSeat ? Array.from({ length: count }, (_, i) => startSeat + i) : [];
-                                updatePassengerInput(tripId, "seatNumbers", seats);
+                                const seats = startSeat
+                                  ? Array.from(
+                                      { length: count },
+                                      (_, i) => startSeat + i,
+                                    )
+                                  : [];
+                                updatePassengerInput(
+                                  tripId,
+                                  "seatNumbers",
+                                  seats,
+                                );
                               }}
                               className="field"
                             >
                               <option value="">Auto Seat</option>
                               {Array.from(
-                                { length: vehicleType.includes("microbus") ? 9 : vehicleType.includes("van") ? 5 : 3 },
+                                {
+                                  length: vehicleType.includes("microbus")
+                                    ? 9
+                                    : vehicleType.includes("van")
+                                      ? 5
+                                      : 3,
+                                },
                                 (_, i) => i + 1,
                               ).map((sNo) => (
                                 <option key={sNo} value={sNo}>
@@ -586,20 +809,88 @@ export default function MatchRideForm({
                             </select>
                           </label>
                           <label style={{ display: "grid", gap: 5 }}>
-                            <span className="field-label" style={{ fontSize: 11 }}>Pickup order</span>
-                            <input type="number" min={1} value={input.pickupOrder} onChange={(e) => updatePassengerInput(tripId, "pickupOrder", e.target.value)} className="field" />
+                            <span
+                              className="field-label"
+                              style={{ fontSize: 11 }}
+                            >
+                              Pickup order
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={input.pickupOrder}
+                              onChange={(e) =>
+                                updatePassengerInput(
+                                  tripId,
+                                  "pickupOrder",
+                                  e.target.value,
+                                )
+                              }
+                              className="field"
+                            />
                           </label>
                           <label style={{ display: "grid", gap: 5 }}>
-                            <span className="field-label" style={{ fontSize: 11 }}>Dropoff order</span>
-                            <input type="number" min={1} value={input.dropoffOrder} onChange={(e) => updatePassengerInput(tripId, "dropoffOrder", e.target.value)} className="field" />
+                            <span
+                              className="field-label"
+                              style={{ fontSize: 11 }}
+                            >
+                              Dropoff order
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={input.dropoffOrder}
+                              onChange={(e) =>
+                                updatePassengerInput(
+                                  tripId,
+                                  "dropoffOrder",
+                                  e.target.value,
+                                )
+                              }
+                              className="field"
+                            />
                           </label>
                           <label style={{ display: "grid", gap: 5 }}>
-                            <span className="field-label" style={{ fontSize: 11 }}>Passengers</span>
-                            <input type="number" min={1} value={input.numberOfPassengers} onChange={(e) => updatePassengerInput(tripId, "numberOfPassengers", e.target.value)} className="field" />
+                            <span
+                              className="field-label"
+                              style={{ fontSize: 11 }}
+                            >
+                              Passengers
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={input.numberOfPassengers}
+                              onChange={(e) =>
+                                updatePassengerInput(
+                                  tripId,
+                                  "numberOfPassengers",
+                                  e.target.value,
+                                )
+                              }
+                              className="field"
+                            />
                           </label>
                           <label style={{ display: "grid", gap: 5 }}>
-                            <span className="field-label" style={{ fontSize: 11 }}>Price</span>
-                            <input type="number" min={0} value={input.priceEgp} onChange={(e) => updatePassengerInput(tripId, "priceEgp", e.target.value)} className="field" />
+                            <span
+                              className="field-label"
+                              style={{ fontSize: 11 }}
+                            >
+                              Price
+                            </span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={input.priceEgp}
+                              onChange={(e) =>
+                                updatePassengerInput(
+                                  tripId,
+                                  "priceEgp",
+                                  e.target.value,
+                                )
+                              }
+                              className="field"
+                            />
                           </label>
                         </div>
                       </>
@@ -612,12 +903,35 @@ export default function MatchRideForm({
         </div>
 
         {orderedPoints.length > 0 && (
-          <div style={{ marginTop: 14, padding: 16, background: "#F8FAFB", border: "1px solid #E6EAEC", borderRadius: 14 }}>
-            <h3 className="display" style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: "#0B1E3D" }}>
+          <div
+            style={{
+              marginTop: 14,
+              padding: 16,
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 14,
+            }}
+          >
+            <h3
+              className="display"
+              style={{
+                margin: "0 0 4px",
+                fontSize: 15,
+                fontWeight: 700,
+                color: "var(--color-primary)",
+              }}
+            >
               Route Points Sequence (First Station → Final Destination)
             </h3>
-            <p style={{ margin: "0 0 12px", fontSize: 13, color: "#5A6A7A" }}>
-              Reorder the sequence of pickup and dropoff points from 1st (Start Station) to Nth (Final Destination).
+            <p
+              style={{
+                margin: "0 0 12px",
+                fontSize: 13,
+                color: "var(--color-muted)",
+              }}
+            >
+              Reorder the sequence of pickup and dropoff points from 1st (Start
+              Station) to Nth (Final Destination).
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {orderedPoints.map((pt, idx) => {
@@ -631,21 +945,32 @@ export default function MatchRideForm({
                       alignItems: "center",
                       justifyContent: "space-between",
                       padding: "10px 14px",
-                      background: "#ffffff",
-                      border: "1px solid #E6EAEC",
+                      background: "var(--color-panel)",
+                      border: "1px solid var(--color-border)",
                       borderRadius: 10,
                       gap: 10,
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        minWidth: 0,
+                      }}
+                    >
                       <span
                         className="mono"
                         style={{
                           minWidth: 26,
                           height: 26,
                           borderRadius: "50%",
-                          background: isFirst ? "#00C2A8" : isLast ? "#0B1E3D" : "#5A6A7A",
-                          color: "#ffffff",
+                          background: isFirst
+                            ? "var(--color-secondary)"
+                            : isLast
+                              ? "var(--color-primary)"
+                              : "var(--color-muted)",
+                          color: "var(--color-on-primary)",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -657,11 +982,32 @@ export default function MatchRideForm({
                         {idx + 1}
                       </span>
                       <div style={{ minWidth: 0 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D", display: "block" }}>
-                          {isFirst ? "1st (Start Station): " : isLast ? `${idx + 1}th (Final Station): ` : `${idx + 1}th Station: `}
-                          {pt.type === "pickup" ? "Pickup" : "Dropoff"} · Trip #{pt.tripNumber ?? "—"}
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "var(--color-primary)",
+                            display: "block",
+                          }}
+                        >
+                          {isFirst
+                            ? "1st (Start Station): "
+                            : isLast
+                              ? `${idx + 1}th (Final Station): `
+                              : `${idx + 1}th Station: `}
+                          {pt.type === "pickup" ? "Pickup" : "Dropoff"} · Trip #
+                          {pt.tripNumber ?? "—"}
                         </span>
-                        <span style={{ fontSize: 12, color: "#5A6A7A", display: "block", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "var(--color-muted)",
+                            display: "block",
+                            textOverflow: "ellipsis",
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           {pt.address}
                         </span>
                       </div>
@@ -675,8 +1021,8 @@ export default function MatchRideForm({
                         style={{
                           padding: "4px 8px",
                           borderRadius: 6,
-                          border: "1px solid #DDE4E7",
-                          background: "#ffffff",
+                          border: "1px solid var(--color-border)",
+                          background: "var(--color-panel)",
                           fontSize: 12,
                           fontWeight: 600,
                           cursor: isFirst ? "default" : "pointer",
@@ -692,8 +1038,8 @@ export default function MatchRideForm({
                         style={{
                           padding: "4px 8px",
                           borderRadius: 6,
-                          border: "1px solid #DDE4E7",
-                          background: "#ffffff",
+                          border: "1px solid var(--color-border)",
+                          background: "var(--color-panel)",
                           fontSize: 12,
                           fontWeight: 600,
                           cursor: isLast ? "default" : "pointer",
@@ -711,7 +1057,22 @@ export default function MatchRideForm({
         )}
 
         {feedback && (
-          <div style={{ padding: "12px 14px", borderRadius: 12, background: feedback.type === "success" ? "rgba(0,194,168,0.12)" : "rgba(232,163,61,0.16)", color: feedback.type === "success" ? "var(--teal-deep)" : "var(--amber-deep)", fontWeight: 600, fontSize: 14 }}>
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 12,
+              background:
+                feedback.type === "success"
+                  ? "var(--color-success-tint)"
+                  : "var(--color-warning-tint)",
+              color:
+                feedback.type === "success"
+                  ? "var(--color-success)"
+                  : "var(--color-warning)",
+              fontWeight: 600,
+              fontSize: 14,
+            }}
+          >
             {feedback.message}
           </div>
         )}

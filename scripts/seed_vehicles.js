@@ -8,7 +8,7 @@ const mongoose = require("mongoose");
 const VEHICLES = {
   private_car: {
     key: "private_car",
-    label: "Private car",
+    label: "Private Car",
     rate: 15,
     ride: "private",
     buffer: 20,

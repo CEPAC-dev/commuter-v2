@@ -9,22 +9,42 @@ export function validateMutationRequest(
 ): NextResponse | null {
   const contentLength = Number(req.headers.get("content-length") ?? 0);
   const maxBytes = options.maxBytes ?? 16_384;
-  if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > maxBytes) {
-    return NextResponse.json({ error: "Request body is too large." }, { status: 413 });
+  if (
+    !Number.isFinite(contentLength) ||
+    contentLength < 0 ||
+    contentLength > maxBytes
+  ) {
+    return NextResponse.json(
+      { error: "Request body is too large." },
+      { status: 413 },
+    );
   }
 
-  const origin = req.headers.get("origin");
-  const configuredOrigin = getConfiguredOrigin();
   const requestOrigin = new URL(req.url).origin;
-  const allowedOrigins = new Set([configuredOrigin, requestOrigin].filter(Boolean));
+  const configuredOrigins = getConfiguredOrigins();
+  const allowedOrigins = new Set([requestOrigin, ...configuredOrigins]);
+  const origin = req.headers.get("origin");
 
-  if (!origin || !allowedOrigins.has(origin)) {
-    return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  if (origin) {
+    if (!allowedOrigins.has(origin) && !isLocalDevelopmentOrigin(origin)) {
+      return NextResponse.json(
+        { error: "Invalid request origin." },
+        { status: 403 },
+      );
+    }
+  } else if (!isLocalDevelopmentOrigin(requestOrigin)) {
+    return NextResponse.json(
+      { error: "Invalid request origin." },
+      { status: 403 },
+    );
   }
 
   if (
     options.requireJson !== false &&
-    !req.headers.get("content-type")?.toLowerCase().startsWith("application/json")
+    !req.headers
+      .get("content-type")
+      ?.toLowerCase()
+      .startsWith("application/json")
   ) {
     return NextResponse.json(
       { error: "Content-Type must be application/json." },
@@ -35,13 +55,32 @@ export function validateMutationRequest(
   return null;
 }
 
-function getConfiguredOrigin(): string | null {
-  const appUrl = process.env.APP_URL;
-  if (!appUrl) return null;
+function getConfiguredOrigins(): string[] {
+  const raw = [
+    process.env.APP_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.NEXT_PUBLIC_API_URL,
+  ].filter((value): value is string => Boolean(value));
+
+  const origins = new Set<string>();
+  for (const value of raw) {
+    try {
+      origins.add(new URL(value).origin);
+    } catch {
+      // Ignore invalid env values; the request will still be checked against the request origin.
+    }
+  }
+
+  return [...origins];
+}
+
+function isLocalDevelopmentOrigin(origin: string | null): boolean {
+  if (!origin) return false;
   try {
-    return new URL(appUrl).origin;
+    const parsed = new URL(origin);
+    return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -51,9 +90,13 @@ export function normalizePlainText(
 ): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.normalize("NFKC").trim();
-  if ((!normalized && !options.allowEmpty) || normalized.length > options.maxLength)
+  if (
+    (!normalized && !options.allowEmpty) ||
+    normalized.length > options.maxLength
+  )
     return null;
-  if (CONTROL_CHARACTERS.test(normalized) || /[<>]/.test(normalized)) return null;
+  if (CONTROL_CHARACTERS.test(normalized) || /[<>]/.test(normalized))
+    return null;
   return normalized;
 }
 

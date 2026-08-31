@@ -1,6 +1,18 @@
 "use client";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
+import {
+  AdminCard,
+  AdminEmptyState,
+  AdminErrorState,
+  AdminLoadingState,
+  AdminPageContainer,
+  AdminPageHeader,
+  AdminPagination,
+  AdminStatusBadge,
+  AdminTable,
+} from "@/components/admin/layout";
+import { AdminTopbarActions } from "@/components/admin/layout/AdminShell";
 
 interface Transaction {
   id: string;
@@ -42,12 +54,6 @@ interface ReportSummary {
   failures: { failedTxCount: number };
   net: { netCollectedEgp: number };
 }
-
-const STATUS_COLORS: Record<string, string> = {
-  completed: "#00877A",
-  pending: "#E8A33D",
-  failed: "#E74C3C",
-};
 
 const TYPES = [
   "topup",
@@ -161,22 +167,13 @@ export default function TransactionsClient({
     label: string,
     value: string,
     sub?: string,
-    color = "#0B1E3D",
+    color = "var(--color-primary)",
   ) => (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid #eef0f3",
-        borderRadius: 12,
-        padding: "14px 16px",
-        flex: 1,
-        minWidth: 160,
-      }}
-    >
+    <AdminCard padding="14px 16px" style={{ flex: 1, minWidth: 160 }}>
       <div
         style={{
           fontSize: 11,
-          color: "#5A6A7A",
+          color: "var(--color-muted)",
           fontWeight: 600,
           letterSpacing: 0.4,
           textTransform: "uppercase",
@@ -196,56 +193,27 @@ export default function TransactionsClient({
         {value}
       </div>
       {sub && (
-        <div style={{ fontSize: 11, color: "#5A6A7A", marginTop: 2 }}>
+        <div style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 2 }}>
           {sub}
         </div>
       )}
-    </div>
+    </AdminCard>
   );
 
   return (
-    <main
-      style={{
-        padding: 24,
-        background: "#F6F8F7",
-        minHeight: "100dvh",
-        fontFamily: "Inter, system-ui, sans-serif",
-      }}
-    >
-      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 20,
-          }}
-        >
-          <div>
-            <Link
-              href="/admin/dashboard"
-              style={{ fontSize: 12, color: "#5A6A7A", textDecoration: "none" }}
-            >
-              ← Dashboard
-            </Link>
-            <h1
-              style={{
-                fontSize: 24,
-                fontWeight: 800,
-                color: "#0B1E3D",
-                margin: "4px 0 0",
-              }}
-            >
-              Transactions
-            </h1>
-          </div>
-          {canExport && (
+    <AdminPageContainer maxWidth={1400}>
+      <AdminPageHeader
+        title="Transactions"
+        description="Review payment activity, settlement status, and transaction history."
+      />
+      {canExport ? (
+        <AdminTopbarActions>
             <a
               href={`/api/admin/transactions/export?${qs}`}
               style={{
                 padding: "10px 16px",
-                background: "#0B1E3D",
-                color: "#fff",
+                background: "var(--color-primary)",
+                color: "var(--color-on-primary)",
                 borderRadius: 10,
                 textDecoration: "none",
                 fontWeight: 700,
@@ -254,8 +222,8 @@ export default function TransactionsClient({
             >
               Export CSV
             </a>
-          )}
-        </div>
+        </AdminTopbarActions>
+      ) : null}
 
         {canReports && report && (
           <div
@@ -270,63 +238,55 @@ export default function TransactionsClient({
               "Total collected",
               `${report.completed.totalCollectedEgp} EGP`,
               `${report.completed.paidPaymentsCount} payments`,
-              "#00877A",
+              "var(--color-secondary-deep)",
             )}
             {kpi(
               "Wallet portion",
               `${report.completed.walletVolumeEgp} EGP`,
               "captured",
-              "#0B1E3D",
+              "var(--color-primary)",
             )}
             {kpi(
               "Kashier portion",
               `${report.completed.kashierVolumeEgp} EGP`,
               "settled",
-              "#0B1E3D",
+              "var(--color-primary)",
             )}
             {kpi(
               "Refunded",
               `${report.refunds.totalRefundedEgp} EGP`,
               `${report.refunds.refundCount} refunds`,
-              "#E74C3C",
+              "var(--color-danger)",
             )}
             {kpi(
               "Net collected",
               `${report.net.netCollectedEgp} EGP`,
               "collected − refunded",
-              "#00877A",
+              "var(--color-secondary-deep)",
             )}
             {kpi(
               "Reserved (inflight)",
               `${report.inflight.reservedEgp} EGP`,
               `${report.inflight.reservationCount} holds — NOT revenue`,
-              "#E8A33D",
+              "var(--color-accent)",
             )}
             {kpi(
               "Pending",
               String(report.inflight.pendingTxCount),
               "unsettled",
-              "#E8A33D",
+              "var(--color-accent)",
             )}
             {kpi(
               "Failed",
               String(report.failures.failedTxCount),
               "",
-              "#E74C3C",
+              "var(--color-danger)",
             )}
           </div>
         )}
 
         {/* Filter bar */}
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #eef0f3",
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 16,
-          }}
-        >
+        <AdminCard padding={16}>
           <div
             style={{
               display: "grid",
@@ -345,7 +305,7 @@ export default function TransactionsClient({
               placeholder="Search id, payment id, kashier ref, user name/email/phone…"
               style={{
                 padding: "10px 12px",
-                border: "1.5px solid #eef0f3",
+                border: "1.5px solid var(--color-border)",
                 borderRadius: 8,
                 fontSize: 13,
               }}
@@ -361,7 +321,7 @@ export default function TransactionsClient({
                 style={{
                   flex: 1,
                   padding: "10px 12px",
-                  border: "1.5px solid #eef0f3",
+                  border: "1.5px solid var(--color-border)",
                   borderRadius: 8,
                   fontSize: 13,
                 }}
@@ -376,7 +336,7 @@ export default function TransactionsClient({
                 style={{
                   flex: 1,
                   padding: "10px 12px",
-                  border: "1.5px solid #eef0f3",
+                  border: "1.5px solid var(--color-border)",
                   borderRadius: 8,
                   fontSize: 13,
                 }}
@@ -392,7 +352,7 @@ export default function TransactionsClient({
                 style={{
                   width: 100,
                   padding: "10px 12px",
-                  border: "1.5px solid #eef0f3",
+                  border: "1.5px solid var(--color-border)",
                   borderRadius: 8,
                   fontSize: 13,
                 }}
@@ -408,7 +368,7 @@ export default function TransactionsClient({
                 style={{
                   width: 100,
                   padding: "10px 12px",
-                  border: "1.5px solid #eef0f3",
+                  border: "1.5px solid var(--color-border)",
                   borderRadius: 8,
                   fontSize: 13,
                 }}
@@ -434,7 +394,7 @@ export default function TransactionsClient({
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
-                  color: "#5A6A7A",
+                  color: "var(--color-muted)",
                   textTransform: "uppercase",
                   marginBottom: 4,
                 }}
@@ -449,7 +409,7 @@ export default function TransactionsClient({
                 }}
                 style={{
                   padding: "6px 10px",
-                  border: "1.5px solid #eef0f3",
+                  border: "1.5px solid var(--color-border)",
                   borderRadius: 8,
                   fontSize: 12,
                 }}
@@ -461,41 +421,15 @@ export default function TransactionsClient({
               </select>
             </div>
           </div>
-        </div>
+        </AdminCard>
 
-        {error && (
-          <div
-            style={{
-              color: "#E74C3C",
-              padding: 12,
-              background: "rgba(231,76,60,0.08)",
-              borderRadius: 8,
-              marginBottom: 12,
-            }}
-          >
-            {error}
-          </div>
-        )}
+        {error ? <AdminErrorState title="Unable to load transactions" description={error} /> : null}
 
         {/* Table */}
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #eef0f3",
-            borderRadius: 12,
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: 13,
-              }}
-            >
+        <AdminCard padding={0}>
+          <AdminTable ariaLabel="Transactions">
               <thead>
-                <tr style={{ background: "#f8f9fa", textAlign: "left" }}>
+                <tr style={{ background: "var(--color-surface)", textAlign: "left" }}>
                   <Th>Date</Th>
                   <Th>Type</Th>
                   <Th>Status</Th>
@@ -514,10 +448,10 @@ export default function TransactionsClient({
                       style={{
                         padding: 24,
                         textAlign: "center",
-                        color: "#5A6A7A",
+                        color: "var(--color-muted)",
                       }}
                     >
-                      Loading…
+                      <AdminLoadingState title="Loading transactions..." />
                     </td>
                   </tr>
                 )}
@@ -528,16 +462,16 @@ export default function TransactionsClient({
                       style={{
                         padding: 24,
                         textAlign: "center",
-                        color: "#5A6A7A",
+                        color: "var(--color-muted)",
                       }}
                     >
-                      No transactions
+                      <AdminEmptyState title="No transactions" description="No transactions match the current filters." />
                     </td>
                   </tr>
                 )}
                 {!loading &&
                   rows.map((tx) => (
-                    <tr key={tx.id} style={{ borderTop: "1px solid #eef0f3" }}>
+                    <tr key={tx.id} style={{ borderTop: "1px solid var(--color-border)" }}>
                       <Td>{new Date(tx.createdAt).toLocaleString()}</Td>
                       <Td>
                         <code style={{ fontSize: 11 }}>{tx.type}</code>
@@ -555,13 +489,13 @@ export default function TransactionsClient({
                       </Td>
                       <Td>
                         {tx.userName ?? "—"}
-                        <div style={{ fontSize: 11, color: "#5A6A7A" }}>
+                        <div style={{ fontSize: 11, color: "var(--color-muted)" }}>
                           {tx.userEmail ?? tx.userPhone ?? tx.userId}
                         </div>
                       </Td>
                       <Td>
                         {tx.payment ? (
-                          <span style={{ fontSize: 11, color: "#5A6A7A" }}>
+                          <span style={{ fontSize: 11, color: "var(--color-muted)" }}>
                             W {tx.payment.walletAmountEgp} + K{" "}
                             {tx.payment.gatewayAmountEgp} ={" "}
                             {tx.payment.totalEgp}
@@ -584,7 +518,7 @@ export default function TransactionsClient({
                         <Link
                           href={`/admin/transactions/${tx.id}`}
                           style={{
-                            color: "#00C2A8",
+                            color: "var(--color-secondary)",
                             fontWeight: 700,
                             textDecoration: "none",
                           }}
@@ -595,8 +529,7 @@ export default function TransactionsClient({
                     </tr>
                   ))}
               </tbody>
-            </table>
-          </div>
+          </AdminTable>
 
           <div
             style={{
@@ -604,34 +537,18 @@ export default function TransactionsClient({
               justifyContent: "space-between",
               alignItems: "center",
               padding: "12px 16px",
-              borderTop: "1px solid #eef0f3",
+              borderTop: "1px solid var(--color-border)",
               fontSize: 12,
-              color: "#5A6A7A",
+              color: "var(--color-muted)",
             }}
           >
             <span>
               {total} transactions · page {page} of {pages}
             </span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-                style={pageBtn(page <= 1)}
-              >
-                Prev
-              </button>
-              <button
-                disabled={page >= pages}
-                onClick={() => setPage(page + 1)}
-                style={pageBtn(page >= pages)}
-              >
-                Next
-              </button>
-            </div>
+            <AdminPagination page={page} totalPages={pages} onPageChange={setPage} />
           </div>
-        </div>
-      </div>
-    </main>
+        </AdminCard>
+    </AdminPageContainer>
   );
 }
 
@@ -642,7 +559,7 @@ function Th({ children }: { children: React.ReactNode }) {
         padding: "10px 12px",
         fontSize: 11,
         fontWeight: 700,
-        color: "#5A6A7A",
+        color: "var(--color-muted)",
         textTransform: "uppercase",
         letterSpacing: 0.4,
       }}
@@ -659,27 +576,13 @@ function Td({
   style?: React.CSSProperties;
 }) {
   return (
-    <td style={{ padding: "10px 12px", color: "#0B1E3D", ...style }}>
+    <td style={{ padding: "10px 12px", color: "var(--color-primary)", ...style }}>
       {children}
     </td>
   );
 }
 function StatusPill({ status }: { status: string }) {
-  const color = STATUS_COLORS[status] ?? "#5A6A7A";
-  return (
-    <span
-      style={{
-        background: `${color}22`,
-        color,
-        padding: "2px 8px",
-        borderRadius: 999,
-        fontSize: 11,
-        fontWeight: 700,
-      }}
-    >
-      {status}
-    </span>
-  );
+  return <AdminStatusBadge status={status} />;
 }
 function FilterGroup({
   label,
@@ -698,7 +601,7 @@ function FilterGroup({
         style={{
           fontSize: 11,
           fontWeight: 700,
-          color: "#5A6A7A",
+          color: "var(--color-muted)",
           textTransform: "uppercase",
           marginBottom: 4,
         }}
@@ -712,9 +615,9 @@ function FilterGroup({
             onClick={() => onToggle(it)}
             style={{
               padding: "4px 8px",
-              background: selected.includes(it) ? "#0B1E3D" : "#fff",
-              color: selected.includes(it) ? "#fff" : "#5A6A7A",
-              border: "1.5px solid #eef0f3",
+              background: selected.includes(it) ? "var(--color-primary)" : "var(--color-panel)",
+              color: selected.includes(it) ? "var(--color-on-primary)" : "var(--color-muted)",
+              border: "1.5px solid var(--color-border)",
               borderRadius: 999,
               fontSize: 11,
               fontWeight: 600,
@@ -727,16 +630,4 @@ function FilterGroup({
       </div>
     </div>
   );
-}
-function pageBtn(disabled: boolean): React.CSSProperties {
-  return {
-    padding: "6px 12px",
-    background: disabled ? "#eef0f3" : "#0B1E3D",
-    color: disabled ? "#9aa8b5" : "#fff",
-    border: "none",
-    borderRadius: 8,
-    fontSize: 12,
-    fontWeight: 700,
-    cursor: disabled ? "not-allowed" : "pointer",
-  };
 }

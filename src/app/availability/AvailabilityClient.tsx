@@ -52,7 +52,7 @@ function to12h(hhmm: string): string {
 }
 // Removal locks at 5:00 PM the day before the availability date.
 function isLocked(dateISO: string): boolean {
-  const cutoff = new Date(`${dateISO}T20:00:00`);
+  const cutoff = new Date(`${dateISO}T17:00:00`);
   cutoff.setDate(cutoff.getDate() - 1);
   return new Date() >= cutoff;
 }

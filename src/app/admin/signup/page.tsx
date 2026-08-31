@@ -55,16 +55,16 @@ export default function AdminSignupPage() {
     gap: 10,
     padding: "0 14px",
     height: 52,
-    background: "#f8f9fa",
+    background: "var(--color-background)",
     borderRadius: 12,
-    border: "1.5px solid #e8edf0",
+    border: "1.5px solid var(--color-border)",
   };
 
   return (
-    <div style={{ minHeight: "100dvh", background: "linear-gradient(140deg, #0B1E3D 0%, #1C3557 100%)", padding: "24px 16px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ width: "100%", maxWidth: 480, background: "#ffffff", borderRadius: 24, padding: "32px 28px", boxShadow: "0 24px 80px rgba(0,0,0,0.3)", position: "relative" }}>
+    <div style={{ minHeight: "100dvh", background: "var(--color-primary)", padding: "24px 16px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: "100%", maxWidth: 480, background: "var(--color-panel)", borderRadius: 24, padding: "32px 28px", boxShadow: "0 24px 80px var(--color-shadow-strong)", position: "relative" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-          <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#5A6A7A", textDecoration: "none", fontSize: 14 }}>
+          <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--color-muted)", textDecoration: "none", fontSize: 14 }}>
             <ArrowLeft size={16} /> {t("auth.back_to_home")}
           </Link>
           
@@ -75,12 +75,12 @@ export default function AdminSignupPage() {
             style={{
               padding: "6px 12px",
               borderRadius: 8,
-              border: "1px solid #e8edf0",
+              border: "1px solid var(--color-border)",
               fontSize: 12,
               fontWeight: 600,
               cursor: "pointer",
-              background: "transparent",
-              color: "#0B1E3D",
+              background: "var(--color-transparent)",
+              color: "var(--color-primary)",
               transition: "border-color 0.15s, color 0.15s, background-color 0.15s",
               opacity: isPending ? 0.5 : 1,
               fontFamily: "inherit",
@@ -89,14 +89,14 @@ export default function AdminSignupPage() {
               gap: 4,
             }}
             onMouseEnter={(e) => {
-              (e.target as HTMLButtonElement).style.borderColor = "#00C2A8";
-              (e.target as HTMLButtonElement).style.color = "#00C2A8";
-              (e.target as HTMLButtonElement).style.background = "rgba(0,194,168,0.05)";
+              (e.target as HTMLButtonElement).style.borderColor = "var(--color-secondary)";
+              (e.target as HTMLButtonElement).style.color = "var(--color-secondary)";
+              (e.target as HTMLButtonElement).style.background = "var(--color-secondary-tint)";
             }}
             onMouseLeave={(e) => {
-              (e.target as HTMLButtonElement).style.borderColor = "#e8edf0";
-              (e.target as HTMLButtonElement).style.color = "#0B1E3D";
-              (e.target as HTMLButtonElement).style.background = "transparent";
+              (e.target as HTMLButtonElement).style.borderColor = "var(--color-border)";
+              (e.target as HTMLButtonElement).style.color = "var(--color-primary)";
+              (e.target as HTMLButtonElement).style.background = "var(--color-transparent)";
             }}
             aria-label={locale === "en" ? "Switch to Arabic" : "Switch to English"}
           >
@@ -105,53 +105,53 @@ export default function AdminSignupPage() {
           </button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(0,194,168,0.14)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <ShieldCheck size={24} style={{ color: "#00C2A8" }} />
+          <div style={{ width: 48, height: 48, borderRadius: 14, background: "var(--color-secondary-tint)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <ShieldCheck size={24} style={{ color: "var(--color-secondary)" }} />
           </div>
           <div>
-            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#00C2A8" }}>{t("auth.admin.access")}</p>
-            <h1 style={{ margin: "4px 0 0", fontSize: 28, fontWeight: 800, color: "#0B1E3D" }}>{t("auth.admin.title")}</h1>
+            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--color-secondary)" }}>{t("auth.admin.access")}</p>
+            <h1 style={{ margin: "4px 0 0", fontSize: 28, fontWeight: 800, color: "var(--color-primary)" }}>{t("auth.admin.title")}</h1>
           </div>
         </div>
-        <p style={{ margin: "0 0 24px", color: "#5A6A7A", lineHeight: 1.7 }}>{t("auth.admin.description")}</p>
+        <p style={{ margin: "0 0 24px", color: "var(--color-muted)", lineHeight: 1.7 }}>{t("auth.admin.description")}</p>
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D", display: "block", marginBottom: 6 }}>{t("auth.admin.full_name")}</label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>{t("auth.admin.full_name")}</label>
             <div style={fieldStyle}>
-              <User size={17} style={{ color: "#5A6A7A" }} />
-              <input value={name} onChange={(e) => setName(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "#0B1E3D" }} />
+              <User size={17} style={{ color: "var(--color-muted)" }} />
+              <input value={name} onChange={(e) => setName(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D", display: "block", marginBottom: 6 }}>{t("auth.admin.email")}</label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>{t("auth.admin.email")}</label>
             <div style={fieldStyle}>
-              <Mail size={17} style={{ color: "#5A6A7A" }} />
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "#0B1E3D" }} />
+              <Mail size={17} style={{ color: "var(--color-muted)" }} />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D", display: "block", marginBottom: 6 }}>{t("auth.admin.phone")}</label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>{t("auth.admin.phone")}</label>
             <div style={fieldStyle}>
-              <Phone size={17} style={{ color: "#5A6A7A" }} />
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "#0B1E3D" }} />
+              <Phone size={17} style={{ color: "var(--color-muted)" }} />
+              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D", display: "block", marginBottom: 6 }}>{t("auth.admin.password")}</label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>{t("auth.admin.password")}</label>
             <div style={fieldStyle}>
-              <Lock size={17} style={{ color: "#5A6A7A" }} />
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "#0B1E3D" }} />
+              <Lock size={17} style={{ color: "var(--color-muted)" }} />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D", display: "block", marginBottom: 6 }}>{t("auth.admin.invite_code")}</label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>{t("auth.admin.invite_code")}</label>
             <div style={fieldStyle}>
-              <KeyRound size={17} style={{ color: "#5A6A7A" }} />
-              <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "#0B1E3D" }} />
+              <KeyRound size={17} style={{ color: "var(--color-muted)" }} />
+              <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
             </div>
           </div>
-          {error ? <p role="alert" style={{ margin: 0, padding: "10px 12px", borderRadius: 10, background: "rgba(231,76,60,0.08)", color: "#e74c3c", border: "1px solid rgba(231,76,60,0.2)" }}>{error}</p> : null}
-          <button type="submit" disabled={loading} style={{ height: 52, borderRadius: 12, background: loading ? "#5A6A7A" : "#0B1E3D", color: "#ffffff", fontWeight: 700, fontSize: 15, border: "none", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          {error ? <p role="alert" style={{ margin: 0, padding: "10px 12px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)" }}>{error}</p> : null}
+          <button type="submit" disabled={loading} style={{ height: 52, borderRadius: 12, background: loading ? "var(--color-disabled)" : "var(--color-primary)", color: "var(--color-on-primary)", fontWeight: 700, fontSize: 15, border: "none", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {loading ? <><Loader2 size={18} className="spin" /> {t("auth.admin.creating_account")}</> : t("auth.admin.create_account")}
           </button>
         </form>

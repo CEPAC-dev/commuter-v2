@@ -1,20 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateMutationRequest } from "@/lib/security/request";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Driver } from "@/models/Driver";
+import { WithdrawalRequest } from "@/models/WithdrawalRequest";
 import { MIN_WITHDRAWAL_EGP, MAX_WITHDRAWAL_EGP } from "@/lib/config/earnings";
-import {
-  initiateKashierPayout,
-  maskDestination,
-} from "@/lib/payments/kashierPayout";
-import {
-  getOrCreateWallet,
-  reserveWithdrawal,
-  completeWithdrawal,
-  refundWithdrawal,
-} from "@/lib/wallet/wallet";
-import { WalletTransaction } from "@/models/WalletTransaction";
-import { validateMutationRequest } from "@/lib/security/request";
+import { maskDestination } from "@/lib/payments/kashierPayout";
+import { createWithdrawalRequest } from "@/lib/wallet/wallet";
+
+export async function GET() {
+  const session = await getSession();
+  if (!session || session.role !== "driver") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  await connectDB();
+  const requests = await WithdrawalRequest.find({ driverId: session.userId })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean();
+
+  return NextResponse.json({
+    requests: requests.map((r: any) => ({
+      id: String(r._id),
+      amountEgp: r.amountEgp,
+      status: r.status,
+      payoutMethod: r.payoutMethod,
+      payoutDestination: r.payoutDestination,
+      rejectionReason: r.rejectionReason ?? null,
+      requestedAt: r.requestedAt ? new Date(r.requestedAt).toISOString() : String(r.createdAt),
+      resolvedAt: r.resolvedAt ? new Date(r.resolvedAt).toISOString() : null,
+    })),
+  });
+}
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -93,14 +111,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const wallet = await getOrCreateWallet(session.userId);
-  if (wallet.balanceEgp < amount) {
-    return NextResponse.json(
-      { error: "Insufficient balance." },
-      { status: 400 },
-    );
-  }
-
   const recipient =
     driver.payoutMethod === "mobile_wallet"
       ? {
@@ -116,55 +126,25 @@ export async function POST(req: NextRequest) {
 
   const destination = maskDestination(recipient);
 
-  const reserved = await reserveWithdrawal(session.userId, amount, {
-    description: `Withdrawal to ${destination}`,
-    payoutMethod: driver.payoutMethod,
-    payoutDestination: destination,
-  });
+  try {
+    const { request, wallet } = await createWithdrawalRequest(
+      session.userId,
+      amount,
+      driver.payoutMethod,
+      destination,
+    );
 
-  if (!reserved) {
+    return NextResponse.json({
+      status: "pending",
+      requestId: String(request._id),
+      pendingWithdrawalAmount: wallet.pendingWithdrawalAmount,
+      balanceEgp: wallet.balanceEgp,
+      message: "Withdrawal request submitted successfully and is awaiting admin approval.",
+    });
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Insufficient balance." },
+      { error: err.message || "Failed to submit withdrawal request." },
       { status: 400 },
     );
   }
-
-  const payout = await initiateKashierPayout(
-    reserved.transactionId,
-    amount,
-    recipient,
-  );
-
-  if (payout.status === "completed") {
-    await completeWithdrawal(reserved.transactionId, payout.payoutId);
-    await WalletTransaction.findByIdAndUpdate(reserved.transactionId, {
-      kashierOrderId: reserved.transactionId,
-      kashierPayoutId: payout.payoutId,
-    });
-    return NextResponse.json({
-      status: "completed",
-      balanceEgp: reserved.balanceAfterEgp,
-      message: "Withdrawal sent successfully.",
-    });
-  }
-
-  if (payout.status === "pending") {
-    await WalletTransaction.findByIdAndUpdate(reserved.transactionId, {
-      kashierOrderId: reserved.transactionId,
-      kashierPayoutId: payout.payoutId,
-    });
-    return NextResponse.json({
-      status: "pending",
-      balanceEgp: reserved.balanceAfterEgp,
-      message: "Withdrawal is being processed.",
-    });
-  }
-
-  await refundWithdrawal(reserved.transactionId);
-  return NextResponse.json(
-    {
-      error: payout.message ?? "Withdrawal failed. Funds returned to wallet.",
-    },
-    { status: 502 },
-  );
 }
