@@ -698,6 +698,11 @@ export const en = {
   "referral.title_invite": "Invite {count} of your friends",
   "referral.title_unlimited": "Invite ∞ of your friends",
   "referral.title_finished": "Referral limit reached",
+  "referral.paused_title": "Referrals are currently paused",
+  "referral.paused_description":
+    "Referral rewards are temporarily unavailable.",
+  "referral.paused_status":
+    "Sharing will return when referrals are active again.",
   "referral.description":
     "Earn {amount} EGP when a friend signs up with your code.",
   "referral.copy_link": "Copy link",

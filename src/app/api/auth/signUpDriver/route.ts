@@ -5,7 +5,7 @@ import { User } from "@/models/User";
 import { nextSequence } from "@/models/Counter";
 import { Driver } from "@/models/Driver";
 import { createSession } from "@/lib/auth/session";
-import { generateReferralCode } from "@/lib/referral";
+import { applyReferralOnSignup, generateReferralCode } from "@/lib/referral";
 import {
   isStrongPassword,
   normalizeEgyptPhone,
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
   if (invalidRequest) return invalidRequest;
   try {
-    const { name, phone, password, email, gender } = await req.json();
+    const { name, phone, password, email, gender, referralCodeUsed } = await req.json();
     const safeName = normalizePlainText(name, { maxLength: 100 });
 
     if (!safeName || typeof phone !== "string" || !phone.trim() || !password)
@@ -119,6 +119,19 @@ export async function POST(req: NextRequest) {
       verificationStatus: "incomplete",
     });
 
+    let referralWarning: string | undefined;
+    const safeReferralCode = normalizePlainText(referralCodeUsed, {
+      maxLength: 32,
+      allowEmpty: true,
+    });
+    if (safeReferralCode) {
+      const referralResult = await applyReferralOnSignup(
+        safeReferralCode.toUpperCase(),
+        user._id,
+      );
+      if (!referralResult.success) referralWarning = referralResult.message;
+    }
+
     console.log("Phase 2: Driver data created successfully.");
 
     await createSession({
@@ -128,7 +141,12 @@ export async function POST(req: NextRequest) {
     });
     console.log("Phase 3: Session created successfully.");
     return NextResponse.json(
-      { ok: true, role: "driver", verificationStatus: "incomplete" },
+      {
+        ok: true,
+        role: "driver",
+        verificationStatus: "incomplete",
+        ...(referralWarning ? { referralWarning } : {}),
+      },
       { status: 201 },
     );
   } catch (err) {

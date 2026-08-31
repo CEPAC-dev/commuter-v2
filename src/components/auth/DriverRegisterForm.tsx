@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, TicketPercent } from "lucide-react";
 import PasswordInput from "@/components/shared/PasswordInput";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
 import {
@@ -47,6 +47,7 @@ interface Props {
   setEmail: (v: string) => void;
   gender: "male" | "female" | "";
   setGender: (v: "male" | "female" | "") => void;
+  referralCode: string;
   onSuccess: () => void;
 }
 
@@ -63,6 +64,7 @@ export default function DriverRegisterForm({
   setEmail,
   gender,
   setGender,
+  referralCode,
   onSuccess,
 }: Props) {
   const { t } = useClientLocale();
@@ -100,6 +102,7 @@ export default function DriverRegisterForm({
           password,
           email,
           gender,
+          referralCodeUsed: referralCode || undefined,
         }),
       });
       const data = await res.json();
@@ -252,6 +255,28 @@ export default function DriverRegisterForm({
             style={inputStyle}
           />
         </div>
+        {referralCode ? (
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <label htmlFor="d-referral-code" style={{ ...labelStyle, marginBottom: 0 }}>
+                {t("auth.referral_code")}
+              </label>
+              <span style={{ background: "rgba(0,194,168,0.12)", color: "#00877A", padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
+                Applied from link
+              </span>
+            </div>
+            <div style={{ position: "relative" }}>
+              <TicketPercent size={17} aria-hidden="true" style={{ position: "absolute", left: 14, top: 18, color: "#00877A" }} />
+              <input
+                id="d-referral-code"
+                type="text"
+                readOnly
+                value={referralCode}
+                style={{ ...inputStyle, paddingLeft: 42, background: "#f1fcf9", borderColor: "#00C2A8", color: "#00877A", fontWeight: 700 }}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {error && (

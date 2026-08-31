@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Gauge,
   Palette,
+  Gift,
   type LucideIcon,
 } from "lucide-react";
 import { AdminCard, AdminEmptyState, AdminStatusBadge } from "@/components/admin/layout";
@@ -62,6 +63,8 @@ type UserRow = {
   email?: string;
   role?: string;
   createdAt?: string;
+  referralCode?: string;
+  referralUsageCount?: number;
   driver?: DriverProfile;
 };
 
@@ -362,6 +365,9 @@ export default function UserManagementClient({
                         #{user.userNumber ?? "—"} · {user.phone || "—"} ·{" "}
                         {user.email || "—"}
                       </div>
+                      <div className="mt-1 truncate font-mono text-xs text-[var(--color-muted)]">
+                        {user.referralCode || "No referral code"} · Used by {user.referralUsageCount ?? 0}
+                      </div>
                     </div>
                   </div>
 
@@ -400,6 +406,16 @@ export default function UserManagementClient({
                               ? new Date(user.createdAt).toLocaleDateString()
                               : "—"
                           }
+                        />
+                        <InfoRow
+                          icon={Gift}
+                          label="Referral code"
+                          value={user.referralCode || "—"}
+                        />
+                        <InfoRow
+                          icon={Users}
+                          label="Referral uses"
+                          value={user.referralUsageCount ?? 0}
                         />
                       </InfoCard>
 

@@ -10,6 +10,7 @@ interface ReferralData {
   balanceEgp: number;
   referrerBonusAmount: number;
   maxUsersPerCode: number;
+  isActive: boolean;
   referralUnlimited: boolean;
   stats: {
     total: number;
@@ -74,6 +75,8 @@ export default function ReferralCard() {
 
   const cardTitle = !data
     ? t("referral.title")
+    : !data.isActive
+      ? t("referral.paused_title")
     : data.referralUnlimited
       ? t("referral.title_unlimited")
       : (remaining ?? 0) <= 0
@@ -109,10 +112,12 @@ export default function ReferralCard() {
             {cardTitle}
           </h2>
           <p style={{ margin: "3px 0 0", fontSize: 13, color: "#5A6A7A" }}>
-            {t("referral.description").replace(
-              "{amount}",
-              String(data?.referrerBonusAmount ?? 0),
-            )}
+            {data && !data.isActive
+              ? t("referral.paused_description")
+              : t("referral.description").replace(
+                  "{amount}",
+                  String(data?.referrerBonusAmount ?? 0),
+                )}
           </p>
         </div>
       </div>
@@ -123,7 +128,26 @@ export default function ReferralCard() {
         </div>
       ) : null}
       {error ? <p role="alert" style={{ margin: 0, color: "#e74c3c", fontSize: 13 }}>{error}</p> : null}
-      {data ? (
+      {data && !data.isActive ? (
+        <div
+          role="status"
+          style={{
+            minHeight: 52,
+            display: "flex",
+            alignItems: "center",
+            padding: "0 14px",
+            background: "#f8f9fa",
+            border: "1px solid #e8edf0",
+            borderRadius: 10,
+            color: "#5A6A7A",
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          {t("referral.paused_status")}
+        </div>
+      ) : null}
+      {data?.isActive ? (
         <>
           <div
             dir="ltr"

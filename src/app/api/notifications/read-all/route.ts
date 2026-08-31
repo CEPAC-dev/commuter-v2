@@ -17,3 +17,5 @@ export async function POST() {
 
   return NextResponse.json({ ok: true, updatedCount: result.modifiedCount });
 }
+
+export const PATCH = POST;

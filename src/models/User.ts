@@ -68,6 +68,7 @@ const UserSchema = new Schema(
     referralCode: { type: String, unique: true, sparse: true, index: true },
     referredBy: { type: Types.ObjectId, ref: "User", default: null },
     referralUnlimited: { type: Boolean, default: false },
+    referralLockVersion: { type: Number, default: 0, select: false },
   },
   { timestamps: true }, // createdAt, updatedAt
 );
@@ -90,7 +91,14 @@ if (existingUserModel) {
     });
   }
   if (!existingUserModel.schema.path("phoneVerifiedAt")) {
-    existingUserModel.schema.add({ phoneVerifiedAt: { type: Date, default: null } });
+    existingUserModel.schema.add({
+      phoneVerifiedAt: { type: Date, default: null },
+    });
+  }
+  if (!existingUserModel.schema.path("referralLockVersion")) {
+    existingUserModel.schema.add({
+      referralLockVersion: { type: Number, default: 0, select: false },
+    });
   }
 }
 

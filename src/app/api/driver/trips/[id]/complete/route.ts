@@ -60,14 +60,6 @@ export async function POST(
     data: { tripId },
   });
 
-  await createNotification({
-    userId: String(trip.userId),
-    type: "trip_completed",
-    title: "Trip completed",
-    body: "Your trip has been completed. Thanks for riding with Commuter.",
-    data: { tripId },
-  });
-
   await creditReferralBonusIfEligible(String(trip.userId), tripId);
   const balance = await settleTripEarning(tripId);
 

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
+import { ReferralUsage } from "@/models/ReferralUsage";
 import { connectDB } from "@/lib/db/mongoose";
 import UserManagementClient from "@/components/admin/UserManagementClient";
 import { AdminPageContainer, AdminPageHeader } from "@/components/admin/layout";
@@ -27,9 +28,17 @@ export default async function AdminUsersPage() {
   if (session.role !== "admin") redirect("/admin/signup");
 
   await connectDB();
-  const users = await User.find().sort({ createdAt: -1 }).select("-passwordHash").lean();
-  const driverProfiles = await Driver.find({}).lean();
+  const [users, driverProfiles, referralUsageCounts] = await Promise.all([
+    User.find().sort({ createdAt: -1 }).select("-passwordHash").lean(),
+    Driver.find({}).lean(),
+    ReferralUsage.aggregate<{ _id: unknown; count: number }>([
+      { $group: { _id: "$referrer", count: { $sum: 1 } } },
+    ]),
+  ]);
   const driverMap = new Map(driverProfiles.map((driver) => [String(driver.userId), driver]));
+  const referralUsageMap = new Map(
+    referralUsageCounts.map((item) => [String(item._id), item.count]),
+  );
 
   const rows = users.map((user) => {
     const plainUser = toPlainValue(user) as Record<string, unknown> & { _id?: unknown };
@@ -41,6 +50,8 @@ export default async function AdminUsersPage() {
       _id: String(plainUser._id),
       userNumber: typeof plainUser.userNumber === "number" ? plainUser.userNumber : undefined,
       role: typeof plainUser.role === "string" ? plainUser.role : "passenger",
+      referralCode: typeof plainUser.referralCode === "string" ? plainUser.referralCode : undefined,
+      referralUsageCount: referralUsageMap.get(String(plainUser._id)) ?? 0,
       driver: plainDriver
         ? {
           _id: String(plainDriver._id),
