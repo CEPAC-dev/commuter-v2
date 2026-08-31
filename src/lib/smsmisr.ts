@@ -40,7 +40,12 @@ function getOtpCredentials() {
     );
   }
 
-  return { username, password, sender, template };
+  return {
+    username,
+    password,
+    sender: sender as string,
+    template: template as string,
+  };
 }
 
 async function parseResponse(response: Response): Promise<SmsMisrResponse> {
