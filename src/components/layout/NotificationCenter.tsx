@@ -13,9 +13,11 @@ import {
 } from "@/lib/api/notifications";
 import { useClientLocale } from "@/lib/i18n/client";
 
-const POLL_INTERVAL_MS = 10_000;
+const POLL_INTERVAL_MS = 30_000;
 
 function notificationHref(notification: NotificationItem): string {
+  if (notification.type === "referral_bonus") return "/wallet";
+
   const bookingId = notification.data.bookingId;
   if (typeof bookingId === "string") return `/my-requests/${bookingId}`;
 

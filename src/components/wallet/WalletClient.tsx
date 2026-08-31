@@ -18,7 +18,7 @@ import { toArabicDigits } from "@/lib/i18n";
 
 interface Tx {
   id: string;
-  type: "topup" | "payment" | "refund" | "earning" | "withdrawal";
+  type: "topup" | "payment" | "refund" | "earning" | "referral_bonus" | "withdrawal";
   amountEgp: number;
   status: "pending" | "completed" | "failed";
   description: string;
@@ -939,9 +939,14 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {data.transactions.map((transaction) => {
             const isCredit =
-              transaction.type === "topup" || transaction.type === "refund" || transaction.type === "earning";
+              transaction.type === "topup" ||
+              transaction.type === "refund" ||
+              transaction.type === "earning" ||
+              transaction.type === "referral_bonus";
             const Icon =
-              transaction.type === "topup" || transaction.type === "earning"
+              transaction.type === "topup" ||
+              transaction.type === "earning" ||
+              transaction.type === "referral_bonus"
                 ? ArrowDownLeft
                 : transaction.type === "refund"
                   ? RotateCcw
