@@ -108,8 +108,8 @@ interface Props {
   canRemove: boolean;
   onChange: (updated: TripData) => void;
   onRemove: () => void;
-  picking?: "pickup" | "dropoff" | null;
-  onPickFromMap?: (field: "pickup" | "dropoff") => void;
+  picking?: { field: "pickup" | "dropoff" | "stop"; stopId?: string } | null;
+  onPickFromMap?: (field: "pickup" | "dropoff" | "stop", stopId?: string) => void;
   sourceTripData?: TripData | null; // trips[0] for return-trip toggle
   savedAddresses?: SavedAddress[];
   stations?: Station[];
@@ -1397,10 +1397,10 @@ export default function TripCycle({
                   <button
                     type="button"
                     onClick={() => onPickFromMap("pickup")}
-                    style={pickBtnStyle(picking === "pickup")}
+                    style={pickBtnStyle(picking?.field === "pickup")}
                   >
                     <MapPin size={13} aria-hidden="true" />
-                    {picking === "pickup"
+                    {picking?.field === "pickup"
                       ? t("create.click_map")
                       : t("create.pick_from_map")}
                   </button>
@@ -1482,10 +1482,10 @@ export default function TripCycle({
                   <button
                     type="button"
                     onClick={() => onPickFromMap("dropoff")}
-                    style={pickBtnStyle(picking === "dropoff")}
+                    style={pickBtnStyle(picking?.field === "dropoff")}
                   >
                     <MapPin size={13} aria-hidden="true" />
-                    {picking === "dropoff"
+                    {picking?.field === "dropoff"
                       ? t("create.click_map")
                       : t("create.pick_from_map")}
                   </button>
@@ -2061,10 +2061,10 @@ export default function TripCycle({
                   <button
                     type="button"
                     onClick={() => onPickFromMap("pickup")}
-                    style={pickBtnStyle(picking === "pickup")}
+                    style={pickBtnStyle(picking?.field === "pickup")}
                   >
                     <MapPin size={13} aria-hidden="true" />
-                    {picking === "pickup"
+                    {picking?.field === "pickup"
                       ? t("create.click_map")
                       : t("create.pick_from_map")}
                   </button>
@@ -2142,6 +2142,20 @@ export default function TripCycle({
                       iconColor="#00C2A8"
                       savedAddresses={savedAddresses}
                     />
+                    {onPickFromMap && (
+                      <button
+                        type="button"
+                        onClick={() => onPickFromMap("stop", stop.id)}
+                        style={pickBtnStyle(
+                          picking?.field === "stop" && picking.stopId === stop.id,
+                        )}
+                      >
+                        <MapPin size={13} aria-hidden="true" />
+                        {picking?.field === "stop" && picking.stopId === stop.id
+                          ? t("create.click_map")
+                          : t("create.pick_from_map")}
+                      </button>
+                    )}
                     <div
                       style={{
                         display: "grid",
@@ -2239,10 +2253,10 @@ export default function TripCycle({
                   <button
                     type="button"
                     onClick={() => onPickFromMap("dropoff")}
-                    style={pickBtnStyle(picking === "dropoff")}
+                    style={pickBtnStyle(picking?.field === "dropoff")}
                   >
                     <MapPin size={13} aria-hidden="true" />
-                    {picking === "dropoff"
+                    {picking?.field === "dropoff"
                       ? t("create.click_map")
                       : t("create.pick_from_map")}
                   </button>

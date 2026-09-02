@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { AdminButton } from "@/components/admin/layout";
 
 export default function AdminLogoutButton() {
   const router = useRouter();
@@ -21,26 +22,15 @@ export default function AdminLogoutButton() {
   }
 
   return (
-    <button
+    <AdminButton
       type="button"
+      variant="destructive"
       onClick={handleLogout}
       disabled={isLoggingOut}
       aria-label="Log out"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "12px 16px",
-        borderRadius: 12,
-        background: "var(--color-danger)",
-        color: "var(--color-on-primary)",
-        border: "none",
-        fontWeight: 700,
-        cursor: isLoggingOut ? "not-allowed" : "pointer",
-      }}
     >
       <LogOut size={16} aria-hidden="true" />
       {isLoggingOut ? "Signing out..." : "Log out"}
-    </button>
+    </AdminButton>
   );
 }

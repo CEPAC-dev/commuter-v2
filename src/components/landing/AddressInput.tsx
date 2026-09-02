@@ -75,7 +75,7 @@ export default function AddressInput({
       setResults(r);
       setOpen(r.length > 0);
       setLoading(false);
-    }, 320);
+    }, 650);
   }, []);
 
   // Saved addresses filtered by query
