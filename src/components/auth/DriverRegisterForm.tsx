@@ -9,6 +9,7 @@ import {
   toNationalDigits,
 } from "@/lib/auth/validation";
 import { useClientLocale } from "@/lib/i18n/client";
+import { useVerificationConfig } from "@/lib/auth/useVerificationConfig";
 
 const labelStyle: React.CSSProperties = {
   fontSize: 13,
@@ -68,6 +69,10 @@ export default function DriverRegisterForm({
   onSuccess,
 }: Props) {
   const { t } = useClientLocale();
+  const { method: verificationMethod, questions: securityQuestions } =
+    useVerificationConfig();
+  const [securityQuestionId, setSecurityQuestionId] = useState("");
+  const [securityAnswer, setSecurityAnswer] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -79,6 +84,11 @@ export default function DriverRegisterForm({
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return t("auth.driver.invalid_email");
     if (!gender) return t("auth.driver.gender_required");
+    if (verificationMethod === "security_question") {
+      if (!securityQuestionId) return "Choose a security question.";
+      if (securityAnswer.trim().length < 2)
+        return "Enter an answer to your security question.";
+    }
     return "";
   }
 
@@ -103,6 +113,10 @@ export default function DriverRegisterForm({
           email,
           gender,
           referralCodeUsed: referralCode || undefined,
+          ...(verificationMethod === "security_question" && {
+            securityQuestionId,
+            securityAnswer: securityAnswer.trim(),
+          }),
         }),
       });
       const data = await res.json();
@@ -175,7 +189,12 @@ export default function DriverRegisterForm({
                 unicodeBidi: "isolate",
               }}
             >
-              <span dir="ltr" style={{ direction: "ltr", unicodeBidi: "plaintext" }}>+20</span>
+              <span
+                dir="ltr"
+                style={{ direction: "ltr", unicodeBidi: "plaintext" }}
+              >
+                +20
+              </span>
             </span>
             <input
               id="d-phone"
@@ -255,24 +274,107 @@ export default function DriverRegisterForm({
             style={inputStyle}
           />
         </div>
+        {verificationMethod === "security_question" && (
+          <>
+            <div>
+              <label htmlFor="d-sec-question" style={labelStyle}>
+                Security question{" "}
+                <span aria-hidden="true" style={{ color: "#e74c3c" }}>
+                  *
+                </span>
+              </label>
+              <select
+                id="d-sec-question"
+                required
+                value={securityQuestionId}
+                onChange={(e) => setSecurityQuestionId(e.target.value)}
+                style={selectStyle}
+              >
+                <option value="">Choose a question…</option>
+                {securityQuestions.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.question}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="d-sec-answer" style={labelStyle}>
+                Your answer{" "}
+                <span aria-hidden="true" style={{ color: "#e74c3c" }}>
+                  *
+                </span>
+              </label>
+              <input
+                id="d-sec-answer"
+                type="text"
+                autoComplete="off"
+                required
+                value={securityAnswer}
+                onChange={(e) =>
+                  setSecurityAnswer(e.target.value.slice(0, 120))
+                }
+                style={inputStyle}
+              />
+              <p style={{ fontSize: 12, color: "#5A6A7A", margin: "6px 0 0" }}>
+                You&apos;ll use this answer to reset or change your password.
+              </p>
+            </div>
+          </>
+        )}
         {referralCode ? (
           <div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-              <label htmlFor="d-referral-code" style={{ ...labelStyle, marginBottom: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 6,
+              }}
+            >
+              <label
+                htmlFor="d-referral-code"
+                style={{ ...labelStyle, marginBottom: 0 }}
+              >
                 {t("auth.referral_code")}
               </label>
-              <span style={{ background: "rgba(0,194,168,0.12)", color: "#00877A", padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
+              <span
+                style={{
+                  background: "rgba(0,194,168,0.12)",
+                  color: "#00877A",
+                  padding: "2px 8px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}
+              >
                 Applied from link
               </span>
             </div>
             <div style={{ position: "relative" }}>
-              <TicketPercent size={17} aria-hidden="true" style={{ position: "absolute", left: 14, top: 18, color: "#00877A" }} />
+              <TicketPercent
+                size={17}
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: 14,
+                  top: 18,
+                  color: "#00877A",
+                }}
+              />
               <input
                 id="d-referral-code"
                 type="text"
                 readOnly
                 value={referralCode}
-                style={{ ...inputStyle, paddingLeft: 42, background: "#f1fcf9", borderColor: "#00C2A8", color: "#00877A", fontWeight: 700 }}
+                style={{
+                  ...inputStyle,
+                  paddingLeft: 42,
+                  background: "#f1fcf9",
+                  borderColor: "#00C2A8",
+                  color: "#00877A",
+                  fontWeight: 700,
+                }}
               />
             </div>
           </div>
@@ -320,7 +422,9 @@ export default function DriverRegisterForm({
         }}
       >
         {loading && <Loader2 size={18} className="spin" aria-hidden="true" />}
-        {loading ? t("auth.driver.creating_account") : t("auth.driver.create_account")}
+        {loading
+          ? t("auth.driver.creating_account")
+          : t("auth.driver.create_account")}
       </button>
     </form>
   );

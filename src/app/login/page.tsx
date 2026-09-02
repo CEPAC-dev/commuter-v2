@@ -24,6 +24,7 @@ import {
 } from "@/lib/auth/validation";
 import { useClientLocale, setLocaleCookie } from "@/lib/i18n/client";
 import { localeDirection } from "@/lib/i18n/config";
+import { useVerificationConfig } from "@/lib/auth/useVerificationConfig";
 
 type Mode = "login" | "register";
 type Role = "passenger" | "driver";
@@ -37,7 +38,9 @@ function LoginForm() {
 
   const [role, setRole] = useState<Role>("passenger");
   const referralCodeFromUrl = params.get("ref")?.trim().toUpperCase() ?? "";
-  const [mode, setMode] = useState<Mode>(referralCodeFromUrl ? "register" : "login");
+  const [mode, setMode] = useState<Mode>(
+    referralCodeFromUrl ? "register" : "login",
+  );
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
@@ -56,6 +59,10 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [gender, setGender] = useState<"male" | "female" | "">("");
   const [referralCode, setReferralCode] = useState(referralCodeFromUrl);
+  const { method: verificationMethod, questions: securityQuestions } =
+    useVerificationConfig();
+  const [securityQuestionId, setSecurityQuestionId] = useState<string>("");
+  const [securityAnswer, setSecurityAnswer] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,6 +76,16 @@ function LoginForm() {
     if (mode === "register" && !isStrongPassword(password)) {
       setError(t("auth.password_weak"));
       return;
+    }
+    if (mode === "register" && verificationMethod === "security_question") {
+      if (!securityQuestionId) {
+        setError("Choose a security question.");
+        return;
+      }
+      if (securityAnswer.trim().length < 2) {
+        setError("Enter an answer to your security question.");
+        return;
+      }
     }
 
     setLoading(true);
@@ -84,6 +101,10 @@ function LoginForm() {
               password,
               email: email.trim(),
               referralCodeUsed: referralCode.trim() || undefined,
+              ...(verificationMethod === "security_question" && {
+                securityQuestionId,
+                securityAnswer: securityAnswer.trim(),
+              }),
             };
 
       const res = await fetch(url, {
@@ -161,7 +182,16 @@ function LoginForm() {
       }}
     >
       {/* Back to home */}
-      <div style={{ width: "100%", maxWidth: 440, marginBottom: 16, display: "flex", justifyContent: locale === "ar" ? "flex-end" : "flex-start", gap: 8 }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 440,
+          marginBottom: 16,
+          display: "flex",
+          justifyContent: locale === "ar" ? "flex-end" : "flex-start",
+          gap: 8,
+        }}
+      >
         <button
           onClick={toggleLanguage}
           disabled={isPending}
@@ -187,15 +217,19 @@ function LoginForm() {
             (e.target as HTMLButtonElement).style.color = "#00C2A8";
           }}
           onMouseLeave={(e) => {
-            (e.target as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.3)";
-            (e.target as HTMLButtonElement).style.color = "rgba(255,255,255,0.8)";
+            (e.target as HTMLButtonElement).style.borderColor =
+              "rgba(255,255,255,0.3)";
+            (e.target as HTMLButtonElement).style.color =
+              "rgba(255,255,255,0.8)";
           }}
-          aria-label={locale === "en" ? "Switch to Arabic" : "Switch to English"}
+          aria-label={
+            locale === "en" ? "Switch to Arabic" : "Switch to English"
+          }
         >
           <Globe size={14} aria-hidden="true" />
           {locale === "en" ? "العربية" : "English"}
         </button>
-        
+
         <Link
           href="/"
           style={{
@@ -305,7 +339,9 @@ function LoginForm() {
                 textAlign: "center",
               }}
             >
-              {r === "passenger" ? t("auth.passenger.role") : t("auth.driver.role")}
+              {r === "passenger"
+                ? t("auth.passenger.role")
+                : t("auth.driver.role")}
             </button>
           ))}
         </div>
@@ -426,7 +462,7 @@ function LoginForm() {
                     <input
                       id="name"
                       type="text"
-                      autoComplete="name" 
+                      autoComplete="name"
                       placeholder="Mohamed Ahmed"
                       required
                       value={name}
@@ -493,7 +529,12 @@ function LoginForm() {
                       style={{ color: "#5A6A7A" }}
                       aria-hidden="true"
                     />
-                    <span dir="ltr" style={{ direction: "ltr", unicodeBidi: "plaintext" }}>+20</span>
+                    <span
+                      dir="ltr"
+                      style={{ direction: "ltr", unicodeBidi: "plaintext" }}
+                    >
+                      +20
+                    </span>
                   </span>
                   <input
                     id="phone"
@@ -551,7 +592,9 @@ function LoginForm() {
                       mode === "login" ? "current-password" : "new-password"
                     }
                     placeholder={
-                      mode === "register" ? t("auth.password_placeholder_register") : t("auth.password_placeholder_login")
+                      mode === "register"
+                        ? t("auth.password_placeholder_register")
+                        : t("auth.password_placeholder_login")
                     }
                     required
                     minLength={mode === "register" ? 8 : undefined}
@@ -562,7 +605,11 @@ function LoginForm() {
                   <button
                     type="button"
                     onClick={() => setShowPass((v) => !v)}
-                    aria-label={showPass ? t("auth.hide_password") : t("auth.show_password")}
+                    aria-label={
+                      showPass
+                        ? t("auth.hide_password")
+                        : t("auth.show_password")
+                    }
                     style={{
                       background: "none",
                       border: "none",
@@ -641,6 +688,102 @@ function LoginForm() {
                   </div>
                 </div>
               )}
+
+              {mode === "register" &&
+                verificationMethod === "security_question" && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <label
+                        htmlFor="sec-question"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#0B1E3D",
+                          display: "block",
+                          marginBottom: 6,
+                        }}
+                      >
+                        Security question
+                      </label>
+                      <select
+                        id="sec-question"
+                        value={securityQuestionId}
+                        onChange={(e) => setSecurityQuestionId(e.target.value)}
+                        required
+                        style={{
+                          width: "100%",
+                          height: 52,
+                          padding: "0 14px",
+                          background: "#f8f9fa",
+                          border: "1.5px solid #e8edf0",
+                          borderRadius: 12,
+                          fontSize: 15,
+                          fontFamily: "inherit",
+                          color: "#0B1E3D",
+                        }}
+                      >
+                        <option value="">Choose a question…</option>
+                        {securityQuestions.map((q) => (
+                          <option key={q.id} value={q.id}>
+                            {q.question}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="sec-answer"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#0B1E3D",
+                          display: "block",
+                          marginBottom: 6,
+                        }}
+                      >
+                        Your answer
+                      </label>
+                      <input
+                        id="sec-answer"
+                        type="text"
+                        autoComplete="off"
+                        placeholder="Answer"
+                        value={securityAnswer}
+                        onChange={(e) =>
+                          setSecurityAnswer(e.target.value.slice(0, 120))
+                        }
+                        required
+                        style={{
+                          width: "100%",
+                          height: 52,
+                          padding: "0 14px",
+                          background: "#f8f9fa",
+                          border: "1.5px solid #e8edf0",
+                          borderRadius: 12,
+                          fontSize: 15,
+                          fontFamily: "inherit",
+                          color: "#0B1E3D",
+                        }}
+                      />
+                      <p
+                        style={{
+                          margin: "6px 0 0",
+                          fontSize: 12,
+                          color: "#5A6A7A",
+                        }}
+                      >
+                        You&apos;ll use this answer to reset or change your
+                        password.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
               {mode === "register" && (
                 <div>
@@ -813,7 +956,9 @@ function LoginForm() {
               padding: 0,
             }}
           >
-            {mode === "login" ? t("auth.register_button") : t("auth.log_in_button")}
+            {mode === "login"
+              ? t("auth.register_button")
+              : t("auth.log_in_button")}
           </button>
         </p>
       </div>

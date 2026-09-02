@@ -74,7 +74,7 @@ export async function fetchOsrmDirectionsTable(
     distancesKm: data.distances.map((row) =>
       row.map((distance) =>
         typeof distance === "number" && distance >= 0
-          ? Math.round((distance / 1000) * 10) / 10
+          ? Math.round((distance / 1000) * 1000) / 1000
           : null,
       ),
     ),
@@ -124,7 +124,7 @@ export async function fetchOpenRouteServiceMatrix(
     distancesKm: data.distances.map((row) =>
       row.map((distance) =>
         typeof distance === "number" && distance > 0
-          ? Math.round((distance / 1000) * 10) / 10
+          ? Math.round((distance / 1000) * 1000) / 1000
           : null,
       ),
     ),
@@ -184,7 +184,7 @@ export async function fetchValhallaMatrix(
     distancesKm: matrix.map((row) =>
       row.map((cell) =>
         typeof cell?.distance === "number" && cell.distance > 0
-          ? Math.round(cell.distance * 10) / 10
+          ? Math.round(cell.distance * 1000) / 1000
           : null,
       ),
     ),
@@ -300,7 +300,7 @@ export async function fetchGraphHopperMatrix(
           const destinationIndex = targetGroup.start + colIndex;
           distancesKm[originIndex][destinationIndex] =
             typeof distance === "number" && distance >= 0
-              ? Math.round((distance / 1000) * 10) / 10
+              ? Math.round((distance / 1000) * 1000) / 1000
               : null;
           durationsMinutes[originIndex][destinationIndex] =
             typeof duration === "number" && duration >= 0
@@ -319,7 +319,7 @@ export async function fetchGraphHopperMatrix(
             const destinationIndex = sourceGroup.start + colIndex;
             distancesKm[originIndex][destinationIndex] =
               typeof distance === "number" && distance >= 0
-                ? Math.round((distance / 1000) * 10) / 10
+                ? Math.round((distance / 1000) * 1000) / 1000
                 : null;
             durationsMinutes[originIndex][destinationIndex] =
               typeof duration === "number" && duration >= 0
@@ -408,7 +408,7 @@ export async function fetchTravelTimeMatrix(
     distancesKm: data.distances.map((row) =>
       row.map((distance) =>
         typeof distance === "number" && distance >= 0
-          ? Math.round((distance / 1000) * 10) / 10
+          ? Math.round((distance / 1000) * 1000) / 1000
           : null,
       ),
     ),

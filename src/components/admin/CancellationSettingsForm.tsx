@@ -9,8 +9,14 @@ import {
   CheckCircle2,
   AlertCircle,
   UserX,
+  ShieldCheck,
 } from "lucide-react";
 import { DEFAULT_PASSENGER_CANCELLATION_TIERS } from "@/lib/config/cancellationDefaults";
+import {
+  DEFAULT_VERIFICATION_METHOD,
+  isVerificationMethod,
+  type VerificationMethod,
+} from "@/lib/config/verification";
 import {
   AdminCard,
   AdminFormField,
@@ -39,14 +45,24 @@ interface PassengerCancellationTier {
 
 export default function CancellationSettingsForm() {
   const [walletReserveAmount, setWalletReserveAmount] = useState<number>(200);
-  const [defaultWithdrawalLimit, setDefaultWithdrawalLimit] = useState<string>("");
-  const [availabilityLockTime, setAvailabilityLockTime] = useState<string>("17:00");
-  const [cancellationTiers, setCancellationTiers] = useState<DriverCancellationTier[]>([]);
-  const [passengerCancellationTiers, setPassengerCancellationTiers] =
-    useState<PassengerCancellationTier[]>(DEFAULT_PASSENGER_CANCELLATION_TIERS);
+  const [defaultWithdrawalLimit, setDefaultWithdrawalLimit] =
+    useState<string>("");
+  const [availabilityLockTime, setAvailabilityLockTime] =
+    useState<string>("17:00");
+  const [cancellationTiers, setCancellationTiers] = useState<
+    DriverCancellationTier[]
+  >([]);
+  const [passengerCancellationTiers, setPassengerCancellationTiers] = useState<
+    PassengerCancellationTier[]
+  >(DEFAULT_PASSENGER_CANCELLATION_TIERS);
+  const [verificationMethod, setVerificationMethod] =
+    useState<VerificationMethod>(DEFAULT_VERIFICATION_METHOD);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   async function fetchSettings() {
     try {
@@ -57,7 +73,8 @@ export default function CancellationSettingsForm() {
       if (json.data) {
         setWalletReserveAmount(json.data.walletReserveAmount ?? 200);
         setDefaultWithdrawalLimit(
-          json.data.defaultWithdrawalLimit !== null && json.data.defaultWithdrawalLimit !== undefined
+          json.data.defaultWithdrawalLimit !== null &&
+            json.data.defaultWithdrawalLimit !== undefined
             ? String(json.data.defaultWithdrawalLimit)
             : "",
         );
@@ -69,9 +86,16 @@ export default function CancellationSettingsForm() {
         ) {
           setPassengerCancellationTiers(json.data.passengerCancellationTiers);
         }
+        if (isVerificationMethod(json.data.verificationMethod)) {
+          setVerificationMethod(json.data.verificationMethod);
+        }
       }
     } catch (error: unknown) {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to load settings" });
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error ? error.message : "Failed to load settings",
+      });
     } finally {
       setLoading(false);
     }
@@ -123,24 +147,36 @@ export default function CancellationSettingsForm() {
         body: JSON.stringify({
           walletReserveAmount: Number(walletReserveAmount),
           defaultWithdrawalLimit:
-            defaultWithdrawalLimit.trim() === "" ? null : Number(defaultWithdrawalLimit),
+            defaultWithdrawalLimit.trim() === ""
+              ? null
+              : Number(defaultWithdrawalLimit),
           availabilityLockTime,
           cancellationTiers,
           passengerCancellationTiers,
+          verificationMethod,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to update settings");
-      setMessage({ type: "success", text: "Policy settings saved successfully!" });
+      setMessage({
+        type: "success",
+        text: "Policy settings saved successfully!",
+      });
     } catch (error: unknown) {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to save settings" });
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error ? error.message : "Failed to save settings",
+      });
     } finally {
       setSaving(false);
     }
   }
 
   if (loading) {
-    return <AdminLoadingState title="Loading cancellation and penalty settings..." />;
+    return (
+      <AdminLoadingState title="Loading cancellation and penalty settings..." />
+    );
   }
 
   return (
@@ -162,6 +198,44 @@ export default function CancellationSettingsForm() {
         </div>
       )}
 
+      {/* User verification method */}
+      <AdminCard padding={24}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2.5 bg-[var(--color-secondary-tint)] rounded-xl text-[var(--color-secondary)]">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-[var(--color-primary)]">
+              User Verification Method
+            </h3>
+            <p className="text-sm text-[var(--color-muted)]">
+              Choose how passengers and drivers verify their identity during
+              registration, password reset, and password change.
+            </p>
+          </div>
+        </div>
+        <div className="max-w-md">
+          <AdminFormField label="Verification method">
+            <select
+              value={verificationMethod}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (isVerificationMethod(v)) setVerificationMethod(v);
+              }}
+              className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
+            >
+              <option value="sms_otp">SMS OTP (SMS Misr)</option>
+              <option value="security_question">Security question</option>
+            </select>
+          </AdminFormField>
+          <p className="text-xs text-[var(--color-muted)] mt-2">
+            SMS OTP: a 6-digit code is sent to the user’s phone. Security
+            question: the user picks one of six preset questions at signup and
+            answers it on password reset / change.
+          </p>
+        </div>
+      </AdminCard>
+
       {/* Passenger Cancellation & Refund Policy */}
       <AdminCard padding={24}>
         <div className="flex items-center gap-3 mb-4">
@@ -173,64 +247,77 @@ export default function CancellationSettingsForm() {
               Passenger Cancellation & Refund Policy
             </h3>
             <p className="text-sm text-[var(--color-muted)]">
-              Configure time-tiered refund percentages and cancellation blocks for passengers.
+              Configure time-tiered refund percentages and cancellation blocks
+              for passengers.
             </p>
           </div>
         </div>
 
-          <AdminTable ariaLabel="Passenger cancellation policy">
-            <thead className="bg-[var(--color-background)] text-xs text-[var(--color-muted)] uppercase tracking-wider">
-              <tr>
-                <th className="px-4 py-3">Timing / Rule</th>
-                <th className="px-4 py-3">Time of Day Rule</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Refund %</th>
-                <th className="px-4 py-3">Penalty %</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border)]">
-              {passengerCancellationTiers.map((tier, idx) => (
-                <tr key={idx} className="hover:bg-[var(--color-primary-tint)]">
-                  <td className="px-4 py-3 font-medium text-[var(--color-primary)]">
-                    {tier.label === "four_plus_days_before" && "4+ Days before pickup"}
-                    {tier.label === "two_to_three_days_before" && "2–3 Days before pickup"}
-                    {tier.label === "day_before_pre_match" && "D-1 (Before 5:00 PM)"}
-                    {tier.label === "day_before_during_match" && "D-1 (5:00 PM – 7:00 PM)"}
-                    {tier.label === "day_before_post_match" && "D-1 (7:00 PM – Midnight)"}
-                    {tier.label === "same_day" && "Day of pickup (D)"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-[var(--color-muted)] font-mono">
-                    {tier.timeOfDayRule || "Any time"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <label className="inline-flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!!tier.blocked}
-                        onChange={(e) => handlePassengerBlockedToggle(idx, e.target.checked)}
-                        className="rounded bg-[var(--color-panel)] border-[var(--color-border)] text-[var(--color-danger)] focus:ring-0 cursor-pointer"
-                      />
-                      <AdminStatusBadge status={tier.blocked ? "blocked" : "allowed"} tone={tier.blocked ? "danger" : "success"} />
-                    </label>
-                  </td>
-                  <td className="px-4 py-3">
+        <AdminTable ariaLabel="Passenger cancellation policy">
+          <thead className="bg-[var(--color-background)] text-xs text-[var(--color-muted)] uppercase tracking-wider">
+            <tr>
+              <th className="px-4 py-3">Timing / Rule</th>
+              <th className="px-4 py-3">Time of Day Rule</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Refund %</th>
+              <th className="px-4 py-3">Penalty %</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--color-border)]">
+            {passengerCancellationTiers.map((tier, idx) => (
+              <tr key={idx} className="hover:bg-[var(--color-primary-tint)]">
+                <td className="px-4 py-3 font-medium text-[var(--color-primary)]">
+                  {tier.label === "four_plus_days_before" &&
+                    "4+ Days before pickup"}
+                  {tier.label === "two_to_three_days_before" &&
+                    "2–3 Days before pickup"}
+                  {tier.label === "day_before_pre_match" &&
+                    "D-1 (Before 5:00 PM)"}
+                  {tier.label === "day_before_during_match" &&
+                    "D-1 (5:00 PM – 7:00 PM)"}
+                  {tier.label === "day_before_post_match" &&
+                    "D-1 (7:00 PM – Midnight)"}
+                  {tier.label === "same_day" && "Day of pickup (D)"}
+                </td>
+                <td className="px-4 py-3 text-xs text-[var(--color-muted)] font-mono">
+                  {tier.timeOfDayRule || "Any time"}
+                </td>
+                <td className="px-4 py-3">
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
                     <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      disabled={!!tier.blocked}
-                      value={tier.refundPercent}
-                      onChange={(e) => handlePassengerTierChange(idx, Number(e.target.value))}
-                      className="w-20 bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg px-2.5 py-1 text-[var(--color-primary)] text-sm focus:outline-none focus:border-[var(--color-secondary)] disabled:opacity-40"
+                      type="checkbox"
+                      checked={!!tier.blocked}
+                      onChange={(e) =>
+                        handlePassengerBlockedToggle(idx, e.target.checked)
+                      }
+                      className="rounded bg-[var(--color-panel)] border-[var(--color-border)] text-[var(--color-danger)] focus:ring-0 cursor-pointer"
                     />
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-[var(--color-danger)]">
-                    {tier.penaltyPercent}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </AdminTable>
+                    <AdminStatusBadge
+                      status={tier.blocked ? "blocked" : "allowed"}
+                      tone={tier.blocked ? "danger" : "success"}
+                    />
+                  </label>
+                </td>
+                <td className="px-4 py-3">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    disabled={!!tier.blocked}
+                    value={tier.refundPercent}
+                    onChange={(e) =>
+                      handlePassengerTierChange(idx, Number(e.target.value))
+                    }
+                    className="w-20 bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg px-2.5 py-1 text-[var(--color-primary)] text-sm focus:outline-none focus:border-[var(--color-secondary)] disabled:opacity-40"
+                  />
+                </td>
+                <td className="px-4 py-3 font-semibold text-[var(--color-danger)]">
+                  {tier.penaltyPercent}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </AdminTable>
       </AdminCard>
 
       {/* Wallet Reserve & Withdrawal Limit Settings */}
@@ -240,9 +327,12 @@ export default function CancellationSettingsForm() {
             <DollarSign className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-[var(--color-primary)]">Driver Wallet Reserve & Withdrawal Limits</h3>
+            <h3 className="text-lg font-semibold text-[var(--color-primary)]">
+              Driver Wallet Reserve & Withdrawal Limits
+            </h3>
             <p className="text-sm text-[var(--color-muted)]">
-              Configure global defaults for minimum reserve floor and maximum withdrawal limit ceiling per request.
+              Configure global defaults for minimum reserve floor and maximum
+              withdrawal limit ceiling per request.
             </p>
           </div>
         </div>
@@ -280,24 +370,27 @@ export default function CancellationSettingsForm() {
             <Clock className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-[var(--color-primary)]">Availability Lock Cutoff Time</h3>
+            <h3 className="text-lg font-semibold text-[var(--color-primary)]">
+              Availability Lock Cutoff Time
+            </h3>
             <p className="text-sm text-[var(--color-muted)]">
-              Cutoff time on the day prior to the ride after which driver availability cannot be created, edited, or deleted.
+              Cutoff time on the day prior to the ride after which driver
+              availability cannot be created, edited, or deleted.
             </p>
           </div>
         </div>
 
         <div className="max-w-xs">
           <AdminFormField label="Lock Time (24h format HH:MM)">
-          <input
-            type="text"
-            pattern="^\d{2}:\d{2}$"
-            value={availabilityLockTime}
-            onChange={(e) => setAvailabilityLockTime(e.target.value)}
-            className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
-            placeholder="17:00"
-            required
-          />
+            <input
+              type="text"
+              pattern="^\d{2}:\d{2}$"
+              value={availabilityLockTime}
+              onChange={(e) => setAvailabilityLockTime(e.target.value)}
+              className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
+              placeholder="17:00"
+              required
+            />
           </AdminFormField>
         </div>
       </AdminCard>
@@ -309,37 +402,53 @@ export default function CancellationSettingsForm() {
             <ShieldAlert className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-[var(--color-primary)]">Driver Cancellation Penalty Rules</h3>
+            <h3 className="text-lg font-semibold text-[var(--color-primary)]">
+              Driver Cancellation Penalty Rules
+            </h3>
             <p className="text-sm text-[var(--color-muted)]">
-              Configured penalty windows on the cutoff evening before the ride for drivers.
+              Configured penalty windows on the cutoff evening before the ride
+              for drivers.
             </p>
           </div>
         </div>
 
-          <AdminTable ariaLabel="Driver cancellation penalty rules">
-            <thead className="bg-[var(--color-background)] text-xs text-[var(--color-muted)] uppercase tracking-wider">
-              <tr>
-                <th className="px-4 py-3">Start Time</th>
-                <th className="px-4 py-3">End Time</th>
-                <th className="px-4 py-3">Action</th>
-                <th className="px-4 py-3">Penalty %</th>
+        <AdminTable ariaLabel="Driver cancellation penalty rules">
+          <thead className="bg-[var(--color-background)] text-xs text-[var(--color-muted)] uppercase tracking-wider">
+            <tr>
+              <th className="px-4 py-3">Start Time</th>
+              <th className="px-4 py-3">End Time</th>
+              <th className="px-4 py-3">Action</th>
+              <th className="px-4 py-3">Penalty %</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--color-border)]">
+            {cancellationTiers.map((tier, idx) => (
+              <tr key={idx} className="hover:bg-[var(--color-primary-tint)]">
+                <td className="px-4 py-3 font-mono text-[var(--color-primary)]">
+                  {tier.startTime}
+                </td>
+                <td className="px-4 py-3 font-mono text-[var(--color-primary)]">
+                  {tier.endTime}
+                </td>
+                <td className="px-4 py-3">
+                  <AdminStatusBadge
+                    status={tier.action}
+                    tone={
+                      tier.action === "free"
+                        ? "success"
+                        : tier.action === "blocked"
+                          ? "danger"
+                          : "warning"
+                    }
+                  />
+                </td>
+                <td className="px-4 py-3 font-semibold text-[var(--color-primary)]">
+                  {tier.penaltyPercent}%
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border)]">
-              {cancellationTiers.map((tier, idx) => (
-                <tr key={idx} className="hover:bg-[var(--color-primary-tint)]">
-                  <td className="px-4 py-3 font-mono text-[var(--color-primary)]">{tier.startTime}</td>
-                  <td className="px-4 py-3 font-mono text-[var(--color-primary)]">{tier.endTime}</td>
-                  <td className="px-4 py-3">
-                    <AdminStatusBadge status={tier.action} tone={tier.action === "free" ? "success" : tier.action === "blocked" ? "danger" : "warning"} />
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-[var(--color-primary)]">
-                    {tier.penaltyPercent}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </AdminTable>
+            ))}
+          </tbody>
+        </AdminTable>
       </AdminCard>
 
       <div className="flex justify-end">

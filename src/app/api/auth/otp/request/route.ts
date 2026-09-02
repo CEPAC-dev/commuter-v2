@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { getSession } from "@/lib/auth/session";
 import { normalizeEgyptPhone } from "@/lib/auth/validation";
-import { createSmsOtp, deleteSmsOtp, type SmsOtpPurpose } from "@/lib/auth/smsOtp";
+import {
+  createSmsOtp,
+  deleteSmsOtp,
+  type SmsOtpPurpose,
+} from "@/lib/auth/smsOtp";
 import { sendSmsMisrOtp } from "@/lib/smsmisr";
 import { User } from "@/models/User";
 import { validateMutationRequest } from "@/lib/security/request";
 import { enforceRateLimit } from "@/lib/security/rateLimit";
+import { getActiveVerificationMethod } from "@/lib/auth/securityQuestion";
 
 const PURPOSES = new Set<SmsOtpPurpose>([
   "phone_verification",
@@ -26,10 +31,23 @@ export async function POST(req: NextRequest) {
   try {
     const { purpose, phone, role } = await req.json();
     if (!PURPOSES.has(purpose)) {
-      return NextResponse.json({ error: "Invalid OTP purpose." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid OTP purpose." },
+        { status: 400 },
+      );
     }
 
     await connectDB();
+    const method = await getActiveVerificationMethod();
+    if (method !== "sms_otp") {
+      return NextResponse.json(
+        {
+          error:
+            "SMS verification is disabled. Use your security question instead.",
+        },
+        { status: 400 },
+      );
+    }
     let target: {
       purpose: SmsOtpPurpose;
       userId?: string;
@@ -39,23 +57,45 @@ export async function POST(req: NextRequest) {
 
     if (purpose === "password_reset") {
       if (role !== "passenger" && role !== "driver") {
-        return NextResponse.json({ error: "Invalid account role." }, { status: 400 });
+        return NextResponse.json(
+          { error: "Invalid account role." },
+          { status: 400 },
+        );
       }
       const normalizedPhone = normalizeEgyptPhone(phone);
       if (!normalizedPhone) {
-        return NextResponse.json({ error: "Enter a valid Egyptian mobile number." }, { status: 400 });
+        return NextResponse.json(
+          { error: "Enter a valid Egyptian mobile number." },
+          { status: 400 },
+        );
       }
-      const user = await User.findOne({ phone: normalizedPhone, role }).select("_id").lean();
+      const user = await User.findOne({ phone: normalizedPhone, role })
+        .select("_id")
+        .lean();
       if (!user) {
-        return NextResponse.json({ error: "No account found with this phone number." }, { status: 404 });
+        return NextResponse.json(
+          { error: "No account found with this phone number." },
+          { status: 404 },
+        );
       }
-      target = { purpose, userId: String(user._id), phone: normalizedPhone, role };
+      target = {
+        purpose,
+        userId: String(user._id),
+        phone: normalizedPhone,
+        role,
+      };
     } else {
       const session = await getSession();
-      if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      const user = await User.findById(session.userId).select("phone role").lean();
+      if (!session)
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const user = await User.findById(session.userId)
+        .select("phone role")
+        .lean();
       if (!user?.phone) {
-        return NextResponse.json({ error: "Add a valid phone number to your profile first." }, { status: 400 });
+        return NextResponse.json(
+          { error: "Add a valid phone number to your profile first." },
+          { status: 400 },
+        );
       }
       target = {
         purpose,
@@ -77,7 +117,9 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("SMS OTP request failed", error);
     return NextResponse.json(
-      { error: "We could not send a verification code. Please try again later." },
+      {
+        error: "We could not send a verification code. Please try again later.",
+      },
       { status: 503 },
     );
   }
