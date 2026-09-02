@@ -61,6 +61,17 @@ function getProviderCode(response: SmsMisrResponse) {
   return String(response.code ?? response.Code ?? "");
 }
 
+const OTP_ERROR_MESSAGES: Record<string, string> = {
+  "4903": "SMS Misr rejected the API username or password.",
+  "4904": "SMS Misr rejected the sender token for this account or environment.",
+  "4905": "SMS Misr rejected the mobile number.",
+  "4906": "The SMS Misr account has insufficient credit.",
+  "4907": "SMS Misr is temporarily unavailable.",
+  "4908": "SMS Misr rejected the OTP value.",
+  "4909": "SMS Misr rejected the OTP template token.",
+  "4912": "SMS Misr rejected the selected environment.",
+};
+
 function isSuccess(response: SmsMisrResponse) {
   // SMS Misr's OTP endpoint uses 4901; 1901 is for the general SMS endpoint.
   return getProviderCode(response) === "4901";
@@ -98,21 +109,24 @@ export async function sendSmsMisrOtp({
       status: response.status,
       code: providerCode,
       body: result,
+      environment: payload.get("environment"),
       phone: phone.replace(/^\+/, ""),
     });
     throw new Error(
-      `SMS Misr rejected the OTP request (code ${providerCode}). Check SMS_MISR_SENDER and SMS_MISR_OTP_TEMPLATE in .env.local.`,
+      OTP_ERROR_MESSAGES[providerCode] ??
+        `SMS Misr rejected the OTP request (code ${providerCode}).`,
     );
   }
 }
 
 export async function getSmsMisrBalance(): Promise<unknown> {
   const { username, password } = getAccountCredentials();
-  const url = new URL(`${API_BASE_URL}/Balance/`);
-  url.searchParams.set("username", username);
-  url.searchParams.set("password", password);
-
-  const response = await fetch(url, { cache: "no-store" });
+  const response = await fetch(`${API_BASE_URL}/Balance/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ username, password }),
+    cache: "no-store",
+  });
   const text = await response.text();
   if (!response.ok) {
     console.error("SMS Misr balance request failed", {
