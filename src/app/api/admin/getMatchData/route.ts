@@ -94,6 +94,9 @@ interface StationInfo {
   name: string;
   lat: number;
   lng: number;
+  zones?: string;
+  direction?: string;
+  description?: string;
 }
 
 const PRIVATE_COLUMNS: (keyof PrivateRow)[] = [
@@ -372,7 +375,7 @@ export async function GET(req: NextRequest) {
 
   const privateTrips = await Trip.find({
     date: targetDate,
-    status: "submitted",
+    status: "matched",
     paymentStatus: "paid",
     vehicleType: { $in: ["private_car", "taxi_private"] },
   }).lean<
@@ -398,7 +401,7 @@ export async function GET(req: NextRequest) {
 
   const sharedTrips = await Trip.find({
     date: targetDate,
-    status: "submitted",
+    status: "matched",
     paymentStatus: "paid",
     vehicleType: { $in: ["taxi_shared", "van_shared", "microbus_shared"] },
   }).lean<
@@ -621,7 +624,7 @@ export async function GET(req: NextRequest) {
   const existingStations = await Station.find({
     objectId: { $in: existingStationIds },
   })
-    .select("objectId name lat lng")
+    .select("objectId name lat lng zones direction description")
     .lean<StationInfo[]>();
   const existingStationCoordinateToId = new Map(
     existingStations.map((station) => [
@@ -687,7 +690,7 @@ export async function GET(req: NextRequest) {
   );
 
   const stations = await Station.find({ objectId: { $in: stationIds } })
-    .select("objectId name lat lng")
+    .select("objectId name lat lng zones direction description")
     .lean<StationInfo[]>();
 
   const stationMap = new Map(
@@ -763,7 +766,7 @@ export async function GET(req: NextRequest) {
       return {
         distance_km: hasRouteDistance
           ? routeDistanceKm
-          : Math.round(directDistanceKm * 10) / 10,
+          : Math.round(directDistanceKm * 1000) / 1000,
         duration_minutes: hasRouteDuration
           ? routeDurationMinutes
           : estimatedDurationMinutes,
@@ -816,10 +819,10 @@ export async function GET(req: NextRequest) {
 
   VEHICLE_LIST.forEach((vehicle, index) => {
     const rowNumber = index + 2;
-    const waitingRateFormula = `=ROUND(0.5*E${rowNumber}*30*I${rowNumber},0)`;
+    const waitingRateFormula = `=ROUND(E${rowNumber}*30*I${rowNumber},0)`;
     const additionalRateFormula = `=${vehicle.additional_rate}*E${rowNumber}`;
     const waitingRateValue =
-      0.5 * vehicle.rate * Math.pow(50, 0.8) * vehicle.min_occupancy;
+      vehicle.rate * Math.pow(50, 0.8) * vehicle.min_occupancy;
     const additionalRateValue = vehicle.additional_rate * vehicle.rate;
 
     const row = policiesSheet.addRow([
@@ -843,13 +846,24 @@ export async function GET(req: NextRequest) {
   adjustWorksheetSizing(policiesSheet);
 
   const stationsSheet = wb.addWorksheet("Stops");
-  stationsSheet.addRow(["Stop", "Lat", "Long", "Stop_Name"]);
+  stationsSheet.addRow([
+    "Stop",
+    "Lat",
+    "Long",
+    "Stop_Name",
+    "Zone",
+    "Direction",
+    "Description",
+  ]);
   for (const station of stationsSheetRows) {
     stationsSheet.addRow([
       station.objectId,
       station.lat,
       station.lng,
       station.name || "",
+      station.zones || "",
+      station.direction || "",
+      station.description || "",
     ]);
   }
   styleWorksheet(stationsSheet);
@@ -887,6 +901,7 @@ export async function GET(req: NextRequest) {
         .getCell(colIndex + 2);
 
       distanceCell.value = metrics.distance_km;
+      distanceCell.numFmt = "0.000";
       durationCell.value = metrics.duration_minutes;
 
       if (metrics.usedDistanceFallback) {

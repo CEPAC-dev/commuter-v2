@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
   if (invalidRequest) return invalidRequest;
   try {
-    const { name, phone, password, email, gender, referralCodeUsed } = await req.json();
+    const { name, phone, password, email, gender, referralCodeUsed } =
+      await req.json();
     const safeName = normalizePlainText(name, { maxLength: 100 });
 
     if (!safeName || typeof phone !== "string" || !phone.trim() || !password)
