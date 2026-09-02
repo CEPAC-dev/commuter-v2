@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { getSession } from "@/lib/auth/session";
 import { AdminSettings } from "@/models/AdminSettings";
 import { DEFAULT_ADMIN_SETTINGS } from "@/lib/cancellationPolicy";
+import { isVerificationMethod } from "@/lib/config/verification";
 
 export async function GET() {
   const session = await getSession();
@@ -33,6 +34,7 @@ export async function PUT(req: NextRequest) {
       availabilityLockTime,
       cancellationTiers,
       passengerCancellationTiers,
+      verificationMethod,
     } = body;
 
     if (
@@ -49,7 +51,9 @@ export async function PUT(req: NextRequest) {
     if (
       defaultWithdrawalLimit !== undefined &&
       defaultWithdrawalLimit !== null &&
-      (typeof defaultWithdrawalLimit !== "number" || defaultWithdrawalLimit <= 0 || !Number.isFinite(defaultWithdrawalLimit))
+      (typeof defaultWithdrawalLimit !== "number" ||
+        defaultWithdrawalLimit <= 0 ||
+        !Number.isFinite(defaultWithdrawalLimit))
     ) {
       return NextResponse.json(
         { error: "defaultWithdrawalLimit must be a positive number or null." },
@@ -74,9 +78,24 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    if (passengerCancellationTiers && !Array.isArray(passengerCancellationTiers)) {
+    if (
+      passengerCancellationTiers &&
+      !Array.isArray(passengerCancellationTiers)
+    ) {
       return NextResponse.json(
         { error: "passengerCancellationTiers must be an array." },
+        { status: 400 },
+      );
+    }
+
+    if (
+      verificationMethod !== undefined &&
+      !isVerificationMethod(verificationMethod)
+    ) {
+      return NextResponse.json(
+        {
+          error: "verificationMethod must be 'sms_otp' or 'security_question'.",
+        },
         { status: 400 },
       );
     }
@@ -92,6 +111,7 @@ export async function PUT(req: NextRequest) {
           availabilityLockTime,
           ...(cancellationTiers && { cancellationTiers }),
           ...(passengerCancellationTiers && { passengerCancellationTiers }),
+          ...(verificationMethod && { verificationMethod }),
         },
       },
       { upsert: true, new: true, runValidators: true },

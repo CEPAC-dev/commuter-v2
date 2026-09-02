@@ -18,13 +18,27 @@ import {
   normalizePlainText,
   validateMutationRequest,
 } from "@/lib/security/request";
+import {
+  getActiveVerificationMethod,
+  hashSecurityAnswer,
+  isPlausibleSecurityAnswer,
+} from "@/lib/auth/securityQuestion";
+import { isValidSecurityQuestionId } from "@/lib/config/verification";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
   if (invalidRequest) return invalidRequest;
   try {
-    const { name, phone, password, email, gender, referralCodeUsed } =
-      await req.json();
+    const {
+      name,
+      phone,
+      password,
+      email,
+      gender,
+      referralCodeUsed,
+      securityQuestionId,
+      securityAnswer,
+    } = await req.json();
     const safeName = normalizePlainText(name, { maxLength: 100 });
 
     if (!safeName || typeof phone !== "string" || !phone.trim() || !password)
@@ -70,6 +84,26 @@ export async function POST(req: NextRequest) {
 
     console.log("Phase 2: Database connection established.");
 
+    const verificationMethod = await getActiveVerificationMethod();
+    let securityAnswerHash: string | null = null;
+    let normalizedQuestionId: string | null = null;
+    if (verificationMethod === "security_question") {
+      if (!isValidSecurityQuestionId(securityQuestionId)) {
+        return NextResponse.json(
+          { error: "Choose a valid security question." },
+          { status: 400 },
+        );
+      }
+      if (!isPlausibleSecurityAnswer(securityAnswer)) {
+        return NextResponse.json(
+          { error: "Enter a security answer (2–120 characters)." },
+          { status: 400 },
+        );
+      }
+      normalizedQuestionId = securityQuestionId;
+      securityAnswerHash = await hashSecurityAnswer(securityAnswer);
+    }
+
     const existing = await User.findOne({
       phone: normalizedPhone,
       role: "driver",
@@ -112,6 +146,8 @@ export async function POST(req: NextRequest) {
       email: normalizedEmail,
       role: "driver",
       referralCode,
+      ...(normalizedQuestionId && { securityQuestionId: normalizedQuestionId }),
+      ...(securityAnswerHash && { securityAnswerHash }),
     });
 
     await Driver.create({

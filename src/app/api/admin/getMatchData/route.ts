@@ -196,6 +196,9 @@ const CAR_TYPE_TO_VEHICLE_TYPE: Record<string, number> = {
   microbus: 4,
 };
 
+const DISTANCE_MATRIX_FACTOR = 1.081;
+const DURATION_MATRIX_FACTOR = 1.524;
+
 function styleWorksheet(sheet: ExcelJS.Worksheet) {
   const thinBorder = {
     style: "thin" as ExcelJS.BorderStyle,
@@ -900,9 +903,9 @@ export async function GET(req: NextRequest) {
         .getRow(rowIndex + 2)
         .getCell(colIndex + 2);
 
-      distanceCell.value = metrics.distance_km;
+      distanceCell.value = metrics.distance_km * DISTANCE_MATRIX_FACTOR;
       distanceCell.numFmt = "0.000";
-      durationCell.value = metrics.duration_minutes;
+      durationCell.value = metrics.duration_minutes * DURATION_MATRIX_FACTOR;
 
       if (metrics.usedDistanceFallback) {
         distanceCell.fill = {
