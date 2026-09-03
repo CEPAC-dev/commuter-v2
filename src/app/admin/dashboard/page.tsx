@@ -8,9 +8,53 @@ import { Ride } from "@/models/Ride";
 import { Availability } from "@/models/Availability";
 import LanguageToggle from "@/components/layout/LanguageToggle";
 import MatchRideForm from "@/components/admin/MatchRideForm";
+import DashboardCharts from "@/components/admin/DashboardCharts";
 import { AdminCard, AdminPageContainer, AdminPageHeader } from "@/components/admin/layout";
 import { AdminTopbarActions } from "@/components/admin/layout/AdminShell";
 import SmsBalanceCard from "@/components/admin/SmsBalanceCard";
+
+const DAILY_WINDOW_DAYS = 14;
+
+function dayKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+async function loadDashboardCharts() {
+  const since = new Date();
+  since.setDate(since.getDate() - (DAILY_WINDOW_DAYS - 1));
+  since.setHours(0, 0, 0, 0);
+
+  const [tripsByDay, usersByDay, ridesByStatus] = await Promise.all([
+    Trip.aggregate<{ _id: string; count: number }>([
+      { $match: { createdAt: { $gte: since } } },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
+    ]),
+    User.aggregate<{ _id: string; count: number }>([
+      { $match: { createdAt: { $gte: since } } },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
+    ]),
+    Ride.aggregate<{ _id: string; count: number }>([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+  ]);
+
+  const tripsMap = new Map(tripsByDay.map((row) => [row._id, row.count]));
+  const usersMap = new Map(usersByDay.map((row) => [row._id, row.count]));
+
+  const daily = Array.from({ length: DAILY_WINDOW_DAYS }, (_, i) => {
+    const d = new Date(since);
+    d.setDate(d.getDate() + i);
+    const key = dayKey(d);
+    return {
+      date: key,
+      label: d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+      trips: tripsMap.get(key) ?? 0,
+      users: usersMap.get(key) ?? 0,
+    };
+  });
+
+  const rideStatus = ridesByStatus.map((row) => ({ status: row._id, count: row.count }));
+
+  return { daily, rideStatus };
+}
 
 export default async function AdminDashboardPage() {
   const session = await getSession();
@@ -24,6 +68,8 @@ export default async function AdminDashboardPage() {
     Ride.countDocuments(),
     Availability.countDocuments(),
   ]);
+
+  const charts = await loadDashboardCharts();
 
   const [availabilities, drivers, trips] = await Promise.all([
     Availability.find({ status: { $in: ["open", "matched"] } })
@@ -50,18 +96,6 @@ export default async function AdminDashboardPage() {
     { title: "Rides", value: rideCount, icon: Car, color: "var(--color-success)", tint: "var(--color-success-tint)", href: "/admin/rides" },
     { title: "Trips", value: tripCount, icon: Route, color: "var(--color-primary)", tint: "var(--color-primary-tint)", href: "/admin/trips" },
     { title: "Availability", value: availabilityCount, icon: CalendarClock, color: "var(--color-warning)", tint: "var(--color-warning-tint)", href: "/admin/availability" },
-  ];
-
-  const tools = [
-    { label: "Manage rides", href: "/admin/rides" },
-    { label: "Manage trips", href: "/admin/trips" },
-    { label: "Manage users", href: "/admin/users" },
-    { label: "Manage availability", href: "/admin/availability" },
-    { label: "Referral settings", href: "/admin/referral-settings" },
-    { label: "Promo codes", href: "/admin/promo-codes" },
-    { label: "Transactions", href: "/admin/transactions" },
-    { label: "Withdrawal requests", href: "/admin/withdrawals" },
-    { label: "Policy and admin settings", href: "/admin/settings" },
   ];
 
   const stamp = new Date().toLocaleString("en-GB", {
@@ -92,15 +126,7 @@ export default async function AdminDashboardPage() {
         ))}
       </div>
 
-      <AdminCard title="Admin tools">
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {tools.map((tool) => (
-            <a key={tool.href} href={tool.href} style={{ padding: "10px 14px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-background)", color: "var(--color-primary)", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
-              {tool.label}
-            </a>
-          ))}
-        </div>
-      </AdminCard>
+      <DashboardCharts daily={charts.daily} rideStatus={charts.rideStatus} />
 
       <SmsBalanceCard />
 

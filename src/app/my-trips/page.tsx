@@ -32,6 +32,7 @@ import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import RateTripModal from "@/components/trips/RateTripModal";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 import CancelTripModal from "@/components/trips/CancelTripModal";
+import StickySidebar from "@/components/shared/StickySidebar";
 
 export const metadata = { title: "My trips — Commuter" };
 export const dynamic = "force-dynamic";
@@ -748,8 +749,6 @@ export default async function MyTripsPage({
             display: block;
             align-self: start;
             min-width: 0;
-            position: sticky;
-            top: var(--app-header-offset);
             z-index: 5;
             height: fit-content;
           }
@@ -807,9 +806,8 @@ export default async function MyTripsPage({
         </div>
 
         <div className="my-trips-layout">
-          <aside className="my-trips-sidebar" aria-label={translate(locale, "my_trips.title")}>
-            <div className="my-trips-sidebar-pin">
-              <div className="my-trips-sidebar-panel">
+          <StickySidebar className="my-trips-sidebar" ariaLabel={translate(locale, "my_trips.title")}>
+            <div className="my-trips-sidebar-panel">
               <p className="my-trips-sidebar-label">{translate(locale, "my_trips.sidebar_filters")}</p>
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-16)" }}>
                 <DateRangeCalendar fullWidth />
@@ -908,8 +906,7 @@ export default async function MyTripsPage({
                 </Link>
               </div>
             )}
-            </div>
-          </aside>
+          </StickySidebar>
 
           <div className="my-trips-content" style={{ minWidth: 0 }}>
             <div className="my-trips-header my-trips-header-desktop">

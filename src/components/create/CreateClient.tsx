@@ -12,6 +12,7 @@ import {
   Route,
   Users,
   Navigation,
+  Info,
 } from "lucide-react";
 import { useTripStore } from "@/lib/store/useTripStore";
 import { useClientLocale } from "@/lib/locale.client";
@@ -107,6 +108,8 @@ export default function CreateClient({
   const [bookingNote, setBookingNote] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
+  const [promoFieldOpen, setPromoFieldOpen] = useState(false);
+  const [noteFieldOpen, setNoteFieldOpen] = useState(false);
   const [promoCodeDraft, setPromoCodeDraft] = useState("");
   const [promoCodeValid, setPromoCodeValid] = useState(false);
   const [promoCodeDiscountType, setPromoCodeDiscountType] = useState<
@@ -125,7 +128,8 @@ export default function CreateClient({
   );
   const [picking, setPicking] = useState<{
     tripId: string;
-    field: "pickup" | "dropoff";
+    field: "pickup" | "dropoff" | "stop";
+    stopId?: string;
   } | null>(null);
   const [drawerHeightVh, setDrawerHeightVh] = useState(
     MOBILE_DRAWER_DEFAULT_VH,
@@ -206,9 +210,18 @@ export default function CreateClient({
     (point: TripPoint) => {
       if (!picking) return;
       setTrips((prev) =>
-        prev.map((t) =>
-          t.id === picking.tripId ? { ...t, [picking.field]: point } : t,
-        ),
+        prev.map((t) => {
+          if (t.id !== picking.tripId) return t;
+          if (picking.field === "stop") {
+            return {
+              ...t,
+              stops: t.stops.map((stop) =>
+                stop.id === picking.stopId ? { ...stop, point } : stop,
+              ),
+            };
+          }
+          return { ...t, [picking.field]: point };
+        }),
       );
       setPicking(null);
     },
@@ -794,9 +807,9 @@ export default function CreateClient({
                     canRemove={trips.length > 1}
                     onChange={(updated) => updateTrip(trip.id, updated)}
                     onRemove={() => removeTrip(trip.id)}
-                    picking={picking?.tripId === trip.id ? picking.field : null}
-                    onPickFromMap={(field) =>
-                      setPicking({ tripId: trip.id, field })
+                    picking={picking?.tripId === trip.id ? picking : null}
+                    onPickFromMap={(field, stopId) =>
+                      setPicking({ tripId: trip.id, field, stopId })
                     }
                     sourceTripData={canBeReturn ? prevTrip : null}
                     savedAddresses={savedAddresses}
@@ -1006,7 +1019,6 @@ export default function CreateClient({
             display: "flex",
             alignItems: "flex-end",
             justifyContent: "center",
-            padding: "0 0 0 0",
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowPreview(false);
@@ -1019,17 +1031,19 @@ export default function CreateClient({
               width: "100%",
               maxWidth: 520,
               maxHeight: "85dvh",
-              overflowY: "auto",
-              padding: "0 0 24px",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
-            {/* Handle */}
+            {/* Header — fixed */}
             <div
               style={{
-                padding: "16px 24px 0",
+                flexShrink: 0,
+                padding: "16px 24px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
+                borderBottom: "1px solid #eef0f3",
               }}
             >
               <h2
@@ -1062,7 +1076,8 @@ export default function CreateClient({
               </button>
             </div>
 
-            <div style={{ padding: "8px 24px 0" }}>
+            {/* Scrollable middle */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px" }}>
               <p style={{ fontSize: 13, color: "#5A6A7A", margin: "0 0 16px" }}>
                 {selectedDates.length > 1
                   ? t("create.dates_label")
@@ -1102,319 +1117,499 @@ export default function CreateClient({
                     icon: Flag,
                   },
                 ];
+                const showTripHeader = trips.length > 1;
+                const vehicle = trip.vehicleType
+                  ? (vehiclesMap?.[trip.vehicleType] ??
+                    VEHICLES[trip.vehicleType])
+                  : null;
                 return (
                   <div
                     key={trip.id}
-                    style={{
-                      padding: "14px 16px",
-                      background: "#f8f9fa",
-                      borderRadius: 12,
-                      marginBottom: 10,
-                      border: "1px solid #eef0f3",
-                    }}
+                    style={
+                      showTripHeader
+                        ? {
+                            padding: "14px 16px",
+                            background: "#f8f9fa",
+                            borderRadius: 12,
+                            marginBottom: 12,
+                            border: "1px solid #eef0f3",
+                          }
+                        : { marginBottom: 16 }
+                    }
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        marginBottom: 8,
-                      }}
-                    >
-                      <span
+                    {showTripHeader && (
+                      <div
                         style={{
-                          fontWeight: 700,
-                          fontSize: 14,
-                          color: "#0B1E3D",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          marginBottom: 8,
                         }}
                       >
-                        {t("create.trip_number").replace("{n}", String(i + 1))}
-                      </span>
-                      <span
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 14,
+                            color: "#0B1E3D",
+                          }}
+                        >
+                          {t("create.trip_number").replace(
+                            "{n}",
+                            String(i + 1),
+                          )}
+                        </span>
+                        <span
+                          style={{
+                            fontWeight: 800,
+                            fontSize: 15,
+                            color: "#00C2A8",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {formatEgp(locale, getTripPriceForSubmission(trip))}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Primary: route */}
+                    {isPrivate ? (
+                      <div
                         style={{
-                          fontWeight: 800,
-                          fontSize: 15,
-                          color: "#00C2A8",
-                          fontVariantNumeric: "tabular-nums",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
                         }}
                       >
-                        {formatEgp(locale, getTripPriceForSubmission(trip))}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#5A6A7A",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
-                      }}
-                    >
-                      {trip.vehicleType && (
-                        (() => {
-                          const vehicle =
-                            vehiclesMap?.[trip.vehicleType] ??
-                            VEHICLES[trip.vehicleType];
-                          const marginMinutes = Math.max(
-                            5,
-                            Math.round(vehicle.window / 2),
-                          );
+                        {routePoints.map((routePoint, pointIndex) => {
+                          const Icon = routePoint.icon;
                           return (
-                            <span
-                              style={{
-                                display: "block",
-                                padding: "10px 12px",
-                                borderRadius: 10,
-                                background: "rgba(245,166,35,0.12)",
-                                border: "1.5px solid rgba(245,166,35,0.55)",
-                                color: "#7A5000",
-                                fontWeight: 700,
-                                lineHeight: 1.6,
-                                fontSize: 12,
-                              }}
-                            >
-                              {locale === "ar"
-                                ? "هام: يختلف وقت الالتقاء بحوالي"
-                                : "Pickup time may vary by about"}{" "}
-                              <strong
+                            <div key={routePoint.label}>
+                              <span
                                 style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  fontSize: 14,
                                   color: "#0B1E3D",
-                                  fontSize: 13,
-                                  fontVariantNumeric: "tabular-nums",
-                                  whiteSpace: "nowrap",
                                 }}
                               >
-                                <span>+</span>
-                                {marginMinutes}
-                                {locale === "ar" ? "دقيقة" : "min"}
-                                <span>-</span>
-                              </strong>
-                              {" "}
-                              {locale === "ar"
-                                ? " لنوع هذه المركبة."
-                                : " for this vehicle type."}
-                            </span>
-                          );
-                        })()
-                      )}
-                      {isPrivate ? (
-                        <span
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                          }}
-                        >
-                          <Users size={15} color="#0B1E3D" />
-                          <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
-                            {trip.numberOfPassengers}{" "}
-                            {trip.numberOfPassengers === 1
-                              ? t("create.passenger_count_suffix")
-                              : t("create.passengers_count_suffix")}
-                          </strong>
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                          }}
-                        >
-                          <Users size={15} color="#0B1E3D" />
-                          <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
-                            {trip.extraPassengers}{" "}
-                            {trip.extraPassengers === 1
-                              ? t("create.extra_passenger_count_suffix")
-                              : t("create.extra_passengers_count_suffix")}
-                          </strong>
-                        </span>
-                      )}
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
-                        <Car
-                          size={15}
-                          color="#0B1E3D"
-                          aria-hidden="true"
-                          style={{ flexShrink: 0 }}
-                        />
-                        <strong style={{ color: "#0B1E3D", fontWeight: 600 }}>
-                          {VEHICLE_LIST_LABEL(trip.vehicleType, t)}
-                        </strong>
-                      </span>
-                      {isPrivate ? (
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 8,
-                            padding: "10px 0",
-                            borderTop: "1px solid #e5e9ee",
-                            borderBottom: "1px solid #e5e9ee",
-                          }}
-                        >
-                          {routePoints.map((routePoint, pointIndex) => {
-                            const Icon = routePoint.icon;
-                            const leg = trip.routeLegs[pointIndex];
-                            return (
-                              <div key={routePoint.label}>
+                                <Icon
+                                  size={15}
+                                  color={
+                                    pointIndex === routePoints.length - 1
+                                      ? "#F5A623"
+                                      : pointIndex === 0
+                                        ? "#0B1E3D"
+                                        : "#00C2A8"
+                                  }
+                                  aria-hidden="true"
+                                  style={{ flexShrink: 0 }}
+                                />
+                                <strong style={{ fontWeight: 700 }}>
+                                  {routePoint.label}
+                                </strong>
+                                <span style={{ color: "#5A6A7A" }}>
+                                  {routePoint.point?.address
+                                    ? formatDisplayName(
+                                        routePoint.point.address,
+                                      )
+                                    : "—"}
+                                </span>
+                              </span>
+
+                              {trip.stops[pointIndex - 1] && (
                                 <span
                                   style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 8,
+                                    display: "block",
+                                    margin: "4px 0 0 23px",
+                                    fontSize: 12,
+                                    color: "#5A6A7A",
                                   }}
                                 >
-                                  <Icon
-                                    size={15}
-                                    color={
-                                      pointIndex === routePoints.length - 1
-                                        ? "#F5A623"
-                                        : pointIndex === 0
-                                          ? "#0B1E3D"
-                                          : "#00C2A8"
-                                    }
-                                    aria-hidden="true"
-                                    style={{ flexShrink: 0 }}
-                                  />
-                                  <strong
-                                    style={{
-                                      color: "#0B1E3D",
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    {routePoint.label}
-                                  </strong>
-                                  <span>
-                                    {routePoint.point?.address
-                                      ? formatDisplayName(
-                                          routePoint.point.address,
-                                        )
-                                      : "—"}
-                                  </span>
+                                  Alighting:{" "}
+                                  {trip.stops[pointIndex - 1].alighting} ·
+                                  Boarding:{" "}
+                                  {trip.stops[pointIndex - 1].boarding}
+                                  {trip.stops[pointIndex - 1].waitingMinutes >
+                                    0 &&
+                                    ` · Wait: ${trip.stops[pointIndex - 1].waitingMinutes} min`}
                                 </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: "#0B1E3D",
+                          }}
+                        >
+                          <MapPin
+                            size={15}
+                            color="#00C2A8"
+                            aria-hidden="true"
+                            style={{ flexShrink: 0 }}
+                          />
+                          {trip.pickup?.address
+                            ? formatDisplayName(trip.pickup.address)
+                            : "—"}
+                        </span>
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: "#0B1E3D",
+                          }}
+                        >
+                          <Flag
+                            size={15}
+                            color="#F5A623"
+                            aria-hidden="true"
+                            style={{ flexShrink: 0 }}
+                          />
+                          {trip.dropoff?.address
+                            ? formatDisplayName(trip.dropoff.address)
+                            : "—"}
+                        </span>
+                      </div>
+                    )}
 
-                                {trip.stops[pointIndex - 1] && (
-                                  <span
-                                    style={{
-                                      display: "block",
-                                      margin: "4px 0 0 23px",
-                                      fontSize: 12,
-                                      color: "#5A6A7A",
-                                    }}
-                                  >
-                                    Alighting:{" "}
-                                    {trip.stops[pointIndex - 1].alighting} ·
-                                    Boarding:{" "}
-                                    {trip.stops[pointIndex - 1].boarding}
-                                    {trip.stops[pointIndex - 1].waitingMinutes >
-                                      0 &&
-                                      ` · Wait: ${trip.stops[pointIndex - 1].waitingMinutes} min`}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <>
-                          <span
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 8,
-                            }}
-                          >
-                            <MapPin
-                              size={15}
-                              color="#00C2A8"
-                              aria-hidden="true"
-                              style={{ flexShrink: 0 }}
-                            />
-                            {trip.pickup?.address
-                              ? formatDisplayName(trip.pickup.address)
-                              : "—"}
-                          </span>
-                          <span
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 8,
-                            }}
-                          >
-                            <Flag
-                              size={15}
-                              color="#F5A623"
-                              aria-hidden="true"
-                              style={{ flexShrink: 0 }}
-                            />
-                            {trip.dropoff?.address
-                              ? formatDisplayName(trip.dropoff.address)
-                              : "—"}
-                          </span>
-                        </>
-                      )}
+                    {/* Subtle pickup-time-variance note */}
+                    {vehicle && (
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 6,
+                          marginTop: 8,
+                          fontSize: 11.5,
+                          color: "#5A6A7A",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        <Info
+                          size={13}
+                          aria-hidden="true"
+                          style={{ flexShrink: 0, marginTop: 1 }}
+                        />
+                        <span>
+                          {locale === "ar"
+                            ? "يختلف وقت الالتقاء بحوالي"
+                            : "Pickup time may vary by about"}{" "}
+                          ±{Math.max(5, Math.round(vehicle.window / 2))}
+                          {locale === "ar" ? " دقيقة" : " min"}
+                          {locale === "ar"
+                            ? " لنوع هذه المركبة."
+                            : " for this vehicle type."}
+                        </span>
+                      </span>
+                    )}
+
+                    {/* Secondary: compact meta row */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        rowGap: 6,
+                        columnGap: 16,
+                        marginTop: 12,
+                        fontSize: 12,
+                        color: "#5A6A7A",
+                      }}
+                    >
                       <span
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          gap: 8,
+                          gap: 5,
                         }}
                       >
-                        <Clock
-                          size={15}
-                          color="#5A6A7A"
-                          aria-hidden="true"
-                          style={{ flexShrink: 0 }}
-                        />
-                        <span>
-                          {t("create.early_pickup_label")}{" "}
-                          <strong>{formatTime(locale, trip.pickupTime)}</strong>{" "}
-                          · {t("latest_arrival_time")}{" "}
-                          <strong>
-                            {formatTime(locale, trip.arrivalTime)}
-                          </strong>
-                        </span>
+                        <Users size={14} aria-hidden="true" />
+                        {isPrivate
+                          ? `${trip.numberOfPassengers} ${
+                              trip.numberOfPassengers === 1
+                                ? t("create.passenger_count_suffix")
+                                : t("create.passengers_count_suffix")
+                            }`
+                          : `${trip.extraPassengers} ${
+                              trip.extraPassengers === 1
+                                ? t("create.extra_passenger_count_suffix")
+                                : t("create.extra_passengers_count_suffix")
+                            }`}
+                      </span>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 5,
+                        }}
+                      >
+                        <Car size={14} aria-hidden="true" />
+                        {VEHICLE_LIST_LABEL(trip.vehicleType, t)}
+                      </span>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 5,
+                        }}
+                      >
+                        <Clock size={14} aria-hidden="true" />
+                        {formatTime(locale, trip.pickupTime)} →{" "}
+                        {formatTime(locale, trip.arrivalTime)}
                       </span>
                       {trip.distanceKm && (
                         <span
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: 8,
+                            gap: 5,
                           }}
                         >
-                          <Route
-                            size={15}
-                            color="#5A6A7A"
-                            aria-hidden="true"
-                            style={{ flexShrink: 0 }}
-                          />
+                          <Route size={14} aria-hidden="true" />
                           {formatDistanceKm(locale, trip.distanceKm ?? 0)} ·{" "}
                           {formatMinutes(locale, trip.durationMinutes ?? 0)}
                         </span>
                       )}
                     </div>
-
-                    {/* per-trip instructions moved to /terms page */}
                   </div>
                 );
               })}
 
+              {/* Promo code — collapsed by default */}
+              <div
+                style={{
+                  marginTop: 8,
+                  paddingTop: 16,
+                  borderTop: "1px solid #eef0f3",
+                }}
+              >
+                {promoFieldOpen || promoCodeDraft ? (
+                  <>
+                    <label
+                      htmlFor="promo-code"
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "#0B1E3D",
+                        display: "block",
+                        marginBottom: 8,
+                      }}
+                    >
+                      {t("create.promo_input_label")}
+                    </label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        id="promo-code"
+                        type="text"
+                        autoFocus={promoFieldOpen}
+                        value={promoCodeDraft}
+                        onChange={(event) =>
+                          handlePromoCodeInputChange(event.target.value)
+                        }
+                        placeholder="PROMO-XXXXXX"
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          height: 38,
+                          borderRadius: 10,
+                          border: "1.5px solid #d0d8e0",
+                          padding: "0 10px",
+                          fontSize: 13,
+                          color: "#0B1E3D",
+                          fontFamily: "inherit",
+                          textTransform: "uppercase",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleValidatePromoCode()}
+                        disabled={promoCodeChecking || !promoCodeDraft.trim()}
+                        style={{
+                          height: 38,
+                          padding: "0 14px",
+                          border: 0,
+                          borderRadius: 10,
+                          background:
+                            promoCodeChecking || !promoCodeDraft.trim()
+                              ? "#9aa8b5"
+                              : "#0B1E3D",
+                          color: "#fff",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          cursor:
+                            promoCodeChecking || !promoCodeDraft.trim()
+                              ? "not-allowed"
+                              : "pointer",
+                        }}
+                      >
+                        {promoCodeChecking
+                          ? t("create.promo_checking")
+                          : t("create.promo_apply_action")}
+                      </button>
+                    </div>
+                    {promoCodeMessage ? (
+                      <p
+                        style={{
+                          margin: "8px 0 0",
+                          fontSize: 12,
+                          color: promoCodeValid ? "#00877A" : "#e74c3c",
+                          fontWeight: promoCodeValid ? 700 : 600,
+                        }}
+                      >
+                        {promoCodeMessage}
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setPromoFieldOpen(true)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      color: "#00877A",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Plus size={14} aria-hidden="true" />
+                    {t("create.promo_input_label")}
+                  </button>
+                )}
+
+                {totalSavingsEgp > 0 && (
+                  <p
+                    style={{
+                      margin: "8px 0 0",
+                      fontSize: 12,
+                      color: "#00877A",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {t("create.discount_savings_label").replace(
+                      "{amount}",
+                      String(totalSavingsEgp),
+                    )}
+                  </p>
+                )}
+              </div>
+
+              {/* Note — collapsed by default */}
+              <div style={{ marginTop: 16 }}>
+                {noteFieldOpen || bookingNote ? (
+                  <>
+                    <label
+                      htmlFor="booking-note"
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "#0B1E3D",
+                        display: "block",
+                        marginBottom: 6,
+                      }}
+                    >
+                      {t("create.add_note_label")}
+                    </label>
+                    <textarea
+                      id="booking-note"
+                      autoFocus={noteFieldOpen}
+                      value={bookingNote}
+                      onChange={(event) =>
+                        setBookingNote(event.target.value.slice(0, 1000))
+                      }
+                      placeholder={t("create.pickup_instructions_placeholder")}
+                      rows={3}
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        resize: "vertical",
+                        minHeight: 72,
+                        padding: "10px 12px",
+                        borderRadius: 12,
+                        border: "1.5px solid #e8edf0",
+                        background: "#f8f9fa",
+                        color: "#0B1E3D",
+                        fontSize: 13,
+                        fontFamily: "inherit",
+                        lineHeight: 1.45,
+                        outline: "none",
+                      }}
+                    />
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: "#5A6A7A",
+                        margin: "5px 0 0",
+                      }}
+                    >
+                      {bookingNote.length}/1000
+                    </p>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setNoteFieldOpen(true)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      color: "#00877A",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Plus size={14} aria-hidden="true" />
+                    {t("create.add_note_label")}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Sticky footer — Total + terms + Confirm, always visible */}
+            <div
+              style={{
+                flexShrink: 0,
+                padding: "14px 24px",
+                borderTop: "1px solid #eef0f3",
+                background: "#ffffff",
+              }}
+            >
               {totalEgp > 0 && (
                 <div
                   style={{
-                    padding: "12px 0",
-                    borderTop: "1.5px solid #eef0f3",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    marginTop: 4,
+                    marginBottom: 12,
                   }}
                 >
                   <span
@@ -1427,7 +1622,7 @@ export default function CreateClient({
                   <span
                     style={{
                       fontWeight: 900,
-                      fontSize: 18,
+                      fontSize: 20,
                       color: "#0B1E3D",
                       fontVariantNumeric: "tabular-nums",
                     }}
@@ -1437,203 +1632,48 @@ export default function CreateClient({
                 </div>
               )}
 
-              <div
+              <label
                 style={{
-                  marginTop: 8,
-                  marginBottom: 8,
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  background: "#f8f9fa",
-                  border: "1px solid #eef0f3",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 10,
+                  cursor: "pointer",
+                  marginBottom: 12,
                 }}
               >
-                <label
-                  htmlFor="promo-code"
+                <input
+                  type="checkbox"
+                  checked={agreedTerms}
+                  onChange={(e) => setAgreedTerms(e.target.checked)}
                   style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: "#0B1E3D",
-                    display: "block",
-                    marginBottom: 8,
-                  }}
-                >
-                  {t("create.promo_input_label")}
-                </label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    id="promo-code"
-                    type="text"
-                    value={promoCodeDraft}
-                    onChange={(event) =>
-                      handlePromoCodeInputChange(event.target.value)
-                    }
-                    placeholder="PROMO-XXXXXX"
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      height: 40,
-                      borderRadius: 10,
-                      border: "1.5px solid #d0d8e0",
-                      padding: "0 10px",
-                      fontSize: 13,
-                      color: "#0B1E3D",
-                      fontFamily: "inherit",
-                      textTransform: "uppercase",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleValidatePromoCode()}
-                    disabled={promoCodeChecking || !promoCodeDraft.trim()}
-                    style={{
-                      height: 40,
-                      padding: "0 14px",
-                      border: 0,
-                      borderRadius: 10,
-                      background:
-                        promoCodeChecking || !promoCodeDraft.trim()
-                          ? "#9aa8b5"
-                          : "#0B1E3D",
-                      color: "#fff",
-                      fontWeight: 700,
-                      fontSize: 12,
-                      cursor:
-                        promoCodeChecking || !promoCodeDraft.trim()
-                          ? "not-allowed"
-                          : "pointer",
-                    }}
-                  >
-                    {promoCodeChecking
-                      ? t("create.promo_checking")
-                      : t("create.promo_apply_action")}
-                  </button>
-                </div>
-                {promoCodeMessage ? (
-                  <p
-                    style={{
-                      margin: "8px 0 0",
-                      fontSize: 12,
-                      color: promoCodeValid ? "#00877A" : "#e74c3c",
-                      fontWeight: promoCodeValid ? 700 : 600,
-                    }}
-                  >
-                    {promoCodeMessage}
-                  </p>
-                ) : null}
-              </div>
-
-              {totalSavingsEgp > 0 && (
-                <p
-                  style={{
-                    margin: "6px 0 0",
-                    fontSize: 12,
-                    color: "#00877A",
-                    fontWeight: 700,
-                  }}
-                >
-                  {t("create.discount_savings_label").replace(
-                    "{amount}",
-                    String(totalSavingsEgp),
-                  )}
-                </p>
-              )}
-
-              <div style={{ marginTop: 16 }}>
-                <label
-                  htmlFor="booking-note"
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "#0B1E3D",
-                    display: "block",
-                    marginBottom: 6,
-                  }}
-                >
-                  {t("create.add_note_label")}
-                </label>
-                <textarea
-                  id="booking-note"
-                  value={bookingNote}
-                  onChange={(event) =>
-                    setBookingNote(event.target.value.slice(0, 1000))
-                  }
-                  placeholder={t("create.pickup_instructions_placeholder")}
-                  rows={4}
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    resize: "vertical",
-                    minHeight: 92,
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1.5px solid #e8edf0",
-                    background: "#f8f9fa",
-                    color: "#0B1E3D",
-                    fontSize: 13,
-                    fontFamily: "inherit",
-                    lineHeight: 1.45,
-                    outline: "none",
+                    marginTop: 2,
+                    width: 16,
+                    height: 16,
+                    accentColor: "#00C2A8",
+                    cursor: "pointer",
+                    flexShrink: 0,
                   }}
                 />
-                <p
-                  style={{ fontSize: 11, color: "#5A6A7A", margin: "5px 0 0" }}
-                >
-                  {bookingNote.length}/1000
-                </p>
-              </div>
-
-              {/* ── Terms & conditions ── */}
-              <div
-                style={{
-                  marginTop: 16,
-                  padding: "14px 16px",
-                  background: "#f8f9fa",
-                  borderRadius: 12,
-                  border: "1.5px solid #eef0f3",
-                }}
-              >
-                <label
+                <span
                   style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 10,
-                    cursor: "pointer",
+                    fontSize: 13,
+                    color: "#0B1E3D",
+                    fontWeight: 600,
+                    lineHeight: 1.5,
                   }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={agreedTerms}
-                    onChange={(e) => setAgreedTerms(e.target.checked)}
-                    style={{
-                      marginTop: 2,
-                      width: 16,
-                      height: 16,
-                      accentColor: "#00C2A8",
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: 13,
-                      color: "#0B1E3D",
-                      fontWeight: 600,
-                      lineHeight: 1.5,
-                    }}
+                  {t("create.terms_agree_prefix")}{" "}
+                  <Link
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#00C2A8", fontWeight: 700 }}
                   >
-                    {t("create.terms_agree_prefix")}{" "}
-                    <Link
-                      href="/terms"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: "#00C2A8", fontWeight: 700 }}
-                    >
-                      {t("create.terms_link_text")}
-                    </Link>{" "}
-                    {t("create.terms_agree_suffix")}
-                  </span>
-                </label>
-              </div>
+                    {t("create.terms_link_text")}
+                  </Link>{" "}
+                  {t("create.terms_agree_suffix")}
+                </span>
+              </label>
 
               <button
                 type="button"
@@ -1643,7 +1683,6 @@ export default function CreateClient({
                 }}
                 disabled={!agreedTerms}
                 style={{
-                  marginTop: 14,
                   width: "100%",
                   height: 52,
                   background: agreedTerms ? "#0B1E3D" : "#d0d8e0",

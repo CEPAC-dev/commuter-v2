@@ -5,6 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, ShieldCheck, KeyRound, Phone, Lock, User, Mail, Globe } from "lucide-react";
 import { useClientLocale, setLocaleCookie } from "@/lib/i18n/client";
+import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
+import {
+  isStrongPassword,
+  normalizeEgyptPhone,
+  toNationalDigits,
+  PASSWORD_RULES_MESSAGE,
+  PHONE_RULES_MESSAGE,
+} from "@/lib/auth/validation";
 
 export default function AdminSignupPage() {
   const router = useRouter();
@@ -28,13 +36,24 @@ export default function AdminSignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    const normalizedPhone = normalizeEgyptPhone(phone);
+    if (!normalizedPhone) {
+      setError(PHONE_RULES_MESSAGE);
+      return;
+    }
+    if (!isStrongPassword(password)) {
+      setError(PASSWORD_RULES_MESSAGE);
+      return;
+    }
+
     setLoading(true);
 
     try {
       const res = await fetch("/api/admin/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, phone, password, inviteCode }),
+        body: JSON.stringify({ name, email, phone: normalizedPhone, password, inviteCode }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -114,7 +133,7 @@ export default function AdminSignupPage() {
           </div>
         </div>
         <p style={{ margin: "0 0 24px", color: "var(--color-muted)", lineHeight: 1.7 }}>{t("auth.admin.description")}</p>
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>{t("auth.admin.full_name")}</label>
             <div style={fieldStyle}>
@@ -131,17 +150,46 @@ export default function AdminSignupPage() {
           </div>
           <div>
             <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>{t("auth.admin.phone")}</label>
-            <div style={fieldStyle}>
-              <Phone size={17} style={{ color: "var(--color-muted)" }} />
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
+            <div className="ltr-field" style={{ ...fieldStyle, padding: 0, overflow: "hidden" }}>
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  height: "100%",
+                  padding: "0 12px",
+                  background: "var(--color-surface)",
+                  borderRight: "1.5px solid var(--color-border)",
+                  fontWeight: 600,
+                  color: "var(--color-primary)",
+                  flexShrink: 0,
+                }}
+              >
+                <Phone size={17} style={{ color: "var(--color-muted)" }} aria-hidden="true" />
+                <span>+20</span>
+              </span>
+              <input
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                placeholder="1XXXXXXXXX"
+                maxLength={13}
+                value={phone.replace(/^\+?20/, "")}
+                onChange={(e) => {
+                  const digits = toNationalDigits(e.target.value);
+                  setPhone(digits ? `+20${digits}` : "");
+                }}
+                style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)", padding: "0 14px", direction: "ltr", textAlign: "left" }}
+              />
             </div>
           </div>
           <div>
             <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>{t("auth.admin.password")}</label>
             <div style={fieldStyle}>
               <Lock size={17} style={{ color: "var(--color-muted)" }} />
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
+              <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
             </div>
+            <PasswordStrengthMeter password={password} />
           </div>
           <div>
             <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>{t("auth.admin.invite_code")}</label>

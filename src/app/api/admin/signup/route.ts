@@ -4,21 +4,55 @@ import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { nextSequence } from "@/models/Counter";
 import { createSession } from "@/lib/auth/session";
+import {
+  isStrongPassword,
+  normalizeEgyptPhone,
+  PASSWORD_RULES_MESSAGE,
+  PHONE_RULES_MESSAGE,
+} from "@/lib/auth/validation";
+import {
+  isSafePassword,
+  normalizeEmail,
+  normalizePlainText,
+  validateMutationRequest,
+} from "@/lib/security/request";
 
 export async function POST(req: NextRequest) {
+  const invalidRequest = validateMutationRequest(req);
+  if (invalidRequest) return invalidRequest;
   try {
     const { name, email, phone, password, inviteCode } = await req.json();
+    const safeName = normalizePlainText(name, { maxLength: 100 });
 
-    if (!name?.trim() || !phone?.trim() || !password) {
+    if (!safeName || typeof phone !== "string" || !phone.trim() || !password) {
       return NextResponse.json(
         { error: "Name, phone and password are required." },
         { status: 400 },
       );
     }
 
-    if (password.length < 8) {
+    if (!isSafePassword(password) || !isStrongPassword(password)) {
       return NextResponse.json(
-        { error: "Password must be at least 8 characters." },
+        { error: PASSWORD_RULES_MESSAGE },
+        { status: 400 },
+      );
+    }
+
+    const normalizedPhone = normalizeEgyptPhone(phone);
+    if (!normalizedPhone) {
+      return NextResponse.json({ error: PHONE_RULES_MESSAGE }, { status: 400 });
+    }
+
+    if (email !== undefined && typeof email !== "string") {
+      return NextResponse.json(
+        { error: "Invalid email address." },
+        { status: 400 },
+      );
+    }
+    const normalizedEmail = email?.trim() ? normalizeEmail(email) : undefined;
+    if (email?.trim() && !normalizedEmail) {
+      return NextResponse.json(
+        { error: "Invalid email address." },
         { status: 400 },
       );
     }
@@ -39,7 +73,7 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
-    const existing = await User.findOne({ phone: phone.trim(), role: "admin" }).lean();
+    const existing = await User.findOne({ phone: normalizedPhone, role: "admin" }).lean();
     if (existing) {
       return NextResponse.json(
         { error: "An admin account with this phone number already exists." },
@@ -51,10 +85,10 @@ export async function POST(req: NextRequest) {
     const userNumber = await nextSequence("userNumber");
     const user = await User.create({
       userNumber,
-      name: name.trim(),
-      phone: phone.trim(),
+      name: safeName,
+      phone: normalizedPhone,
       passwordHash,
-      email: email?.trim() ? email.toLowerCase().trim() : undefined,
+      email: normalizedEmail,
       role: "admin",
     });
 

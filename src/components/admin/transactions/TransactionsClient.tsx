@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
+import TransactionsChart from "./TransactionsChart";
 import {
   AdminCard,
   AdminEmptyState,
@@ -284,6 +285,8 @@ export default function TransactionsClient({
             )}
           </div>
         )}
+
+        {canReports ? <TransactionsChart /> : null}
 
         {/* Filter bar */}
         <AdminCard padding={16}>

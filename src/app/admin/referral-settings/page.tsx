@@ -1,9 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Settings } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getOrCreateReferralSettings } from "@/lib/referral";
-import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import ReferralSettingsForm from "@/components/admin/ReferralSettingsForm";
 import ReferralUserOverrides from "@/components/admin/ReferralUserOverrides";
 import {
@@ -43,12 +41,6 @@ export default async function AdminReferralSettingsPage() {
         title="Referral settings"
         description="Configure separate referral bonuses and limits for passenger-owned and driver-owned codes."
         icon={Settings}
-        actions={
-          <>
-            <Link href="/admin/dashboard" style={{ minHeight: 44, padding: "0 14px", display: "inline-flex", alignItems: "center", color: "var(--color-primary)", background: "var(--color-panel)", border: "1px solid var(--color-border)", borderRadius: 6, textDecoration: "none", fontWeight: 700, fontSize: 14 }}>Dashboard</Link>
-            <AdminLogoutButton />
-          </>
-        }
       />
       <AdminCard padding="12px 16px">
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>

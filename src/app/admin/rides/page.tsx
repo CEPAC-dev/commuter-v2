@@ -1069,7 +1069,7 @@ export default function AdminRidesPage() {
             </div>
           ) : null}
 
-          <div style={{ overflowX: "auto" }}>
+          <div className="admin-table-scroll">
             <table>
               <thead>
                 <tr>
