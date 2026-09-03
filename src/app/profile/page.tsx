@@ -22,6 +22,7 @@ export default async function ProfilePage() {
         email={profile.email}
         initialPhone={profile.phone}
         initialPhoneVerified={Boolean(profile.phoneVerifiedAt)}
+        initialHasSecurityQuestion={profile.hasSecurityQuestion}
         gender={profile.gender}
         carType={profile.carType}
         carBrand={profile.carBrand}
@@ -49,6 +50,7 @@ export default async function ProfilePage() {
       email={profile.email}
       initialPhone={profile.phone}
       initialPhoneVerified={Boolean(profile.phoneVerifiedAt)}
+      initialHasSecurityQuestion={profile.hasSecurityQuestion}
       initialRegion={profile.region}
       initialProfilePic={profile.profilePic}
       initialSavedAddresses={profile.savedAddresses}
