@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Lock, Phone, ShieldCheck } from "lucide-react";
+import { normalizeEgyptPhone, toNationalDigits, PHONE_RULES_MESSAGE } from "@/lib/auth/validation";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -15,13 +16,20 @@ export default function AdminLoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    const normalizedPhone = normalizeEgyptPhone(phone);
+    if (!normalizedPhone) {
+      setError(PHONE_RULES_MESSAGE);
+      return;
+    }
+
     setLoading(true);
 
     try {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, password }),
+        body: JSON.stringify({ phone: normalizedPhone, password }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -48,7 +56,7 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div style={{ minHeight: "100dvh", background: "var(--color-primary)", padding: "24px 16px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className="ltr-field" style={{ minHeight: "100dvh", background: "var(--color-primary)", padding: "24px 16px", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ width: "100%", maxWidth: 440, background: "var(--color-panel)", borderRadius: 24, padding: "32px 28px", boxShadow: "0 24px 80px var(--color-shadow-strong)" }}>
         <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--color-muted)", textDecoration: "none", marginBottom: 20, fontSize: 14 }}>
           <ArrowLeft size={16} /> Back to home
@@ -63,19 +71,48 @@ export default function AdminLoginPage() {
           </div>
         </div>
         <p style={{ margin: "0 0 24px", color: "var(--color-muted)", lineHeight: 1.7 }}>Use your administrator phone number and password to access the admin dashboard.</p>
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>Phone</label>
-            <div style={fieldStyle}>
-              <Phone size={17} style={{ color: "var(--color-muted)" }} />
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
+            <label htmlFor="admin-phone" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>Phone</label>
+            <div style={{ ...fieldStyle, padding: 0, overflow: "hidden" }}>
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  height: "100%",
+                  padding: "0 12px",
+                  background: "var(--color-surface)",
+                  borderRight: "1.5px solid var(--color-border)",
+                  fontWeight: 600,
+                  color: "var(--color-primary)",
+                  flexShrink: 0,
+                }}
+              >
+                <Phone size={17} style={{ color: "var(--color-muted)" }} aria-hidden="true" />
+                <span>+20</span>
+              </span>
+              <input
+                id="admin-phone"
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                placeholder="1XXXXXXXXX"
+                maxLength={13}
+                value={phone.replace(/^\+?20/, "")}
+                onChange={(e) => {
+                  const digits = toNationalDigits(e.target.value);
+                  setPhone(digits ? `+20${digits}` : "");
+                }}
+                style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)", padding: "0 14px" }}
+              />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>Password</label>
+            <label htmlFor="admin-password" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>Password</label>
             <div style={fieldStyle}>
               <Lock size={17} style={{ color: "var(--color-muted)" }} />
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
+              <input id="admin-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
             </div>
           </div>
           {error ? <p role="alert" style={{ margin: 0, padding: "10px 12px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)" }}>{error}</p> : null}

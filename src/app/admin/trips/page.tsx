@@ -903,17 +903,7 @@ export default function AdminTripsPage() {
           </button>
         </div>
 
-        <section style={{ borderRadius: "var(--radius-md)", background: "var(--color-panel)", border: "1px solid var(--color-border)", boxShadow: "0 10px 35px var(--color-shadow)", overflow: "hidden" }}>
-          <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: 12, borderTop: "3px solid var(--color-secondary)" }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--color-secondary-tint)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Route size={18} style={{ color: "var(--color-secondary-deep)" }} />
-            </div>
-            <div>
-              <h2 className="display" style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--color-primary)" }}>Manage trips</h2>
-              <p style={{ margin: "3px 0 0", color: "var(--color-muted)", fontSize: 13 }}>Select trips to delete in bulk, assign a driver, or remove a single trip.</p>
-            </div>
-          </div>
-
+        <section style={{ borderRadius: "var(--radius-md)", background: "var(--color-panel)", border: "1px solid var(--color-border)", boxShadow: "0 10px 35px var(--color-shadow)", overflow: "hidden", borderTop: "3px solid var(--color-secondary)" }}>
           {selectedIds.length > 0 ? (
             <div className="bulk-bar">
               <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
@@ -939,7 +929,7 @@ export default function AdminTripsPage() {
             </div>
           ) : null}
 
-          <div style={{ overflowX: "auto" }}>
+          <div className="admin-table-scroll">
             <table>
               <thead>
                 <tr>

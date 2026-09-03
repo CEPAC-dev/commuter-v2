@@ -170,6 +170,25 @@ html[dir="rtl"] th {
   scrollbar-width: none;
 }
 
+.admin-table-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+.admin-table-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.admin-table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-table-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 999px;
+}
+
 /* ── Glass navbar ────────────────────────────────────────── */
 .navbar-glass {
   background: rgba(255, 255, 255, 0.85) !important;
@@ -1161,16 +1180,29 @@ html[dir="rtl"] .review-submit-btn,
   min-height: 100dvh;
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
+  transition: grid-template-columns 0.18s ease;
+}
+
+.admin-shell-frame.admin-shell-collapsed {
+  grid-template-columns: 72px minmax(0, 1fr);
 }
 
 .admin-sidebar {
   position: sticky;
   top: 0;
   height: 100dvh;
+  width: 248px;
   padding: var(--space-24) var(--space-16);
   background: var(--color-primary);
   color: var(--color-on-primary);
   overflow-y: auto;
+  overflow-x: hidden;
+  transition: width 0.18s ease, padding 0.18s ease;
+}
+
+.admin-shell-collapsed .admin-sidebar {
+  width: 72px;
+  padding: var(--space-24) var(--space-12);
 }
 
 .admin-sidebar-brand {
@@ -1178,11 +1210,42 @@ html[dir="rtl"] .review-submit-btn,
   align-items: center;
   gap: var(--space-12);
   min-height: 44px;
-  padding: 0 var(--space-8) var(--space-24);
+  padding: 0 var(--space-8) var(--space-16);
   color: var(--color-on-primary);
   font-size: 18px;
   font-weight: 800;
   text-decoration: none;
+}
+
+.admin-sidebar-brand-label {
+  white-space: nowrap;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.15s ease;
+}
+
+.admin-shell-collapsed .admin-sidebar-brand-label {
+  opacity: 0;
+  width: 0;
+}
+
+.admin-sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-on-primary) 10%, var(--color-transparent));
+  color: var(--color-on-primary);
+  cursor: pointer;
+  margin-bottom: var(--space-16);
+}
+
+.admin-sidebar-toggle:hover {
+  background: color-mix(in srgb, var(--color-on-primary) 18%, var(--color-transparent));
 }
 
 .admin-sidebar-nav {
@@ -1191,6 +1254,7 @@ html[dir="rtl"] .review-submit-btn,
 }
 
 .admin-sidebar-link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-12);
@@ -1203,10 +1267,79 @@ html[dir="rtl"] .review-submit-btn,
   text-decoration: none;
 }
 
+.admin-sidebar-link-label {
+  white-space: nowrap;
+  overflow: hidden;
+  flex: 1;
+}
+
+.admin-shell-collapsed .admin-sidebar-link {
+  justify-content: center;
+  padding: 0;
+}
+
+.admin-shell-collapsed .admin-sidebar-link-label,
+.admin-shell-collapsed .admin-sidebar-badge {
+  display: none;
+}
+
+.admin-sidebar-badge {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-on-primary) 16%, var(--color-transparent));
+  color: var(--color-on-primary);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.admin-sidebar-icon-badge {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-primary);
+  font-size: 9px;
+  line-height: 15px;
+  font-weight: 800;
+  text-align: center;
+}
+
 .admin-sidebar-link:hover,
 .admin-sidebar-link[aria-current="page"] {
   color: var(--color-on-primary);
   background: color-mix(in srgb, var(--color-on-primary) 12%, var(--color-transparent));
+}
+
+.admin-sidebar-tooltip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px var(--color-shadow-strong);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  z-index: 70;
+  pointer-events: none;
+}
+
+.admin-sidebar-link:hover .admin-sidebar-tooltip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .admin-shell-content {

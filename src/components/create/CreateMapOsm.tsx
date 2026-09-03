@@ -140,7 +140,7 @@ function isLeafletMapReady(map: L.Map | null): map is L.Map {
 
 interface Props {
   trips: TripData[];
-  picking?: { tripId: string; field: "pickup" | "dropoff" } | null;
+  picking?: { tripId: string; field: "pickup" | "dropoff" | "stop"; stopId?: string } | null;
   onMapPick?: (point: TripPoint) => void;
   onStationSelect?: (
     tripId: string,
@@ -474,7 +474,7 @@ export default function CreateMapOsm({
             whiteSpace: "nowrap",
           }}
         >
-          <span>Click map to set {picking.field}</span>
+          <span>Click map to set {picking.field === "stop" ? "stop point" : picking.field}</span>
           <button
             type="button"
             onClick={onCancelPick}

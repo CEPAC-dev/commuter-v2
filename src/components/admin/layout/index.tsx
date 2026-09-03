@@ -1,4 +1,5 @@
 import type {
+  ButtonHTMLAttributes,
   CSSProperties,
   FormHTMLAttributes,
   HTMLAttributes,
@@ -12,6 +13,49 @@ import {
   Loader2,
   type LucideIcon,
 } from "lucide-react";
+
+type ButtonVariant = "primary" | "secondary" | "destructive" | "ghost";
+type ButtonSize = "sm" | "md";
+
+const buttonVariantStyles: Record<ButtonVariant, CSSProperties> = {
+  primary: { background: "var(--color-secondary)", color: "var(--color-on-primary)", border: "1px solid transparent" },
+  secondary: { background: "var(--color-panel)", color: "var(--color-primary)", border: "1px solid var(--color-border)" },
+  destructive: { background: "var(--color-danger)", color: "var(--color-on-primary)", border: "1px solid transparent" },
+  ghost: { background: "transparent", color: "var(--color-muted, var(--color-text-muted))", border: "1px solid transparent" },
+};
+
+const buttonSizeStyles: Record<ButtonSize, CSSProperties> = {
+  sm: { padding: "7px 12px", fontSize: 12.5, borderRadius: "var(--radius-sm)" },
+  md: { padding: "10px 16px", fontSize: 13.5, borderRadius: "var(--radius-sm)" },
+};
+
+/** Single source of truth for admin button styling — variant + size only, no page-level overrides. */
+export function AdminButton({
+  variant = "secondary",
+  size = "md",
+  style,
+  disabled,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize }) {
+  return (
+    <button
+      {...props}
+      disabled={disabled}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        fontWeight: 700,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.55 : 1,
+        transition: "opacity 0.12s ease",
+        ...buttonVariantStyles[variant],
+        ...buttonSizeStyles[size],
+        ...style,
+      }}
+    />
+  );
+}
 
 const pageWidth = 1120;
 
@@ -280,7 +324,7 @@ export function AdminStatusBadge({
 
 export function AdminTable({ children, ariaLabel }: { children: ReactNode; ariaLabel?: string }) {
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div className="admin-table-scroll">
       <table
         aria-label={ariaLabel}
         style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}

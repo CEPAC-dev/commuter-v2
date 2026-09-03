@@ -10,7 +10,10 @@ for (const line of envContent.split("\n")) {
     if (idx > 0) {
       const key = trimmed.slice(0, idx).trim();
       let val = trimmed.slice(idx + 1).trim();
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
         val = val.slice(1, -1);
       }
       envVars[key] = val;
@@ -36,17 +39,40 @@ async function main() {
     process.exit(1);
   }
 
-  const referralUsages = await db.collection("referral_usages").find({}).sort({ createdAt: -1 }).toArray();
-  console.log(`Found ${referralUsages.length} ReferralUsage documents:`);
+  const referralUsages = await db
+    .collection("referral_usages")
+    .find({})
+    .sort({ createdAt: -1 })
+    .toArray();
 
   for (const usage of referralUsages) {
-    const referrer = await db.collection("users").findOne({ _id: usage.referrer }, { projection: { name: 1, phone: 1, email: 1, role: 1 } });
-    const referee = await db.collection("users").findOne({ _id: usage.referredUser }, { projection: { name: 1, phone: 1, email: 1, role: 1 } });
-    const referrerWallet = await db.collection("wallets").findOne({ userId: usage.referrer });
-    const refereeWallet = await db.collection("wallets").findOne({ userId: usage.referredUser });
+    const referrer = await db
+      .collection("users")
+      .findOne(
+        { _id: usage.referrer },
+        { projection: { name: 1, phone: 1, email: 1, role: 1 } },
+      );
+    const referee = await db
+      .collection("users")
+      .findOne(
+        { _id: usage.referredUser },
+        { projection: { name: 1, phone: 1, email: 1, role: 1 } },
+      );
+    const referrerWallet = await db
+      .collection("wallets")
+      .findOne({ userId: usage.referrer });
+    const refereeWallet = await db
+      .collection("wallets")
+      .findOne({ userId: usage.referredUser });
 
-    const referrerTxs = await db.collection("wallettransactions").find({ userId: usage.referrer }).toArray();
-    const refereeTxs = await db.collection("wallettransactions").find({ userId: usage.referredUser }).toArray();
+    const referrerTxs = await db
+      .collection("wallettransactions")
+      .find({ userId: usage.referrer })
+      .toArray();
+    const refereeTxs = await db
+      .collection("wallettransactions")
+      .find({ userId: usage.referredUser })
+      .toArray();
 
     console.log("=========================================");
     console.log(`ReferralUsage ID: ${usage._id}`);

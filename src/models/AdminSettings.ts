@@ -37,21 +37,55 @@ import {
   type PassengerCancellationTierConfig,
 } from "@/lib/config/cancellationDefaults";
 
-export { DEFAULT_PASSENGER_CANCELLATION_TIERS, type PassengerCancellationTierConfig };
+export {
+  DEFAULT_PASSENGER_CANCELLATION_TIERS,
+  type PassengerCancellationTierConfig,
+};
 
 const AdminSettingsSchema = new Schema(
   {
     walletReserveAmount: { type: Number, required: true, default: 200 },
     defaultWithdrawalLimit: { type: Number, required: false, default: null },
     availabilityLockTime: { type: String, required: true, default: "17:00" },
+    verificationMethod: {
+      type: String,
+      required: true,
+      enum: ["sms_otp", "security_question"],
+      default: "sms_otp",
+    },
     cancellationTiers: {
       type: [CancellationTierSchema],
       default: [
-        { startTime: "00:00", endTime: "17:00", action: "free", penaltyPercent: 0 },
-        { startTime: "17:00", endTime: "19:00", action: "blocked", penaltyPercent: 0 },
-        { startTime: "19:00", endTime: "21:00", action: "ride_only", penaltyPercent: 25 },
-        { startTime: "21:00", endTime: "23:00", action: "ride_only", penaltyPercent: 50 },
-        { startTime: "23:00", endTime: "23:59", action: "ride_only", penaltyPercent: 110 },
+        {
+          startTime: "00:00",
+          endTime: "17:00",
+          action: "free",
+          penaltyPercent: 0,
+        },
+        {
+          startTime: "17:00",
+          endTime: "19:00",
+          action: "blocked",
+          penaltyPercent: 0,
+        },
+        {
+          startTime: "19:00",
+          endTime: "21:00",
+          action: "ride_only",
+          penaltyPercent: 25,
+        },
+        {
+          startTime: "21:00",
+          endTime: "23:00",
+          action: "ride_only",
+          penaltyPercent: 50,
+        },
+        {
+          startTime: "23:00",
+          endTime: "23:59",
+          action: "ride_only",
+          penaltyPercent: 110,
+        },
       ],
     },
     passengerCancellationTiers: {

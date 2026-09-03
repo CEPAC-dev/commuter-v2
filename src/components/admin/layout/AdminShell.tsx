@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,6 +12,7 @@ import {
   Gauge,
   Gift,
   ListChecks,
+  Menu,
   Route,
   Settings,
   SlidersHorizontal,
@@ -21,18 +22,22 @@ import {
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 
 const sections = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: Gauge },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/trips", label: "Trips", icon: Route },
-  { href: "/admin/rides", label: "Rides", icon: Car },
-  { href: "/admin/availability", label: "Availability", icon: CalendarClock },
-  { href: "/admin/withdrawals", label: "Withdrawals", icon: Banknote },
-  { href: "/admin/transactions", label: "Transactions", icon: ChartNoAxesCombined },
-  { href: "/admin/promo-codes", label: "Promo codes", icon: TicketPercent },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
-  { href: "/admin/referral-settings", label: "Referral settings", icon: Gift },
-  { href: "/admin/operation", label: "Operation", icon: SlidersHorizontal },
+  { href: "/admin/dashboard", label: "Dashboard", icon: Gauge, statKey: null },
+  { href: "/admin/users", label: "Users", icon: Users, statKey: "users" },
+  { href: "/admin/trips", label: "Trips", icon: Route, statKey: "trips" },
+  { href: "/admin/rides", label: "Rides", icon: Car, statKey: "rides" },
+  { href: "/admin/availability", label: "Availability", icon: CalendarClock, statKey: "availability" },
+  { href: "/admin/withdrawals", label: "Withdrawals", icon: Banknote, statKey: null },
+  { href: "/admin/transactions", label: "Transactions", icon: ChartNoAxesCombined, statKey: null },
+  { href: "/admin/promo-codes", label: "Promo codes", icon: TicketPercent, statKey: null },
+  { href: "/admin/settings", label: "Settings", icon: Settings, statKey: null },
+  { href: "/admin/referral-settings", label: "Referral settings", icon: Gift, statKey: null },
+  { href: "/admin/operation", label: "Operation", icon: SlidersHorizontal, statKey: null },
 ] as const;
+
+type Stats = { users: number; trips: number; rides: number; availability: number };
+
+const COLLAPSE_STORAGE_KEY = "admin-sidebar-collapsed";
 
 function currentTitle(pathname: string) {
   if (pathname.startsWith("/admin/transactions/")) return "Transaction details";
@@ -47,23 +52,73 @@ export function AdminTopbarActions({ children }: { children: ReactNode }) {
 export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isAuthPage = pathname === "/admin/login" || pathname === "/admin/signup";
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== "undefined" && window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === "1",
+  );
+  const [stats, setStats] = useState<Stats | null>(null);
+
+  useEffect(() => {
+    if (isAuthPage) return;
+    let cancelled = false;
+    fetch("/api/admin/stats", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!cancelled && json) setStats(json);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthPage, pathname]);
+
+  function toggleCollapsed() {
+    setCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(COLLAPSE_STORAGE_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
 
   if (isAuthPage) return <div className="admin-shell">{children}</div>;
 
   return (
-    <div className="admin-shell admin-shell-frame" dir="ltr">
+    <div className={`admin-shell admin-shell-frame${collapsed ? " admin-shell-collapsed" : ""}`} dir="ltr">
       <aside className="admin-sidebar">
+        <button
+          type="button"
+          className="admin-sidebar-toggle"
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-pressed={collapsed}
+        >
+          <Menu size={18} aria-hidden="true" />
+        </button>
         <Link href="/admin/dashboard" className="admin-sidebar-brand">
-          <ListChecks size={22} aria-hidden="true" />
-          Commuter Admin
+          <ListChecks size={22} aria-hidden="true" style={{ flexShrink: 0 }} />
+          <span className="admin-sidebar-brand-label">Commuter Admin</span>
         </Link>
         <nav className="admin-sidebar-nav" aria-label="Admin sections">
-          {sections.map(({ href, label, icon: Icon }) => {
+          {sections.map(({ href, label, icon: Icon, statKey }) => {
             const active = pathname === href || (href !== "/admin/dashboard" && pathname.startsWith(`${href}/`));
+            const count = statKey ? stats?.[statKey] : undefined;
             return (
               <Link key={href} href={href} className="admin-sidebar-link" aria-current={active ? "page" : undefined}>
-                <Icon size={17} aria-hidden="true" />
-                {label}
+                <span style={{ position: "relative", display: "inline-flex" }}>
+                  <Icon size={17} aria-hidden="true" />
+                  {collapsed && typeof count === "number" && count > 0 ? (
+                    <span className="admin-sidebar-icon-badge">{count > 99 ? "99+" : count}</span>
+                  ) : null}
+                </span>
+                <span className="admin-sidebar-link-label">{label}</span>
+                {!collapsed && typeof count === "number" ? (
+                  <span className="admin-sidebar-badge">{count}</span>
+                ) : null}
+                {collapsed ? (
+                  <span className="admin-sidebar-tooltip">
+                    {label}
+                    {typeof count === "number" ? ` (${count})` : ""}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
