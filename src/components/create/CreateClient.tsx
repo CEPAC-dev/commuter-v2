@@ -281,9 +281,17 @@ export default function CreateClient({
 
   const getTripPriceForSubmission = useCallback(
     (trip: TripData) => {
-      const hasPickup = !!(trip.pickup?.address || (trip.pickup?.lat && trip.pickup?.lng));
-      const hasDropoff = !!(trip.dropoff?.address || (trip.dropoff?.lat && trip.dropoff?.lng));
-      const hasTime = !!(trip.arrivalTime && trip.arrivalTime.trim().length > 0);
+      const hasPickup = !!(
+        trip.pickup?.address ||
+        (trip.pickup?.lat && trip.pickup?.lng)
+      );
+      const hasDropoff = !!(
+        trip.dropoff?.address ||
+        (trip.dropoff?.lat && trip.dropoff?.lng)
+      );
+      const hasTime = !!(
+        trip.arrivalTime && trip.arrivalTime.trim().length > 0
+      );
 
       if (!trip.vehicleType || !hasPickup || !hasDropoff || !hasTime) return 0;
 
@@ -768,7 +776,6 @@ export default function CreateClient({
               >
                 {t("create.book_a_ride_heading")}
               </h1>
-            
             </div>
 
             <DatePicker value={selectedDates} onChange={setSelectedDates} />
@@ -1384,7 +1391,10 @@ export default function CreateClient({
                           }}
                         >
                           <Route size={14} aria-hidden="true" />
-                          {formatDistanceKm(locale, trip.distanceKm ?? 0)} ·{" "}
+                          {formatDistanceKm(
+                            locale,
+                            trip.distanceKm ?? 0,
+                          )} ·{" "}
                           {formatMinutes(locale, trip.durationMinutes ?? 0)}
                         </span>
                       )}
@@ -1759,7 +1769,7 @@ export default function CreateClient({
                   margin: 0,
                 }}
               >
-                Payment
+                {t("create.payment_heading")}
               </h2>
               <button
                 onClick={() => setShowPaymentModal(false)}

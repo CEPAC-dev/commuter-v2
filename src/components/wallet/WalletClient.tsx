@@ -18,7 +18,13 @@ import { toArabicDigits } from "@/lib/i18n";
 
 interface Tx {
   id: string;
-  type: "topup" | "payment" | "refund" | "earning" | "referral_bonus" | "withdrawal";
+  type:
+    | "topup"
+    | "payment"
+    | "refund"
+    | "earning"
+    | "referral_bonus"
+    | "withdrawal";
   amountEgp: number;
   status: "pending" | "completed" | "failed";
   description: string;
@@ -88,7 +94,9 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
     payoutAccountNumber: "",
     payoutAccountHolder: "",
   });
-  const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequestItem[]>([]);
+  const [withdrawalRequests, setWithdrawalRequests] = useState<
+    WithdrawalRequestItem[]
+  >([]);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const role = data?.role ?? initialRole ?? "passenger";
@@ -96,12 +104,12 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
   const { locale, dir, t } = useClientLocale();
 
   const formatAmountLabel = (key: string, value: number) =>
-    t(key).replace("{amount}", locale === "ar" ? toArabicDigits(value.toString()) : value.toString());
+    t(key).replace(
+      "{amount}",
+      locale === "ar" ? toArabicDigits(value.toString()) : value.toString(),
+    );
 
-  const formatLabel = (
-    key: string,
-    values: Record<string, string | number>,
-  ) =>
+  const formatLabel = (key: string, values: Record<string, string | number>) =>
     t(key).replace(/\{(\w+)\}/g, (_, placeholder) => {
       const raw = String(values[placeholder] ?? "");
       return locale === "ar" ? toArabicDigits(raw) : raw;
@@ -133,7 +141,9 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
       }
     }
     if (transaction.type === "topup") {
-      const match = transaction.description.match(/^Wallet top-up of (\d+) EGP$/);
+      const match = transaction.description.match(
+        /^Wallet top-up of (\d+) EGP$/,
+      );
       if (match) {
         return formatLabel("wallet.topup_description", { amount: match[1] });
       }
@@ -196,15 +206,13 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
           });
           const json = await res.json();
           if (!cancelled) {
-            if (json.status === "paid")
-              setNotice(t("wallet.topup_added"));
+            if (json.status === "paid") setNotice(t("wallet.topup_added"));
             else if (json.status === "failed")
               setNotice(t("wallet.topup_failed"));
             else setNotice(t("wallet.topup_processing"));
           }
         } catch {
-          if (!cancelled)
-            setNotice(t("wallet.topup_confirm_error"));
+          if (!cancelled) setNotice(t("wallet.topup_confirm_error"));
         }
         // Clean the URL so a refresh doesn't re-verify.
         router.replace("/wallet");
@@ -340,14 +348,14 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setNotice(json.error ?? "Failed to cancel request.");
+        setNotice(json.error ?? t("wallet.cancel_request_failed"));
       } else {
-        setNotice(json.message ?? "Request cancelled.");
+        setNotice(json.message ?? t("wallet.cancel_request_success"));
         await load();
         await loadRequests();
       }
     } catch {
-      setNotice("Network error.");
+      setNotice(t("wallet.generic_network_error"));
     } finally {
       setCancellingId(null);
     }
@@ -405,7 +413,9 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
         >
           <WalletIcon size={16} aria-hidden="true" />
           <span style={{ fontSize: 13, fontWeight: 600 }}>
-            {isDriver ? t("wallet.earnings_balance") : t("wallet.balance_label")}
+            {isDriver
+              ? t("wallet.earnings_balance")
+              : t("wallet.balance_label")}
           </span>
         </div>
         <div
@@ -416,7 +426,9 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          {data ? formatNumber(data.balanceEgp) + " " + t("wallet.egp_suffix") : "—"}
+          {data
+            ? formatNumber(data.balanceEgp) + " " + t("wallet.egp_suffix")
+            : "—"}
         </div>
 
         {isDriver && data && (
@@ -433,24 +445,61 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
             }}
           >
             <div>
-              <span style={{ opacity: 0.75, display: "block", marginBottom: 2 }}>Total Balance</span>
-              <strong style={{ fontSize: 14 }}>{formatNumber(data.balanceEgp)} {t("wallet.egp_suffix")}</strong>
+              <span
+                style={{ opacity: 0.75, display: "block", marginBottom: 2 }}
+              >
+                {t("wallet.total_balance")}
+              </span>
+              <strong style={{ fontSize: 14 }}>
+                {formatNumber(data.balanceEgp)} {t("wallet.egp_suffix")}
+              </strong>
             </div>
             <div>
-              <span style={{ opacity: 0.75, display: "block", marginBottom: 2 }}>Reserve (Floor)</span>
-              <strong style={{ fontSize: 14 }}>{formatNumber(data.reserveAmount ?? 200)} {t("wallet.egp_suffix")}</strong>
+              <span
+                style={{ opacity: 0.75, display: "block", marginBottom: 2 }}
+              >
+                {t("wallet.reserve_floor")}
+              </span>
+              <strong style={{ fontSize: 14 }}>
+                {formatNumber(data.reserveAmount ?? 200)}{" "}
+                {t("wallet.egp_suffix")}
+              </strong>
             </div>
             <div>
-              <span style={{ opacity: 0.75, display: "block", marginBottom: 2 }}>Pending Withdrawal</span>
-              <strong style={{ fontSize: 14, color: "#F5A623" }}>{formatNumber(data.pendingWithdrawalAmount ?? 0)} {t("wallet.egp_suffix")}</strong>
+              <span
+                style={{ opacity: 0.75, display: "block", marginBottom: 2 }}
+              >
+                {t("wallet.pending_withdrawal")}
+              </span>
+              <strong style={{ fontSize: 14, color: "#F5A623" }}>
+                {formatNumber(data.pendingWithdrawalAmount ?? 0)}{" "}
+                {t("wallet.egp_suffix")}
+              </strong>
             </div>
             <div>
-              <span style={{ opacity: 0.75, display: "block", marginBottom: 2 }}>Withdrawable</span>
-              <strong style={{ fontSize: 14, color: "#00C2A8" }}>{formatNumber(data.withdrawableEgp ?? 0)} {t("wallet.egp_suffix")}</strong>
+              <span
+                style={{ opacity: 0.75, display: "block", marginBottom: 2 }}
+              >
+                {t("wallet.withdrawable")}
+              </span>
+              <strong style={{ fontSize: 14, color: "#00C2A8" }}>
+                {formatNumber(data.withdrawableEgp ?? 0)}{" "}
+                {t("wallet.egp_suffix")}
+              </strong>
             </div>
             {data.withdrawalLimit != null && (
-              <div style={{ gridColumn: "1 / -1", fontSize: 11, opacity: 0.8, marginTop: 2 }}>
-                Max withdrawal limit per request: <strong>{formatNumber(data.withdrawalLimit)} {t("wallet.egp_suffix")}</strong>
+              <div
+                style={{
+                  gridColumn: "1 / -1",
+                  fontSize: 11,
+                  opacity: 0.8,
+                  marginTop: 2,
+                }}
+              >
+                {t("wallet.max_withdrawal_limit_prefix")}{" "}
+                <strong>
+                  {formatNumber(data.withdrawalLimit)} {t("wallet.egp_suffix")}
+                </strong>
               </div>
             )}
           </div>
@@ -734,9 +783,11 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                   margin: "0 0 14px",
                 }}
               >
-                Withdrawal Requests
+                {t("wallet.withdrawal_requests_title")}
               </h2>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
                 {withdrawalRequests.map((req) => {
                   const isPending = req.status === "pending";
                   const isApproved = req.status === "approved";
@@ -755,9 +806,16 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                       }}
                     >
                       <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
                           <strong style={{ fontSize: 15, color: "#0B1E3D" }}>
-                            {formatNumber(req.amountEgp)} {t("wallet.egp_suffix")}
+                            {formatNumber(req.amountEgp)}{" "}
+                            {t("wallet.egp_suffix")}
                           </strong>
                           <span
                             style={{
@@ -768,28 +826,45 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                               background: isPending
                                 ? "rgba(245, 166, 35, 0.15)"
                                 : isApproved
-                                ? "rgba(0, 194, 168, 0.15)"
-                                : isRejected
-                                ? "rgba(231, 76, 60, 0.15)"
-                                : "#E2E8F0",
+                                  ? "rgba(0, 194, 168, 0.15)"
+                                  : isRejected
+                                    ? "rgba(231, 76, 60, 0.15)"
+                                    : "#E2E8F0",
                               color: isPending
                                 ? "#D97706"
                                 : isApproved
-                                ? "#00A38D"
-                                : isRejected
-                                ? "#E74C3C"
-                                : "#64748B",
+                                  ? "#00A38D"
+                                  : isRejected
+                                    ? "#E74C3C"
+                                    : "#64748B",
                             }}
                           >
-                            {req.status.toUpperCase()}
+                            {t(`wallet.request_status.${req.status}`)}
                           </span>
                         </div>
-                        <p style={{ fontSize: 12, color: "#64748B", margin: "4px 0 0" }}>
-                          To: {req.payoutDestination} &bull; {new Date(req.requestedAt).toLocaleDateString()}
+                        <p
+                          style={{
+                            fontSize: 12,
+                            color: "#64748B",
+                            margin: "4px 0 0",
+                          }}
+                        >
+                          {t("wallet.destination_prefix")}{" "}
+                          {req.payoutDestination} &bull;{" "}
+                          {new Date(req.requestedAt).toLocaleDateString(
+                            locale === "ar" ? "ar-EG" : "en-EG",
+                          )}
                         </p>
                         {req.rejectionReason && (
-                          <p style={{ fontSize: 12, color: "#E74C3C", margin: "4px 0 0" }}>
-                            Reason: {req.rejectionReason}
+                          <p
+                            style={{
+                              fontSize: 12,
+                              color: "#E74C3C",
+                              margin: "4px 0 0",
+                            }}
+                          >
+                            {t("wallet.rejection_reason_prefix")}{" "}
+                            {req.rejectionReason}
                           </p>
                         )}
                       </div>
@@ -809,7 +884,9 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                             cursor: "pointer",
                           }}
                         >
-                          {cancellingId === req.id ? "Cancelling..." : "Cancel"}
+                          {cancellingId === req.id
+                            ? t("wallet.cancelling")
+                            : t("wallet.cancel_button")}
                         </button>
                       )}
                     </div>
@@ -914,7 +991,9 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
             ) : (
               <Plus size={18} aria-hidden="true" />
             )}
-            {busy ? t("wallet.redirecting") : formatAmountLabel("wallet.charge_button", amount)}
+            {busy
+              ? t("wallet.redirecting")
+              : formatAmountLabel("wallet.charge_button", amount)}
           </button>
         </section>
       )}
@@ -934,7 +1013,9 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
       {!data ? (
         <p style={{ fontSize: 14, color: "#5A6A7A" }}>{t("wallet.loading")}</p>
       ) : data.transactions.length === 0 ? (
-        <p style={{ fontSize: 14, color: "#5A6A7A" }}>{t("wallet.no_transactions")}</p>
+        <p style={{ fontSize: 14, color: "#5A6A7A" }}>
+          {t("wallet.no_transactions")}
+        </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {data.transactions.map((transaction) => {
@@ -1004,7 +1085,9 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                         minute: "2-digit",
                       },
                     )}
-                    {transaction.status !== "completed" ? ` · ${t(`wallet.status.${transaction.status}`)}` : ""}
+                    {transaction.status !== "completed"
+                      ? ` · ${t(`wallet.status.${transaction.status}`)}`
+                      : ""}
                   </div>
                 </div>
                 <span

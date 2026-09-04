@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Loader2, ShieldQuestion } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useVerificationConfig } from "@/lib/auth/useVerificationConfig";
+import { useClientLocale } from "@/lib/i18n/client";
 
 export default function SecurityQuestionSetupCard({
   initialHasSecurityQuestion,
@@ -11,6 +12,7 @@ export default function SecurityQuestionSetupCard({
   initialHasSecurityQuestion: boolean;
 }) {
   const router = useRouter();
+  const { t, locale } = useClientLocale();
   const { method, questions, loading: configLoading } = useVerificationConfig();
   const [hasSecurityQuestion, setHasSecurityQuestion] = useState(
     initialHasSecurityQuestion,
@@ -28,11 +30,11 @@ export default function SecurityQuestionSetupCard({
     event.preventDefault();
     setMessage(null);
     if (!securityQuestionId) {
-      setMessage({ ok: false, text: "Choose a security question." });
+      setMessage({ ok: false, text: t("security_question.error_choose") });
       return;
     }
     if (securityAnswer.trim().length < 2) {
-      setMessage({ ok: false, text: "Enter your security answer." });
+      setMessage({ ok: false, text: t("security_question.error_answer") });
       return;
     }
 
@@ -48,10 +50,12 @@ export default function SecurityQuestionSetupCard({
       });
       const data = await response.json();
       if (!response.ok)
-        throw new Error(data.error ?? "Could not save security question.");
+        throw new Error(
+          data.error ?? t("security_question.save_error_fallback"),
+        );
       setHasSecurityQuestion(true);
       setSecurityAnswer("");
-      setMessage({ ok: true, text: "Security question saved." });
+      setMessage({ ok: true, text: t("security_question.saved_notice") });
       router.refresh();
     } catch (error) {
       setMessage({
@@ -59,7 +63,7 @@ export default function SecurityQuestionSetupCard({
         text:
           error instanceof Error
             ? error.message
-            : "Could not save security question.",
+            : t("security_question.save_error_fallback"),
       });
     } finally {
       setSaving(false);
@@ -104,7 +108,7 @@ export default function SecurityQuestionSetupCard({
         </span>
         <div>
           <h2 style={{ margin: 0, color: "#0B1E3D", fontSize: 15 }}>
-            Security question
+            {t("security_question.title")}
           </h2>
           <p
             style={{
@@ -114,8 +118,8 @@ export default function SecurityQuestionSetupCard({
             }}
           >
             {hasSecurityQuestion
-              ? "Set up"
-              : "Set this up to reset or change your password."}
+              ? t("security_question.setup_status_done")
+              : t("security_question.setup_hint")}
           </p>
         </div>
       </div>
@@ -129,13 +133,13 @@ export default function SecurityQuestionSetupCard({
             value={securityQuestionId}
             onChange={(event) => setSecurityQuestionId(event.target.value)}
             required
-            aria-label="Security question"
+            aria-label={t("security_question.title")}
             style={fieldStyle}
           >
-            <option value="">Choose a question</option>
+            <option value="">{t("security_question.choose_option")}</option>
             {questions.map((question) => (
               <option key={question.id} value={question.id}>
-                {question.question}
+                {locale === "ar" ? question.questionAr : question.question}
               </option>
             ))}
           </select>
@@ -145,7 +149,7 @@ export default function SecurityQuestionSetupCard({
               setSecurityAnswer(event.target.value.slice(0, 120))
             }
             autoComplete="off"
-            placeholder="Your answer"
+            placeholder={t("security_question.your_answer_placeholder")}
             required
             style={fieldStyle}
           />
@@ -162,8 +166,8 @@ export default function SecurityQuestionSetupCard({
             </p>
           )}
           <button type="submit" disabled={saving} style={buttonStyle(saving)}>
-            {saving && <Loader2 size={16} className="animate-spin" />}Save
-            security question
+            {saving && <Loader2 size={16} className="animate-spin" />}
+            {t("security_question.save_button")}
           </button>
         </form>
       )}

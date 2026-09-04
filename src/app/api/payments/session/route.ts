@@ -79,22 +79,48 @@ export async function POST(req: NextRequest) {
   const gatewayAmount = totalEgp - walletAmount;
 
   // ── Create Payment aggregate ──
-  const payment = await Payment.create({
-    userId: new Types.ObjectId(session.userId),
-    bookingId: booking._id,
-    totalEgp,
-    walletAmountEgp: walletAmount,
-    gatewayAmountEgp: gatewayAmount,
-    walletStatus: walletAmount > 0 ? "reserved" : "none",
-    gatewayStatus: gatewayAmount > 0 ? "pending" : "none",
-    overallStatus: "created",
-    timeline: [
-      {
-        event: "payment_created",
-        detail: `Total ${totalEgp} EGP (wallet ${walletAmount}, gateway ${gatewayAmount})`,
-      },
-    ],
-  });
+  // Guard against double-checkout races (two tabs, double-click): the unique
+  // partial index on {bookingId, overallStatus:active} rejects a second
+  // concurrent attempt instead of creating a parallel reservation/charge.
+  let payment;
+  try {
+    payment = await Payment.create({
+      userId: new Types.ObjectId(session.userId),
+      bookingId: booking._id,
+      totalEgp,
+      walletAmountEgp: walletAmount,
+      gatewayAmountEgp: gatewayAmount,
+      walletStatus: walletAmount > 0 ? "reserved" : "none",
+      gatewayStatus: gatewayAmount > 0 ? "pending" : "none",
+      overallStatus: "created",
+      timeline: [
+        {
+          event: "payment_created",
+          detail: `Total ${totalEgp} EGP (wallet ${walletAmount}, gateway ${gatewayAmount})`,
+        },
+      ],
+    });
+  } catch (err) {
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      (err as { code?: number }).code === 11000
+    ) {
+      const existing = await Payment.findOne({
+        bookingId: booking._id,
+        overallStatus: { $in: ["created", "wallet_reserved", "kashier_pending"] },
+      }).sort({ createdAt: -1 });
+      return NextResponse.json(
+        {
+          error: "A payment is already in progress for this booking.",
+          paymentId: existing ? String(existing._id) : null,
+        },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
 
   // ── Wallet reservation (if any) ──
   let reservationTxId: string | null = null;

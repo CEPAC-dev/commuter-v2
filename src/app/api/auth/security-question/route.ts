@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
         { status: 409 },
       );
     }
-    return NextResponse.json({ questionId: q.id, question: q.question });
+    return NextResponse.json({ questionId: q.id, question: q.question, questionAr: q.questionAr });
   } catch {
     return NextResponse.json(
       { error: "Could not look up the security question." },

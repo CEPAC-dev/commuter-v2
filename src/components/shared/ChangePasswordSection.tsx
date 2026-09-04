@@ -9,8 +9,10 @@ import {
   PASSWORD_RULES_MESSAGE,
 } from "@/lib/auth/validation";
 import { useVerificationConfig } from "@/lib/auth/useVerificationConfig";
+import { useClientLocale } from "@/lib/i18n/client";
 
 export default function ChangePasswordSection() {
+  const { t } = useClientLocale();
   const [isOpen, setIsOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -34,13 +36,15 @@ export default function ChangePasswordSection() {
       });
       const data = await res.json();
       if (!res.ok)
-        throw new Error(data.error ?? "Could not send a verification code.");
+        throw new Error(
+          data.error ?? t("otp.send_verification_error_fallback"),
+        );
       setCodeSent(true);
     } catch (error) {
       setError(
         error instanceof Error
           ? error.message
-          : "Could not send a verification code.",
+          : t("otp.send_verification_error_fallback"),
       );
     } finally {
       setSendingCode(false);
@@ -53,12 +57,12 @@ export default function ChangePasswordSection() {
     setSuccess(false);
     if (!isStrongPassword(newPassword)) return setError(PASSWORD_RULES_MESSAGE);
     if (newPassword !== confirmPassword)
-      return setError("New passwords do not match.");
+      return setError(t("change_password.mismatch"));
     if (verificationMethod === "security_question") {
       if (securityAnswer.trim().length < 2)
-        return setError("Enter the answer to your security question.");
+        return setError(t("security_question.enter_answer_error"));
     } else if (!/^\d{6}$/.test(otp)) {
-      return setError("Enter the 6-digit verification code.");
+      return setError(t("otp.enter_code_error"));
     }
 
     setSaving(true);
@@ -77,7 +81,8 @@ export default function ChangePasswordSection() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to change password.");
+      if (!res.ok)
+        throw new Error(data.error ?? t("change_password.update_failed"));
       setNewPassword("");
       setConfirmPassword("");
       setOtp("");
@@ -87,7 +92,9 @@ export default function ChangePasswordSection() {
       setTimeout(() => setSuccess(false), 3000);
     } catch (error) {
       setError(
-        error instanceof Error ? error.message : "Failed to change password.",
+        error instanceof Error
+          ? error.message
+          : t("change_password.update_failed"),
       );
     } finally {
       setSaving(false);
@@ -126,10 +133,12 @@ export default function ChangePasswordSection() {
         <h2
           style={{ fontSize: 15, fontWeight: 700, color: "#0B1E3D", margin: 0 }}
         >
-          Change password
+          {t("profile.change_password")}
         </h2>
         <span style={{ fontSize: 14, color: "#00C2A8", fontWeight: 700 }}>
-          {isOpen ? "Hide" : "Change"}
+          {isOpen
+            ? t("change_password.toggle_hide")
+            : t("change_password.toggle_change")}
         </span>
       </button>
 
@@ -153,11 +162,11 @@ export default function ChangePasswordSection() {
             }}
           >
             {verificationMethod === "security_question"
-              ? "Answer your security question to confirm this change."
-              : "We’ll send a code to your account phone number before changing your password."}
+              ? t("security_question.confirm_change_hint")
+              : t("otp.change_password_hint")}
           </p>
           <PasswordInput
-            label="New password"
+            label={t("change_password.new")}
             id="cp-new"
             autoComplete="new-password"
             value={newPassword}
@@ -165,7 +174,7 @@ export default function ChangePasswordSection() {
           />
           <PasswordStrengthMeter password={newPassword} />
           <PasswordInput
-            label="Confirm new password"
+            label={t("change_password.confirm")}
             id="cp-confirm"
             autoComplete="new-password"
             value={confirmPassword}
@@ -184,7 +193,8 @@ export default function ChangePasswordSection() {
                   color: "#0B1E3D",
                 }}
               >
-                <ShieldQuestion size={14} aria-hidden="true" /> Security answer
+                <ShieldQuestion size={14} aria-hidden="true" />{" "}
+                {t("security_question.answer_label_with_icon")}
               </span>
               <input
                 value={securityAnswer}
@@ -192,7 +202,7 @@ export default function ChangePasswordSection() {
                   setSecurityAnswer(e.target.value.slice(0, 120))
                 }
                 autoComplete="off"
-                placeholder="Your answer"
+                placeholder={t("security_question.your_answer_placeholder")}
                 required
                 style={{
                   height: 48,
@@ -213,8 +223,8 @@ export default function ChangePasswordSection() {
                 }
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                placeholder="6-digit verification code"
-                aria-label="6-digit verification code"
+                placeholder={t("otp.code_placeholder_full")}
+                aria-label={t("otp.code_placeholder_full")}
                 required
                 style={{
                   height: 48,
@@ -250,7 +260,7 @@ export default function ChangePasswordSection() {
               }}
             >
               <Check size={14} aria-hidden="true" />
-              Password updated.
+              {t("change_password.updated")}
             </p>
           )}
 
@@ -263,7 +273,9 @@ export default function ChangePasswordSection() {
                 style={buttonStyle("secondary", sendingCode || saving)}
               >
                 {sendingCode && <Loader2 size={16} className="animate-spin" />}
-                {codeSent ? "Resend code" : "Send code"}
+                {codeSent
+                  ? t("otp.resend_code_short")
+                  : t("otp.send_code_short")}
               </button>
             )}
             {(canSubmitSecurity || canSubmitOtp) && (
@@ -272,8 +284,8 @@ export default function ChangePasswordSection() {
                 disabled={saving}
                 style={buttonStyle("primary", saving)}
               >
-                {saving && <Loader2 size={16} className="animate-spin" />}Update
-                password
+                {saving && <Loader2 size={16} className="animate-spin" />}
+                {t("change_password.update")}
               </button>
             )}
           </div>

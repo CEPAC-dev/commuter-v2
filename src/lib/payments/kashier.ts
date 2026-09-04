@@ -77,6 +77,32 @@ export async function verifyAndSettleBooking(
   if (payment) {
     // No gateway leg — capture wallet and settle.
     if (payment.gatewayAmountEgp === 0) {
+      const settled = await Request.findOneAndUpdate(
+        { _id: booking._id, paymentStatus: { $in: ["pending", "failed"] } },
+        { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
+      );
+
+      if (!settled) {
+        if (
+          payment.walletReservationTxId &&
+          payment.walletStatus === "reserved"
+        ) {
+          await releaseReservation(String(payment.walletReservationTxId), {
+            description: `Released — booking already settled (duplicate payment ${payment._id})`,
+            paymentId: String(payment._id),
+            bookingId: String(payment.bookingId),
+          });
+        }
+        await Payment.updateOne(
+          { _id: payment._id },
+          {
+            $set: { overallStatus: "cancelled", walletStatus: "released" },
+            $push: { timeline: { event: "duplicate_settlement_prevented" } },
+          },
+        );
+        return booking.paymentStatus === "paid" ? "paid" : "failed";
+      }
+
       if (
         payment.walletReservationTxId &&
         payment.walletStatus === "reserved"
@@ -91,10 +117,6 @@ export async function verifyAndSettleBooking(
         );
         if (captured === null) return "pending";
       }
-      await Request.findOneAndUpdate(
-        { _id: booking._id, paymentStatus: { $in: ["pending", "failed"] } },
-        { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
-      );
       await Trip.updateMany(
         { requestId: booking._id },
         { paymentStatus: "paid", status: "submitted" },
@@ -117,6 +139,61 @@ export async function verifyAndSettleBooking(
     const outcome = await queryKashierStatus(payment.kashierSessionId);
 
     if (outcome === "paid") {
+      // Claim booking BEFORE capturing money — same invariant as the webhook
+      // path: never take funds for a Payment that lost the settlement race.
+      const settled = await Request.findOneAndUpdate(
+        { _id: booking._id, paymentStatus: { $in: ["pending", "failed"] } },
+        { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
+      );
+
+      if (!settled) {
+        if (
+          payment.walletReservationTxId &&
+          payment.walletStatus === "reserved"
+        ) {
+          await releaseReservation(String(payment.walletReservationTxId), {
+            description: `Released — booking already settled (duplicate payment ${payment._id})`,
+            paymentId: String(payment._id),
+            bookingId: String(payment.bookingId),
+          });
+        }
+        let gatewayRefunded = false;
+        if (payment.gatewayAmountEgp > 0 && payment.kashierOrderId) {
+          const refund = await refundKashierPayment(
+            payment.kashierOrderId,
+            payment.gatewayAmountEgp,
+            "Duplicate payment — booking already settled",
+          );
+          gatewayRefunded = refund !== null;
+        }
+        await Payment.updateOne(
+          { _id: payment._id },
+          {
+            $set: {
+              overallStatus: "cancelled",
+              walletStatus: payment.walletAmountEgp > 0 ? "released" : "none",
+              gatewayStatus:
+                payment.gatewayAmountEgp > 0
+                  ? gatewayRefunded
+                    ? "refunded"
+                    : "success"
+                  : "none",
+            },
+            $push: {
+              timeline: {
+                event: "duplicate_settlement_prevented",
+                detail: gatewayRefunded
+                  ? "wallet released, gateway refunded"
+                  : payment.gatewayAmountEgp > 0
+                    ? "wallet released, gateway refund FAILED — manual action required"
+                    : "wallet released",
+              },
+            },
+          },
+        );
+        return booking.paymentStatus === "paid" ? "paid" : "failed";
+      }
+
       if (
         payment.walletReservationTxId &&
         payment.walletStatus === "reserved"
@@ -131,16 +208,10 @@ export async function verifyAndSettleBooking(
         );
         if (captured === null) return "pending";
       }
-      const settled = await Request.findOneAndUpdate(
-        { _id: booking._id, paymentStatus: { $in: ["pending", "failed"] } },
-        { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
+      await Trip.updateMany(
+        { requestId: settled._id },
+        { paymentStatus: "paid", status: "submitted" },
       );
-      if (settled) {
-        await Trip.updateMany(
-          { requestId: settled._id },
-          { paymentStatus: "paid", status: "submitted" },
-        );
-      }
       await Payment.updateOne(
         { _id: payment._id },
         {

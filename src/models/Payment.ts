@@ -89,6 +89,17 @@ const PaymentSchema = new Schema(
 
 PaymentSchema.index({ overallStatus: 1, createdAt: -1 });
 PaymentSchema.index({ userId: 1, createdAt: -1 });
+// At most one in-flight Payment per booking — blocks double-checkout races
+// (two tabs/double-click) from creating parallel reservations/charges.
+PaymentSchema.index(
+  { bookingId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      overallStatus: { $in: ["created", "wallet_reserved", "kashier_pending"] },
+    },
+  },
+);
 
 export type PaymentDoc = InferSchemaType<typeof PaymentSchema>;
 export const Payment = models.Payment || model("Payment", PaymentSchema);

@@ -79,11 +79,11 @@ function LoginForm() {
     }
     if (mode === "register" && verificationMethod === "security_question") {
       if (!securityQuestionId) {
-        setError("Choose a security question.");
+        setError(t("security_question.error_choose"));
         return;
       }
       if (securityAnswer.trim().length < 2) {
-        setError("Enter an answer to your security question.");
+        setError(t("security_question.error_answer_full"));
         return;
       }
     }
@@ -709,7 +709,7 @@ function LoginForm() {
                           marginBottom: 6,
                         }}
                       >
-                        Security question
+                        {t("security_question.title")}
                       </label>
                       <select
                         id="sec-question"
@@ -728,10 +728,12 @@ function LoginForm() {
                           color: "#0B1E3D",
                         }}
                       >
-                        <option value="">Choose a question…</option>
+                        <option value="">
+                          {t("security_question.choose_placeholder")}
+                        </option>
                         {securityQuestions.map((q) => (
                           <option key={q.id} value={q.id}>
-                            {q.question}
+                            {locale === "ar" ? q.questionAr : q.question}
                           </option>
                         ))}
                       </select>
@@ -747,13 +749,15 @@ function LoginForm() {
                           marginBottom: 6,
                         }}
                       >
-                        Your answer
+                        {t("security_question.your_answer_placeholder")}
                       </label>
                       <input
                         id="sec-answer"
                         type="text"
                         autoComplete="off"
-                        placeholder="Answer"
+                        placeholder={t(
+                          "security_question.answer_placeholder_short",
+                        )}
                         value={securityAnswer}
                         onChange={(e) =>
                           setSecurityAnswer(e.target.value.slice(0, 120))
@@ -778,8 +782,7 @@ function LoginForm() {
                           color: "#5A6A7A",
                         }}
                       >
-                        You&apos;ll use this answer to reset or change your
-                        password.
+                        {t("security_question.usage_hint")}
                       </p>
                     </div>
                   </div>
