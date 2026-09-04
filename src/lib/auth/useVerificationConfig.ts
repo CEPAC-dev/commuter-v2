@@ -8,7 +8,7 @@ import {
   type VerificationMethod,
 } from "@/lib/config/verification";
 
-type Question = { id: string; question: string };
+type Question = { id: string; question: string; questionAr: string };
 
 export function useVerificationConfig() {
   const [method, setMethod] = useState<VerificationMethod>(

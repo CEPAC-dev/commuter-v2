@@ -68,7 +68,7 @@ export default function DriverRegisterForm({
   referralCode,
   onSuccess,
 }: Props) {
-  const { t } = useClientLocale();
+  const { t, locale } = useClientLocale();
   const { method: verificationMethod, questions: securityQuestions } =
     useVerificationConfig();
   const [securityQuestionId, setSecurityQuestionId] = useState("");
@@ -85,9 +85,9 @@ export default function DriverRegisterForm({
       return t("auth.driver.invalid_email");
     if (!gender) return t("auth.driver.gender_required");
     if (verificationMethod === "security_question") {
-      if (!securityQuestionId) return "Choose a security question.";
+      if (!securityQuestionId) return t("security_question.error_choose");
       if (securityAnswer.trim().length < 2)
-        return "Enter an answer to your security question.";
+        return t("security_question.error_answer_full");
     }
     return "";
   }
@@ -278,7 +278,7 @@ export default function DriverRegisterForm({
           <>
             <div>
               <label htmlFor="d-sec-question" style={labelStyle}>
-                Security question{" "}
+                {t("security_question.title")}{" "}
                 <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                   *
                 </span>
@@ -290,17 +290,19 @@ export default function DriverRegisterForm({
                 onChange={(e) => setSecurityQuestionId(e.target.value)}
                 style={selectStyle}
               >
-                <option value="">Choose a question…</option>
+                <option value="">
+                  {t("security_question.choose_placeholder")}
+                </option>
                 {securityQuestions.map((q) => (
                   <option key={q.id} value={q.id}>
-                    {q.question}
+                    {locale === "ar" ? q.questionAr : q.question}
                   </option>
                 ))}
               </select>
             </div>
             <div>
               <label htmlFor="d-sec-answer" style={labelStyle}>
-                Your answer{" "}
+                {t("security_question.your_answer_placeholder")}{" "}
                 <span aria-hidden="true" style={{ color: "#e74c3c" }}>
                   *
                 </span>
@@ -317,7 +319,7 @@ export default function DriverRegisterForm({
                 style={inputStyle}
               />
               <p style={{ fontSize: 12, color: "#5A6A7A", margin: "6px 0 0" }}>
-                You&apos;ll use this answer to reset or change your password.
+                {t("security_question.usage_hint")}
               </p>
             </div>
           </>

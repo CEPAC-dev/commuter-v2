@@ -266,6 +266,80 @@ async function settleMixedPayment(
   if (!payment) return;
 
   if (paid) {
+    // Claim the booking FIRST — never capture money before confirming this
+    // Payment is the one allowed to settle it. If another Payment for the
+    // same booking already settled it (should be prevented by the unique
+    // active-Payment index, but defense in depth), compensate below instead
+    // of silently capturing funds for nothing.
+    const settled = await Request.findOneAndUpdate(
+      {
+        _id: payment.bookingId,
+        paymentStatus: { $in: ["pending", "failed"] },
+      },
+      {
+        $set: {
+          paymentStatus: "paid",
+          status: "submitted",
+          paidAt: new Date(),
+        },
+      },
+    );
+
+    if (!settled) {
+      // Booking already settled elsewhere — refund whatever this Payment
+      // took instead of capturing/keeping it.
+      if (payment.walletReservationTxId && payment.walletStatus === "reserved") {
+        await releaseReservation(String(payment.walletReservationTxId), {
+          description: `Released — booking already settled (duplicate payment ${payment._id})`,
+          paymentId: String(payment._id),
+          bookingId: String(payment.bookingId),
+        });
+      }
+      let gatewayRefunded = false;
+      if (payment.gatewayAmountEgp > 0 && payment.kashierOrderId) {
+        const { refundKashierPayment } = await import("@/lib/payments/kashier");
+        const refund = await refundKashierPayment(
+          payment.kashierOrderId,
+          payment.gatewayAmountEgp,
+          "Duplicate payment — booking already settled",
+        );
+        gatewayRefunded = refund !== null;
+      }
+      await Payment.updateOne(
+        { _id: payment._id },
+        {
+          $set: {
+            overallStatus: "cancelled",
+            walletStatus: payment.walletAmountEgp > 0 ? "released" : "none",
+            gatewayStatus:
+              payment.gatewayAmountEgp > 0
+                ? gatewayRefunded
+                  ? "refunded"
+                  : "success"
+                : "none",
+          },
+          $push: {
+            timeline: {
+              event: "duplicate_settlement_prevented",
+              detail: gatewayRefunded
+                ? "wallet released, gateway refunded"
+                : payment.gatewayAmountEgp > 0
+                  ? "wallet released, gateway refund FAILED — manual action required"
+                  : "wallet released",
+            },
+          },
+        },
+      );
+      await createNotification({
+        userId: String(payment.userId),
+        type: "payment_failed",
+        title: "Payment issue",
+        body: "This booking was already paid by another request. Any charge has been reversed.",
+        data: { bookingId: String(payment.bookingId), paymentId: String(payment._id) },
+      });
+      return;
+    }
+
     if (payment.walletReservationTxId && payment.walletStatus === "reserved") {
       const captured = await captureReservation(
         String(payment.walletReservationTxId),
@@ -280,20 +354,6 @@ async function settleMixedPayment(
         return;
       }
     }
-
-    const settled = await Request.findOneAndUpdate(
-      {
-        _id: payment.bookingId,
-        paymentStatus: { $in: ["pending", "failed"] },
-      },
-      {
-        $set: {
-          paymentStatus: "paid",
-          status: "submitted",
-          paidAt: new Date(),
-        },
-      },
-    );
 
     await Payment.updateOne(
       { _id: payment._id },

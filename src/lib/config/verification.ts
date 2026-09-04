@@ -22,14 +22,46 @@ export function isVerificationMethod(v: unknown): v is VerificationMethod {
 export const SECURITY_QUESTIONS: ReadonlyArray<{
   id: string;
   question: string;
+  questionAr: string;
 }> = [
-  { id: "pet_name", question: "What was the name of your first pet?" },
-  { id: "mother_maiden", question: "What is your mother's maiden name?" },
-  { id: "birth_city", question: "In what city were you born?" },
-  { id: "first_school", question: "What was the name of your first school?" },
-  { id: "first_car", question: "What was the make of your first car?" },
-  { id: "childhood_book", question: "What is your favorite childhood book?" },
+  {
+    id: "pet_name",
+    question: "What was the name of your first pet?",
+    questionAr: "ما اسم أول حيوان أليف امتلكته؟",
+  },
+  {
+    id: "mother_maiden",
+    question: "What is your mother's maiden name?",
+    questionAr: "ما اسم عائلة والدتك قبل الزواج؟",
+  },
+  {
+    id: "birth_city",
+    question: "In what city were you born?",
+    questionAr: "في أي مدينة وُلدت؟",
+  },
+  {
+    id: "first_school",
+    question: "What was the name of your first school?",
+    questionAr: "ما اسم أول مدرسة التحقت بها؟",
+  },
+  {
+    id: "first_car",
+    question: "What was the make of your first car?",
+    questionAr: "ما ماركة أول سيارة امتلكتها؟",
+  },
+  {
+    id: "childhood_book",
+    question: "What is your favorite childhood book?",
+    questionAr: "ما كتابك المفضل في الطفولة؟",
+  },
 ] as const;
+
+export function questionText(
+  q: { question: string; questionAr: string },
+  locale: "en" | "ar",
+) {
+  return locale === "ar" ? q.questionAr : q.question;
+}
 
 export function getSecurityQuestion(id: string) {
   return SECURITY_QUESTIONS.find((q) => q.id === id);

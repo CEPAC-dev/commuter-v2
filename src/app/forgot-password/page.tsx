@@ -45,6 +45,7 @@ export default function ForgotPasswordPage() {
   const [securityQuestion, setSecurityQuestion] = useState<{
     id: string;
     question: string;
+    questionAr: string;
   } | null>(null);
   const [securityAnswer, setSecurityAnswer] = useState("");
   const [loadingQuestion, setLoadingQuestion] = useState(false);
@@ -110,7 +111,7 @@ export default function ForgotPasswordPage() {
       if (!res.ok)
         throw new Error(data.error ?? t("auth.something_went_wrong"));
       setCodeSent(true);
-      setSuccess("A verification code was sent to your phone.");
+      setSuccess(t("otp.sent_notice"));
     } catch (error) {
       setError(
         error instanceof Error ? error.message : t("auth.something_went_wrong"),
@@ -138,7 +139,11 @@ export default function ForgotPasswordPage() {
       const data = await res.json();
       if (!res.ok)
         throw new Error(data.error ?? t("auth.something_went_wrong"));
-      setSecurityQuestion({ id: data.questionId, question: data.question });
+      setSecurityQuestion({
+        id: data.questionId,
+        question: data.question,
+        questionAr: data.questionAr,
+      });
     } catch (error) {
       setError(
         error instanceof Error ? error.message : t("auth.something_went_wrong"),
@@ -170,15 +175,15 @@ export default function ForgotPasswordPage() {
 
     if (verificationMethod === "security_question") {
       if (!securityQuestion) {
-        setError("Load your security question first.");
+        setError(t("security_question.load_first_error"));
         return;
       }
       if (securityAnswer.trim().length < 2) {
-        setError("Enter the answer to your security question.");
+        setError(t("security_question.enter_answer_error"));
         return;
       }
     } else if (!/^\d{6}$/.test(otp)) {
-      setError("Enter the 6-digit verification code.");
+      setError(t("otp.enter_code_error"));
       return;
     }
 
@@ -518,13 +523,13 @@ export default function ForgotPasswordPage() {
                 >
                   {loadingQuestion ? (
                     <>
-                      <Loader2 size={16} className="animate-spin" /> Loading
-                      question…
+                      <Loader2 size={16} className="animate-spin" />{" "}
+                      {t("security_question.loading")}
                     </>
                   ) : securityQuestion ? (
-                    "Reload question"
+                    t("security_question.reload_button")
                   ) : (
-                    "Load my security question"
+                    t("security_question.load_button")
                   )}
                 </button>
                 {securityQuestion ? (
@@ -544,7 +549,11 @@ export default function ForgotPasswordPage() {
                         style={{ color: "#5A6A7A" }}
                         aria-hidden="true"
                       />
-                      <span>{securityQuestion.question}</span>
+                      <span>
+                        {locale === "ar"
+                          ? securityQuestion.questionAr
+                          : securityQuestion.question}
+                      </span>
                     </div>
                     <div style={fieldStyle}>
                       <Lock
@@ -555,7 +564,9 @@ export default function ForgotPasswordPage() {
                       <input
                         type="text"
                         autoComplete="off"
-                        placeholder="Your answer"
+                        placeholder={t(
+                          "security_question.your_answer_placeholder",
+                        )}
                         value={securityAnswer}
                         onChange={(e) =>
                           setSecurityAnswer(e.target.value.slice(0, 120))
@@ -589,13 +600,13 @@ export default function ForgotPasswordPage() {
                 >
                   {sendingCode ? (
                     <>
-                      <Loader2 size={16} className="animate-spin" /> Sending
-                      code…
+                      <Loader2 size={16} className="animate-spin" />{" "}
+                      {t("otp.sending")}
                     </>
                   ) : codeSent ? (
-                    "Resend verification code"
+                    t("otp.resend_full")
                   ) : (
-                    "Send verification code"
+                    t("otp.send_full")
                   )}
                 </button>
                 {codeSent ? (
@@ -609,7 +620,7 @@ export default function ForgotPasswordPage() {
                       type="text"
                       inputMode="numeric"
                       autoComplete="one-time-code"
-                      placeholder="6-digit verification code"
+                      placeholder={t("otp.code_placeholder_full")}
                       value={otp}
                       onChange={(e) =>
                         setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))

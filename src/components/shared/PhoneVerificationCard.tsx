@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Loader2, Phone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useVerificationConfig } from "@/lib/auth/useVerificationConfig";
+import { useClientLocale } from "@/lib/i18n/client";
 
 export default function PhoneVerificationCard({
   initialVerified,
@@ -11,6 +12,7 @@ export default function PhoneVerificationCard({
   initialVerified: boolean;
 }) {
   const router = useRouter();
+  const { t } = useClientLocale();
   const { method: verificationMethod, loading: configLoading } =
     useVerificationConfig();
   const [verified, setVerified] = useState(initialVerified);
@@ -31,16 +33,17 @@ export default function PhoneVerificationCard({
         body: JSON.stringify({ purpose: "phone_verification" }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not send a code.");
+      if (!res.ok) throw new Error(data.error ?? t("otp.send_error_fallback"));
       setSent(true);
       setMessage({
         ok: true,
-        text: "A verification code was sent to your phone.",
+        text: t("otp.sent_notice"),
       });
     } catch (error) {
       setMessage({
         ok: false,
-        text: error instanceof Error ? error.message : "Could not send a code.",
+        text:
+          error instanceof Error ? error.message : t("otp.send_error_fallback"),
       });
     } finally {
       setLoading(null);
@@ -58,16 +61,19 @@ export default function PhoneVerificationCard({
         body: JSON.stringify({ otp }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not verify the code.");
+      if (!res.ok)
+        throw new Error(data.error ?? t("otp.verify_error_fallback"));
       setVerified(true);
       setOtp("");
-      setMessage({ ok: true, text: "Your phone number is verified." });
+      setMessage({ ok: true, text: t("phone_verification.verified_notice") });
       router.refresh();
     } catch (error) {
       setMessage({
         ok: false,
         text:
-          error instanceof Error ? error.message : "Could not verify the code.",
+          error instanceof Error
+            ? error.message
+            : t("otp.verify_error_fallback"),
       });
     } finally {
       setLoading(null);
@@ -100,11 +106,10 @@ export default function PhoneVerificationCard({
           </span>
           <div>
             <h2 style={{ margin: 0, color: "#0B1E3D", fontSize: 15 }}>
-              Phone verification
+              {t("phone_verification.title")}
             </h2>
             <p style={{ margin: "3px 0 0", color: "#5A6A7A", fontSize: 13 }}>
-              SMS verification is disabled. Identity is confirmed via your
-              security question.
+              {t("phone_verification.disabled_hint")}
             </p>
           </div>
         </div>
@@ -137,7 +142,7 @@ export default function PhoneVerificationCard({
             </span>
             <div>
               <h2 style={{ margin: 0, color: "#0B1E3D", fontSize: 15 }}>
-                Phone verification
+                {t("phone_verification.title")}
               </h2>
               <p
                 style={{
@@ -147,8 +152,8 @@ export default function PhoneVerificationCard({
                 }}
               >
                 {verified
-                  ? "Verified"
-                  : "Verify your number to secure your account."}
+                  ? t("phone_verification.verified_status")
+                  : t("phone_verification.unverified_hint")}
               </p>
             </div>
           </div>
@@ -166,8 +171,8 @@ export default function PhoneVerificationCard({
                   }
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  placeholder="6-digit code"
-                  aria-label="6-digit verification code"
+                  placeholder={t("otp.code_placeholder_short")}
+                  aria-label={t("otp.code_placeholder_full")}
                   required
                   style={{
                     height: 44,
@@ -202,7 +207,7 @@ export default function PhoneVerificationCard({
                   {loading === "send" ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : null}
-                  {sent ? "Resend code" : "Send code"}
+                  {sent ? t("otp.resend_code_short") : t("otp.send_code_short")}
                 </button>
                 {sent && (
                   <button
@@ -216,7 +221,7 @@ export default function PhoneVerificationCard({
                     {loading === "verify" ? (
                       <Loader2 size={16} className="animate-spin" />
                     ) : null}
-                    Verify phone
+                    {t("phone_verification.verify_button")}
                   </button>
                 )}
               </div>

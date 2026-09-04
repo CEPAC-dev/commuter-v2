@@ -5,7 +5,8 @@ import { MapPin, Clock, Car } from "lucide-react";
 import { isSharedVehicle } from "@/lib/geo/stations";
 import { getSession } from "@/lib/auth/session";
 import AppHeader from "@/components/layout/AppHeader";
-import { translate } from "@/lib/locale";
+import { translate, localeDirection } from "@/lib/locale";
+import { formatTime } from "@/lib/i18n";
 import { expireStaleForUser, listUserRequests } from "@/lib/services/requests";
 import { VEHICLES } from "@/lib/config/vehicles";
 import EmptyState from "@/components/shared/EmptyState";
@@ -16,6 +17,7 @@ import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import type { VehicleKey } from "@/lib/config/vehicles";
 import type { PaymentStatus, BookingStatus } from "@/types/booking";
+import type { Locale } from "@/lib/i18n";
 
 export const metadata = { title: "My requests — Commuter" };
 export const dynamic = "force-dynamic";
@@ -24,45 +26,48 @@ const PAGE_SIZE = 8;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function to12h(hhmm: string): string {
-  if (!hhmm) return "—";
-  const [h, m] = hhmm.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-
 function truncate(s: string, max = 34): string {
   return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
-const PAY_PILL: Record<
-  PaymentStatus,
-  { label: string; bg: string; color: string }
-> = {
-  pending: { label: "Awaiting payment", bg: "#FFF8E1", color: "#E65100" },
-  paid: { label: "Paid", bg: "#E8F5E9", color: "#27AE60" },
-  failed: { label: "Payment failed", bg: "#FFEBEE", color: "#E74C3C" },
-  refunded: { label: "Refunded", bg: "#EDE7F6", color: "#6A1B9A" },
-  expired: { label: "Expired", bg: "#F5F5F5", color: "#9aa7b4" },
+const PAY_PILL_KEYS: Record<PaymentStatus, string> = {
+  pending: "payments.pending",
+  paid: "payments.paid",
+  failed: "payments.failed",
+  refunded: "payments.refunded",
+  expired: "payments.expired",
 };
 
-const STATUS_PILL: Record<
-  BookingStatus,
-  { label: string; bg: string; color: string }
-> = {
-  pending_payment: {
-    label: "Pending payment",
-    bg: "#FFF3E0",
-    color: "#E65100",
-  },
-  submitted: { label: "Submitted", bg: "#E2E8F0", color: "#5A6A7A" },
-  matched: { label: "Matched", bg: "#00C2A8", color: "#fff" },
-  confirmed: { label: "Confirmed", bg: "#E8F5E9", color: "#27AE60" },
-  active: { label: "Active", bg: "#00C2A8", color: "#fff" },
-  completed: { label: "Completed", bg: "#0B1E3D", color: "#fff" },
-  cancelled: { label: "Cancelled", bg: "#FFEBEE", color: "#E74C3C" },
-  time_out: { label: "Timed out", bg: "#F5F5F5", color: "#9aa7b4" },
+const PAY_PILL_COLORS: Record<PaymentStatus, { bg: string; color: string }> = {
+  pending: { bg: "#FFF8E1", color: "#E65100" },
+  paid: { bg: "#E8F5E9", color: "#27AE60" },
+  failed: { bg: "#FFEBEE", color: "#E74C3C" },
+  refunded: { bg: "#EDE7F6", color: "#6A1B9A" },
+  expired: { bg: "#F5F5F5", color: "#9aa7b4" },
 };
+
+const STATUS_PILL_KEYS: Record<BookingStatus, string> = {
+  pending_payment: "status.pending_payment",
+  submitted: "filters.status_submitted",
+  matched: "filters.status_matched",
+  confirmed: "filters.status_confirmed",
+  active: "filters.status_active",
+  completed: "driver.completed",
+  cancelled: "filters.status_cancelled",
+  time_out: "status.previous",
+};
+
+const STATUS_PILL_COLORS: Record<BookingStatus, { bg: string; color: string }> =
+  {
+    pending_payment: { bg: "#FFF3E0", color: "#E65100" },
+    submitted: { bg: "#E2E8F0", color: "#5A6A7A" },
+    matched: { bg: "#00C2A8", color: "#fff" },
+    confirmed: { bg: "#E8F5E9", color: "#27AE60" },
+    active: { bg: "#00C2A8", color: "#fff" },
+    completed: { bg: "#0B1E3D", color: "#fff" },
+    cancelled: { bg: "#FFEBEE", color: "#E74C3C" },
+    time_out: { bg: "#F5F5F5", color: "#9aa7b4" },
+  };
 
 function Pill({
   label,
@@ -94,30 +99,51 @@ function Pill({
 
 // ── page ─────────────────────────────────────────────────────────────────────
 
-const PAYMENT_OPTIONS: FilterDef = {
-  key: "payment",
-  label: "Payment",
-  options: [
-    { value: "paid", label: "Paid" },
-    { value: "pending", label: "Awaiting payment" },
-    { value: "failed", label: "Failed" },
-    { value: "refunded", label: "Refunded" },
-  ],
-};
-
-const STATUS_OPTIONS: FilterDef = {
-  key: "status",
-  label: "Status",
-  options: [
-    { value: "pending_payment", label: "Pending payment" },
-    { value: "submitted", label: "Submitted" },
-    { value: "matched", label: "Matched" },
-    { value: "confirmed", label: "Confirmed" },
-    { value: "active", label: "Active" },
-    { value: "completed", label: "Completed" },
-    { value: "cancelled", label: "Cancelled" },
-  ],
-};
+function filterOptions(locale: Locale): {
+  payment: FilterDef;
+  status: FilterDef;
+} {
+  return {
+    payment: {
+      key: "payment",
+      label: translate(locale, "filters.payment_label"),
+      options: [
+        { value: "paid", label: translate(locale, "payments.paid") },
+        { value: "pending", label: translate(locale, "payments.pending") },
+        { value: "failed", label: translate(locale, "filters.status_failed") },
+        { value: "refunded", label: translate(locale, "payments.refunded") },
+      ],
+    },
+    status: {
+      key: "status",
+      label: translate(locale, "my_trips.status_filter_label"),
+      options: [
+        {
+          value: "pending_payment",
+          label: translate(locale, "status.pending_payment"),
+        },
+        {
+          value: "submitted",
+          label: translate(locale, "filters.status_submitted"),
+        },
+        {
+          value: "matched",
+          label: translate(locale, "filters.status_matched"),
+        },
+        {
+          value: "confirmed",
+          label: translate(locale, "filters.status_confirmed"),
+        },
+        { value: "active", label: translate(locale, "filters.status_active") },
+        { value: "completed", label: translate(locale, "driver.completed") },
+        {
+          value: "cancelled",
+          label: translate(locale, "filters.status_cancelled"),
+        },
+      ],
+    },
+  };
+}
 
 export default async function MyTripsPage({
   searchParams,
@@ -144,9 +170,11 @@ export default async function MyTripsPage({
     page,
     pageSize: PAGE_SIZE,
     paymentStatus:
-      payment && payment in PAY_PILL ? (payment as PaymentStatus) : undefined,
+      payment && payment in PAY_PILL_KEYS
+        ? (payment as PaymentStatus)
+        : undefined,
     status:
-      statusFilter && statusFilter in STATUS_PILL
+      statusFilter && statusFilter in STATUS_PILL_KEYS
         ? (statusFilter as BookingStatus)
         : undefined,
   });
@@ -154,12 +182,15 @@ export default async function MyTripsPage({
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   const hasFilters = Boolean(payment || statusFilter);
+  const options = filterOptions(locale);
+  const dateLocale = locale === "ar" ? "ar-EG" : "en-EG";
 
   return (
     <div style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
       <AppHeader authed email={session.email} variant="app" backHref="/" />
 
       <main
+        dir={localeDirection(locale)}
         style={{ maxWidth: 640, margin: "0 auto", padding: "28px 20px 56px" }}
       >
         <div style={{ marginBottom: 24 }}>
@@ -172,27 +203,34 @@ export default async function MyTripsPage({
               letterSpacing: "-0.02em",
             }}
           >
-            My requests
+            {translate(locale, "my_requests.page_title")}
           </h1>
           <p style={{ fontSize: 14, color: "#5A6A7A", margin: 0 }}>
             {total === 0
               ? hasFilters
-                ? "No requests match these filters."
-                : "No requests yet."
-              : `${total} request${total === 1 ? "" : "s"}`}
+                ? translate(locale, "my_requests.no_match_filters")
+                : translate(locale, "my_requests.no_requests_yet")
+              : translate(locale, "my_requests.count_label", {
+                  count: total,
+                  plural: total === 1 ? "" : "s",
+                })}
           </p>
         </div>
 
-        <FilterBar filters={[PAYMENT_OPTIONS, STATUS_OPTIONS]} />
+        <FilterBar filters={[options.payment, options.status]} />
 
         {bookings.length === 0 ? (
           <EmptyState
             icon="🚗"
-            title={hasFilters ? "Nothing here" : "No trips yet"}
+            title={
+              hasFilters
+                ? translate(locale, "my_trips.empty_title_filtered")
+                : translate(locale, "my_trips.empty")
+            }
             description={
               hasFilters
-                ? "Try clearing the filters to see all your requests."
-                : "Book your first commute ride and it will appear here."
+                ? translate(locale, "my_requests.empty_description_filtered")
+                : translate(locale, "my_requests.empty_description_first_time")
             }
             action={
               <Link
@@ -208,7 +246,7 @@ export default async function MyTripsPage({
                   textDecoration: "none",
                 }}
               >
-                Book a ride
+                {translate(locale, "my_trips.book_ride")}
               </Link>
             }
           />
@@ -264,7 +302,7 @@ export default async function MyTripsPage({
                       {booking.dates
                         .map((d) =>
                           new Date(`${d}T12:00:00`).toLocaleDateString(
-                            "en-EG",
+                            dateLocale,
                             {
                               weekday: "short",
                               month: "short",
@@ -289,12 +327,22 @@ export default async function MyTripsPage({
                         style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
                       >
                         <Pill
-                          {...(PAY_PILL[booking.paymentStatus] ??
-                            PAY_PILL.pending)}
+                          label={translate(
+                            locale,
+                            PAY_PILL_KEYS[booking.paymentStatus] ??
+                              PAY_PILL_KEYS.pending,
+                          )}
+                          {...(PAY_PILL_COLORS[booking.paymentStatus] ??
+                            PAY_PILL_COLORS.pending)}
                         />
                         <Pill
-                          {...(STATUS_PILL[booking.status] ??
-                            STATUS_PILL.pending_payment)}
+                          label={translate(
+                            locale,
+                            STATUS_PILL_KEYS[booking.status] ??
+                              STATUS_PILL_KEYS.pending_payment,
+                          )}
+                          {...(STATUS_PILL_COLORS[booking.status] ??
+                            STATUS_PILL_COLORS.pending_payment)}
                         />
                       </div>
                       <span
@@ -313,8 +361,11 @@ export default async function MyTripsPage({
                   {/* Trip rows */}
                   {booking.trips.map((trip, i) => {
                     const vLabel =
-                      VEHICLES[trip.vehicleType as VehicleKey]?.label ??
-                      trip.vehicleType;
+                      translate(locale, `vehicles.${trip.vehicleType}`) !==
+                      `vehicles.${trip.vehicleType}`
+                        ? translate(locale, `vehicles.${trip.vehicleType}`)
+                        : (VEHICLES[trip.vehicleType as VehicleKey]?.label ??
+                          trip.vehicleType);
                     return (
                       <div
                         key={i}
@@ -431,9 +482,11 @@ export default async function MyTripsPage({
                               aria-hidden="true"
                             />
                             <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                              {isSharedVehicle(trip.vehicleType) ? translate(locale, "board_station_by") : translate(locale, "pickup")}{" "}
+                              {isSharedVehicle(trip.vehicleType)
+                                ? translate(locale, "board_station_by")
+                                : translate(locale, "pickup")}{" "}
                               <strong style={{ color: "#0B1E3D" }}>
-                                {to12h(trip.pickupTime)}
+                                {formatTime(locale, trip.pickupTime)}
                               </strong>
                             </span>
                           </div>
@@ -450,9 +503,11 @@ export default async function MyTripsPage({
                               aria-hidden="true"
                             />
                             <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                              {isSharedVehicle(trip.vehicleType) ? translate(locale, "latest_arrival_time") : translate(locale, "arrive")}{" "}
+                              {isSharedVehicle(trip.vehicleType)
+                                ? translate(locale, "latest_arrival_time")
+                                : translate(locale, "arrive")}{" "}
                               <strong style={{ color: "#0B1E3D" }}>
-                                {to12h(trip.arrivalTime)}
+                                {formatTime(locale, trip.arrivalTime)}
                               </strong>
                             </span>
                           </div>
