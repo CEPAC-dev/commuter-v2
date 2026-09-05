@@ -125,7 +125,7 @@ export function priceFor(
   key: VehicleKey,
   vehiclesMap: Record<VehicleKey, VehicleConfig> = VEHICLES,
 ): number {
-  return Math.round(vehiclesMap[key].rate * Math.pow(distanceKm, 0.8));
+  return Math.round(vehiclesMap[key].rate * distanceKm);
 }
 
 function applyMinimumCharge(
@@ -242,8 +242,17 @@ export function computeTripPriceForSelection({
     vehiclesMap,
   });
 
+  return priceForSelectedDates(singleTripPrice, selectedDates);
+}
+
+export function priceForSelectedDates(
+  singleTripPrice: number,
+  selectedDates?: string[],
+): number {
+  const normalizedSingleTripPrice = Math.max(0, Math.round(singleTripPrice));
+
   if (!Array.isArray(selectedDates) || selectedDates.length === 0) {
-    return singleTripPrice;
+    return normalizedSingleTripPrice;
   }
 
   const weekDates = bookingWindow();
@@ -252,15 +261,15 @@ export function computeTripPriceForSelection({
     weekDates.every((day) => selectedDates.includes(day));
 
   if (!isFullWeekSelection) {
-    return singleTripPrice * selectedDates.length;
+    return normalizedSingleTripPrice * selectedDates.length;
   }
 
   const seventhDay = weekDates[weekDates.length - 1];
   return selectedDates.reduce((total, date) => {
     const priceForDate =
       date === seventhDay
-        ? Math.round(singleTripPrice * 0.95)
-        : singleTripPrice;
+        ? Math.round(normalizedSingleTripPrice * 0.95)
+        : normalizedSingleTripPrice;
     return total + priceForDate;
   }, 0);
 }
@@ -358,4 +367,17 @@ export function privateRoutePrice(
     (sum, price) => Math.round(sum + price),
     0,
   );
+}
+
+export function computePrivateTripPriceEgp(
+  legs: PrivateFareLeg[],
+  waitingMinutes: number,
+  key: VehicleKey,
+  vehiclesMap: Record<VehicleKey, VehicleConfig> = VEHICLES,
+): number {
+  const vehicle = vehiclesMap[key];
+  const price =
+    privateRoutePrice(legs, key, vehiclesMap) +
+    waitingCostEgp(waitingMinutes, key, vehiclesMap);
+  return Math.max(vehicle.minimum_charge, Math.round(price));
 }

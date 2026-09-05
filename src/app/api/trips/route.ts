@@ -8,9 +8,12 @@ import { Station } from "@/models/Station";
 import { User } from "@/models/User";
 import {
   VEHICLES,
+  computePrivateTripPriceEgp,
   computeTripPriceEgp,
   type VehicleKey,
 } from "@/lib/config/vehicles";
+import { fetchRoute } from "@/lib/openrouteservice";
+import { fetchDirections } from "@/app/api/directions/route";
 import {
   isVehicleAvailableInRegion,
   normalizeRegion,
@@ -40,6 +43,21 @@ const PRIVATE_VEHICLE_KEYS = new Set<VehicleKey>([
   "private_car",
   "taxi_private",
 ]);
+
+async function calculateRoute(points: Array<{ lat: number; lng: number }>) {
+  const routes = await fetchRoute(points);
+  if (routes[0]) return routes[0];
+
+  const [origin, ...remainingPoints] = points;
+  const destination = remainingPoints.pop();
+  if (!origin || !destination) return null;
+  const fallbackRoutes = await fetchDirections(
+    `${origin.lat},${origin.lng}`,
+    `${destination.lat},${destination.lng}`,
+    remainingPoints.map((point) => `${point.lat},${point.lng}`).join("|"),
+  );
+  return fallbackRoutes[0] ?? null;
+}
 
 function stationPayload(
   station: Pick<GeoStation, "id" | "lat" | "lng" | "name">,
@@ -311,15 +329,16 @@ export async function POST(req: NextRequest) {
             },
       );
 
-      if (!Number.isFinite(t.distanceKm) || t.distanceKm < 0) {
+      const routePoints = [t.pickup, ...stops.map((stop) => stop.point), t.dropoff];
+      const [route, ...legRoutes] = await Promise.all([
+        calculateRoute(routePoints),
+        ...routePoints.slice(0, -1).map((point, index) =>
+          calculateRoute([point, routePoints[index + 1]]),
+        ),
+      ]);
+      if (!route || legRoutes.some((legRoute) => !legRoute)) {
         return NextResponse.json(
-          { error: "Invalid trip distanceKm" },
-          { status: 400 },
-        );
-      }
-      if (!Number.isFinite(t.durationMinutes) || t.durationMinutes < 0) {
-        return NextResponse.json(
-          { error: "Invalid trip durationMinutes" },
+          { error: "Unable to calculate route" },
           { status: 400 },
         );
       }
@@ -337,13 +356,26 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      const priceEgp = computeTripPriceEgp({
-        distanceKm: Number(t.distanceKm),
-        vehicleType: vKey,
-        extraPassengers: 0,
-        numberOfPassengers,
-        vehiclesMap,
+      let passengersOnboard = numberOfPassengers;
+      const routeLegs = legRoutes.map((legRoute, index) => {
+        const leg = {
+          distanceKm: legRoute!.distance_km,
+          passengers: passengersOnboard,
+        };
+        const stop = stops[index];
+        if (stop) passengersOnboard += stop.boarding - stop.alighting;
+        return leg;
       });
+      const waitingMinutes = stops.reduce(
+        (sum, stop) => sum + stop.waitingMinutes,
+        0,
+      );
+      const priceEgp = computePrivateTripPriceEgp(
+        routeLegs,
+        waitingMinutes,
+        vKey,
+        vehiclesMap,
+      );
 
       // Nearest stations attached for admin/export use only — never shown to
       // the user, never affects route/duration/price.
@@ -367,8 +399,8 @@ export async function POST(req: NextRequest) {
         rideType: tripRideType,
         arrivalTime,
         pickupTime,
-        distanceKm: Number(t.distanceKm),
-        durationMinutes: Math.round(Number(t.durationMinutes)),
+        distanceKm: route.distance_km,
+        durationMinutes: route.duration_minutes,
         priceEgp,
         extraPassengers: 0,
         numberOfPassengers,
@@ -425,15 +457,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!Number.isFinite(t.distanceKm) || t.distanceKm < 0) {
+    const route = await calculateRoute([selectedPickup, selectedDropoff]);
+    if (!route) {
       return NextResponse.json(
-        { error: "Invalid trip distanceKm" },
-        { status: 400 },
-      );
-    }
-    if (!Number.isFinite(t.durationMinutes) || t.durationMinutes < 0) {
-      return NextResponse.json(
-        { error: "Invalid trip durationMinutes" },
+        { error: "Unable to calculate route" },
         { status: 400 },
       );
     }
@@ -452,7 +479,7 @@ export async function POST(req: NextRequest) {
       );
     }
     const priceEgp = computeTripPriceEgp({
-      distanceKm: Number(t.distanceKm),
+      distanceKm: route.distance_km,
       vehicleType: vKey,
       extraPassengers: Math.max(0, Math.round(Number(t.extraPassengers ?? 0))),
       vehiclesMap,
@@ -477,8 +504,8 @@ export async function POST(req: NextRequest) {
       rideType: tripRideType,
       arrivalTime,
       pickupTime,
-      distanceKm: Number(t.distanceKm),
-      durationMinutes: Math.round(Number(t.durationMinutes)),
+      distanceKm: route.distance_km,
+      durationMinutes: route.duration_minutes,
       priceEgp,
       extraPassengers,
       numberOfPassengers: 1,
@@ -546,9 +573,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const fullBookingWindow = bookingWindow();
+  const hasFullWeekSelection =
+    dates.length === fullBookingWindow.length &&
+    fullBookingWindow.every((date) => dates.includes(date));
+  const seventhDay = fullBookingWindow[fullBookingWindow.length - 1];
+
   const pricedTripInstances = tripInstances.map((instance, index) => {
     const promoApply = promoApplies[index];
-    const basePriceEgp = instance.trip.priceEgp;
+    const basePriceEgp =
+      hasFullWeekSelection && instance.date === seventhDay
+        ? Math.round(instance.trip.priceEgp * 0.95)
+        : instance.trip.priceEgp;
     const priceAfterPromo = promoApply
       ? Math.round(
           computePromoDiscountedPrice(

@@ -31,7 +31,10 @@ import { earliestBookingDate } from "@/lib/time/bookingDates";
 import type { SavedAddress } from "@/types/shared";
 import { haversineKm } from "@/lib/geo/stations";
 import type { Station } from "@/lib/geo/stations";
-import { computeTripPriceForSelection } from "@/lib/config/vehicles";
+import {
+  computeTripPriceEgp,
+  priceForSelectedDates,
+} from "@/lib/config/vehicles";
 import {
   DEFAULT_REGION,
   vehiclesForRegion,
@@ -295,14 +298,18 @@ export default function CreateClient({
 
       if (!trip.vehicleType || !hasPickup || !hasDropoff || !hasTime) return 0;
 
-      return computeTripPriceForSelection({
-        basePrice: trip.priceEgp ?? 0,
-        vehicleType: trip.vehicleType,
-        extraPassengers: trip.extraPassengers ?? 0,
-        numberOfPassengers: trip.numberOfPassengers ?? 1,
-        selectedDates,
-        vehiclesMap: vehiclesMap ?? undefined,
-      });
+      const vehicle =
+        vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType];
+      const singleTripPrice =
+        vehicle.ride === "private"
+          ? trip.priceEgp ?? 0
+          : computeTripPriceEgp({
+              distanceKm: trip.distanceKm ?? undefined,
+              vehicleType: trip.vehicleType,
+              extraPassengers: trip.extraPassengers ?? 0,
+              vehiclesMap: vehiclesMap ?? undefined,
+            });
+      return priceForSelectedDates(singleTripPrice, selectedDates);
     },
     [selectedDates, vehiclesMap],
   );
