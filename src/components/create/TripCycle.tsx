@@ -18,8 +18,8 @@ import {
   priceFor,
   maxExtraPassengers,
   privateRouteLegPrices,
+  computePrivateTripPriceEgp,
   computeTripPriceEgp,
-  waitingCostEgp,
   type VehicleKey,
   type VehicleConfig,
 } from "@/lib/config/vehicles";
@@ -715,9 +715,14 @@ export default function TripCycle({
         routeLegs.forEach((leg, legIndex) => {
           leg.priceEgp = legPrices[legIndex];
         });
-        const price = Math.round(
-          legPrices.reduce((sum, legPrice) => sum + legPrice, 0) +
-          waitingCostEgp(totalWaitingMinutes, vehicleType, vMap),
+        const price = computePrivateTripPriceEgp(
+          routeLegs.map((leg) => ({
+            distanceKm: leg.distanceKm,
+            passengers: leg.passengers ?? 1,
+          })),
+          totalWaitingMinutes,
+          vehicleType,
+          vMap,
         );
         onChange({
           ...data,
@@ -1082,13 +1087,15 @@ export default function TripCycle({
   const displayedPrice =
     !data.vehicleType || !hasRequiredFieldsForPrice
       ? null
-      : computeTripPriceEgp({
+      : isPrivate
+        ? data.priceEgp
+        : computeTripPriceEgp({
         basePrice: data.priceEgp ?? 0,
         vehicleType: data.vehicleType,
         extraPassengers: data.extraPassengers ?? 0,
         numberOfPassengers: data.numberOfPassengers ?? 1,
         vehiclesMap: vMap,
-      });
+        });
 
   return (
     <div
