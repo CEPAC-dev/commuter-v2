@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { Payment } from "@/models/Payment";
 import { Request } from "@/models/Request";
+import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { PERMISSIONS } from "@/lib/auth/permissions";
@@ -30,7 +31,7 @@ export async function GET(
   > | null>();
   if (!tx) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const [user, payment, booking] = await Promise.all([
+  const [user, payment, booking, trips] = await Promise.all([
     tx.userId
       ? User.findById(tx.userId)
           .select("name email phone role")
@@ -44,6 +45,14 @@ export async function GET(
           .select("amountEgp paymentStatus status dates note")
           .lean<Record<string, unknown> | null>()
       : null,
+    tx.bookingId
+      ? Trip.find({ requestId: tx.bookingId })
+          .select(
+            "tripNumber date cycleIndex pickup.address dropoff.address vehicleType rideType pickupTime arrivalTime priceEgp paymentStatus status cancellation adminRefund",
+          )
+          .sort({ date: 1, cycleIndex: 1 })
+          .lean<Record<string, unknown>[]>()
+      : [],
   ]);
 
   // If we have a Payment, include all its related ledger rows so the
@@ -111,6 +120,23 @@ export async function GET(
           note: booking.note,
         }
       : null,
+    trips: trips.map((trip) => ({
+      id: String(trip._id),
+      tripNumber: trip.tripNumber ?? null,
+      date: trip.date,
+      cycleIndex: trip.cycleIndex,
+      pickup: (trip.pickup as { address?: string } | undefined)?.address ?? "—",
+      dropoff: (trip.dropoff as { address?: string } | undefined)?.address ?? "—",
+      vehicleType: trip.vehicleType,
+      rideType: trip.rideType,
+      pickupTime: trip.pickupTime,
+      arrivalTime: trip.arrivalTime,
+      priceEgp: trip.priceEgp,
+      paymentStatus: trip.paymentStatus,
+      status: trip.status,
+      cancellation: trip.cancellation ?? null,
+      adminRefund: trip.adminRefund ?? null,
+    })),
     payment: payment
       ? {
           id: String(payment._id),
