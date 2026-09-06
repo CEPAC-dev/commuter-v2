@@ -10,7 +10,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useClientLocale } from "@/lib/locale.client";
-import { formatTime, formatDistanceKm, formatMinutes, toArabicDigits } from "@/lib/i18n";
+import { formatTime, formatTimeRange, formatHourMinuteRange, formatDistanceKm, formatMinutes, toArabicDigits } from "@/lib/i18n";
 import AddressInput from "@/components/landing/AddressInput";
 import {
   VEHICLES,
@@ -26,6 +26,8 @@ import {
 import {
   computeArrivalTime,
   computePickupTime,
+  getDayHalfHourSlots,
+  pickupWindowRange,
   toMinutes,
 } from "@/lib/time/pickupWindow";
 import { fetchRoute } from "@/lib/openrouteservice";
@@ -420,14 +422,11 @@ export default function TripCycle({
   const [stopError, setStopError] = useState("");
   const [timeError, setTimeError] = useState<string | null>(null);
   const [locating, setLocating] = useState<"pickup" | "dropoff" | null>(null);
+  const [arrivalPeriod, setArrivalPeriod] = useState<"AM" | "PM">("AM");
   const { t, locale } = useClientLocale();
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
   const previousStopErrorRef = useRef<string | null>(null);
-  const selectedVehicle = data.vehicleType ? vMap[data.vehicleType] : null;
-  const vehicleTimeMarginMin = selectedVehicle
-    ? Math.max(5, Math.round(selectedVehicle.window / 2))
-    : 0;
 
   useEffect(() => {
     const nextError = stopError || null;
@@ -435,6 +434,13 @@ export default function TripCycle({
     previousStopErrorRef.current = nextError;
     onStopErrorChange?.(nextError);
   }, [stopError, onStopErrorChange]);
+
+  // Keep the AM/PM toggle in sync whenever arrivalTime is set from outside (e.g. mirrored return trip).
+  useEffect(() => {
+    if (!data.arrivalTime) return;
+    const period = toMinutes(data.arrivalTime) < 12 * 60 ? "AM" : "PM";
+    setArrivalPeriod((prev) => (prev === period ? prev : period));
+  }, [data.arrivalTime]);
 
   function handleReturnToggle(checked: boolean) {
     if (checked && sourceTripData) {
@@ -954,10 +960,19 @@ export default function TripCycle({
     );
   }
 
-  const arrivalInputMin =
-    minArrivalTime && toMinutes(minArrivalTime) > toMinutes(MORNING_TIME_MIN)
-      ? minArrivalTime
-      : MORNING_TIME_MIN;
+  // Full day split by AM/PM so each half-hour range (e.g. "6:00–6:30") only ever appears once.
+  const arrivalPeriodSlots = getDayHalfHourSlots().filter((slot) =>
+    arrivalPeriod === "AM"
+      ? toMinutes(slot.start) < 12 * 60
+      : toMinutes(slot.start) >= 12 * 60,
+  );
+
+  function handleArrivalPeriodChange(nextPeriod: "AM" | "PM") {
+    setArrivalPeriod(nextPeriod);
+    if (!data.arrivalTime) return;
+    const currentPeriod = toMinutes(data.arrivalTime) < 12 * 60 ? "AM" : "PM";
+    if (currentPeriod !== nextPeriod) handleArrivalTimeChange("");
+  }
 
   const enforcePrivatePickupWindow =
     data.vehicleType === "private_car" || data.vehicleType === "taxi_private";
@@ -1328,40 +1343,6 @@ export default function TripCycle({
               </option>
             ))}
           </select>
-          {data.vehicleType && selectedVehicle && (
-            <div
-              style={{
-                marginTop: 8,
-                padding: "10px 12px",
-                borderRadius: 10,
-                background: "rgba(245,166,35,0.12)",
-                border: "1.5px solid rgba(245,166,35,0.55)",
-                color: "#7A5000",
-                fontSize: 12,
-                fontWeight: 700,
-                lineHeight: 1.6,
-              }}
-            >
-              {locale === "ar"
-                ? "هام: يختلف وقت الالتقاء بحوالي"
-                : "Time can shift by about"}{" "}
-              <strong
-                style={{
-                  color: "#0B1E3D",
-                  fontSize: 13,
-                  fontVariantNumeric: "tabular-nums",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <span>+</span>
-                {vehicleTimeMarginMin}
-                {locale === "ar" ? "دقيقة" : "min"}
-                <span>-</span>
-              </strong>
-              {" "}
-              {locale === "ar" ? "لنوع هذه السيارة." : "for this vehicle type."}
-            </div>
-          )}
         </div>
 
         {/* Everything below is exclusive to shared rides for now — private ride
@@ -1614,43 +1595,94 @@ export default function TripCycle({
                   </span>
                 </span>
               </label>
-              <input
-                id={`arrival-${data.id}`}
-                type="time"
-                value={data.arrivalTime}
-                min={arrivalInputMin}
-                max={MORNING_TIME_MAX}
-                onChange={(e) => handleArrivalTimeChange(e.target.value)}
-                required
-                style={{
-                  width: "100%",
-                  height: 52,
-                  padding: "0 14px",
-                  borderRadius: 5,
-                  border: `1.5px solid ${arrivalTooEarly ? "#e74c3c" : "#e8edf0"}`,
-                  background: "#f8f9fa",
-                  fontSize: 15,
-                  fontFamily: "inherit",
-                  color: "#0B1E3D",
-                  boxSizing: "border-box",
-                  outline: "none",
-                  transition: "border-color 0.15s",
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = arrivalTooEarly
-                    ? "#e74c3c"
-                    : "#00C2A8";
-                  e.currentTarget.style.boxShadow = arrivalTooEarly
-                    ? "0 0 0 3px rgba(231,76,60,0.12)"
-                    : "0 0 0 3px rgba(0,194,168,0.12)";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = arrivalTooEarly
-                    ? "#e74c3c"
-                    : "#e8edf0";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <select
+                  aria-label={t("create.period_label")}
+                  value={arrivalPeriod}
+                  onChange={(e) =>
+                    handleArrivalPeriodChange(e.target.value as "AM" | "PM")
+                  }
+                  style={{
+                    width: 84,
+                    flexShrink: 0,
+                    height: 52,
+                    padding: "0 10px",
+                    borderRadius: 5,
+                    border: "1.5px solid #e8edf0",
+                    background: "#f8f9fa",
+                    fontSize: 15,
+                    fontFamily: "inherit",
+                    color: "#0B1E3D",
+                    boxSizing: "border-box",
+                    appearance: "none",
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235A6A7A' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 8px center",
+                    paddingRight: 26,
+                    cursor: "pointer",
+                    outline: "none",
+                  }}
+                >
+                  <option value="AM">{t("create.period_am")}</option>
+                  <option value="PM">{t("create.period_pm")}</option>
+                </select>
+                <select
+                  id={`arrival-${data.id}`}
+                  value={
+                    data.arrivalTime &&
+                    (toMinutes(data.arrivalTime) < 12 * 60 ? "AM" : "PM") ===
+                      arrivalPeriod
+                      ? data.arrivalTime
+                      : ""
+                  }
+                  onChange={(e) => handleArrivalTimeChange(e.target.value)}
+                  required
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: 52,
+                    padding: "0 14px",
+                    borderRadius: 5,
+                    border: `1.5px solid ${arrivalTooEarly ? "#e74c3c" : "#e8edf0"}`,
+                    background: "#f8f9fa",
+                    fontSize: 15,
+                    fontFamily: "inherit",
+                    color: "#0B1E3D",
+                    boxSizing: "border-box",
+                    appearance: "none",
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235A6A7A' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 14px center",
+                    paddingRight: 40,
+                    cursor: "pointer",
+                    outline: "none",
+                    transition: "border-color 0.15s",
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = arrivalTooEarly
+                      ? "#e74c3c"
+                      : "#00C2A8";
+                    e.currentTarget.style.boxShadow = arrivalTooEarly
+                      ? "0 0 0 3px rgba(231,76,60,0.12)"
+                      : "0 0 0 3px rgba(0,194,168,0.12)";
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = arrivalTooEarly
+                      ? "#e74c3c"
+                      : "#e8edf0";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
+                >
+                  <option value="" disabled>
+                    {t("create.arrival_time_label")}
+                  </option>
+                  {arrivalPeriodSlots.map((slot) => (
+                    <option key={slot.start} value={slot.value}>
+                      {formatHourMinuteRange(locale, slot)}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {timeError && (
                 <p
                   role="alert"
@@ -1733,7 +1765,12 @@ export default function TripCycle({
                       fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {formatTime(locale, data.pickupTime)}
+                    {isSharedVehicle(data.vehicleType)
+                      ? formatTimeRange(
+                          locale,
+                          pickupWindowRange(data.pickupTime),
+                        )
+                      : formatTime(locale, data.pickupTime)}
                   </span>
                 </div>
               ) : (

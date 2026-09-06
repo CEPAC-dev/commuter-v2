@@ -19,6 +19,12 @@ import {
   normalizeRegion,
 } from "@/lib/config/regions";
 import { bookingWindow, isDateInWindow } from "@/lib/time/bookingDates";
+import {
+  ARRIVAL_SLOT_END_MIN,
+  ARRIVAL_SLOT_START_MIN,
+  snapToArrivalSlotMidpoint,
+  toMinutes,
+} from "@/lib/time/pickupWindow";
 import { getVehicles } from "@/lib/db/getVehicles";
 import {
   findNearestStations,
@@ -471,13 +477,23 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const arrivalTime = t.arrivalTime;
-    if (!arrivalTime || !/^\d{2}:\d{2}$/.test(arrivalTime)) {
+    if (!t.arrivalTime || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.arrivalTime)) {
       return NextResponse.json(
         { error: "Invalid arrivalTime" },
         { status: 400 },
       );
     }
+    const arrivalMinutes = toMinutes(t.arrivalTime);
+    if (
+      arrivalMinutes < ARRIVAL_SLOT_START_MIN ||
+      arrivalMinutes >= ARRIVAL_SLOT_END_MIN
+    ) {
+      return NextResponse.json(
+        { error: "Invalid arrivalTime" },
+        { status: 400 },
+      );
+    }
+    const arrivalTime = snapToArrivalSlotMidpoint(t.arrivalTime);
     const priceEgp = computeTripPriceEgp({
       distanceKm: route.distance_km,
       vehicleType: vKey,

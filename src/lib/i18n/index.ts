@@ -50,6 +50,31 @@ export function formatTime(locale: Locale, hhmm: string): string {
   return `${hour12}:${minute} ${h >= 12 ? "PM" : "AM"}`;
 }
 
+/** Compact time-range label — merges a shared AM/PM suffix instead of repeating it, e.g. "6:00–6:30 AM". */
+export function formatTimeRange(
+  locale: Locale,
+  range: { start: string; end: string },
+): string {
+  const startLabel = formatTime(locale, range.start);
+  const endLabel = formatTime(locale, range.end);
+  const periodSuffix = /\s(AM|PM|ص|م)$/;
+  const startPeriod = startLabel.match(periodSuffix)?.[1];
+  const endPeriod = endLabel.match(periodSuffix)?.[1];
+  const start =
+    startPeriod && startPeriod === endPeriod
+      ? startLabel.replace(periodSuffix, "")
+      : startLabel;
+  return `${start}–${endLabel}`;
+}
+
+/** Same as formatTimeRange but without the AM/PM suffix — for use beside a separate period picker. */
+export function formatHourMinuteRange(
+  locale: Locale,
+  range: { start: string; end: string },
+): string {
+  return formatTimeRange(locale, range).replace(/\s?(AM|PM|ص|م)/g, "");
+}
+
 export function formatDistanceKm(locale: Locale, km: number): string {
   const intl = locale === "ar" ? "ar-EG" : "en-EG";
   const out = `${km.toLocaleString(intl, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${locale === "ar" ? "كم" : "km"}`;
