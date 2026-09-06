@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Payment } from "@/models/Payment";
+import { Trip } from "@/models/Trip";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { creditWallet } from "@/lib/wallet/wallet";
 import { refundKashierPayment } from "@/lib/payments/kashier";
@@ -21,12 +22,14 @@ export async function POST(req: NextRequest) {
   if (!auth.authorized) return auth.response;
 
   let paymentId: string;
-  let amountEgp: number;
+  let tripId: string;
+  let compensationPercent: number;
   let reason: string | undefined;
   try {
     const body = await req.json();
     paymentId = body.paymentId;
-    amountEgp = Number(body.amountEgp);
+    tripId = body.tripId;
+    compensationPercent = Number(body.compensationPercent ?? 0);
     reason = typeof body.reason === "string" ? body.reason : undefined;
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -34,8 +37,13 @@ export async function POST(req: NextRequest) {
 
   if (!paymentId || !Types.ObjectId.isValid(paymentId))
     return NextResponse.json({ error: "Invalid paymentId" }, { status: 400 });
-  if (!Number.isFinite(amountEgp) || amountEgp <= 0)
-    return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
+  if (!tripId || !Types.ObjectId.isValid(tripId))
+    return NextResponse.json({ error: "Invalid tripId" }, { status: 400 });
+  if (![0, 15, 25, 35, 50, 75].includes(compensationPercent))
+    return NextResponse.json(
+      { error: "Invalid compensation percentage" },
+      { status: 400 },
+    );
 
   await connectDB();
 
@@ -51,15 +59,68 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
 
+  const eligibleStatuses = ["submitted", "matched", "nomatch"];
+  const trip = await Trip.findOneAndUpdate(
+    {
+      _id: tripId,
+      requestId: payment.bookingId,
+      status: { $in: eligibleStatuses },
+      adminRefund: null,
+      "cancellation.refundStatus": { $nin: ["pending", "approved"] },
+    },
+    {
+      $set: {
+        adminRefund: {
+          status: "processing",
+          paymentId: payment._id,
+          refundedBy: new Types.ObjectId(auth.userId),
+          refundAmountEgp: 0,
+          compensationPercent,
+          compensationAmountEgp: 0,
+          totalReturnEgp: 0,
+          reason,
+        },
+      },
+    },
+    { new: true },
+  );
+  if (!trip)
+    return NextResponse.json(
+      {
+        error:
+          "Trip is not refundable. It must be submitted or matched and never refunded before.",
+      },
+      { status: 409 },
+    );
+
+  const isBaseRefundEligible = ["submitted", "matched", "nomatch"].includes(
+    trip.status,
+  );
+  const amountEgp = isBaseRefundEligible ? Number(trip.priceEgp) : 0;
+  const compensationAmountEgp = Math.round(
+    (Number(trip.priceEgp) * compensationPercent) / 100,
+  );
+
   const alreadyRefunded = payment.refundedAmountEgp ?? 0;
   const refundableTotal = payment.totalEgp - alreadyRefunded;
-  if (amountEgp > refundableTotal)
+  if (amountEgp > refundableTotal) {
+    await Trip.updateOne(
+      { _id: trip._id, "adminRefund.status": "processing" },
+      {
+        $set: {
+          "adminRefund.status": "failed",
+          "adminRefund.failureReason":
+            "Payment has insufficient refundable balance",
+        },
+      },
+    );
     return NextResponse.json(
       {
         error: `Refund exceeds remaining refundable amount (${refundableTotal} EGP).`,
       },
       { status: 400 },
     );
+  }
 
   // Split refund: wallet portion first, then Kashier.
   const walletCaptured =
@@ -86,6 +147,7 @@ export async function POST(req: NextRequest) {
       type: "refund",
       paymentId: String(payment._id),
       bookingId: String(payment.bookingId),
+      tripId: String(trip._id),
     });
     // Find the newly created ledger row for reference.
     const created = await WalletTransaction.findOne({
@@ -125,6 +187,7 @@ export async function POST(req: NextRequest) {
           description: `Kashier refund for booking ${payment.bookingId}${reason ? ` — ${reason}` : ""}`,
           paymentId: payment._id,
           bookingId: payment.bookingId,
+          tripId: trip._id,
           kashierOrderId: payment.kashierOrderId,
           kashierTransactionIds: [result.refundId],
         });
@@ -146,16 +209,35 @@ export async function POST(req: NextRequest) {
     alreadyRefunded +
     walletRefundEgp +
     (gatewayRefundFailed ? 0 : gatewayRefundEgp);
-  const fullyRefunded = newRefundedTotal >= payment.totalEgp;
+  const fullyRefunded = amountEgp > 0 && newRefundedTotal >= payment.totalEgp;
 
-  const update: Record<string, unknown> = {
-    refundedAt: new Date(),
-    refundedAmountEgp: newRefundedTotal,
-    overallStatus: fullyRefunded ? "refunded" : "partially_refunded",
-  };
+  const update: Record<string, unknown> =
+    amountEgp > 0
+      ? {
+          refundedAt: new Date(),
+          refundedAmountEgp: newRefundedTotal,
+          overallStatus: fullyRefunded ? "refunded" : "partially_refunded",
+        }
+      : {};
   if (walletRefundEgp > 0 && fullyRefunded) update.walletStatus = "refunded";
   if (gatewayRefundEgp > 0 && !gatewayRefundFailed && fullyRefunded)
     update.gatewayStatus = "refunded";
+
+  if (compensationAmountEgp > 0) {
+    await creditWallet(String(payment.userId), compensationAmountEgp, {
+      description: `Compensation (${compensationPercent}%) for trip ${trip._id}${reason ? ` — ${reason}` : ""}`,
+      type: "compensation",
+      paymentId: String(payment._id),
+      bookingId: String(payment.bookingId),
+      tripId: String(trip._id),
+    });
+    update.compensatedAmountEgp =
+      (payment.compensatedAmountEgp ?? 0) + compensationAmountEgp;
+    timelineEvents.push({
+      event: "trip_compensation_credited",
+      detail: `${compensationAmountEgp} EGP (${compensationPercent}%) for trip ${trip._id}`,
+    });
+  }
 
   await Payment.updateOne(
     { _id: payment._id },
@@ -171,12 +253,36 @@ export async function POST(req: NextRequest) {
     },
   );
 
+  await Trip.updateOne(
+    { _id: trip._id, "adminRefund.status": "processing" },
+    {
+      $set: {
+        "adminRefund.status": gatewayRefundFailed ? "failed" : "completed",
+        "adminRefund.refundedAt": new Date(),
+        "adminRefund.refundAmountEgp":
+          walletRefundEgp + (gatewayRefundFailed ? 0 : gatewayRefundEgp),
+        "adminRefund.compensationAmountEgp": compensationAmountEgp,
+        "adminRefund.totalReturnEgp":
+          walletRefundEgp +
+          (gatewayRefundFailed ? 0 : gatewayRefundEgp) +
+          compensationAmountEgp,
+        ...(gatewayRefundFailed
+          ? {
+              "adminRefund.failureReason":
+                "Kashier refund failed; manual accountant action required",
+            }
+          : {}),
+      },
+    },
+  );
+
   return NextResponse.json({
     ok: true,
     refundedAmountEgp:
       walletRefundEgp + (gatewayRefundFailed ? 0 : gatewayRefundEgp),
     walletRefundEgp,
     gatewayRefundEgp: gatewayRefundFailed ? 0 : gatewayRefundEgp,
+    compensationAmountEgp,
     gatewayRefundFailed,
     kashierRefundId,
     overallStatus: update.overallStatus,

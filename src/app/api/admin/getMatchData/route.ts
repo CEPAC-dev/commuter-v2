@@ -13,7 +13,7 @@ import {
   isMatrixProvider,
 } from "@/app/api/directions/route";
 import { haversineKm } from "@/lib/geo/stations";
-import { VEHICLE_LIST } from "@/lib/config/vehicles";
+import { VEHICLES, VEHICLE_LIST } from "@/lib/config/vehicles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -554,7 +554,8 @@ export async function GET(req: NextRequest) {
       stop4WaitingTime: null,
       readyFrom: trip.pickupTime,
       shouldArrivebefore: trip.arrivalTime,
-      Ride_Type: trip.vehicleType === "private_car" ? 1 : 2,
+      Ride_Type:
+        VEHICLES[trip.vehicleType as keyof typeof VEHICLES]?.trip_type ?? 0,
       Origin_Boarding: trip.numberOfPassengers,
     };
 
@@ -606,11 +607,7 @@ export async function GET(req: NextRequest) {
     readyFrom: trip.pickupTime,
     shouldArrivebefore: trip.arrivalTime,
     Ride_Type:
-      trip.vehicleType === "taxi_shared"
-        ? 3
-        : trip.vehicleType === "van_shared"
-          ? 4
-          : 5,
+      VEHICLES[trip.vehicleType as keyof typeof VEHICLES]?.trip_type ?? 0,
     Origin_Boarding: trip.extraPassengers + 1,
   }));
 

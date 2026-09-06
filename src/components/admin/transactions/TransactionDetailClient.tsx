@@ -37,6 +37,31 @@ interface DetailData {
     dates: string[];
     note: string;
   } | null;
+  trips: {
+    id: string;
+    tripNumber: number | null;
+    date: string;
+    cycleIndex: number;
+    pickup: string;
+    dropoff: string;
+    vehicleType: string;
+    rideType: string;
+    pickupTime: string;
+    arrivalTime: string;
+    priceEgp: number;
+    paymentStatus: string;
+    status: string;
+    cancellation: { refundAmount?: number; refundStatus?: string } | null;
+    adminRefund: {
+      status: "processing" | "completed" | "failed";
+      refundAmountEgp: number;
+      compensationPercent: number;
+      compensationAmountEgp: number;
+      totalReturnEgp: number;
+      reason?: string;
+      failureReason?: string;
+    } | null;
+  }[];
   payment: {
     id: string;
     totalEgp: number;
@@ -74,7 +99,8 @@ export default function TransactionDetailClient({
 }) {
   const [data, setData] = useState<DetailData | null>(null);
   const [error, setError] = useState("");
-  const [refundAmount, setRefundAmount] = useState("");
+  const [selectedTripId, setSelectedTripId] = useState("");
+  const [compensationPercent, setCompensationPercent] = useState("0");
   const [refundReason, setRefundReason] = useState("");
   const [refunding, setRefunding] = useState(false);
   const [refundResult, setRefundResult] = useState<string>("");
@@ -99,6 +125,10 @@ export default function TransactionDetailClient({
 
   async function submitRefund() {
     if (!data?.payment) return;
+    if (!selectedTripId) {
+      setRefundResult("Choose an eligible trip first.");
+      return;
+    }
     setRefunding(true);
     setRefundResult("");
     try {
@@ -107,14 +137,15 @@ export default function TransactionDetailClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           paymentId: data.payment.id,
-          amountEgp: Number(refundAmount),
+          tripId: selectedTripId,
+          compensationPercent: Number(compensationPercent),
           reason: refundReason || undefined,
         }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Refund failed");
       setRefundResult(
-        `Refunded ${j.refundedAmountEgp} EGP (wallet ${j.walletRefundEgp}, kashier ${j.gatewayRefundEgp}). ${j.gatewayRefundFailed ? "⚠ Kashier portion failed — manual action required." : ""}`,
+        `Refunded ${j.refundedAmountEgp} EGP (wallet ${j.walletRefundEgp}, Kashier ${j.gatewayRefundEgp}); compensation ${j.compensationAmountEgp} EGP. ${j.gatewayRefundFailed ? "Kashier portion failed — manual action required." : ""}`,
       );
       await load();
     } catch (e) {
@@ -124,8 +155,21 @@ export default function TransactionDetailClient({
     }
   }
 
-  if (error) return <AdminPageContainer maxWidth={1000}><AdminErrorState title="Unable to load transaction" description={error} /></AdminPageContainer>;
-  if (!data) return <AdminPageContainer maxWidth={1000}><AdminLoadingState title="Loading transaction..." /></AdminPageContainer>;
+  if (error)
+    return (
+      <AdminPageContainer maxWidth={1000}>
+        <AdminErrorState
+          title="Unable to load transaction"
+          description={error}
+        />
+      </AdminPageContainer>
+    );
+  if (!data)
+    return (
+      <AdminPageContainer maxWidth={1000}>
+        <AdminLoadingState title="Loading transaction..." />
+      </AdminPageContainer>
+    );
 
   const p = data.payment;
   const canDoRefund =
@@ -133,202 +177,324 @@ export default function TransactionDetailClient({
     p &&
     (p.overallStatus === "paid" || p.overallStatus === "partially_refunded");
   const maxRefundable = p ? p.totalEgp - (p.refundedAmountEgp ?? 0) : 0;
+  const eligibleTrips = data.trips.filter(
+    (trip) =>
+      (trip.status === "submitted" ||
+        trip.status === "matched" ||
+        trip.status === "nomatch") &&
+      !trip.adminRefund,
+  );
 
   return (
     <AdminPageContainer maxWidth={1000}>
-        <AdminPageHeader
-          title={`Transaction ${data.transaction.id}`}
-          breadcrumb={<Link href="/admin/transactions" style={{ fontSize: 12, color: "var(--color-muted)", textDecoration: "none" }}>Transactions / Details</Link>}
-        />
+      <AdminPageHeader
+        title={`Transaction ${data.transaction.id}`}
+        breadcrumb={
+          <Link
+            href="/admin/transactions"
+            style={{
+              fontSize: 12,
+              color: "var(--color-muted)",
+              textDecoration: "none",
+            }}
+          >
+            Transactions / Details
+          </Link>
+        }
+      />
 
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}
-        >
-          <Section title="Transaction">
-            <Row k="Type" v={<code>{data.transaction.type}</code>} />
-            <Row k="Status" v={<AdminStatusBadge status={data.transaction.status} />} />
-            <Row k="Amount" v={`${data.transaction.amountEgp} EGP`} />
-            <Row k="Description" v={data.transaction.description} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <Section title="Transaction">
+          <Row k="Type" v={<code>{data.transaction.type}</code>} />
+          <Row
+            k="Status"
+            v={<AdminStatusBadge status={data.transaction.status} />}
+          />
+          <Row k="Amount" v={`${data.transaction.amountEgp} EGP`} />
+          <Row k="Description" v={data.transaction.description} />
+          <Row k="Balance after" v={data.transaction.balanceAfterEgp ?? "—"} />
+          <Row
+            k="Created"
+            v={new Date(data.transaction.createdAt).toLocaleString()}
+          />
+        </Section>
+
+        <Section title="User">
+          {data.user ? (
+            <>
+              <Row k="Name" v={data.user.name} />
+              <Row k="Email" v={data.user.email ?? "—"} />
+              <Row k="Phone" v={data.user.phone ?? "—"} />
+              <Row k="Role" v={data.user.role} />
+            </>
+          ) : (
+            "—"
+          )}
+        </Section>
+
+        {p && (
+          <Section title="Payment (aggregate)" full>
+            <Row k="Payment id" v={<code>{p.id}</code>} />
+            <Row k="Total" v={`${p.totalEgp} EGP`} />
             <Row
-              k="Balance after"
-              v={data.transaction.balanceAfterEgp ?? "—"}
+              k="Wallet portion"
+              v={`${p.walletAmountEgp} EGP — ${p.walletStatus}`}
             />
             <Row
-              k="Created"
-              v={new Date(data.transaction.createdAt).toLocaleString()}
+              k="Kashier portion"
+              v={`${p.gatewayAmountEgp} EGP — ${p.gatewayStatus}`}
+            />
+            <Row
+              k="Overall status"
+              v={<AdminStatusBadge status={p.overallStatus} />}
+            />
+            <Row
+              k="Paid at"
+              v={p.paidAt ? new Date(p.paidAt).toLocaleString() : "—"}
+            />
+            <Row
+              k="Refunded"
+              v={`${p.refundedAmountEgp} EGP${p.refundedAt ? ` at ${new Date(p.refundedAt).toLocaleString()}` : ""}`}
+            />
+            <Row k="Kashier session" v={p.kashierSessionId ?? "—"} />
+            <Row k="Kashier order" v={p.kashierOrderId ?? "—"} />
+            <Row
+              k="Kashier txns"
+              v={(p.kashierTransactionIds ?? []).join(", ") || "—"}
+            />
+            <Row
+              k="Kashier refunds"
+              v={(p.kashierRefundIds ?? []).join(", ") || "—"}
             />
           </Section>
+        )}
 
-          <Section title="User">
-            {data.user ? (
-              <>
-                <Row k="Name" v={data.user.name} />
-                <Row k="Email" v={data.user.email ?? "—"} />
-                <Row k="Phone" v={data.user.phone ?? "—"} />
-                <Row k="Role" v={data.user.role} />
-              </>
-            ) : (
-              "—"
-            )}
+        {data.booking && (
+          <Section title="Booking" full>
+            <Row k="Booking id" v={<code>{data.booking.id}</code>} />
+            <Row k="Amount" v={`${data.booking.amountEgp} EGP`} />
+            <Row
+              k="Payment status"
+              v={<AdminStatusBadge status={data.booking.paymentStatus} />}
+            />
+            <Row
+              k="Status"
+              v={<AdminStatusBadge status={data.booking.status} />}
+            />
+            <Row k="Dates" v={(data.booking.dates ?? []).join(", ")} />
+            <Row k="Note" v={data.booking.note || "—"} />
           </Section>
+        )}
 
-          {p && (
-            <Section title="Payment (aggregate)" full>
-              <Row k="Payment id" v={<code>{p.id}</code>} />
-              <Row k="Total" v={`${p.totalEgp} EGP`} />
-              <Row
-                k="Wallet portion"
-                v={`${p.walletAmountEgp} EGP — ${p.walletStatus}`}
-              />
-              <Row
-                k="Kashier portion"
-                v={`${p.gatewayAmountEgp} EGP — ${p.gatewayStatus}`}
-              />
-              <Row k="Overall status" v={<AdminStatusBadge status={p.overallStatus} />} />
-              <Row
-                k="Paid at"
-                v={p.paidAt ? new Date(p.paidAt).toLocaleString() : "—"}
-              />
-              <Row
-                k="Refunded"
-                v={`${p.refundedAmountEgp} EGP${p.refundedAt ? ` at ${new Date(p.refundedAt).toLocaleString()}` : ""}`}
-              />
-              <Row k="Kashier session" v={p.kashierSessionId ?? "—"} />
-              <Row k="Kashier order" v={p.kashierOrderId ?? "—"} />
-              <Row
-                k="Kashier txns"
-                v={(p.kashierTransactionIds ?? []).join(", ") || "—"}
-              />
-              <Row
-                k="Kashier refunds"
-                v={(p.kashierRefundIds ?? []).join(", ") || "—"}
-              />
-            </Section>
+        <Section title={`Attached trips (${data.trips.length})`} full>
+          {data.trips.length === 0 && (
+            <div style={{ color: "var(--color-muted)" }}>No attached trips</div>
           )}
-
-          {data.booking && (
-            <Section title="Booking" full>
-              <Row k="Booking id" v={<code>{data.booking.id}</code>} />
-              <Row k="Amount" v={`${data.booking.amountEgp} EGP`} />
-              <Row k="Payment status" v={<AdminStatusBadge status={data.booking.paymentStatus} />} />
-              <Row k="Status" v={<AdminStatusBadge status={data.booking.status} />} />
-              <Row k="Dates" v={(data.booking.dates ?? []).join(", ")} />
-              <Row k="Note" v={data.booking.note || "—"} />
-            </Section>
-          )}
-
-          <Section title="Related ledger rows" full>
-            {data.ledger.length === 0 && (
-              <div style={{ color: "var(--color-muted)" }}>No related rows</div>
-            )}
-            {data.ledger.map((l) => (
+          {data.trips.map((trip) => (
+            <div
+              key={trip.id}
+              style={{
+                padding: "10px 0",
+                borderBottom: "1px solid var(--color-border)",
+                fontSize: 13,
+              }}
+            >
               <div
-                key={l.id}
                 style={{
-                  padding: "8px 0",
-                  borderBottom: "1px solid var(--color-border)",
-                  fontSize: 13,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
                 }}
               >
-                <code style={{ fontSize: 11 }}>{l.type}</code> · {l.status} ·{" "}
-                <strong>{l.amountEgp} EGP</strong> ·{" "}
-                {new Date(l.createdAt).toLocaleString()}
-                <div style={{ color: "var(--color-muted)", fontSize: 12 }}>
-                  {l.description}
-                </div>
-              </div>
-            ))}
-          </Section>
-
-          <Section title="Timeline" full>
-            {data.timeline.length === 0 && (
-              <div style={{ color: "var(--color-muted)" }}>No timeline</div>
-            )}
-            {data.timeline.map((ev, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: "6px 0",
-                  fontSize: 13,
-                  borderBottom: "1px solid var(--color-border)",
-                }}
-              >
-                <span style={{ color: "var(--color-muted)", fontSize: 11 }}>
-                  {new Date(ev.at).toLocaleString()}
-                </span>
-                {" · "}
-                <code style={{ fontSize: 11 }}>{ev.event}</code>
-                {ev.detail && (
-                  <span style={{ color: "var(--color-muted)" }}> — {ev.detail}</span>
-                )}
-              </div>
-            ))}
-          </Section>
-
-          {canDoRefund && (
-            <Section title="Issue refund" full>
-              <div style={{ fontSize: 12, color: "var(--color-muted)", marginBottom: 8 }}>
-                Refundable remaining:{" "}
-                <strong style={{ color: "var(--color-primary)" }}>
-                  {maxRefundable} EGP
+                <strong>
+                  {trip.tripNumber
+                    ? `Trip #${trip.tripNumber}`
+                    : `Trip ${trip.cycleIndex + 1}`}{" "}
+                  · {trip.date}
                 </strong>
-                . Wallet portion is refunded first, then Kashier.
+                <strong style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {trip.priceEgp} EGP
+                </strong>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="number"
-                  min={1}
-                  max={maxRefundable}
-                  value={refundAmount}
-                  onChange={(e) => setRefundAmount(e.target.value)}
-                  placeholder="Amount EGP"
-                  style={{
-                    padding: "8px 10px",
-                    border: "1.5px solid var(--color-border)",
-                    borderRadius: 8,
-                    fontSize: 13,
-                    width: 140,
-                  }}
-                />
-                <input
-                  type="text"
-                  value={refundReason}
-                  onChange={(e) => setRefundReason(e.target.value)}
-                  placeholder="Reason"
-                  style={{
-                    flex: 1,
-                    padding: "8px 10px",
-                    border: "1.5px solid var(--color-border)",
-                    borderRadius: 8,
-                    fontSize: 13,
-                  }}
-                />
-                <button
-                  disabled={refunding || !refundAmount}
-                  onClick={submitRefund}
-                  style={{
-                    padding: "8px 16px",
-                    background:
-                      refunding || !refundAmount ? "var(--color-muted)" : "var(--color-danger)",
-                    color: "var(--color-on-primary)",
-                    border: "none",
-                    borderRadius: 8,
-                    fontWeight: 700,
-                    cursor:
-                      refunding || !refundAmount ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {refunding ? "Refunding…" : "Refund"}
-                </button>
+              <div style={{ color: "var(--color-primary)", marginTop: 3 }}>
+                {trip.pickup} → {trip.dropoff}
               </div>
-              {refundResult && (
-                <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-primary)" }}>
-                  {refundResult}
-                </div>
-              )}
-            </Section>
+              <div
+                style={{
+                  color: "var(--color-muted)",
+                  fontSize: 12,
+                  marginTop: 3,
+                }}
+              >
+                {trip.vehicleType} · pickup {trip.pickupTime} · arrival{" "}
+                {trip.arrivalTime} · {trip.paymentStatus} / {trip.status}
+                {trip.cancellation
+                  ? ` · refund ${trip.cancellation.refundAmount ?? 0} EGP (${trip.cancellation.refundStatus ?? "pending"})`
+                  : ""}
+                {trip.adminRefund
+                  ? ` · admin return ${trip.adminRefund.totalReturnEgp} EGP (${trip.adminRefund.status}; refund ${trip.adminRefund.refundAmountEgp} + compensation ${trip.adminRefund.compensationAmountEgp})`
+                  : ""}
+              </div>
+            </div>
+          ))}
+        </Section>
+
+        <Section title="Related ledger rows" full>
+          {data.ledger.length === 0 && (
+            <div style={{ color: "var(--color-muted)" }}>No related rows</div>
           )}
-        </div>
+          {data.ledger.map((l) => (
+            <div
+              key={l.id}
+              style={{
+                padding: "8px 0",
+                borderBottom: "1px solid var(--color-border)",
+                fontSize: 13,
+              }}
+            >
+              <code style={{ fontSize: 11 }}>{l.type}</code> · {l.status} ·{" "}
+              <strong>{l.amountEgp} EGP</strong> ·{" "}
+              {new Date(l.createdAt).toLocaleString()}
+              <div style={{ color: "var(--color-muted)", fontSize: 12 }}>
+                {l.description}
+              </div>
+            </div>
+          ))}
+        </Section>
+
+        <Section title="Timeline" full>
+          {data.timeline.length === 0 && (
+            <div style={{ color: "var(--color-muted)" }}>No timeline</div>
+          )}
+          {data.timeline.map((ev, i) => (
+            <div
+              key={i}
+              style={{
+                padding: "6px 0",
+                fontSize: 13,
+                borderBottom: "1px solid var(--color-border)",
+              }}
+            >
+              <span style={{ color: "var(--color-muted)", fontSize: 11 }}>
+                {new Date(ev.at).toLocaleString()}
+              </span>
+              {" · "}
+              <code style={{ fontSize: 11 }}>{ev.event}</code>
+              {ev.detail && (
+                <span style={{ color: "var(--color-muted)" }}>
+                  {" "}
+                  — {ev.detail}
+                </span>
+              )}
+            </div>
+          ))}
+        </Section>
+
+        {canDoRefund && (
+          <Section title="Issue refund" full>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--color-muted)",
+                marginBottom: 8,
+              }}
+            >
+              Submitted/matched/nomatch: full trip cost refunded once.
+              Compensation is a wallet credit on top. Refundable remaining:{" "}
+              <strong style={{ color: "var(--color-primary)" }}>
+                {maxRefundable} EGP
+              </strong>
+              . Wallet portion is refunded first, then Kashier.
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select
+                value={selectedTripId}
+                onChange={(e) => setSelectedTripId(e.target.value)}
+                style={{
+                  padding: "8px 10px",
+                  border: "1.5px solid var(--color-border)",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  minWidth: 230,
+                }}
+              >
+                <option value="">Select refundable trip</option>
+                {eligibleTrips.map((trip) => (
+                  <option key={trip.id} value={trip.id}>
+                    {trip.tripNumber
+                      ? `Trip #${trip.tripNumber}`
+                      : `Trip ${trip.cycleIndex + 1}`}{" "}
+                    — {trip.priceEgp} EGP
+                  </option>
+                ))}
+              </select>
+              <select
+                value={compensationPercent}
+                onChange={(e) => setCompensationPercent(e.target.value)}
+                style={{
+                  padding: "8px 10px",
+                  border: "1.5px solid var(--color-border)",
+                  borderRadius: 8,
+                  fontSize: 13,
+                }}
+              >
+                {[0, 15, 25, 35, 50, 75].map((percent) => (
+                  <option key={percent} value={percent}>
+                    {percent}% compensation
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="Reason"
+                style={{
+                  flex: 1,
+                  padding: "8px 10px",
+                  border: "1.5px solid var(--color-border)",
+                  borderRadius: 8,
+                  fontSize: 13,
+                }}
+              />
+              <button
+                disabled={
+                  refunding || !selectedTripId || eligibleTrips.length === 0
+                }
+                onClick={submitRefund}
+                style={{
+                  padding: "8px 16px",
+                  background:
+                    refunding || !selectedTripId || eligibleTrips.length === 0
+                      ? "var(--color-muted)"
+                      : "var(--color-danger)",
+                  color: "var(--color-on-primary)",
+                  border: "none",
+                  borderRadius: 8,
+                  fontWeight: 700,
+                  cursor:
+                    refunding || !selectedTripId || eligibleTrips.length === 0
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                {refunding ? "Refunding…" : "Refund"}
+              </button>
+            </div>
+            {refundResult && (
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: "var(--color-primary)",
+                }}
+              >
+                {refundResult}
+              </div>
+            )}
+          </Section>
+        )}
+      </div>
     </AdminPageContainer>
   );
 }

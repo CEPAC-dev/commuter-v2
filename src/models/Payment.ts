@@ -81,6 +81,7 @@ const PaymentSchema = new Schema(
     paidAt: { type: Date },
     refundedAt: { type: Date },
     refundedAmountEgp: { type: Number, default: 0, min: 0 },
+    compensatedAmountEgp: { type: Number, default: 0, min: 0 },
 
     timeline: { type: [PaymentTimelineEventSchema], default: [] },
   },

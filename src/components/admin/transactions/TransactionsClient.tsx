@@ -27,6 +27,7 @@ interface Transaction {
   userEmail: string | null;
   userPhone: string | null;
   bookingId: string | null;
+  tripCount: number;
   paymentId: string | null;
   tripId: string | null;
   kashierOrderId: string | null;
@@ -286,7 +287,7 @@ export default function TransactionsClient({
           </div>
         )}
 
-        {canReports ? <TransactionsChart /> : null}
+        {canReports ? <TransactionsChart dateFrom={dateFrom} dateTo={dateTo} /> : null}
 
         {/* Filter bar */}
         <AdminCard padding={16}>
@@ -436,6 +437,7 @@ export default function TransactionsClient({
                   <Th>Date</Th>
                   <Th>Type</Th>
                   <Th>Status</Th>
+                  <Th>Num of trips</Th>
                   <Th>Amount</Th>
                   <Th>User</Th>
                   <Th>Payment split</Th>
@@ -447,7 +449,7 @@ export default function TransactionsClient({
                 {loading && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       style={{
                         padding: 24,
                         textAlign: "center",
@@ -461,7 +463,7 @@ export default function TransactionsClient({
                 {!loading && rows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       style={{
                         padding: 24,
                         textAlign: "center",
@@ -481,6 +483,9 @@ export default function TransactionsClient({
                       </Td>
                       <Td>
                         <StatusPill status={tx.status} />
+                      </Td>
+                      <Td style={{ fontVariantNumeric: "tabular-nums" }}>
+                        {tx.tripCount}
                       </Td>
                       <Td
                         style={{

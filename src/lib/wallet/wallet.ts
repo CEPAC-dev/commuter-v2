@@ -57,9 +57,10 @@ export async function creditWallet(
   opts: {
     description: string;
     transactionId?: string;
-    type?: "topup" | "refund";
+    type?: "topup" | "refund" | "compensation";
     paymentId?: string;
     bookingId?: string;
+    tripId?: string;
   } = {
     description: "Wallet top-up",
   },
@@ -74,6 +75,7 @@ export async function creditWallet(
   const bookingId = opts.bookingId
     ? objectId(opts.bookingId, "bookingId")
     : undefined;
+  const tripId = opts.tripId ? objectId(opts.tripId, "tripId") : undefined;
   const transactionId = opts.transactionId
     ? objectId(opts.transactionId, "transactionId")
     : undefined;
@@ -145,6 +147,7 @@ export async function creditWallet(
               balanceAfterEgp: wallet.balanceEgp,
               paymentId,
               bookingId,
+              tripId,
             },
           ],
           { session },
@@ -771,7 +774,8 @@ export async function createWithdrawalRequest(
 
   const wallet = await getOrCreateWallet(userId);
   const reserve = wallet.reserveAmount ?? settings.walletReserveAmount ?? 200;
-  const limit = wallet.withdrawalLimit ?? settings.defaultWithdrawalLimit ?? null;
+  const limit =
+    wallet.withdrawalLimit ?? settings.defaultWithdrawalLimit ?? null;
   const pending = wallet.pendingWithdrawalAmount ?? 0;
   const withdrawable = Math.max(0, wallet.balanceEgp - reserve - pending);
 
@@ -784,9 +788,7 @@ export async function createWithdrawalRequest(
     );
   }
   if (limit != null && amountEgp > limit) {
-    throw new Error(
-      `Amount exceeds your withdrawal limit of ${limit} EGP.`,
-    );
+    throw new Error(`Amount exceeds your withdrawal limit of ${limit} EGP.`);
   }
 
   const updatedWallet = await Wallet.findOneAndUpdate(
@@ -799,10 +801,7 @@ export async function createWithdrawalRequest(
             $subtract: [
               { $ifNull: ["$balanceEgp", 0] },
               {
-                $add: [
-                  reserve,
-                  { $ifNull: ["$pendingWithdrawalAmount", 0] },
-                ],
+                $add: [reserve, { $ifNull: ["$pendingWithdrawalAmount", 0] }],
               },
             ],
           },
@@ -950,7 +949,11 @@ export async function rejectWithdrawalRequest(
     type: "withdrawal_rejected",
     title: "Withdrawal Rejected",
     body: `Your withdrawal request of ${request.amountEgp} EGP was rejected.${reason ? ` Reason: ${reason}` : ""}`,
-    data: { requestId: String(request._id), amountEgp: request.amountEgp, reason },
+    data: {
+      requestId: String(request._id),
+      amountEgp: request.amountEgp,
+      reason,
+    },
   });
 
   return { request, wallet: updatedWallet };
