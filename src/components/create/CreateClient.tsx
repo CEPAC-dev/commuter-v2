@@ -18,6 +18,7 @@ import { useTripStore } from "@/lib/store/useTripStore";
 import { useClientLocale } from "@/lib/locale.client";
 import {
   formatTime,
+  formatTimeRange,
   formatEgp,
   formatDistanceKm,
   formatMinutes,
@@ -1386,7 +1387,13 @@ export default function CreateClient({
                         }}
                       >
                         <Clock size={14} aria-hidden="true" />
-                        {formatTime(locale, trip.pickupTime)} →{" "}
+                        {isPrivate
+                          ? formatTime(locale, trip.pickupTime)
+                          : formatTimeRange(
+                              locale,
+                              pickupWindowRange(trip.pickupTime),
+                            )}
+                        {" → "}
                         {formatTime(locale, trip.arrivalTime)}
                       </span>
                       {trip.distanceKm && (
@@ -2188,7 +2195,7 @@ export default function CreateClient({
 /* ── Helpers local to this file ── */
 import { VEHICLE_LIST, VEHICLES } from "@/lib/config/vehicles";
 import { formatDisplayName } from "@/lib/nominatim";
-import { toMinutes, toHHMM } from "@/lib/time/pickupWindow";
+import { toMinutes, toHHMM, pickupWindowRange } from "@/lib/time/pickupWindow";
 
 function VEHICLE_LIST_LABEL(key: string, t: (key: string) => string) {
   const translated = t(`vehicles.${key}`);

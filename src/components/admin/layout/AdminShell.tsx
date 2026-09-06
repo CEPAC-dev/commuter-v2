@@ -52,10 +52,13 @@ export function AdminTopbarActions({ children }: { children: ReactNode }) {
 export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isAuthPage = pathname === "/admin/login" || pathname === "/admin/signup";
-  const [collapsed, setCollapsed] = useState(
-    () => typeof window !== "undefined" && window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === "1",
-  );
+  const [collapsed, setCollapsed] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
+
+  // read persisted preference after mount to avoid SSR/client markup mismatch
+  useEffect(() => {
+    if (window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === "1") setCollapsed(true);
+  }, []);
 
   useEffect(() => {
     if (isAuthPage) return;
