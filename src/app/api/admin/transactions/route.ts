@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { Payment } from "@/models/Payment";
+import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { PERMISSIONS } from "@/lib/auth/permissions";
@@ -166,7 +167,12 @@ export async function GET(req: NextRequest) {
       rows.map((r) => (r.paymentId ? String(r.paymentId) : "")).filter(Boolean),
     ),
   );
-  const [users, payments] = await Promise.all([
+  const bookingIds = Array.from(
+    new Set(
+      rows.map((r) => (r.bookingId ? String(r.bookingId) : "")).filter(Boolean),
+    ),
+  );
+  const [users, payments, tripCounts] = await Promise.all([
     User.find({ _id: { $in: userIds } })
       .select("name email phone")
       .lean<
@@ -177,9 +183,20 @@ export async function GET(req: NextRequest) {
         "totalEgp walletAmountEgp gatewayAmountEgp overallStatus bookingId",
       )
       .lean<Record<string, unknown>[]>(),
+    Trip.aggregate<{ _id: Types.ObjectId; count: number }>([
+      {
+        $match: {
+          requestId: { $in: bookingIds.map((id) => new Types.ObjectId(id)) },
+        },
+      },
+      { $group: { _id: "$requestId", count: { $sum: 1 } } },
+    ]),
   ]);
   const userMap = new Map(users.map((u) => [String(u._id), u]));
   const paymentMap = new Map(payments.map((p) => [String(p._id), p]));
+  const tripCountMap = new Map(
+    tripCounts.map((row) => [String(row._id), row.count]),
+  );
 
   return NextResponse.json({
     page,
@@ -203,6 +220,9 @@ export async function GET(req: NextRequest) {
         userEmail: u?.email ?? null,
         userPhone: u?.phone ?? null,
         bookingId: r.bookingId ? String(r.bookingId) : null,
+        tripCount: r.bookingId
+          ? (tripCountMap.get(String(r.bookingId)) ?? 0)
+          : 0,
         paymentId: r.paymentId ? String(r.paymentId) : null,
         tripId: r.tripId ? String(r.tripId) : null,
         kashierOrderId: r.kashierOrderId ?? null,

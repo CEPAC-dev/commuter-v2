@@ -13,14 +13,43 @@ export async function GET(req: NextRequest) {
   if (!auth.authorized) return auth.response;
 
   await connectDB();
-  const days = Math.min(Math.max(Number(req.nextUrl.searchParams.get("days")) || 30, 1), 90);
-  const since = new Date();
-  since.setDate(since.getDate() - (days - 1));
+  const searchParams = req.nextUrl.searchParams;
+  const dateFromParam = searchParams.get("dateFrom");
+  const dateToParam = searchParams.get("dateTo");
+  const parsedFrom = dateFromParam
+    ? new Date(`${dateFromParam}T00:00:00.000Z`)
+    : null;
+  const parsedTo = dateToParam
+    ? new Date(`${dateToParam}T23:59:59.999Z`)
+    : null;
+  const hasValidFrom = parsedFrom && !Number.isNaN(parsedFrom.getTime());
+  const hasValidTo = parsedTo && !Number.isNaN(parsedTo.getTime());
+
+  const since = hasValidFrom ? new Date(parsedFrom) : new Date();
+  if (!hasValidFrom) since.setDate(since.getDate() - 29);
   since.setHours(0, 0, 0, 0);
+  const until = hasValidTo ? new Date(parsedTo) : new Date();
+  until.setHours(23, 59, 59, 999);
+  if (until < since) {
+    return NextResponse.json(
+      { error: "dateTo must be on or after dateFrom" },
+      { status: 400 },
+    );
+  }
+  const days = Math.floor((until.getTime() - since.getTime()) / 86_400_000) + 1;
+  if (days > 366) {
+    return NextResponse.json(
+      { error: "Date range cannot exceed 366 days" },
+      { status: 400 },
+    );
+  }
+  const dateMatch = { createdAt: { $gte: since, $lte: until } };
 
   const [collected, byType] = await Promise.all([
     WalletTransaction.aggregate([
-      { $match: { createdAt: { $gte: since }, type: "payment_captured", status: "completed" } },
+      {
+        $match: { ...dateMatch, type: "payment_captured", status: "completed" },
+      },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -31,7 +60,7 @@ export async function GET(req: NextRequest) {
       { $sort: { _id: 1 } },
     ]),
     WalletTransaction.aggregate([
-      { $match: { createdAt: { $gte: since } } },
+      { $match: dateMatch },
       { $group: { _id: "$type", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
     ]),
@@ -44,11 +73,18 @@ export async function GET(req: NextRequest) {
     d.setDate(d.getDate() + i);
     const key = d.toISOString().slice(0, 10);
     const row = byDate.get(key);
-    series.push({ date: key, sumEgp: row?.sumEgp ?? 0, count: row?.count ?? 0 });
+    series.push({
+      date: key,
+      sumEgp: row?.sumEgp ?? 0,
+      count: row?.count ?? 0,
+    });
   }
 
   return NextResponse.json({
     series,
-    byType: byType.map((row) => ({ type: row._id as string, count: row.count as number })),
+    byType: byType.map((row) => ({
+      type: row._id as string,
+      count: row.count as number,
+    })),
   });
 }
