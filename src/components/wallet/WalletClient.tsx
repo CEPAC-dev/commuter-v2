@@ -22,6 +22,7 @@ interface Tx {
     | "topup"
     | "payment"
     | "refund"
+    | "compensation"
     | "earning"
     | "referral_bonus"
     | "withdrawal";
@@ -1022,6 +1023,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
             const isCredit =
               transaction.type === "topup" ||
               transaction.type === "refund" ||
+              transaction.type === "compensation" ||
               transaction.type === "earning" ||
               transaction.type === "referral_bonus";
             const Icon =
@@ -1029,7 +1031,8 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
               transaction.type === "earning" ||
               transaction.type === "referral_bonus"
                 ? ArrowDownLeft
-                : transaction.type === "refund"
+                : transaction.type === "refund" ||
+                    transaction.type === "compensation"
                   ? RotateCcw
                   : transaction.type === "withdrawal"
                     ? Banknote

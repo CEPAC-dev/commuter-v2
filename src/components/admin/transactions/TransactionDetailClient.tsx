@@ -182,7 +182,7 @@ export default function TransactionDetailClient({
       (trip.status === "submitted" ||
         trip.status === "matched" ||
         trip.status === "nomatch") &&
-      !trip.adminRefund,
+      (!trip.adminRefund || trip.adminRefund.status === "failed"),
   );
 
   return (
@@ -311,6 +311,7 @@ export default function TransactionDetailClient({
                     ? `Trip #${trip.tripNumber}`
                     : `Trip ${trip.cycleIndex + 1}`}{" "}
                   · {trip.date}
+                  {trip.adminRefund?.status === "failed" ? " (retry)" : ""}
                 </strong>
                 <strong style={{ fontVariantNumeric: "tabular-nums" }}>
                   {trip.priceEgp} EGP

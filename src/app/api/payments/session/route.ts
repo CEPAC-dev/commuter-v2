@@ -109,7 +109,9 @@ export async function POST(req: NextRequest) {
     ) {
       const existing = await Payment.findOne({
         bookingId: booking._id,
-        overallStatus: { $in: ["created", "wallet_reserved", "kashier_pending"] },
+        overallStatus: {
+          $in: ["created", "wallet_reserved", "kashier_pending"],
+        },
       }).sort({ createdAt: -1 });
       return NextResponse.json(
         {
@@ -280,12 +282,13 @@ export async function POST(req: NextRequest) {
   const expireAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
   const kashierBody = {
-    merchantOrderId: String(payment._id),
+    orderId: String(payment._id),
     merchantId: process.env.KASHIER_MERCHANT_ID!,
     amount: String(gatewayAmount),
     currency: "EGP",
     paymentType: "credit",
     type: "one-time",
+    mode: process.env.KASHIER_MODE ?? "test",
     maxFailureAttempts: 3,
     expireAt,
     display: "en",

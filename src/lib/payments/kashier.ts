@@ -14,6 +14,10 @@ const BASE =
   process.env.KASHIER_MODE === "live"
     ? "https://api.kashier.io"
     : "https://test-api.kashier.io";
+const REFUND_BASE =
+  process.env.KASHIER_MODE === "live"
+    ? "https://fep.kashier.io"
+    : "https://test-fep.kashier.io";
 
 type Settled = "pending" | "paid" | "failed";
 
@@ -360,30 +364,74 @@ export async function refundKashierPayment(
   reason?: string,
 ): Promise<{ refundId: string } | null> {
   if (!process.env.KASHIER_SECRET_KEY) return null;
-  const url = `${BASE}/v3/orders/${encodeURIComponent(orderId)}/refunds`;
+  const url = `${REFUND_BASE}/v3/orders/${encodeURIComponent(orderId)}`;
   try {
     const res = await fetch(url, {
-      method: "POST",
+      method: "PUT",
       headers: {
         Authorization: process.env.KASHIER_SECRET_KEY,
+        accept: "application/json",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount: String(amountEgp),
+        apiOperation: "REFUND",
         reason: reason ?? "Refund",
+        transaction: { amount: amountEgp },
       }),
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as Record<string, unknown>;
+    const data = (await res.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    if (!res.ok) {
+      console.error("Kashier refund error", {
+        status: res.status,
+        orderId,
+        amountEgp,
+        message: data?.message,
+      });
+      return null;
+    }
+    const response = (data?.response ?? data) as
+      | Record<string, unknown>
+      | undefined;
+    const status = String(response?.status ?? data?.status ?? "").toUpperCase();
+    if (status !== "SUCCESS") return null;
     const refundId =
-      (data.refundId as string) ||
-      (data._id as string) ||
-      ((data.data as Record<string, unknown> | undefined)?._id as string);
+      (response?.transactionId as string) ||
+      (data?.refundId as string) ||
+      (data?._id as string) ||
+      ((data?.data as Record<string, unknown> | undefined)?._id as string);
     if (!refundId) return null;
     return { refundId };
   } catch {
     return null;
   }
+}
+
+export async function resolveKashierRefundOrderId(
+  sessionId?: string | null,
+  fallbackOrderId?: string | null,
+): Promise<string | null> {
+  if (!sessionId || !process.env.KASHIER_SECRET_KEY)
+    return fallbackOrderId ?? null;
+  const url = `${BASE}/v3/payment/sessions/${encodeURIComponent(
+    sessionId,
+  )}/payment`;
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: process.env.KASHIER_SECRET_KEY },
+      cache: "no-store",
+    });
+    const json = (await res.json()) as Record<string, unknown>;
+    const data = (json.data ?? json.response ?? json) as Record<
+      string,
+      unknown
+    >;
+    const orderId = String(data.orderId ?? "");
+    if (orderId && orderId !== "NA") return orderId;
+  } catch {}
+  return fallbackOrderId ?? null;
 }
 
 /**

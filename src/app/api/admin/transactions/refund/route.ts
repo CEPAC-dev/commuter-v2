@@ -4,7 +4,10 @@ import { Payment } from "@/models/Payment";
 import { Trip } from "@/models/Trip";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { creditWallet } from "@/lib/wallet/wallet";
-import { refundKashierPayment } from "@/lib/payments/kashier";
+import {
+  refundKashierPayment,
+  resolveKashierRefundOrderId,
+} from "@/lib/payments/kashier";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { Types } from "mongoose";
@@ -60,12 +63,24 @@ export async function POST(req: NextRequest) {
     );
 
   const eligibleStatuses = ["submitted", "matched", "nomatch"];
+  const existingTrip = await Trip.findOne({
+    _id: tripId,
+    requestId: payment.bookingId,
+  }).select("adminRefund");
+  const previousAdminRefund = existingTrip?.adminRefund as
+    | {
+        status?: string;
+        refundAmountEgp?: number;
+        compensationAmountEgp?: number;
+      }
+    | null
+    | undefined;
   const trip = await Trip.findOneAndUpdate(
     {
       _id: tripId,
       requestId: payment.bookingId,
       status: { $in: eligibleStatuses },
-      adminRefund: null,
+      $or: [{ adminRefund: null }, { "adminRefund.status": "failed" }],
       "cancellation.refundStatus": { $nin: ["pending", "approved"] },
     },
     {
@@ -88,7 +103,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Trip is not refundable. It must be submitted or matched and never refunded before.",
+          "Trip is not refundable. It must be submitted, matched, or nomatch, and not already refunded successfully.",
       },
       { status: 409 },
     );
@@ -96,9 +111,23 @@ export async function POST(req: NextRequest) {
   const isBaseRefundEligible = ["submitted", "matched", "nomatch"].includes(
     trip.status,
   );
-  const amountEgp = isBaseRefundEligible ? Number(trip.priceEgp) : 0;
-  const compensationAmountEgp = Math.round(
+  const previousRefundEgp =
+    previousAdminRefund?.status === "failed"
+      ? (previousAdminRefund.refundAmountEgp ?? 0)
+      : 0;
+  const previousCompensationEgp =
+    previousAdminRefund?.status === "failed"
+      ? (previousAdminRefund.compensationAmountEgp ?? 0)
+      : 0;
+  const amountEgp = isBaseRefundEligible
+    ? Math.max(0, Number(trip.priceEgp) - previousRefundEgp)
+    : 0;
+  const targetCompensationAmountEgp = Math.round(
     (Number(trip.priceEgp) * compensationPercent) / 100,
+  );
+  const compensationAmountEgp = Math.max(
+    0,
+    targetCompensationAmountEgp - previousCompensationEgp,
   );
 
   const alreadyRefunded = payment.refundedAmountEgp ?? 0;
@@ -168,12 +197,16 @@ export async function POST(req: NextRequest) {
   let kashierRefundId: string | null = null;
   let gatewayRefundFailed = false;
   if (gatewayRefundEgp > 0) {
-    if (!payment.kashierOrderId) {
+    const kashierOrderId = await resolveKashierRefundOrderId(
+      payment.kashierSessionId,
+      payment.kashierOrderId,
+    );
+    if (!kashierOrderId) {
       gatewayRefundFailed = true;
       timelineEvents.push({ event: "kashier_refund_skipped_no_order" });
     } else {
       const result = await refundKashierPayment(
-        payment.kashierOrderId,
+        kashierOrderId,
         gatewayRefundEgp,
         reason,
       );
@@ -188,7 +221,7 @@ export async function POST(req: NextRequest) {
           paymentId: payment._id,
           bookingId: payment.bookingId,
           tripId: trip._id,
-          kashierOrderId: payment.kashierOrderId,
+          kashierOrderId,
           kashierTransactionIds: [result.refundId],
         });
         timelineEvents.push({
@@ -222,8 +255,14 @@ export async function POST(req: NextRequest) {
   if (walletRefundEgp > 0 && fullyRefunded) update.walletStatus = "refunded";
   if (gatewayRefundEgp > 0 && !gatewayRefundFailed && fullyRefunded)
     update.gatewayStatus = "refunded";
+  if (payment.kashierSessionId && gatewayRefundEgp > 0) {
+    update.kashierOrderId = await resolveKashierRefundOrderId(
+      payment.kashierSessionId,
+      payment.kashierOrderId,
+    );
+  }
 
-  if (compensationAmountEgp > 0) {
+  if (!gatewayRefundFailed && compensationAmountEgp > 0) {
     await creditWallet(String(payment.userId), compensationAmountEgp, {
       description: `Compensation (${compensationPercent}%) for trip ${trip._id}${reason ? ` — ${reason}` : ""}`,
       type: "compensation",
@@ -258,20 +297,26 @@ export async function POST(req: NextRequest) {
     {
       $set: {
         "adminRefund.status": gatewayRefundFailed ? "failed" : "completed",
+        ...(gatewayRefundFailed ? {} : { status: "refunded" }),
         "adminRefund.refundedAt": new Date(),
         "adminRefund.refundAmountEgp":
-          walletRefundEgp + (gatewayRefundFailed ? 0 : gatewayRefundEgp),
-        "adminRefund.compensationAmountEgp": compensationAmountEgp,
+          previousRefundEgp +
+          walletRefundEgp +
+          (gatewayRefundFailed ? 0 : gatewayRefundEgp),
+        "adminRefund.compensationAmountEgp":
+          previousCompensationEgp + compensationAmountEgp,
         "adminRefund.totalReturnEgp":
+          previousRefundEgp +
           walletRefundEgp +
           (gatewayRefundFailed ? 0 : gatewayRefundEgp) +
+          previousCompensationEgp +
           compensationAmountEgp,
         ...(gatewayRefundFailed
           ? {
               "adminRefund.failureReason":
                 "Kashier refund failed; manual accountant action required",
             }
-          : {}),
+          : { paymentStatus: "refunded" }),
       },
     },
   );
