@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
-import { generateReferralCode, getOrCreateReferralSettings } from "@/lib/referral";
+import {
+  generateReferralCode,
+  getOrCreateReferralSettings,
+} from "@/lib/referral";
 import { ReferralUsage } from "@/models/ReferralUsage";
 import { User } from "@/models/User";
 import { Wallet } from "@/models/Wallet";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   await connectDB();
-  const user = await User.findById(session.userId).select("referralCode referralUnlimited");
-  if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
+  const user = await User.findById(session.userId).select(
+    "referralCode referralUnlimited",
+  );
+  if (!user)
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
 
   if (!user.referralCode) {
     user.referralCode = await generateReferralCode();
@@ -24,10 +31,17 @@ export async function GET(req: NextRequest) {
     ReferralUsage.countDocuments({ referrer: user._id, status: "pending" }),
     ReferralUsage.countDocuments({ referrer: user._id, status: "credited" }),
     Wallet.findOne({ userId: user._id }).select("balanceEgp").lean(),
-    getOrCreateReferralSettings(session.role === "driver" ? "driver" : "passenger"),
+    getOrCreateReferralSettings(
+      session.role === "driver" ? "driver" : "passenger",
+    ),
   ]);
 
-  const shareUrl = new URL("/login", req.nextUrl.origin);
+  const appUrl =
+    process.env.APP_URL ??
+    (process.env.NODE_ENV === "production"
+      ? "https://www.commuter.site"
+      : req.nextUrl.origin);
+  const shareUrl = new URL("/login", appUrl);
   shareUrl.searchParams.set("ref", user.referralCode);
 
   return NextResponse.json({
