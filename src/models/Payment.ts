@@ -27,7 +27,6 @@ const PaymentSchema = new Schema(
       type: Types.ObjectId,
       ref: "Booking",
       required: true,
-      index: true,
     },
 
     totalEgp: { type: Number, required: true, min: 0 },

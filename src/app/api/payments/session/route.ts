@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
   const expireAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
   const kashierBody = {
-    orderId: String(payment._id),
+    merchantOrderId: String(payment._id),
     merchantId: process.env.KASHIER_MERCHANT_ID!,
     amount: String(gatewayAmount),
     currency: "EGP",
