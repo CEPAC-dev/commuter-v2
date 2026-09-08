@@ -32,7 +32,7 @@ export async function POST(
           reviewedBy: session.userId,
         },
       },
-      { new: true },
+      { returnDocument: "after" },
     );
 
     if (!refundReq) {

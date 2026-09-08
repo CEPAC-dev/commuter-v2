@@ -35,7 +35,7 @@ export async function PATCH(
   const user = await User.findByIdAndUpdate(
     id,
     { $set: { referralUnlimited: body.unlimited } },
-    { new: true },
+    { returnDocument: "after" },
   ).select("_id userNumber name role referralUnlimited");
 
   if (!user) {

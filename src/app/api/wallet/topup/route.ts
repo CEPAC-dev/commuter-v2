@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const appUrl = process.env.APP_URL;
+  const appUrl = process.env.APP_URL?.replace(/\/+$/, "");
   if (!appUrl) {
     return NextResponse.json(
       { error: "APP_URL is not configured on the server." },
