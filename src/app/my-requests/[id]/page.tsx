@@ -63,6 +63,7 @@ const STATUS_PILL: Record<
   },
   submitted: { label: "Submitted", bg: "#E2E8F0", color: "#5A6A7A" },
   matched: { label: "Matched", bg: "#00C2A8", color: "#fff" },
+  nomatch: { label: "No match", bg: "#FFEBEE", color: "#E74C3C" },
   confirmed: { label: "Confirmed", bg: "#E8F5E9", color: "#27AE60" },
   active: { label: "Active", bg: "#00C2A8", color: "#fff" },
   completed: { label: "Completed", bg: "#0B1E3D", color: "#fff" },
@@ -360,7 +361,10 @@ export default async function RequestDetailPage({
                         />
                         <Detail
                           icon={<Users size={15} color="#0B1E3D" />}
-                          label={translate(locale, "my_requests.extra_passengers")}
+                          label={translate(
+                            locale,
+                            "my_requests.extra_passengers",
+                          )}
                           value={String(t.extraPassengers)}
                         />
                         <Detail
@@ -394,14 +398,20 @@ export default async function RequestDetailPage({
                         {t.rideType === "shared" && t.pickupStation && (
                           <Detail
                             icon={<MapPin size={15} color="#00C2A8" />}
-                            label={translate(locale, "my_requests.pickup_station")}
+                            label={translate(
+                              locale,
+                              "my_requests.pickup_station",
+                            )}
                             value={`${t.pickupStation.name} · ${t.walkingMinToStation ?? 0} min walk`}
                           />
                         )}
                         {t.rideType === "shared" && t.dropoffStation && (
                           <Detail
                             icon={<MapPin size={15} color="#E74C3C" />}
-                            label={translate(locale, "my_requests.dropoff_station")}
+                            label={translate(
+                              locale,
+                              "my_requests.dropoff_station",
+                            )}
                             value={`${t.dropoffStation.name} · ${t.walkingMinFromStation ?? 0} min walk`}
                           />
                         )}
@@ -413,7 +423,10 @@ export default async function RequestDetailPage({
                           <Detail
                             icon={<Notebook size={15} color="#0B1E3D" />}
                             label={translate(locale, "my_requests.note")}
-                            value={translate(locale, "my_requests.note_description")}
+                            value={translate(
+                              locale,
+                              "my_requests.note_description",
+                            )}
                           />
                         </div>
                       ) : null}
