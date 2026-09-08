@@ -346,6 +346,10 @@ export default function CreateClient({
             pickupTime: t.pickupTime,
             distanceKm: t.distanceKm,
             durationMinutes: t.durationMinutes,
+            routeLegs: t.routeLegs.map((leg) => ({
+              distanceKm: leg.distanceKm,
+              passengers: leg.passengers,
+            })),
             extraPassengers: t.extraPassengers,
             passengers: t.passengers,
             numberOfPassengers: t.numberOfPassengers,
