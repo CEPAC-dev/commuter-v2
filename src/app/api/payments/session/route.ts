@@ -288,7 +288,6 @@ export async function POST(req: NextRequest) {
     currency: "EGP",
     paymentType: "credit",
     type: "one-time",
-    mode: process.env.KASHIER_MODE ?? "test",
     maxFailureAttempts: 3,
     expireAt,
     display: "en",
