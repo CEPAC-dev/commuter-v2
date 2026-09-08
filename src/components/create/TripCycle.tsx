@@ -30,7 +30,7 @@ import {
   pickupWindowRange,
   toMinutes,
 } from "@/lib/time/pickupWindow";
-import { fetchRoute } from "@/lib/openrouteservice";
+import { fetchRoadRoutes } from "@/lib/osrm";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import type { SavedAddress } from "@/types/shared";
 import {
@@ -595,7 +595,7 @@ export default function TripCycle({
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRouteLoading(true);
-    fetchRoute([routeFrom, routeTo])
+    fetchRoadRoutes([routeFrom, routeTo])
       .then((routes) => {
         if (cancelled || !routes.length) return;
         const { distance_km, duration_minutes, coordinates } = routes[0];
@@ -689,11 +689,11 @@ export default function TripCycle({
       data.dropoff!,
     ];
     Promise.all([
-      fetchRoute(routePoints),
+      fetchRoadRoutes(routePoints),
       ...routePoints
         .slice(0, -1)
         .map((point, pointIndex) =>
-          fetchRoute([point, routePoints[pointIndex + 1]]),
+          fetchRoadRoutes([point, routePoints[pointIndex + 1]]),
         ),
     ])
       .then(([routes, ...legRoutes]) => {
@@ -789,7 +789,7 @@ export default function TripCycle({
     if (distinct.length === 0) {
       // Nothing distinct — ensure distanceKm reflects the base pickup→dropoff route.
       if (data.passengerDetourKm == null) return;
-      fetchRoute([data.pickup, data.dropoff])
+      fetchRoadRoutes([data.pickup, data.dropoff])
         .then((routes) => {
           if (cancelled || !routes.length) return;
           const { distance_km, duration_minutes, coordinates } = routes[0];
@@ -826,7 +826,7 @@ export default function TripCycle({
       data.dropoff,
     ];
 
-    fetchRoute(waypoints)
+    fetchRoadRoutes(waypoints)
       .then((routes) => {
         if (cancelled || !routes.length) return;
         const { distance_km, duration_minutes, coordinates } = routes[0];

@@ -13,7 +13,6 @@ import {
   priceForSelectedDate,
   type VehicleKey,
 } from "@/lib/config/vehicles";
-import { fetchRoute } from "@/lib/openrouteservice";
 import { fetchDirections } from "@/app/api/directions/route";
 import {
   isVehicleAvailableInRegion,
@@ -52,18 +51,15 @@ const PRIVATE_VEHICLE_KEYS = new Set<VehicleKey>([
 ]);
 
 async function calculateRoute(points: Array<{ lat: number; lng: number }>) {
-  const routes = await fetchRoute(points);
-  if (routes[0]) return routes[0];
-
   const [origin, ...remainingPoints] = points;
   const destination = remainingPoints.pop();
   if (!origin || !destination) return null;
-  const fallbackRoutes = await fetchDirections(
+  const routes = await fetchDirections(
     `${origin.lat},${origin.lng}`,
     `${destination.lat},${destination.lng}`,
     remainingPoints.map((point) => `${point.lat},${point.lng}`).join("|"),
   );
-  return fallbackRoutes[0] ?? null;
+  return routes[0] ?? null;
 }
 
 function stationPayload(

@@ -104,6 +104,10 @@ export default function CreateClient({
   const [trips, setTrips] = useState<TripData[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [createdBooking, setCreatedBooking] = useState<{
+    id: string;
+    amountEgp: number;
+  } | null>(null);
   const [submitError, setSubmitError] = useState("");
   const [useWallet, setUseWallet] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -322,11 +326,10 @@ export default function CreateClient({
     [getSingleTripPrice, selectedDates],
   );
 
-  async function handleSubmit() {
+  async function createBooking() {
     setSubmitting(true);
     setSubmitError("");
     setPromoWarning("");
-    let navigating = false;
     try {
       const res = await fetch("/api/trips", {
         method: "POST",
@@ -369,7 +372,7 @@ export default function CreateClient({
       const data = await res.json();
       if (!res.ok) {
         setSubmitError(data.error ?? t("create.booking_create_failed"));
-        return;
+        return null;
       }
 
       if (data?.promoCodeUnavailable) {
@@ -380,11 +383,41 @@ export default function CreateClient({
         setPromoWarning(t("create.promo_partially_applied"));
       }
 
-      // ── Mixed payment: single call handles wallet-only, mixed, and card-only ──
+      if (typeof data.bookingId !== "string" || !Number.isFinite(data.amountEgp)) {
+        setSubmitError(t("create.booking_create_failed"));
+        return null;
+      }
+      const booking = { id: data.bookingId, amountEgp: data.amountEgp };
+      setCreatedBooking(booking);
+      return booking;
+    } catch {
+      setSubmitError(t("create.network_error_retry"));
+      return null;
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleConfirmRequest() {
+    const booking = await createBooking();
+    if (!booking) return;
+    setShowPreview(false);
+    setShowPaymentModal(true);
+  }
+
+  async function handleSubmit() {
+    if (!createdBooking) {
+      setSubmitError(t("create.booking_create_failed"));
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError("");
+    let navigating = false;
+    try {
       const payRes = await fetch("/api/payments/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: data.bookingId, useWallet }),
+        body: JSON.stringify({ bookingId: createdBooking.id, useWallet }),
       });
       const payData = await payRes.json();
       if (!payRes.ok) {
@@ -711,6 +744,7 @@ export default function CreateClient({
     0,
   );
   const totalSavingsEgp = Math.max(0, baseGrandTotalEgp - grandTotalEgp);
+  const checkoutTotalEgp = createdBooking?.amountEgp ?? grandTotalEgp;
 
   if (!mounted) {
     return (
@@ -1711,21 +1745,18 @@ export default function CreateClient({
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowPreview(false);
-                  setShowPaymentModal(true);
-                }}
-                disabled={!agreedTerms}
+                onClick={() => void handleConfirmRequest()}
+                disabled={!agreedTerms || submitting}
                 style={{
                   width: "100%",
                   height: 52,
-                  background: agreedTerms ? "#0B1E3D" : "#d0d8e0",
-                  color: agreedTerms ? "#ffffff" : "#9aa5b4",
+                  background: agreedTerms && !submitting ? "#0B1E3D" : "#d0d8e0",
+                  color: agreedTerms && !submitting ? "#ffffff" : "#9aa5b4",
                   fontWeight: 700,
                   fontSize: 15,
                   border: "none",
                   borderRadius: 12,
-                  cursor: agreedTerms ? "pointer" : "not-allowed",
+                  cursor: agreedTerms && !submitting ? "pointer" : "not-allowed",
                   fontFamily: "inherit",
                   transition: "background 0.2s",
                   display: "flex",
@@ -1734,13 +1765,13 @@ export default function CreateClient({
                   gap: 8,
                 }}
                 onMouseEnter={(e) => {
-                  if (agreedTerms) e.currentTarget.style.background = "#00C2A8";
+                  if (agreedTerms && !submitting) e.currentTarget.style.background = "#00C2A8";
                 }}
                 onMouseLeave={(e) => {
-                  if (agreedTerms) e.currentTarget.style.background = "#0B1E3D";
+                  if (agreedTerms && !submitting) e.currentTarget.style.background = "#0B1E3D";
                 }}
               >
-                {t("create.confirm_request")}
+                {submitting ? t("create.submitting") : t("create.confirm_request")}
               </button>
             </div>
           </div>
@@ -1844,7 +1875,7 @@ export default function CreateClient({
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  {formatEgp(locale, grandTotalEgp)}
+                  {formatEgp(locale, checkoutTotalEgp)}
                 </span>
               </div>
 
@@ -1852,9 +1883,9 @@ export default function CreateClient({
               {(() => {
                 const avail = walletAvailable ?? 0;
                 const walletPortion = useWallet
-                  ? Math.min(grandTotalEgp, avail)
+                  ? Math.min(checkoutTotalEgp, avail)
                   : 0;
-                const cardPortion = grandTotalEgp - walletPortion;
+                const cardPortion = checkoutTotalEgp - walletPortion;
                 const walletDisabled = avail <= 0;
                 return (
                   <div>
@@ -1987,7 +2018,7 @@ export default function CreateClient({
                       >
                         <span>Trip total</span>
                         <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-                          {formatEgp(locale, grandTotalEgp)}
+                          {formatEgp(locale, checkoutTotalEgp)}
                         </strong>
                       </div>
                       {walletPortion > 0 && (
