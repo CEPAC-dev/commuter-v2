@@ -10,6 +10,7 @@ import {
   VEHICLES,
   computePrivateTripPriceEgp,
   computeTripPriceEgp,
+  priceForSelectedDate,
   type VehicleKey,
 } from "@/lib/config/vehicles";
 import { fetchRoute } from "@/lib/openrouteservice";
@@ -18,7 +19,7 @@ import {
   isVehicleAvailableInRegion,
   normalizeRegion,
 } from "@/lib/config/regions";
-import { bookingWindow, isDateInWindow } from "@/lib/time/bookingDates";
+import { isDateInWindow } from "@/lib/time/bookingDates";
 import {
   ARRIVAL_SLOT_END_MIN,
   ARRIVAL_SLOT_START_MIN,
@@ -589,18 +590,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const fullBookingWindow = bookingWindow();
-  const hasFullWeekSelection =
-    dates.length === fullBookingWindow.length &&
-    fullBookingWindow.every((date) => dates.includes(date));
-  const seventhDay = fullBookingWindow[fullBookingWindow.length - 1];
-
   const pricedTripInstances = tripInstances.map((instance, index) => {
     const promoApply = promoApplies[index];
-    const basePriceEgp =
-      hasFullWeekSelection && instance.date === seventhDay
-        ? Math.round(instance.trip.priceEgp * 0.95)
-        : instance.trip.priceEgp;
+    const basePriceEgp = priceForSelectedDate(
+      instance.trip.priceEgp,
+      instance.date,
+      dates,
+    );
     const priceAfterPromo = promoApply
       ? Math.round(
           computePromoDiscountedPrice(

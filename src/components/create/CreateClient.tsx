@@ -34,6 +34,7 @@ import { haversineKm } from "@/lib/geo/stations";
 import type { Station } from "@/lib/geo/stations";
 import {
   computeTripPriceEgp,
+  priceForSelectedDate,
   priceForSelectedDates,
 } from "@/lib/config/vehicles";
 import {
@@ -283,7 +284,7 @@ export default function CreateClient({
     [],
   );
 
-  const getTripPriceForSubmission = useCallback(
+  const getSingleTripPrice = useCallback(
     (trip: TripData) => {
       const hasPickup = !!(
         trip.pickup?.address ||
@@ -310,9 +311,15 @@ export default function CreateClient({
               extraPassengers: trip.extraPassengers ?? 0,
               vehiclesMap: vehiclesMap ?? undefined,
             });
-      return priceForSelectedDates(singleTripPrice, selectedDates);
+      return singleTripPrice;
     },
-    [selectedDates, vehiclesMap],
+    [vehiclesMap],
+  );
+
+  const getTripPriceForSubmission = useCallback(
+    (trip: TripData) =>
+      priceForSelectedDates(getSingleTripPrice(trip), selectedDates),
+    [getSingleTripPrice, selectedDates],
   );
 
   async function handleSubmit() {
@@ -679,9 +686,12 @@ export default function CreateClient({
     (sum, t) => sum + getTripPriceForSubmission(t),
     0,
   );
-  const baseInstancePrices = trips.map((trip) =>
-    getTripPriceForSubmission(trip),
-  );
+  const baseInstancePrices = trips.flatMap((trip) => {
+    const singleTripPrice = getSingleTripPrice(trip);
+    return selectedDates.map((date) =>
+      priceForSelectedDate(singleTripPrice, date, selectedDates),
+    );
+  });
   const baseGrandTotalEgp = baseInstancePrices.reduce(
     (sum, price) => sum + price,
     0,

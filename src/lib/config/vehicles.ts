@@ -255,23 +255,27 @@ export function priceForSelectedDates(
     return normalizedSingleTripPrice;
   }
 
+  return selectedDates.reduce(
+    (total, date) =>
+      total + priceForSelectedDate(normalizedSingleTripPrice, date, selectedDates),
+    0,
+  );
+}
+
+export function priceForSelectedDate(
+  singleTripPrice: number,
+  date: string,
+  selectedDates: string[],
+): number {
+  const normalizedSingleTripPrice = Math.max(0, Math.round(singleTripPrice));
   const weekDates = bookingWindow();
   const isFullWeekSelection =
     selectedDates.length === weekDates.length &&
     weekDates.every((day) => selectedDates.includes(day));
 
-  if (!isFullWeekSelection) {
-    return normalizedSingleTripPrice * selectedDates.length;
-  }
-
-  const seventhDay = weekDates[weekDates.length - 1];
-  return selectedDates.reduce((total, date) => {
-    const priceForDate =
-      date === seventhDay
-        ? Math.round(normalizedSingleTripPrice * 0.95)
-        : normalizedSingleTripPrice;
-    return total + priceForDate;
-  }, 0);
+  return isFullWeekSelection && date === weekDates[weekDates.length - 1]
+    ? Math.round(normalizedSingleTripPrice * 0.95)
+    : normalizedSingleTripPrice;
 }
 
 export interface PrivateFareLeg {

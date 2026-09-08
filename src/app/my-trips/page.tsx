@@ -1420,6 +1420,22 @@ export default async function MyTripsPage({
                               </span>
                             </div>
 
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: 8,
+                                marginBottom: 12,
+                                fontSize: 12,
+                                color: "#5A6A7A",
+                              }}
+                            >
+                              <span>{translate(locale, "my_trips.trip_fare")}</span>
+                              <span style={{ fontWeight: 700, color: "#0B1E3D", fontVariantNumeric: "tabular-nums" }}>
+                                {translate(locale, "my_trips.request_total")}: {formatEgp(locale, trip.bookingAmountEgp)}
+                              </span>
+                            </div>
+
                             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                               <Pill {...(getStatusPill(locale)[trip.status] ?? getStatusPill(locale).pending_payment)} />
                               {trip.status === "matched" && (

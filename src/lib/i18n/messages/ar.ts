@@ -209,6 +209,8 @@ export const ar: Record<MessageKey, string> = {
   "my_trips.driver_heading": "سائقك",
   "my_trips.driver_fallback": "السائق",
   "my_trips.trip_number": "الرحلة رقم {n}",
+  "my_trips.trip_fare": "أجرة الرحلة",
+  "my_trips.request_total": "إجمالي الطلب",
   "my_trips.no_phone": "لا يوجد رقم هاتف",
   "my_trips.call": "اتصال",
   "my_trips.vehicle_pending": "تفاصيل المركبة غير جاهزة بعد",
