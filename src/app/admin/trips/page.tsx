@@ -90,6 +90,7 @@ const STATUS_STYLES: Record<string, { bg: string; color: string; label?: string 
   completed: { bg: "var(--color-primary-tint)", color: "var(--color-muted)" },
   cancelled: { bg: "var(--color-danger-tint)", color: "var(--color-danger)" },
   time_out: { bg: "var(--color-danger-tint)", color: "var(--color-danger)", label: "Timed out" },
+  nomatch: { bg: "var(--color-danger-tint)", color: "var(--color-danger)", label: "No match" },
 };
 
 function getStatusStyle(status: string) {

@@ -217,6 +217,7 @@ export const ar: Record<MessageKey, string> = {
   "status.upcoming": "قادمة",
   "status.ongoing": "جارية",
   "status.previous": "سابقة",
+  "status.nomatch": "لم يتم إيجاد سائق",
   "nav.wallet": "المحفظة",
   "nav.profile": "الملف الشخصي",
   "nav.availability": "جدولي",

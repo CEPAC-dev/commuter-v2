@@ -13,6 +13,7 @@ export type BookingStatus =
   | "pending_payment"
   | "submitted"
   | "matched"
+  | "nomatch"
   | "confirmed"
   | "active"
   | "completed"
