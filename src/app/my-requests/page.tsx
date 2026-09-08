@@ -55,6 +55,7 @@ const STATUS_PILL_KEYS: Record<BookingStatus, string> = {
   completed: "driver.completed",
   cancelled: "filters.status_cancelled",
   time_out: "status.previous",
+  nomatch: "status.nomatch",
 };
 
 const STATUS_PILL_COLORS: Record<BookingStatus, { bg: string; color: string }> =
@@ -67,6 +68,7 @@ const STATUS_PILL_COLORS: Record<BookingStatus, { bg: string; color: string }> =
     completed: { bg: "#0B1E3D", color: "#fff" },
     cancelled: { bg: "#FFEBEE", color: "#E74C3C" },
     time_out: { bg: "#F5F5F5", color: "#9aa7b4" },
+    nomatch: { bg: "#FFEBEE", color: "#E74C3C" },
   };
 
 function Pill({

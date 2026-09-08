@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
+import { getAdminSettings, getNomatchSweepFilter } from "@/lib/cancellationPolicy";
+import { logTripNomatch } from "@/lib/services/logActionHelpers";
 
 const EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -41,9 +43,28 @@ export async function POST(req: NextRequest) {
     }),
   ]);
 
+  // Auto-mark unmatched "submitted" trips as "nomatch" past the admin-configured cutoff.
+  const settings = await getAdminSettings();
+  const nomatchOr = getNomatchSweepFilter(new Date(), settings.nomatchCutoffTime);
+  const nomatchCandidates = await Trip.find({
+    status: "submitted",
+    $or: nomatchOr,
+  }).select("_id userId");
+
+  if (nomatchCandidates.length > 0) {
+    await Trip.updateMany(
+      { _id: { $in: nomatchCandidates.map((t) => t._id) } },
+      { $set: { status: "nomatch" } },
+    );
+    await Promise.all(
+      nomatchCandidates.map((t) => logTripNomatch(t._id, t.userId)),
+    );
+  }
+
   return NextResponse.json({
     expiredRequests: reqResult.modifiedCount,
     expiredTrips: tripResult.modifiedCount,
+    nomatchedTrips: nomatchCandidates.length,
   });
 }
 

@@ -43,12 +43,38 @@ interface PassengerCancellationTier {
   label: string;
 }
 
+type SettingsTabId =
+  | "verification"
+  | "passenger"
+  | "wallet"
+  | "availability"
+  | "nomatch"
+  | "driver";
+
+const SETTINGS_TABS: {
+  id: SettingsTabId;
+  label: string;
+  icon: typeof ShieldCheck;
+  accent: string;
+  activeText: string;
+}[] = [
+  { id: "verification", label: "Verification", icon: ShieldCheck, accent: "var(--color-secondary)", activeText: "var(--color-primary)" },
+  { id: "passenger", label: "Passenger Policy", icon: UserX, accent: "var(--color-accent)", activeText: "var(--color-primary)" },
+  { id: "wallet", label: "Wallet & Withdrawals", icon: DollarSign, accent: "var(--color-warning)", activeText: "var(--color-primary)" },
+  { id: "availability", label: "Availability Lock", icon: Clock, accent: "var(--color-success)", activeText: "var(--color-on-primary)" },
+  { id: "nomatch", label: "No-Match Cutoff", icon: Clock, accent: "var(--color-danger)", activeText: "var(--color-on-primary)" },
+  { id: "driver", label: "Driver Penalties", icon: ShieldAlert, accent: "var(--color-primary)", activeText: "var(--color-on-primary)" },
+];
+
 export default function CancellationSettingsForm() {
+  const [activeTab, setActiveTab] = useState<SettingsTabId>("verification");
   const [walletReserveAmount, setWalletReserveAmount] = useState<number>(200);
   const [defaultWithdrawalLimit, setDefaultWithdrawalLimit] =
     useState<string>("");
   const [availabilityLockTime, setAvailabilityLockTime] =
     useState<string>("17:00");
+  const [nomatchCutoffTime, setNomatchCutoffTime] =
+    useState<string>("23:00");
   const [cancellationTiers, setCancellationTiers] = useState<
     DriverCancellationTier[]
   >([]);
@@ -79,6 +105,7 @@ export default function CancellationSettingsForm() {
             : "",
         );
         setAvailabilityLockTime(json.data.availabilityLockTime ?? "17:00");
+        setNomatchCutoffTime(json.data.nomatchCutoffTime ?? "23:00");
         setCancellationTiers(json.data.cancellationTiers ?? []);
         if (
           json.data.passengerCancellationTiers &&
@@ -151,6 +178,7 @@ export default function CancellationSettingsForm() {
               ? null
               : Number(defaultWithdrawalLimit),
           availabilityLockTime,
+          nomatchCutoffTime,
           cancellationTiers,
           passengerCancellationTiers,
           verificationMethod,
@@ -180,7 +208,7 @@ export default function CancellationSettingsForm() {
   }
 
   return (
-    <AdminFormLayout onSubmit={handleSubmit} className="max-w-4xl gap-6">
+    <AdminFormLayout onSubmit={handleSubmit} className="w-full" style={{ gap: 24 }}>
       {message && (
         <div
           className={`flex items-center gap-3 p-4 rounded-xl text-sm font-medium ${
@@ -198,204 +226,285 @@ export default function CancellationSettingsForm() {
         </div>
       )}
 
+      {/* Section tabs */}
+      <div className="overflow-x-auto -mx-1 px-1 mb-6 scrollbar-none">
+        <div className="inline-flex items-center gap-1 bg-[var(--color-background)] p-1.5 rounded-xl border border-[var(--color-border)] shadow-sm">
+          {SETTINGS_TABS.map(({ id, label, icon: Icon, accent, activeText }) => {
+            const isActive = activeTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                aria-current={isActive ? "true" : undefined}
+                style={
+                  isActive
+                    ? { background: accent, color: activeText }
+                    : undefined
+                }
+                className={`inline-flex items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  isActive
+                    ? "shadow-md"
+                    : "text-[var(--color-muted)] hover:bg-[var(--color-panel)] hover:text-[var(--color-primary)]"
+                }`}
+              >
+                <Icon
+                  className="w-3.5 h-3.5 shrink-0"
+                  style={{ color: isActive ? activeText : accent }}
+                />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* User verification method */}
-      <AdminCard padding={24}>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2.5 bg-[var(--color-secondary-tint)] rounded-xl text-[var(--color-secondary)]">
-            <ShieldCheck className="w-5 h-5" />
+      {activeTab === "verification" && (
+        <AdminCard padding={24}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-[var(--color-secondary-tint)] rounded-xl text-[var(--color-secondary)]">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-[var(--color-primary)]">
+                User Verification Method
+              </h3>
+              <p className="text-sm text-[var(--color-muted)]">
+                Choose how passengers and drivers verify their identity during
+                registration, password reset, and password change.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-[var(--color-primary)]">
-              User Verification Method
-            </h3>
-            <p className="text-sm text-[var(--color-muted)]">
-              Choose how passengers and drivers verify their identity during
-              registration, password reset, and password change.
+          <div className="max-w-md">
+            <AdminFormField label="Verification method">
+              <select
+                value={verificationMethod}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (isVerificationMethod(v)) setVerificationMethod(v);
+                }}
+                className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
+              >
+                <option value="sms_otp">SMS OTP (SMS Misr)</option>
+                <option value="security_question">Security question</option>
+              </select>
+            </AdminFormField>
+            <p className="text-xs text-[var(--color-muted)] mt-2">
+              SMS OTP: a 6-digit code is sent to the user’s phone. Security
+              question: the user picks one of six preset questions at signup and
+              answers it on password reset / change.
             </p>
           </div>
-        </div>
-        <div className="max-w-md">
-          <AdminFormField label="Verification method">
-            <select
-              value={verificationMethod}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (isVerificationMethod(v)) setVerificationMethod(v);
-              }}
-              className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
-            >
-              <option value="sms_otp">SMS OTP (SMS Misr)</option>
-              <option value="security_question">Security question</option>
-            </select>
-          </AdminFormField>
-          <p className="text-xs text-[var(--color-muted)] mt-2">
-            SMS OTP: a 6-digit code is sent to the user’s phone. Security
-            question: the user picks one of six preset questions at signup and
-            answers it on password reset / change.
-          </p>
-        </div>
-      </AdminCard>
+          <SectionSaveButton saving={saving} />
+        </AdminCard>
+      )}
 
       {/* Passenger Cancellation & Refund Policy */}
-      <AdminCard padding={24}>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2.5 bg-[var(--color-secondary-tint)] rounded-xl text-[var(--color-secondary)]">
-            <UserX className="w-5 h-5" />
+      {activeTab === "passenger" && (
+        <AdminCard padding={24}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-[var(--color-secondary-tint)] rounded-xl text-[var(--color-secondary)]">
+              <UserX className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-[var(--color-primary)]">
+                Passenger Cancellation & Refund Policy
+              </h3>
+              <p className="text-sm text-[var(--color-muted)]">
+                Configure time-tiered refund percentages and cancellation blocks
+                for passengers.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-[var(--color-primary)]">
-              Passenger Cancellation & Refund Policy
-            </h3>
-            <p className="text-sm text-[var(--color-muted)]">
-              Configure time-tiered refund percentages and cancellation blocks
-              for passengers.
-            </p>
-          </div>
-        </div>
 
-        <AdminTable ariaLabel="Passenger cancellation policy">
-          <thead className="bg-[var(--color-background)] text-xs text-[var(--color-muted)] uppercase tracking-wider">
-            <tr>
-              <th className="px-4 py-3">Timing / Rule</th>
-              <th className="px-4 py-3">Time of Day Rule</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Refund %</th>
-              <th className="px-4 py-3">Penalty %</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--color-border)]">
-            {passengerCancellationTiers.map((tier, idx) => (
-              <tr key={idx} className="hover:bg-[var(--color-primary-tint)]">
-                <td className="px-4 py-3 font-medium text-[var(--color-primary)]">
-                  {tier.label === "four_plus_days_before" &&
-                    "4+ Days before pickup"}
-                  {tier.label === "two_to_three_days_before" &&
-                    "2–3 Days before pickup"}
-                  {tier.label === "day_before_pre_match" &&
-                    "D-1 (Before 5:00 PM)"}
-                  {tier.label === "day_before_during_match" &&
-                    "D-1 (5:00 PM – 7:00 PM)"}
-                  {tier.label === "day_before_post_match" &&
-                    "D-1 (7:00 PM – Midnight)"}
-                  {tier.label === "same_day" && "Day of pickup (D)"}
-                </td>
-                <td className="px-4 py-3 text-xs text-[var(--color-muted)] font-mono">
-                  {tier.timeOfDayRule || "Any time"}
-                </td>
-                <td className="px-4 py-3">
-                  <label className="inline-flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!!tier.blocked}
-                      onChange={(e) =>
-                        handlePassengerBlockedToggle(idx, e.target.checked)
-                      }
-                      className="rounded bg-[var(--color-panel)] border-[var(--color-border)] text-[var(--color-danger)] focus:ring-0 cursor-pointer"
-                    />
-                    <AdminStatusBadge
-                      status={tier.blocked ? "blocked" : "allowed"}
-                      tone={tier.blocked ? "danger" : "success"}
-                    />
-                  </label>
-                </td>
-                <td className="px-4 py-3">
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    disabled={!!tier.blocked}
-                    value={tier.refundPercent}
-                    onChange={(e) =>
-                      handlePassengerTierChange(idx, Number(e.target.value))
-                    }
-                    className="w-20 bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg px-2.5 py-1 text-[var(--color-primary)] text-sm focus:outline-none focus:border-[var(--color-secondary)] disabled:opacity-40"
-                  />
-                </td>
-                <td className="px-4 py-3 font-semibold text-[var(--color-danger)]">
-                  {tier.penaltyPercent}%
-                </td>
+          <AdminTable ariaLabel="Passenger cancellation policy">
+            <thead className="bg-[var(--color-background)] text-xs text-[var(--color-muted)] uppercase tracking-wider">
+              <tr>
+                <th className="px-4 py-3">Timing / Rule</th>
+                <th className="px-4 py-3">Time of Day Rule</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Refund %</th>
+                <th className="px-4 py-3">Penalty %</th>
               </tr>
-            ))}
-          </tbody>
-        </AdminTable>
-      </AdminCard>
+            </thead>
+            <tbody className="divide-y divide-[var(--color-border)]">
+              {passengerCancellationTiers.map((tier, idx) => (
+                <tr key={idx} className="hover:bg-[var(--color-primary-tint)]">
+                  <td className="px-4 py-3 font-medium text-[var(--color-primary)]">
+                    {tier.label === "four_plus_days_before" &&
+                      "4+ Days before pickup"}
+                    {tier.label === "two_to_three_days_before" &&
+                      "2–3 Days before pickup"}
+                    {tier.label === "day_before_pre_match" &&
+                      "D-1 (Before 5:00 PM)"}
+                    {tier.label === "day_before_during_match" &&
+                      "D-1 (5:00 PM – 7:00 PM)"}
+                    {tier.label === "day_before_post_match" &&
+                      "D-1 (7:00 PM – Midnight)"}
+                    {tier.label === "same_day" && "Day of pickup (D)"}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-[var(--color-muted)] font-mono">
+                    {tier.timeOfDayRule || "Any time"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!tier.blocked}
+                        onChange={(e) =>
+                          handlePassengerBlockedToggle(idx, e.target.checked)
+                        }
+                        className="rounded bg-[var(--color-panel)] border-[var(--color-border)] text-[var(--color-danger)] focus:ring-0 cursor-pointer"
+                      />
+                      <AdminStatusBadge
+                        status={tier.blocked ? "blocked" : "allowed"}
+                        tone={tier.blocked ? "danger" : "success"}
+                      />
+                    </label>
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      disabled={!!tier.blocked}
+                      value={tier.refundPercent}
+                      onChange={(e) =>
+                        handlePassengerTierChange(idx, Number(e.target.value))
+                      }
+                      className="w-20 bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg px-2.5 py-1 text-[var(--color-primary)] text-sm focus:outline-none focus:border-[var(--color-secondary)] disabled:opacity-40"
+                    />
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-[var(--color-danger)]">
+                    {tier.penaltyPercent}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </AdminTable>
+          <SectionSaveButton saving={saving} />
+        </AdminCard>
+      )}
 
       {/* Wallet Reserve & Withdrawal Limit Settings */}
-      <AdminCard padding={24}>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2.5 bg-[var(--color-warning-tint)] rounded-xl text-[var(--color-warning)]">
-            <DollarSign className="w-5 h-5" />
+      {activeTab === "wallet" && (
+        <AdminCard padding={24}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-[var(--color-warning-tint)] rounded-xl text-[var(--color-warning)]">
+              <DollarSign className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-[var(--color-primary)]">
+                Driver Wallet Reserve & Withdrawal Limits
+              </h3>
+              <p className="text-sm text-[var(--color-muted)]">
+                Configure global defaults for minimum reserve floor and maximum
+                withdrawal limit ceiling per request.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-[var(--color-primary)]">
-              Driver Wallet Reserve & Withdrawal Limits
-            </h3>
-            <p className="text-sm text-[var(--color-muted)]">
-              Configure global defaults for minimum reserve floor and maximum
-              withdrawal limit ceiling per request.
-            </p>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl">
-          <AdminFormField label="Global Reserve Amount (Floor, EGP)">
-            <input
-              type="number"
-              min="0"
-              step="10"
-              value={walletReserveAmount}
-              onChange={(e) => setWalletReserveAmount(Number(e.target.value))}
-              className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
-              required
-            />
-          </AdminFormField>
-          <AdminFormField label="Default Withdrawal Limit (Ceiling, EGP)">
-            <input
-              type="number"
-              min="1"
-              step="100"
-              placeholder="Unlimited (leave empty)"
-              value={defaultWithdrawalLimit}
-              onChange={(e) => setDefaultWithdrawalLimit(e.target.value)}
-              className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
-            />
-          </AdminFormField>
-        </div>
-      </AdminCard>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl">
+            <AdminFormField label="Global Reserve Amount (Floor, EGP)">
+              <input
+                type="number"
+                min="0"
+                step="10"
+                value={walletReserveAmount}
+                onChange={(e) => setWalletReserveAmount(Number(e.target.value))}
+                className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
+                required
+              />
+            </AdminFormField>
+            <AdminFormField label="Default Withdrawal Limit (Ceiling, EGP)">
+              <input
+                type="number"
+                min="1"
+                step="100"
+                placeholder="Unlimited (leave empty)"
+                value={defaultWithdrawalLimit}
+                onChange={(e) => setDefaultWithdrawalLimit(e.target.value)}
+                className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
+              />
+            </AdminFormField>
+          </div>
+          <SectionSaveButton saving={saving} />
+        </AdminCard>
+      )}
 
       {/* Availability Lock Cutoff Time */}
-      <AdminCard padding={24}>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2.5 bg-[var(--color-secondary-tint)] rounded-xl text-[var(--color-secondary)]">
-            <Clock className="w-5 h-5" />
+      {activeTab === "availability" && (
+        <AdminCard padding={24}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-[var(--color-secondary-tint)] rounded-xl text-[var(--color-secondary)]">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-[var(--color-primary)]">
+                Availability Lock Cutoff Time
+              </h3>
+              <p className="text-sm text-[var(--color-muted)]">
+                Cutoff time on the day prior to the ride after which driver
+                availability cannot be created, edited, or deleted.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-[var(--color-primary)]">
-              Availability Lock Cutoff Time
-            </h3>
-            <p className="text-sm text-[var(--color-muted)]">
-              Cutoff time on the day prior to the ride after which driver
-              availability cannot be created, edited, or deleted.
-            </p>
-          </div>
-        </div>
 
-        <div className="max-w-xs">
-          <AdminFormField label="Lock Time (24h format HH:MM)">
-            <input
-              type="text"
-              pattern="^\d{2}:\d{2}$"
-              value={availabilityLockTime}
-              onChange={(e) => setAvailabilityLockTime(e.target.value)}
-              className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
-              placeholder="17:00"
-              required
-            />
-          </AdminFormField>
-        </div>
-      </AdminCard>
+          <div className="max-w-xs">
+            <AdminFormField label="Lock Time (24h format HH:MM)">
+              <input
+                type="text"
+                pattern="^\d{2}:\d{2}$"
+                value={availabilityLockTime}
+                onChange={(e) => setAvailabilityLockTime(e.target.value)}
+                className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
+                placeholder="17:00"
+                required
+              />
+            </AdminFormField>
+          </div>
+          <SectionSaveButton saving={saving} />
+        </AdminCard>
+      )}
+
+      {/* No-Match Cutoff Time */}
+      {activeTab === "nomatch" && (
+        <AdminCard padding={24}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-[var(--color-secondary-tint)] rounded-xl text-[var(--color-secondary)]">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-[var(--color-primary)]">
+                No-Match Cutoff Time
+              </h3>
+              <p className="text-sm text-[var(--color-muted)]">
+                Cutoff time on the day prior to the ride after which an
+                unmatched submitted trip is automatically marked as no-match.
+              </p>
+            </div>
+          </div>
+
+          <div className="max-w-xs">
+            <AdminFormField label="Cutoff Time (24h format HH:MM)">
+              <input
+                type="text"
+                pattern="^\d{2}:\d{2}$"
+                value={nomatchCutoffTime}
+                onChange={(e) => setNomatchCutoffTime(e.target.value)}
+                className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
+                placeholder="23:00"
+                required
+              />
+            </AdminFormField>
+          </div>
+          <SectionSaveButton saving={saving} />
+        </AdminCard>
+      )}
 
       {/* Time-Tiered Driver Cancellation Penalty Rules */}
+      {activeTab === "driver" && (
       <AdminCard padding={24}>
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2.5 bg-[var(--color-danger-tint)] rounded-xl text-[var(--color-danger)]">
@@ -449,18 +558,25 @@ export default function CancellationSettingsForm() {
             ))}
           </tbody>
         </AdminTable>
+        <SectionSaveButton saving={saving} />
       </AdminCard>
-
-      <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={saving}
-          className="flex items-center gap-2 px-6 py-3 bg-[var(--color-secondary)] disabled:opacity-50 text-[var(--color-primary)] font-semibold rounded-xl transition-colors shadow-lg cursor-pointer"
-        >
-          <Save className="w-4 h-4" />
-          <span>{saving ? "Saving..." : "Save Policy Settings"}</span>
-        </button>
-      </div>
+      )}
     </AdminFormLayout>
   );
 }
+
+function SectionSaveButton({ saving }: { saving: boolean }) {
+  return (
+    <div className="flex justify-end mt-4">
+      <button
+        type="submit"
+        disabled={saving}
+        className="flex items-center gap-2 px-6 py-3 bg-[var(--color-secondary)] disabled:opacity-50 text-[var(--color-primary)] font-semibold rounded-xl transition-colors shadow-lg cursor-pointer"
+      >
+        <Save className="w-4 h-4" />
+        <span>{saving ? "Saving..." : "Save Section"}</span>
+      </button>
+    </div>
+  );
+}
+

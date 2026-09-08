@@ -47,6 +47,7 @@ const AdminSettingsSchema = new Schema(
     walletReserveAmount: { type: Number, required: true, default: 200 },
     defaultWithdrawalLimit: { type: Number, required: false, default: null },
     availabilityLockTime: { type: String, required: true, default: "17:00" },
+    nomatchCutoffTime: { type: String, required: true, default: "23:00" },
     verificationMethod: {
       type: String,
       required: true,

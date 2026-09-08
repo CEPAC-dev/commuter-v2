@@ -177,7 +177,7 @@ const STATUS_GROUPS: Record<string, BookingStatus[]> = {
   pending_payment: ["pending_payment"],
   upcoming: ["submitted", "confirmed"],
   ongoing: ["active", "matched"],
-  previous: ["completed", "cancelled", "time_out"],
+  previous: ["completed", "cancelled", "time_out", "nomatch"],
 };
 
 export interface ListUserTripsOptions {
