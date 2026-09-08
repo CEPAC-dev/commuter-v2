@@ -1142,10 +1142,11 @@ export async function GET(req: NextRequest) {
   );
   const vehicleTypeForRideType: Record<number, number> = {
     1: 1,
-    2: 2,
+    2: 1,
     3: 2,
-    4: 3,
-    5: 4,
+    4: 2,
+    5: 3,
+    6: 4,
   };
   let vehicleViolationsCount = 0;
 
@@ -1177,7 +1178,7 @@ export async function GET(req: NextRequest) {
     logsRows.push({
       validationName: "Vehicle availability capacity",
       description:
-        "Each request requires one matching available vehicle. Ride types 2 and 3 both require vehicle type 2. Unmatched request rows are amber.",
+        "Each request requires one matching available vehicle. private_car/shared_car use vehicle type 1; taxi_private/taxi_shared use vehicle type 2; van_shared uses vehicle type 3; microbus_shared uses vehicle type 4. Unmatched request rows are amber.",
       testedSheets: "Trip_Requests, Private_Requests, Shared_Requests",
       solution:
         "Add matching vehicle availability or reduce the number of requests for that vehicle type.",
