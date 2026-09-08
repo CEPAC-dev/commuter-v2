@@ -213,6 +213,8 @@ export const en = {
   "my_trips.driver_heading": "Your driver",
   "my_trips.driver_fallback": "Driver",
   "my_trips.trip_number": "Trip #{n}",
+  "my_trips.trip_fare": "Trip fare",
+  "my_trips.request_total": "Request total",
   "my_trips.no_phone": "No phone on file",
   "my_trips.call": "Call",
   "my_trips.vehicle_pending": "Vehicle details pending",
