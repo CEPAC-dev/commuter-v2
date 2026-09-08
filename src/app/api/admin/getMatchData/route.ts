@@ -29,6 +29,13 @@ function getTomorrowDate() {
   return `${year}-${month}-${day}`;
 }
 
+function getIsoWeekdayNumber(dateText: string): number | null {
+  const parsedDate = new Date(`${dateText}T00:00:00`);
+  if (Number.isNaN(parsedDate.getTime())) return null;
+
+  return parsedDate.getDay() === 0 ? 7 : parsedDate.getDay();
+}
+
 interface PrivateRow {
   Ride_ID: number;
   Pass_ID: number | null;
@@ -376,9 +383,11 @@ export async function GET(req: NextRequest) {
       ? requestedTravelTimeDepartureTime
       : new Date().toISOString();
 
+  const targetIsoWeekday = getIsoWeekdayNumber(targetDate);
+
   const privateTrips = await Trip.find({
     date: targetDate,
-    status: "matched",
+    status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["private_car", "taxi_private"] },
   }).lean<
@@ -404,7 +413,7 @@ export async function GET(req: NextRequest) {
 
   const sharedTrips = await Trip.find({
     date: targetDate,
-    status: "matched",
+    status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["taxi_shared", "van_shared", "microbus_shared"] },
   }).lean<
@@ -420,21 +429,36 @@ export async function GET(req: NextRequest) {
     }[]
   >();
 
-  const availabilities = await Availability.find({
-    date: targetDate,
-  }).lean<
-    {
-      availabilityNumber: number;
-      driverId: unknown;
-      date: string;
-      startLocation: { lat: number; lng: number };
-      endLocation: { lat: number; lng: number };
-      startNearestStation?: { id: number };
-      endNearestStation?: { id: number };
-      startTime: string;
-      endTime: string;
-    }[]
-  >();
+  const availabilities = targetIsoWeekday
+    ? await Availability.find({
+        $expr: {
+          $eq: [
+            {
+              $isoDayOfWeek: {
+                $dateFromString: {
+                  dateString: "$date",
+                  format: "%Y-%m-%d",
+                },
+              },
+            },
+            targetIsoWeekday,
+          ],
+        },
+      }).lean<
+        {
+          availabilityNumber: number;
+          driverId: unknown;
+          date: string;
+          startLocation: { lat: number; lng: number };
+          endLocation: { lat: number; lng: number };
+          startNearestStation?: { id: number };
+          endNearestStation?: { id: number };
+          startTime: string;
+          endTime: string;
+          matched?: boolean;
+        }[]
+      >()
+    : [];
 
   const userIds = Array.from(
     new Set([

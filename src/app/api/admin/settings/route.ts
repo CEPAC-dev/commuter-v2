@@ -114,7 +114,7 @@ export async function PUT(req: NextRequest) {
           ...(verificationMethod && { verificationMethod }),
         },
       },
-      { upsert: true, new: true, runValidators: true },
+      { upsert: true, returnDocument: "after", runValidators: true },
     ).lean();
 
     return NextResponse.json({ ok: true, data: updated });

@@ -16,12 +16,12 @@ import { queryKashierPayoutStatus } from "@/lib/payments/kashierPayout";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { Types } from "mongoose";
 
-function verifySignature(
-  p: Record<string, string>,
+function verifyLegacySignature(
+  p: Record<string, unknown>,
   sig: string,
   secret: string,
 ): boolean {
-  const data = `${p.merchantId}${p.orderId}${p.transactionId}${p.amount}${p.currency}${p.paymentStatus}`;
+  const data = `${p.merchantId ?? ""}${p.orderId ?? ""}${p.transactionId ?? ""}${p.amount ?? ""}${p.currency ?? ""}${p.paymentStatus ?? ""}`;
   const expected = createHmac("sha256", secret).update(data).digest("hex");
   try {
     return timingSafeEqual(
@@ -33,29 +33,70 @@ function verifySignature(
   }
 }
 
+function verifyKashierEventSignature(
+  data: Record<string, unknown>,
+  sig: string,
+  paymentApiKey: string,
+): boolean {
+  const keys = Array.isArray(data.signatureKeys)
+    ? data.signatureKeys.filter((key): key is string => typeof key === "string")
+    : [];
+  if (!keys.length) return false;
+  const signaturePayload = keys
+    .sort()
+    .map(
+      (key) =>
+        `${encodeURIComponent(key)}=${encodeURIComponent(String(data[key] ?? ""))}`,
+    )
+    .join("&");
+  const expected = createHmac("sha256", paymentApiKey)
+    .update(signaturePayload)
+    .digest("hex");
+  try {
+    return timingSafeEqual(
+      Buffer.from(expected, "hex"),
+      Buffer.from(sig, "hex"),
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest) {
-  let body: Record<string, string>;
+  let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Bad payload" }, { status: 400 });
   }
 
-  const orderId = body.merchantOrderId ?? body.orderId;
-  const amount = body.amount;
-  const currency = body.currency;
-  const merchantId = body.merchantId;
-  const transactionId = body.transactionId;
-  const paymentStatus = body.paymentStatus ?? body.status;
-  const sig = body.signature || req.headers.get("x-kashier-signature") || "";
+  const payload = body.payload as Record<string, unknown> | undefined;
+  const eventData = (payload?.data ?? body.data ?? body) as Record<string, unknown>;
+  const event = String(payload?.event ?? body.event ?? "pay").toLowerCase();
+  const orderId = String(eventData.merchantOrderId ?? eventData.orderId ?? "");
+  const amount = eventData.amount;
+  const currency = String(eventData.currency ?? "");
+  const merchantDetails = eventData.merchantDetails as
+    | Record<string, unknown>
+    | undefined;
+  const merchantIdValue =
+    body.merchantId ?? eventData.merchantId ?? merchantDetails?.merchantId;
+  const merchantId = typeof merchantIdValue === "string" ? merchantIdValue : "";
+  const transactionId = String(eventData.transactionId ?? "");
+  const paymentStatus = String(eventData.paymentStatus ?? eventData.status ?? "");
+  const signatureValue = body.signature;
+  const sig =
+    (typeof signatureValue === "string" ? signatureValue : "") ||
+    req.headers.get("x-kashier-signature") ||
+    "";
   const webhookSecret = process.env.KASHIER_SECRET_KEY;
+  const paymentApiKey = process.env.KASHIER_API_KEY;
   const expectedMerchantId = process.env.KASHIER_MERCHANT_ID;
 
   if (
     !orderId ||
     !amount ||
     !currency ||
-    !merchantId ||
     !transactionId ||
     !paymentStatus ||
     !sig
@@ -63,15 +104,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
-  if (!webhookSecret || !expectedMerchantId) {
+  if (!webhookSecret || !paymentApiKey || !expectedMerchantId) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  if (!verifySignature(body, sig, webhookSecret)) {
+  const isNestedEvent = eventData !== body;
+  const validSignature = isNestedEvent
+    ? verifyKashierEventSignature(eventData, sig, paymentApiKey)
+    : verifyLegacySignature(body, sig, webhookSecret);
+  if (!validSignature) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  if (merchantId !== expectedMerchantId || currency.toUpperCase() !== "EGP") {
+  if (
+    (merchantId && merchantId !== expectedMerchantId) ||
+    String(currency).toUpperCase() !== "EGP"
+  ) {
     return NextResponse.json(
       { error: "Invalid payment details" },
       { status: 400 },
@@ -96,6 +144,28 @@ export async function POST(req: NextRequest) {
     "complete",
     "completed",
   ].includes(st);
+
+  // Refund event confirms Kashier's processor outcome. Financial refund work
+  // is initiated by the admin route; acknowledge verified delivery to stop
+  // Kashier retries, then retain gateway reference for audit.
+  if (event === "refund") {
+    if (Types.ObjectId.isValid(String(orderId))) {
+      await Payment.updateOne(
+        { _id: orderId },
+        {
+          $addToSet: { kashierRefundIds: String(transactionId) },
+          $push: {
+            timeline: {
+              event: `kashier_refund_webhook_${st}`,
+              detail: `${receivedAmount} EGP ref ${transactionId}`,
+              actor: "kashier",
+            },
+          },
+        },
+      );
+    }
+    return NextResponse.json({ received: true });
+  }
 
   // ── Route by record type ──
   if (Types.ObjectId.isValid(orderId)) {

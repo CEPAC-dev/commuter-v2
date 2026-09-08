@@ -44,7 +44,7 @@ export async function POST(
             reviewedBy: session.userId,
           },
         },
-        { new: true, session: dbSession },
+        { returnDocument: "after", session: dbSession },
       ).lean<ClaimedRefundRequest | null>();
 
       if (!refundReq)
@@ -72,7 +72,12 @@ export async function POST(
           $inc: { balanceEgp: refundAmount, totalCreditedEgp: refundAmount },
           $set: { lastTransactionAt: new Date() },
         },
-        { new: true, upsert: true, session: dbSession, runValidators: true },
+        {
+          returnDocument: "after",
+          upsert: true,
+          session: dbSession,
+          runValidators: true,
+        },
       );
       balanceAfterEgp = wallet.balanceEgp;
 
@@ -106,7 +111,7 @@ export async function POST(
               },
             },
           },
-          { new: true, session: dbSession },
+          { returnDocument: "after", session: dbSession },
         );
         if (updatedPayment) {
           await Payment.updateOne(

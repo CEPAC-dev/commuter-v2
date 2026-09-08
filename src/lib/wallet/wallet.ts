@@ -813,7 +813,7 @@ export async function createWithdrawalRequest(
       $inc: { pendingWithdrawalAmount: amountEgp },
       $set: { lastTransactionAt: new Date() },
     },
-    { new: true },
+    { returnDocument: "after" },
   );
 
   if (!updatedWallet) {
@@ -875,7 +875,7 @@ export async function approveWithdrawalRequest(
       },
       $set: { lastTransactionAt: new Date() },
     },
-    { new: true },
+    { returnDocument: "after" },
   );
 
   if (!updatedWallet) {
@@ -935,7 +935,7 @@ export async function rejectWithdrawalRequest(
       $inc: { pendingWithdrawalAmount: -request.amountEgp },
       $set: { lastTransactionAt: new Date() },
     },
-    { new: true },
+    { returnDocument: "after" },
   );
 
   request.status = "rejected";
@@ -987,7 +987,7 @@ export async function cancelWithdrawalRequest(
       $inc: { pendingWithdrawalAmount: -request.amountEgp },
       $set: { lastTransactionAt: new Date() },
     },
-    { new: true },
+    { returnDocument: "after" },
   );
 
   request.status = "cancelled";

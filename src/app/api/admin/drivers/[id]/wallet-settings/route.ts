@@ -16,7 +16,10 @@ export async function PATCH(
 
   const { id } = await params;
   if (!id) {
-    return NextResponse.json({ error: "Missing driver user ID" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing driver user ID" },
+      { status: 400 },
+    );
   }
 
   try {
@@ -28,7 +31,9 @@ export async function PATCH(
     if (reserveAmount !== undefined) {
       if (
         reserveAmount !== null &&
-        (typeof reserveAmount !== "number" || reserveAmount < 0 || !Number.isFinite(reserveAmount))
+        (typeof reserveAmount !== "number" ||
+          reserveAmount < 0 ||
+          !Number.isFinite(reserveAmount))
       ) {
         return NextResponse.json(
           { error: "reserveAmount must be a non-negative number or null." },
@@ -41,7 +46,9 @@ export async function PATCH(
     if (withdrawalLimit !== undefined) {
       if (
         withdrawalLimit !== null &&
-        (typeof withdrawalLimit !== "number" || withdrawalLimit <= 0 || !Number.isFinite(withdrawalLimit))
+        (typeof withdrawalLimit !== "number" ||
+          withdrawalLimit <= 0 ||
+          !Number.isFinite(withdrawalLimit))
       ) {
         return NextResponse.json(
           { error: "withdrawalLimit must be a positive number or null." },
@@ -64,7 +71,7 @@ export async function PATCH(
     const wallet = await Wallet.findOneAndUpdate(
       { userId: new Types.ObjectId(id) },
       { $set: updates },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: "after" },
     );
 
     return NextResponse.json({
