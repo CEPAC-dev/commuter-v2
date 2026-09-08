@@ -248,6 +248,26 @@ export async function logTripTimeout(
 }
 
 /**
+ * Log when trip is auto-marked nomatch (no driver assigned by cutoff)
+ */
+export async function logTripNomatch(
+  tripId: Types.ObjectId | string,
+  userId: Types.ObjectId | string,
+  metadata?: Record<string, unknown>,
+) {
+  return await createLog({
+    tripId,
+    userId,
+    status: "nomatch",
+    previousStatus: "submitted",
+    action: "system_nomatch",
+    description: "Trip marked as no-match - no driver assigned by cutoff",
+    metadata,
+    actorType: "system",
+  });
+}
+
+/**
  * Log when trip is created
  */
 export async function logTripCreated(

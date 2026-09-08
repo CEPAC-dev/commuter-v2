@@ -12,6 +12,7 @@ export interface SettingsResult {
   walletReserveAmount: number;
   defaultWithdrawalLimit?: number | null;
   availabilityLockTime: string;
+  nomatchCutoffTime: string;
   cancellationTiers: CancellationTier[];
 }
 
@@ -19,6 +20,7 @@ export const DEFAULT_ADMIN_SETTINGS: SettingsResult = {
   walletReserveAmount: 200,
   defaultWithdrawalLimit: null,
   availabilityLockTime: "17:00",
+  nomatchCutoffTime: "23:00",
   cancellationTiers: [
     { startTime: "00:00", endTime: "17:00", action: "free", penaltyPercent: 0 },
     { startTime: "17:00", endTime: "19:00", action: "blocked", penaltyPercent: 0 },
@@ -39,6 +41,7 @@ export async function getAdminSettings(): Promise<SettingsResult> {
       walletReserveAmount: doc.walletReserveAmount ?? 200,
       defaultWithdrawalLimit: doc.defaultWithdrawalLimit ?? null,
       availabilityLockTime: doc.availabilityLockTime ?? "17:00",
+      nomatchCutoffTime: doc.nomatchCutoffTime ?? "23:00",
       cancellationTiers:
         doc.cancellationTiers && doc.cancellationTiers.length > 0
           ? doc.cancellationTiers
@@ -86,6 +89,29 @@ export function getCutoffDateStr(rideDateStr: string): string {
   const d = new Date(`${rideDateStr}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().split("T")[0];
+}
+
+function getNextDateStr(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().split("T")[0];
+}
+
+/**
+ * Builds the Mongo $or date filter for the nomatch sweep: trips dated today
+ * or earlier always qualify (past-due safety net); trips dated tomorrow only
+ * qualify once current Cairo time has passed the cutoff.
+ */
+export function getNomatchSweepFilter(
+  nowDate: Date = new Date(),
+  cutoffTimeStr: string = "23:00",
+): Record<string, unknown>[] {
+  const { dateStr: todayStr, timeStr: nowTimeStr } = getCairoNowParts(nowDate);
+  const orConditions: Record<string, unknown>[] = [{ date: { $lte: todayStr } }];
+  if (nowTimeStr >= cutoffTimeStr) {
+    orConditions.push({ date: getNextDateStr(todayStr) });
+  }
+  return orConditions;
 }
 
 /**

@@ -32,6 +32,7 @@ export async function PUT(req: NextRequest) {
       walletReserveAmount,
       defaultWithdrawalLimit,
       availabilityLockTime,
+      nomatchCutoffTime,
       cancellationTiers,
       passengerCancellationTiers,
       verificationMethod,
@@ -67,6 +68,16 @@ export async function PUT(req: NextRequest) {
     ) {
       return NextResponse.json(
         { error: "availabilityLockTime must be in HH:MM format (e.g. 17:00)." },
+        { status: 400 },
+      );
+    }
+
+    if (
+      typeof nomatchCutoffTime !== "string" ||
+      !/^\d{2}:\d{2}$/.test(nomatchCutoffTime)
+    ) {
+      return NextResponse.json(
+        { error: "nomatchCutoffTime must be in HH:MM format (e.g. 23:00)." },
         { status: 400 },
       );
     }
@@ -109,6 +120,7 @@ export async function PUT(req: NextRequest) {
           walletReserveAmount,
           defaultWithdrawalLimit: defaultWithdrawalLimit ?? null,
           availabilityLockTime,
+          nomatchCutoffTime,
           ...(cancellationTiers && { cancellationTiers }),
           ...(passengerCancellationTiers && { passengerCancellationTiers }),
           ...(verificationMethod && { verificationMethod }),

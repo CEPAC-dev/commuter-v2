@@ -221,6 +221,7 @@ export const en = {
   "status.upcoming": "Upcoming",
   "status.ongoing": "Ongoing",
   "status.previous": "Previous",
+  "status.nomatch": "No match found",
   "nav.wallet": "Wallet",
   "nav.profile": "Profile",
   "nav.availability": "Availability",

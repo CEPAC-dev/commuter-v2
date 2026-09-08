@@ -77,6 +77,7 @@ function getStatusPill(locale: "en" | "ar") {
     completed: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
     cancelled: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
     time_out: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
+    nomatch: { label: translate(locale, "status.nomatch"), bg: "#FFEBEE", color: "#E74C3C" },
   } as Record<BookingStatus, { label: string; bg: string; color: string }>;
 }
 function descriptionForVehicle(locale: "en" | "ar", vehicleType: string) {

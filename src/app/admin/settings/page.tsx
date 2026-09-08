@@ -3,7 +3,7 @@ import { AdminPageContainer, AdminPageHeader } from "@/components/admin/layout";
 
 export default function AdminSettingsPage() {
   return (
-    <AdminPageContainer>
+    <AdminPageContainer style={{ maxWidth: "100%" }}>
       <AdminPageHeader
         title="System and cancellation settings"
         description="Configure driver availability lock cutoffs, minimum wallet reserves, and late cancellation penalty tiers."
