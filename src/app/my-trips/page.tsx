@@ -16,6 +16,7 @@ import { getServerLocale } from "@/lib/i18n/server";
 import { translate, formatDate, formatTime, formatEgp, toArabicDigits, formatDistanceKm, formatMinutes } from "@/lib/i18n";
 import { isSharedVehicle } from "@/lib/geo/stations";
 import { getSession } from "@/lib/auth/session";
+import { connectDB } from "@/lib/db/mongoose";
 import { listUserTrips, listDriverTrips, getUserTrip, type UserTripDetail } from "@/lib/services/trips";
 import { getRidesByDriver } from "@/lib/services/rideService";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
@@ -524,6 +525,7 @@ export default async function MyTripsPage({
   const session = await getSession();
   if (!session) redirect("/login?redirect=/my-trips");
   if (session.role === "admin") redirect("/admin/dashboard");
+  await connectDB();
 
   const isDriver = session.role === "driver";
   const isPassenger = !isDriver;
@@ -589,7 +591,6 @@ export default async function MyTripsPage({
   let tripRows: TripListRow[] = [];
   let rideRows: RideListRow[] = [];
   let total = 0;
-
   if (isDriver) {
     const result = await getRidesByDriver(session.userId, driverListOptions);
     if (Array.isArray(result)) {

@@ -2,9 +2,10 @@ import mongoose, { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import { Ride } from "../../models/Ride";
 import { Trip } from "../../models/Trip";
-import { Availability } from "../../models/Availability";
 import { Wallet } from "../../models/Wallet";
 import { WalletTransaction } from "../../models/WalletTransaction";
+import { createNotification } from "@/lib/notifications/createNotification";
+import { getEligibleDriverIds } from "@/lib/services/rideMatching";
 import { getAdminSettings, getCancellationTier } from "@/lib/cancellationPolicy";
 import type {
   RideDetailView,
@@ -20,7 +21,7 @@ import {
 
 type MatchResult = {
   availabilityId: Types.ObjectId | string;
-  driverId: Types.ObjectId | string;
+  driverId?: Types.ObjectId | string | null;
   date: string;
   vehicleType: string;
   rideType: string;
@@ -134,10 +135,10 @@ async function createRide(matchResult: MatchResult) {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const availability = await Availability.findById(
-      matchResult.availabilityId,
-    ).session(session);
-    if (!availability) throw new Error("Availability not found");
+    // availabilityId is optional and purely informational under the recurring-
+    // availability model — a broadcast-matched ride may not originate from any
+    // single Availability row, and Availability itself is never looked up or
+    // mutated here.
 
     const tripIds = matchResult.passengers.map((p) => p.tripId);
     const trips = await Trip.find({ _id: { $in: tripIds } })
@@ -217,10 +218,7 @@ async function createRide(matchResult: MatchResult) {
 
     await rideDoc.save({ session });
 
-    // update availability (no seatsRemaining tracking for now)
-    availability.rideId = rideDoc._id;
-    availability.status = "matched";
-    await availability.save({ session });
+    // Recurring driver Availability is never mutated/consumed by ride lifecycle.
 
     // update trips with seatNumbers and driver assignment
     for (const p of matchResult.passengers) {
@@ -243,6 +241,29 @@ async function createRide(matchResult: MatchResult) {
 
     await session.commitTransaction();
     session.endSession();
+
+    if (!matchResult.driverId) {
+      const savedRide = await Ride.findById(rideDoc._id);
+      if (savedRide) {
+        const eligibleDriverIds = await getEligibleDriverIds(savedRide);
+        savedRide.offeredToDriverIds = eligibleDriverIds;
+        savedRide.needsManualAssignment = eligibleDriverIds.length === 0;
+        await savedRide.save();
+        await Promise.all(
+          eligibleDriverIds.map((driverId) =>
+            createNotification({
+              userId: String(driverId),
+              type: "ride_offer",
+              title: "New ride available",
+              body: `${savedRide.date} at ${savedRide.startTime} · ${savedRide.totalCost} EGP`,
+              data: { rideId: String(savedRide._id) },
+            }),
+          ),
+        );
+        // return the doc with its final broadcast fields, not the stale pre-broadcast one
+        return savedRide;
+      }
+    }
     return rideDoc;
   } catch (err) {
     await session.abortTransaction();
@@ -697,6 +718,16 @@ async function getActiveRideForDriver(driverId: string | Types.ObjectId) {
   }).lean();
 }
 
+async function listDriverRideOffers(driverId: string | Types.ObjectId) {
+  return Ride.find({
+    offeredToDriverIds: driverId,
+    driverId: null,
+    status: "matched",
+  })
+    .sort({ date: 1, startTime: 1 })
+    .lean();
+}
+
 async function getRideByAvailability(availabilityId: string | Types.ObjectId) {
   return Ride.findOne({ availabilityId }).lean();
 }
@@ -744,11 +775,7 @@ async function addPassengerToRide(
   try {
     const ride = await Ride.findById(rideId).session(session);
     if (!ride) throw new Error("Ride not found");
-    const availability = await Availability.findById(
-      ride.availabilityId,
-    ).session(session);
-    if (!availability) throw new Error("Availability not found");
-    // no seatsRemaining checks for now
+    // Recurring driver Availability is never mutated/consumed by ride lifecycle.
 
     const trip = await Trip.findById(passenger.tripId)
       .select("pickupStation dropoffStation")
@@ -776,16 +803,12 @@ async function addPassengerToRide(
       ride.passengers as unknown as RoutePassenger[],
     );
 
-    // do not modify seatsRemaining; keep availability marked matched
-    availability.status = "matched";
-
     await Trip.findByIdAndUpdate(
       passenger.tripId,
       { $set: { rideId: ride._id, status: "matched" } },
       { session },
     );
     await ride.save({ session });
-    await availability.save({ session });
 
     await session.commitTransaction();
     session.endSession();
@@ -807,10 +830,7 @@ async function removePassengerFromRide(
   try {
     const ride = await Ride.findById(rideId).session(session);
     if (!ride) throw new Error("Ride not found");
-    const availability = await Availability.findById(
-      ride.availabilityId,
-    ).session(session);
-    if (!availability) throw new Error("Availability not found");
+    // Recurring driver Availability is never mutated/consumed by ride lifecycle.
 
     const ridePassengers = ride.passengers as unknown as Array<{
       tripId?: unknown;
@@ -841,7 +861,6 @@ async function removePassengerFromRide(
       { session },
     );
     await ride.save({ session });
-    await availability.save({ session });
 
     await session.commitTransaction();
     session.endSession();
@@ -891,28 +910,7 @@ async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
     await ride.save({ session });
 
     // unlink trips
-    const ridePassengers = ride.passengers as unknown as Array<{
-      tripId?: unknown;
-    }>;
-    const rideRoute = ride.route as unknown as unknown[];
-    const tripIds = [
-      ...new Set(
-        [
-          ...ridePassengers.map((passenger) => String(passenger.tripId)),
-          ...rideRoute
-            .flatMap((stop: unknown) => {
-              const s = stop as { boarding?: unknown[]; alighting?: unknown[] };
-              return [
-                ...(Array.isArray(s.boarding) ? s.boarding : []),
-                ...(Array.isArray(s.alighting) ? s.alighting : []),
-              ];
-            })
-            .map((passenger: unknown) =>
-              String((passenger as { tripId?: unknown }).tripId),
-            ),
-        ].filter((tripId) => Types.ObjectId.isValid(tripId)),
-      ),
-    ];
+    const tripIds = collectRideTripIds(ride);
 
     await Trip.updateMany(
       { _id: { $in: tripIds } },
@@ -928,21 +926,82 @@ async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
       { session },
     );
 
-    // release availability
-    if (ride.availabilityId) {
-      const availability = await Availability.findById(
-        ride.availabilityId,
-      ).session(session);
-      if (availability) {
-        availability.rideId = null;
-        availability.status = "open";
-        await availability.save({ session });
-      }
-    }
+    // Recurring driver Availability is never released/mutated by ride cancellation.
 
     await session.commitTransaction();
     session.endSession();
     return ride;
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
+}
+
+function collectRideTripIds(ride: {
+  passengers?: unknown;
+  route?: unknown;
+}): string[] {
+  const ridePassengers = (ride.passengers ?? []) as unknown as Array<{
+    tripId?: unknown;
+  }>;
+  const rideRoute = (ride.route ?? []) as unknown as unknown[];
+  return [
+    ...new Set(
+      [
+        ...ridePassengers.map((passenger) => String(passenger.tripId)),
+        ...rideRoute
+          .flatMap((stop: unknown) => {
+            const s = stop as { boarding?: unknown[]; alighting?: unknown[] };
+            return [
+              ...(Array.isArray(s.boarding) ? s.boarding : []),
+              ...(Array.isArray(s.alighting) ? s.alighting : []),
+            ];
+          })
+          .map((passenger: unknown) =>
+            String((passenger as { tripId?: unknown }).tripId),
+          ),
+      ].filter((tripId) => Types.ObjectId.isValid(tripId)),
+    ),
+  ];
+}
+
+/**
+ * Admin-only hard delete: restores every linked trip back to "submitted" (the
+ * matchable pool) and then permanently removes the ride document, unlike
+ * cancelRide() which only soft-cancels and keeps the ride record around.
+ */
+async function deleteRideAndRestoreTrips(rideId: string | Types.ObjectId) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const ride = await Ride.findById(rideId).session(session);
+    if (!ride) return null;
+    if (ride.status === "completed") {
+      throw new Error("Completed rides cannot be deleted");
+    }
+
+    const tripIds = collectRideTripIds(ride);
+
+    await Trip.updateMany(
+      { _id: { $in: tripIds } },
+      {
+        $set: {
+          rideId: null,
+          status: "submitted",
+          driverId: null,
+          assignedDriver: null,
+          seatNumbers: [],
+        },
+      },
+      { session },
+    );
+
+    await Ride.deleteOne({ _id: ride._id }, { session });
+
+    await session.commitTransaction();
+    session.endSession();
+    return true;
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -983,13 +1042,10 @@ async function cancelRideByDriver(
     }
 
     let penaltyAmount = 0;
-    let availabilityRemoved = false;
+    const availabilityRemoved = false; // recurring Availability is never removed by cancellation
 
     if (evaluation.action === "free") {
-      availabilityRemoved = true;
-      if (ride.availabilityId) {
-        await Availability.deleteOne({ _id: ride.availabilityId }, { session });
-      }
+      // no-op: recurring driver Availability stays untouched
     } else {
       // Penalty applies
       penaltyAmount = Math.round((ride.totalCost * evaluation.penaltyPercent) / 100);
@@ -1024,14 +1080,7 @@ async function cancelRideByDriver(
         await tx.save({ session });
       }
 
-      // Availability stays open / unlocked / untouched
-      if (ride.availabilityId) {
-        await Availability.updateOne(
-          { _id: ride.availabilityId },
-          { $set: { rideId: null, status: "open" } },
-          { session },
-        );
-      }
+      // Recurring driver Availability stays untouched regardless of penalty.
     }
 
     // Set ride status and cancellation metadata
@@ -1086,6 +1135,7 @@ export {
   getRidesByDriver,
   getRideByPassengerIncluded,
   getActiveRideForDriver,
+  listDriverRideOffers,
   getRideByAvailability,
   updateRideStatus,
   updatePassengerStatusInRide,
@@ -1094,4 +1144,5 @@ export {
   recalculateRoute,
   cancelRide,
   cancelRideByDriver,
+  deleteRideAndRestoreTrips,
 };

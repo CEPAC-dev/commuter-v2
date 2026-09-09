@@ -32,13 +32,6 @@ type TripOption = {
   userId: string;
 };
 
-type AvailabilityOption = {
-  _id: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-};
-
 type DriverOption = {
   _id: string;
   name: string;
@@ -48,7 +41,6 @@ type DriverOption = {
 
 type MatchRideFormProps = {
   initialDate: string;
-  availabilities: AvailabilityOption[];
   drivers: DriverOption[];
   trips: TripOption[];
 };
@@ -72,18 +64,19 @@ const VEHICLE_OPTIONS = [
 
 export default function MatchRideForm({
   initialDate,
-  availabilities,
   drivers,
   trips,
 }: MatchRideFormProps) {
   const [tripDateFilter, setTripDateFilter] = useState(initialDate);
-  const [availabilityId, setAvailabilityId] = useState("");
   const [driverId, setDriverId] = useState("");
   const [date, setDate] = useState(initialDate);
   const [rideType, setRideType] = useState("shared");
   const [vehicleType, setVehicleType] = useState("taxi_shared");
   const [startTime, setStartTime] = useState("07:00");
   const [endTime, setEndTime] = useState("18:30");
+  // Once the admin edits the time window by hand, stop overwriting it —
+  // otherwise every driver shift (capped at 8h) would never contain it.
+  const [timeTouched, setTimeTouched] = useState(false);
   const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
   const [passengerInputs, setPassengerInputs] = useState<
     Record<string, PassengerInput>
@@ -105,23 +98,26 @@ export default function MatchRideForm({
     }>
   >([]);
 
-  useEffect(() => {
-    if (!availabilityId && availabilities[0]) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAvailabilityId(String(availabilities[0]._id));
-    }
-  }, [availabilityId, availabilities]);
-
-  useEffect(() => {
-    if (!driverId && drivers[0]) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDriverId(String(drivers[0]._id));
-    }
-  }, [driverId, drivers]);
+  // No auto-selected driver: leaving it blank is the intended default
+  // (broadcast the ride to every eligible driver instead of force-assigning).
 
   const filteredTrips = useMemo(() => {
     return trips.filter((trip) => trip.date === tripDateFilter);
   }, [trips, tripDateFilter]);
+
+  // Narrow the ride window to the selected trips' own times so it can
+  // actually fit inside a driver's (max 8h) recurring availability shift.
+  useEffect(() => {
+    if (timeTouched || selectedTripIds.length === 0) return;
+    const selected = trips.filter((trip) => selectedTripIds.includes(String(trip._id)));
+    const pickupTimes = selected.map((trip) => trip.pickupTime).filter(Boolean);
+    const arrivalTimes = selected.map((trip) => trip.arrivalTime).filter(Boolean);
+    if (pickupTimes.length === 0 || arrivalTimes.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStartTime(pickupTimes.sort()[0]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEndTime(arrivalTimes.sort().at(-1)!);
+  }, [selectedTripIds, trips, timeTouched]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -265,14 +261,6 @@ export default function MatchRideForm({
     event.preventDefault();
     setFeedback(null);
 
-    if (!availabilityId || !driverId) {
-      setFeedback({
-        type: "error",
-        message: "Select an availability slot and a driver first.",
-      });
-      return;
-    }
-
     if (selectedTripIds.length === 0) {
       setFeedback({
         type: "error",
@@ -322,8 +310,7 @@ export default function MatchRideForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          availabilityId,
-          driverId,
+          driverId: driverId || null,
           date,
           vehicleType,
           rideType,
@@ -339,13 +326,27 @@ export default function MatchRideForm({
         throw new Error(payload?.error || "The ride could not be created.");
       }
 
+      const createdRide = payload.data as {
+        driverId?: string | null;
+        offeredToDriverIds?: unknown[];
+        needsManualAssignment?: boolean;
+      };
+      const tripLabel = `${passengers.length} trip${passengers.length > 1 ? "s" : ""}`;
+      const eligibleCount = createdRide.offeredToDriverIds?.length ?? 0;
+      const broadcastNote = createdRide.driverId
+        ? ""
+        : createdRide.needsManualAssignment
+          ? " No drivers matched this time/day/vehicle — it needs manual assignment."
+          : ` Offered to ${eligibleCount} eligible driver${eligibleCount === 1 ? "" : "s"}.`;
+
       setFeedback({
         type: "success",
-        message: `Ride created successfully with ${passengers.length} trip${passengers.length > 1 ? "s" : ""}.`,
+        message: `Ride created successfully with ${tripLabel}.${broadcastNote}`,
       });
       setSelectedTripIds([]);
       setPassengerInputs({});
       setOrderedPoints([]);
+      setTimeTouched(false);
     } catch (error) {
       setFeedback({
         type: "error",
@@ -530,8 +531,11 @@ export default function MatchRideForm({
             Create ride from matched trips
           </h2>
           <p style={{ margin: "4px 0 0", color: "var(--slate)", fontSize: 14 }}>
-            Pick a driver, availability slot, and one or more trips to turn into
-            a shared or private ride.
+            Pick one or more trips to turn into a shared or private ride.
+            Optionally choose a driver to assign directly, or leave it blank
+            to broadcast the ride to every eligible driver (matched by their
+            recurring weekly availability) so the first to accept is
+            assigned.
           </p>
         </div>
         {selectedTripIds.length > 0 && (
@@ -563,29 +567,13 @@ export default function MatchRideForm({
           }}
         >
           <label style={{ display: "grid", gap: 6 }}>
-            <span className="field-label">Availability</span>
-            <select
-              value={availabilityId}
-              onChange={(e) => setAvailabilityId(e.target.value)}
-              className="field"
-            >
-              <option value="">Select availability</option>
-              {availabilities.map((item) => (
-                <option key={String(item._id)} value={String(item._id)}>
-                  {item.date} · {item.startTime}–{item.endTime}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            <span className="field-label">Driver</span>
+            <span className="field-label">Driver (optional — blank broadcasts to eligible drivers)</span>
             <select
               value={driverId}
               onChange={(e) => setDriverId(e.target.value)}
               className="field"
             >
-              <option value="">Select driver</option>
+              <option value="">Broadcast to eligible drivers</option>
               {drivers.map((driver) => (
                 <option key={String(driver._id)} value={String(driver._id)}>
                   {driver.name} {driver.phone ? `· ${driver.phone}` : ""}
@@ -600,6 +588,32 @@ export default function MatchRideForm({
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              className="field"
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <span className="field-label">Start time</span>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => {
+                setTimeTouched(true);
+                setStartTime(e.target.value);
+              }}
+              className="field"
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <span className="field-label">End time</span>
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => {
+                setTimeTouched(true);
+                setEndTime(e.target.value);
+              }}
               className="field"
             />
           </label>
@@ -629,26 +643,6 @@ export default function MatchRideForm({
                 </option>
               ))}
             </select>
-          </label>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            <span className="field-label">Start time</span>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="field"
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            <span className="field-label">End time</span>
-            <input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              className="field"
-            />
           </label>
         </div>
 

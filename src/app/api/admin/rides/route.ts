@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
-import { cancelRide } from "@/lib/services/rideService";
+import { deleteRideAndRestoreTrips } from "@/lib/services/rideService";
 import "@/models/Availability";
 import { Ride } from "@/models/Ride";
 import { User } from "@/models/User";
@@ -63,6 +63,9 @@ export async function GET(req: NextRequest) {
   ]) {
     const value = searchParams.get(field);
     if (value) query[field] = value;
+  }
+  if (searchParams.get("needsManualAssignment") === "true") {
+    query.needsManualAssignment = true;
   }
 
   const search = searchParams.get("q")?.trim();
@@ -174,7 +177,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   for (const id of ids) {
-    await cancelRide(id, "Cancelled by admin in bulk");
+    await deleteRideAndRestoreTrips(id);
   }
 
   return NextResponse.json({ ok: true, deletedCount: ids.length });

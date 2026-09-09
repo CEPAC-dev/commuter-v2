@@ -16,6 +16,7 @@ import {
   LogIn,
   CalendarPlus,
   CalendarClock,
+  Inbox,
   Globe,
 } from "lucide-react";
 import { useClientLocale, setLocaleCookie } from "@/lib/locale.client";
@@ -43,6 +44,7 @@ const PASSENGER_NAV_LINKS = [
 ] as const;
 
 const DRIVER_NAV_LINKS = [
+  { href: "/ride-requests", labelKey: "nav.ride_requests", icon: Inbox },
   { href: "/my-trips", labelKey: "nav.my_trips", icon: History },
   { href: "/availability", labelKey: "nav.availability", icon: CalendarClock },
   { href: "/wallet", labelKey: "nav.wallet", icon: Wallet },
