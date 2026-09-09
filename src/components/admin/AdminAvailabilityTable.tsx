@@ -1,948 +1,668 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { MapPin, Plus, Trash2, X } from "lucide-react";
-import AddressInput from "@/components/landing/AddressInput";
-import AdminTripMap, {
-  type TripMapPoint,
-} from "@/components/admin/AdminTripMap";
+import { useMemo, useState } from "react";
 import {
-  AdminCard,
-  AdminEmptyState,
-  AdminErrorState,
-  AdminFormLayout,
-  AdminLoadingState,
-  AdminStatusBadge,
-  AdminTable,
-} from "@/components/admin/layout";
-import type { TripPoint } from "@/lib/store/useTripStore";
+  BarChart3,
+  Calendar,
+  Check,
+  Clock,
+  Minus,
+  Search,
+  TrendingUp,
+  User,
+  Users,
+  X,
+  Zap,
+} from "lucide-react";
+import { AdminCard } from "@/components/admin/layout";
 
-interface AvailabilityRecord {
+type Day = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+
+type RecordItem = {
   _id: string;
-  driver?: {
-    userNumber?: number;
-    name?: string;
-    phone?: string;
-    carType?: string;
-  } | null;
-  date?: string;
-  startTime?: string;
-  endTime?: string;
-}
-
-interface AvailabilityDetail {
-  _id: string;
-  availabilityNumber?: number;
-  date?: string;
-  startTime?: string;
-  endTime?: string;
-  status?: string;
-  matched?: boolean;
-  startLocation?: { address?: string; lat?: number; lng?: number };
-  endLocation?: { address?: string; lat?: number; lng?: number };
-  startNearestStation?: { name?: string; lat?: number; lng?: number };
-  endNearestStation?: { name?: string; lat?: number; lng?: number };
-  driverId?: { name?: string; phone?: string; email?: string } | null;
-}
-
-interface DriverOption {
-  _id: string;
-  name: string;
-  phone: string;
-  userNumber: number | null;
-  carType: string;
-}
-
-const CAR_TYPE_LABELS: Record<string, string> = {
-  private: "Private Car",
-  taxi: "Taxi",
-  van: "Van",
-  microbus: "Microbus",
+  dayOfWeek: Day;
+  origin: { address: string };
+  startTime: string;
+  endTime: string;
+  active: boolean;
 };
 
-function detailPoints(detail: AvailabilityDetail): TripMapPoint[] {
-  const candidates: Array<{
-    point?: { address?: string; name?: string; lat?: number; lng?: number };
-    label: string;
-    kind: TripMapPoint["kind"];
-  }> = [
-    { point: detail.startLocation, label: "Start location", kind: "pickup" },
-    {
-      point: detail.startNearestStation,
-      label: "Nearest station to start",
-      kind: "station",
-    },
-    {
-      point: detail.endNearestStation,
-      label: "Nearest station to end",
-      kind: "station",
-    },
-    { point: detail.endLocation, label: "End location", kind: "dropoff" },
-  ];
+type DriverRow = {
+  id: string;
+  name: string;
+  phone: string;
+  userNumber?: number;
+  records: RecordItem[];
+};
 
-  const points: TripMapPoint[] = [];
-  for (const candidate of candidates) {
-    const lat = candidate.point?.lat;
-    const lng = candidate.point?.lng;
-    if (typeof lat !== "number" || typeof lng !== "number") continue;
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    points.push({
-      lat,
-      lng,
-      label: `${candidate.label}: ${candidate.point?.address ?? candidate.point?.name ?? "—"}`,
-      kind: candidate.kind,
-      order: points.length + 1,
-    });
-  }
-  return points;
+const DAYS: { id: Day; label: string; short: string }[] = [
+  { id: "sun", label: "Sunday", short: "Sun" },
+  { id: "mon", label: "Monday", short: "Mon" },
+  { id: "tue", label: "Tuesday", short: "Tue" },
+  { id: "wed", label: "Wednesday", short: "Wed" },
+  { id: "thu", label: "Thursday", short: "Thu" },
+  { id: "fri", label: "Friday", short: "Fri" },
+  { id: "sat", label: "Saturday", short: "Sat" },
+];
+
+function timeToMinutes(timeStr: string): number {
+  const [h, m] = timeStr.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function isShiftActiveInHour(
+  startTime: string,
+  endTime: string,
+  hour: number,
+): boolean {
+  const startMins = timeToMinutes(startTime);
+  const endMins = timeToMinutes(endTime);
+  const hourStart = hour * 60;
+  const hourEnd = (hour + 1) * 60;
+  return startMins < hourEnd && endMins > hourStart;
+}
+
+function formatHour(h: number): string {
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+  return `${pad(h)}:00`;
 }
 
 export default function AdminAvailabilityTable({
   initialRecords,
 }: {
-  initialRecords: AvailabilityRecord[];
+  initialRecords: DriverRow[];
 }) {
-  const router = useRouter();
-  const [records, setRecords] = useState(initialRecords);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Day | "all">("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hoveredHour, setHoveredHour] = useState<number | null>(null);
+  const [modalDay, setModalDay] = useState<Day | null>(null);
 
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<AvailabilityDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [drivers, setDrivers] = useState<DriverOption[]>([]);
-  const [driverId, setDriverId] = useState("");
-  const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [startLocation, setStartLocation] = useState<TripPoint | null>(null);
-  const [endLocation, setEndLocation] = useState<TripPoint | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-
-  const mapPoints = useMemo(
-    () => (detail ? detailPoints(detail) : []),
-    [detail],
-  );
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRecords(initialRecords);
+  // 1. Overall & Per-Day Unique Drivers Analytics
+  const overallAvailableCount = useMemo(() => {
+    return initialRecords.filter((d) => d.records.some((r) => r.active)).length;
   }, [initialRecords]);
 
-  useEffect(() => {
-    if (!detailId) return;
-    let active = true;
+  const perDayDriverCounts = useMemo(() => {
+    const counts: Record<Day, number> = {
+      sun: 0,
+      mon: 0,
+      tue: 0,
+      wed: 0,
+      thu: 0,
+      fri: 0,
+      sat: 0,
+    };
+    for (const day of DAYS) {
+      counts[day.id] = initialRecords.filter((driver) =>
+        driver.records.some((r) => r.dayOfWeek === day.id && r.active),
+      ).length;
+    }
+    return counts;
+  }, [initialRecords]);
 
-    const load = async () => {
-      try {
-        const res = await fetch(`/api/admin/availability/${detailId}`);
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-          data?: AvailabilityDetail;
-        } | null;
-        if (!res.ok) {
-          throw new Error(
-            data?.error ?? `Failed to load availability (HTTP ${res.status})`,
-          );
+  // 2. Hourly Graph Data (00:00 to 23:00) for selectedDay
+  const hourlyData = useMemo(() => {
+    const hours = Array.from({ length: 24 }, (_, h) => h);
+    return hours.map((hour) => {
+      const activeDriverIds = new Set<string>();
+      for (const driver of initialRecords) {
+        const matchesDay = driver.records.filter((r) => {
+          if (!r.active) return false;
+          if (selectedDay !== "all" && r.dayOfWeek !== selectedDay) return false;
+          return isShiftActiveInHour(r.startTime, r.endTime, hour);
+        });
+        if (matchesDay.length > 0) {
+          activeDriverIds.add(driver.id);
         }
-        if (!active) return;
-        setDetail(data?.data ?? null);
-        setDetailError(null);
-      } catch (err) {
-        if (!active) return;
-        setDetailError(
-          err instanceof Error ? err.message : "Failed to load availability",
-        );
-      } finally {
-        if (active) setDetailLoading(false);
       }
+      return {
+        hour,
+        label: formatHour(hour),
+        count: activeDriverIds.size,
+      };
+    });
+  }, [initialRecords, selectedDay]);
+
+  const maxHourlyCount = useMemo(() => {
+    return Math.max(...hourlyData.map((d) => d.count), 1);
+  }, [hourlyData]);
+
+  // 3. Peak Hours per Day
+  const peakHoursPerDay = useMemo(() => {
+    const peaks: Record<
+      Day,
+      { maxDrivers: number; peakLabel: string; hours: number[] }
+    > = {
+      sun: { maxDrivers: 0, peakLabel: "None", hours: [] },
+      mon: { maxDrivers: 0, peakLabel: "None", hours: [] },
+      tue: { maxDrivers: 0, peakLabel: "None", hours: [] },
+      wed: { maxDrivers: 0, peakLabel: "None", hours: [] },
+      thu: { maxDrivers: 0, peakLabel: "None", hours: [] },
+      fri: { maxDrivers: 0, peakLabel: "None", hours: [] },
+      sat: { maxDrivers: 0, peakLabel: "None", hours: [] },
     };
 
-    void load();
-    return () => {
-      active = false;
-    };
-  }, [detailId]);
-
-  useEffect(() => {
-    if (!createOpen || drivers.length) return;
-    let active = true;
-
-    const load = async () => {
-      try {
-        const res = await fetch("/api/admin/drivers");
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-          drivers?: DriverOption[];
-        } | null;
-        if (!res.ok) throw new Error(data?.error ?? "Failed to load drivers");
-        if (!active) return;
-        setDrivers(data?.drivers ?? []);
-      } catch (err) {
-        if (!active) return;
-        setCreateError(
-          err instanceof Error ? err.message : "Failed to load drivers",
-        );
-      }
-    };
-
-    void load();
-    return () => {
-      active = false;
-    };
-  }, [createOpen, drivers.length]);
-
-  function openDetail(id: string) {
-    setDetailId(id);
-    setDetail(null);
-    setDetailError(null);
-    setDetailLoading(true);
-  }
-
-  function closeDetail() {
-    setDetailId(null);
-    setDetail(null);
-    setDetailError(null);
-  }
-
-  function closeCreate() {
-    setCreateOpen(false);
-    setCreateError(null);
-  }
-
-  async function handleCreate(event: React.FormEvent) {
-    event.preventDefault();
-    if (
-      !driverId ||
-      !date ||
-      !startTime ||
-      !endTime ||
-      !startLocation ||
-      !endLocation
-    ) {
-      setCreateError("All fields are required.");
-      return;
-    }
-    if (startTime >= endTime) {
-      setCreateError("End time must be after start time.");
-      return;
-    }
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const res = await fetch("/api/admin/availability", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          driverId,
-          date,
-          startTime,
-          endTime,
-          startLocation,
-          endLocation,
-        }),
+    for (const day of DAYS) {
+      const counts: number[] = Array.from({ length: 24 }, (_, hour) => {
+        const driverIds = new Set<string>();
+        for (const driver of initialRecords) {
+          if (
+            driver.records.some(
+              (r) =>
+                r.active &&
+                r.dayOfWeek === day.id &&
+                isShiftActiveInHour(r.startTime, r.endTime, hour),
+            )
+          ) {
+            driverIds.add(driver.id);
+          }
+        }
+        return driverIds.size;
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok)
-        throw new Error(data?.error ?? "Could not create availability.");
-      setDriverId("");
-      setDate("");
-      setStartTime("");
-      setEndTime("");
-      setStartLocation(null);
-      setEndLocation(null);
-      closeCreate();
-      router.refresh();
-    } catch (err) {
-      setCreateError(
-        err instanceof Error ? err.message : "Could not create availability.",
-      );
-    } finally {
-      setCreating(false);
-    }
-  }
 
-  async function handleDelete(id: string) {
-    setDeletingId(id);
-    setError(null);
-    try {
-      const res = await fetch(`/api/admin/availability/${id}`, {
-        method: "DELETE",
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error ?? "Unable to delete availability.");
-        return;
+      const maxVal = Math.max(...counts, 0);
+      if (maxVal > 0) {
+        const peakHrs = counts
+          .map((c, h) => (c === maxVal ? h : -1))
+          .filter((h) => h !== -1);
+        const ranges = peakHrs.map((h) => `${formatHour(h)}–${formatHour(h + 1)}`);
+        peaks[day.id] = {
+          maxDrivers: maxVal,
+          peakLabel: ranges.join(", "),
+          hours: peakHrs,
+        };
       }
-      setRecords((current) => current.filter((record) => record._id !== id));
-    } catch {
-      setError("Network error. Please try again.");
-    } finally {
-      setDeletingId(null);
     }
-  }
+    return peaks;
+  }, [initialRecords]);
+
+  const selectedPeakInfo = useMemo(() => {
+    if (selectedDay === "all") {
+      const maxVal = Math.max(...hourlyData.map((d) => d.count), 0);
+      if (maxVal === 0) return { label: "No active shifts", count: 0 };
+      const peakHrs = hourlyData
+        .filter((d) => d.count === maxVal)
+        .map((d) => `${d.label}–${formatHour(d.hour + 1)}`);
+      return { label: peakHrs.join(", "), count: maxVal };
+    }
+    const peak = peakHoursPerDay[selectedDay];
+    return { label: peak.peakLabel, count: peak.maxDrivers };
+  }, [hourlyData, peakHoursPerDay, selectedDay]);
+
+  // Drivers available for Modal Day
+  const modalDayDrivers = useMemo(() => {
+    if (!modalDay) return [];
+    return initialRecords
+      .map((driver) => {
+        const dayShifts = driver.records.filter(
+          (r) => r.dayOfWeek === modalDay && r.active,
+        );
+        if (dayShifts.length === 0) return null;
+        return {
+          driver,
+          shifts: dayShifts,
+        };
+      })
+      .filter((item): item is { driver: DriverRow; shifts: RecordItem[] } => item !== null);
+  }, [initialRecords, modalDay]);
+
+  // Driver Table Filtering (with #userNumber exact match support)
+  const visibleRows = useMemo(() => {
+    const query = searchQuery.trim();
+    return initialRecords.filter((driver) => {
+      // 1. Filter by selected day
+      if (selectedDay !== "all") {
+        const hasDayShift = driver.records.some(
+          (r) => r.dayOfWeek === selectedDay && r.active,
+        );
+        if (!hasDayShift) return false;
+      }
+
+      // 2. Filter by search query
+      if (query !== "") {
+        if (query.startsWith("#")) {
+          const targetNumberStr = query.slice(1).trim();
+          const targetNumber = parseInt(targetNumberStr, 10);
+          if (!isNaN(targetNumber)) {
+            // Exact user number match
+            if (driver.userNumber !== targetNumber) return false;
+          }
+        } else {
+          // General search by name, phone, or user number string
+          const qLower = query.toLowerCase();
+          const nameMatch = driver.name.toLowerCase().includes(qLower);
+          const phoneMatch = driver.phone.toLowerCase().includes(qLower);
+          const numMatch = driver.userNumber ? String(driver.userNumber).includes(qLower) : false;
+          if (!nameMatch && !phoneMatch && !numMatch) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [initialRecords, selectedDay, searchQuery]);
 
   return (
-    <AdminCard
-      padding={0}
-      title="Driver availability records"
-      description="Click a record to view its details, or delete it directly."
-      actions={
-        <button
-          type="button"
-          className="avail-btn primary"
-          onClick={() => setCreateOpen(true)}
-        >
-          <Plus size={15} /> Add new availability
-        </button>
-      }
-    >
-      <style>{`
-        .avail-row { cursor: pointer; }
-        .avail-row:hover { background: var(--color-secondary-tint); }
-        .avail-overlay { position: fixed; inset: 0; z-index: 1200; background: var(--color-overlay); display: flex; }
-        .avail-field { display: flex; flex-direction: column; gap: 6px; }
-        .avail-field > span { color: var(--color-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
-        .avail-field input, .avail-field select { min-height: 40px; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; color: var(--color-primary); background: var(--color-panel); font: 600 14px inherit; }
-        .avail-field input:focus, .avail-field select:focus { outline: 2px solid var(--color-secondary-tint); border-color: var(--color-secondary); }
-        .avail-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--color-transparent); font-size: 13px; font-weight: 600; cursor: pointer; }
-        .avail-btn.primary { background: var(--color-secondary); color: var(--color-on-primary); }
-        .avail-btn.ghost { background: var(--color-panel); color: var(--color-muted); border-color: var(--color-border); }
-        .avail-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .avail-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-        .avail-detail-label { display: block; margin-bottom: 3px; color: var(--color-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
-        @media (max-width: 560px) { .avail-detail-grid { grid-template-columns: 1fr; } }
-      `}</style>
+    <div className="space-y-6">
+      {/* Overview Stat Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <AdminCard padding={16}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                Overall Available Drivers
+              </p>
+              <h3 className="mt-1 text-2xl font-black text-[var(--color-primary)]">
+                {overallAvailableCount}
+              </h3>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00C2A8]/10 text-[#00C2A8]">
+              <Users size={22} />
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-[var(--color-muted)]">
+            Drivers with recurring weekly shifts
+          </p>
+        </AdminCard>
 
-      {error ? (
-        <AdminErrorState
-          title="Unable to update availability"
-          description={error}
-        />
-      ) : null}
-      {records.length === 0 ? (
-        <AdminEmptyState
-          title="No availability records"
-          description="Driver availability submissions will appear here."
-        />
-      ) : (
-        <AdminTable ariaLabel="Driver availability records">
-          <thead style={{ background: "var(--color-surface)" }}>
-            <tr>
-              <th
-                style={{
-                  textAlign: "left",
-                  padding: "14px 16px",
-                  color: "var(--color-primary)",
-                  fontSize: 13,
-                }}
-              >
-                Driver ID
-              </th>
-              <th
-                style={{
-                  textAlign: "left",
-                  padding: "14px 16px",
-                  color: "var(--color-primary)",
-                  fontSize: 13,
-                }}
-              >
-                Driver Name
-              </th>
-              <th
-                style={{
-                  textAlign: "left",
-                  padding: "14px 16px",
-                  color: "var(--color-primary)",
-                  fontSize: 13,
-                }}
-              >
-                Date
-              </th>
-              <th
-                style={{
-                  textAlign: "left",
-                  padding: "14px 16px",
-                  color: "var(--color-primary)",
-                  fontSize: 13,
-                }}
-              >
-                Car type
-              </th>
-              <th
-                style={{
-                  textAlign: "left",
-                  padding: "14px 16px",
-                  color: "var(--color-primary)",
-                  fontSize: 13,
-                }}
-              >
-                Window
-              </th>
-              <th
-                style={{
-                  textAlign: "left",
-                  padding: "14px 16px",
-                  color: "var(--color-primary)",
-                  fontSize: 13,
-                }}
-              >
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((record) => (
-              <tr
-                key={record._id}
-                className="avail-row"
-                tabIndex={0}
-                role="button"
-                aria-label={`Open availability details for ${record.driver?.name ?? "driver"}`}
-                onClick={() => openDetail(record._id)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    openDetail(record._id);
-                  }
-                }}
-                style={{ borderTop: "1px solid var(--color-border)" }}
-              >
-                <td
-                  style={{
-                    padding: "14px 16px",
-                    color: "var(--color-primary)",
-                    fontWeight: 600,
-                  }}
-                >
-                  {record.driver?.userNumber
-                    ? `#${record.driver.userNumber}`
-                    : "—"}
-                </td>
-                <td
-                  style={{ padding: "14px 16px", color: "var(--color-muted)" }}
-                >
-                  {record.driver?.name ?? "—"}
-                </td>
-                <td
-                  style={{ padding: "14px 16px", color: "var(--color-muted)" }}
-                >
-                  {record.date ?? "—"}
-                </td>
-                <td
-                  style={{ padding: "14px 16px", color: "var(--color-muted)" }}
-                >
-                  {CAR_TYPE_LABELS[record.driver?.carType ?? ""] ?? "—"}
-                </td>
-                <td
-                  style={{ padding: "14px 16px", color: "var(--color-muted)" }}
-                >
-                  {record.startTime ?? "—"} → {record.endTime ?? "—"}
-                </td>
-                <td
-                  style={{ padding: "14px 16px" }}
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(record._id)}
-                    disabled={deletingId === record._id}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      padding: "8px 12px",
-                      borderRadius: 999,
-                      border: "1px solid var(--color-danger)",
-                      background: "var(--color-transparent)",
-                      color: "var(--color-danger)",
-                      cursor:
-                        deletingId === record._id ? "not-allowed" : "pointer",
-                      fontWeight: 700,
-                    }}
-                  >
-                    <Trash2 size={14} />{" "}
-                    {deletingId === record._id ? "Deleting..." : "Delete"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </AdminTable>
-      )}
+        <AdminCard padding={16}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                Selected Day Drivers
+              </p>
+              <h3 className="mt-1 text-2xl font-black text-[#00C2A8]">
+                {selectedDay === "all"
+                  ? overallAvailableCount
+                  : perDayDriverCounts[selectedDay]}
+              </h3>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
+              <Calendar size={22} />
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-[var(--color-muted)]">
+            Active on {selectedDay === "all" ? "All Days" : DAYS.find((d) => d.id === selectedDay)?.label}
+          </p>
+        </AdminCard>
 
-      {detailId ? (
-        <div
-          className="avail-overlay"
-          style={{ justifyContent: "flex-end" }}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) closeDetail();
-          }}
-        >
-          <aside
-            role="dialog"
-            aria-modal="true"
-            aria-label="Availability details"
-            style={{
-              width: "min(560px, 100%)",
-              height: "100dvh",
-              overflowY: "auto",
-              background: "var(--color-panel)",
-              borderTop: "3px solid var(--color-secondary)",
-              boxShadow: "-12px 0 40px var(--color-shadow-strong)",
-            }}
-          >
-            <header
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 12,
-                padding: "20px 24px",
-                borderBottom: "1px solid var(--color-border)",
-              }}
+        <AdminCard padding={16}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                Peak Time Slot
+              </p>
+              <h3 className="mt-1 truncate text-lg font-extrabold text-[var(--color-primary)]">
+                {selectedPeakInfo.count > 0 ? selectedPeakInfo.label : "None"}
+              </h3>
+            </div>
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#F5A623]/10 text-[#F5A623]">
+              <Zap size={22} />
+            </div>
+          </div>
+          <p className="mt-2 text-xs font-semibold text-[#F5A623]">
+            {selectedPeakInfo.count} max available driver{selectedPeakInfo.count === 1 ? "" : "s"}
+          </p>
+        </AdminCard>
+
+        <AdminCard padding={16}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                Active Shifts Total
+              </p>
+              <h3 className="mt-1 text-2xl font-black text-[var(--color-primary)]">
+                {initialRecords.reduce(
+                  (acc, d) => acc + d.records.filter((r) => r.active).length,
+                  0,
+                )}
+              </h3>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600">
+              <TrendingUp size={22} />
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-[var(--color-muted)]">
+            Total active shifts scheduled
+          </p>
+        </AdminCard>
+      </div>
+
+      {/* Top Bar Day Selector & Hourly Analytics Section */}
+      <AdminCard padding={20}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--color-border)] pb-4">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-extrabold text-[var(--color-primary)]">
+              <BarChart3 size={20} className="text-[#00C2A8]" />
+              Hourly Driver Availability Timeline
+            </h2>
+            <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+              Select a day to inspect how many drivers are working in each 1-hour window.
+            </p>
+          </div>
+
+          {/* Top Bar Day Selector Pills */}
+          <div className="flex flex-wrap gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] p-1">
+            <button
+              type="button"
+              onClick={() => setSelectedDay("all")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-extrabold transition-colors ${selectedDay === "all"
+                  ? "bg-[#00C2A8] text-[#0B1E3D] shadow-xs"
+                  : "text-[var(--color-muted)] hover:text-[var(--color-primary)]"
+                }`}
             >
-              <div>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 11,
-                    fontWeight: 600,
-                    letterSpacing: "0.14em",
-                    textTransform: "uppercase",
-                    color: "var(--color-secondary-deep)",
-                  }}
-                >
-                  Availability details
-                </p>
-                <h3
-                  style={{
-                    margin: "5px 0 0",
-                    fontSize: 20,
-                    fontWeight: 700,
-                    color: "var(--color-primary)",
-                  }}
-                >
-                  {detail
-                    ? `Availability #${detail.availabilityNumber ?? detail._id.slice(-6)}`
-                    : "Loading..."}
-                </h3>
-                {detail ? (
-                  <p
-                    style={{
-                      margin: "4px 0 0",
-                      color: "var(--color-muted)",
-                      fontSize: 13,
-                    }}
-                  >
-                    {detail.date} · {detail.startTime} → {detail.endTime}
-                  </p>
-                ) : null}
-              </div>
+              All Days
+            </button>
+            {DAYS.map((day) => (
               <button
+                key={day.id}
                 type="button"
-                onClick={closeDetail}
-                aria-label="Close details"
-                style={{
-                  padding: 4,
-                  color: "var(--color-muted)",
-                  background: "var(--color-transparent)",
-                  border: "none",
-                  cursor: "pointer",
-                }}
+                onClick={() => setSelectedDay(day.id)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-extrabold transition-colors ${selectedDay === day.id
+                    ? "bg-[#00C2A8] text-[#0B1E3D] shadow-xs"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-primary)]"
+                  }`}
               >
-                <X size={20} />
+                {day.short}
               </button>
-            </header>
+            ))}
+          </div>
+        </div>
 
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 14,
-                padding: 20,
-              }}
-            >
-              {detailLoading ? (
-                <AdminLoadingState title="Loading availability details..." />
-              ) : detailError ? (
-                <AdminErrorState
-                  title="Unable to load availability"
-                  description={detailError}
-                />
-              ) : detail ? (
-                <>
-                  {mapPoints.length ? (
-                    <div
-                      style={{
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <AdminTripMap key={detail._id} points={mapPoints} />
+        {/* 24-Hour Graph Visual */}
+        <div className="mt-6">
+          <div className="flex items-center justify-between text-xs text-[var(--color-muted)] mb-2 font-mono">
+            <span>00:00 (Midnight)</span>
+            <span>12:00 (Noon)</span>
+            <span>23:00 (Night)</span>
+          </div>
+
+          <div className="grid h-48 grid-cols-24 items-end gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] p-3">
+            {hourlyData.map((slot) => {
+              const heightPercent =
+                maxHourlyCount > 0 ? (slot.count / maxHourlyCount) * 100 : 0;
+              const isHovered = hoveredHour === slot.hour;
+              const isPeak =
+                selectedPeakInfo.count > 0 && slot.count === selectedPeakInfo.count;
+
+              return (
+                <div
+                  key={slot.hour}
+                  onMouseEnter={() => setHoveredHour(slot.hour)}
+                  onMouseLeave={() => setHoveredHour(null)}
+                  className="group relative flex h-full flex-col justify-end items-center"
+                >
+                  {/* Tooltip on Hover */}
+                  {isHovered && (
+                    <div className="absolute -top-10 z-30 whitespace-nowrap rounded-lg bg-[var(--color-primary)] px-2.5 py-1 text-[11px] font-bold text-white shadow-lg">
+                      {slot.label}–{formatHour(slot.hour + 1)}: {slot.count} driver{slot.count === 1 ? "" : "s"}
                     </div>
-                  ) : (
-                    <p
-                      style={{
-                        margin: 0,
-                        color: "var(--color-muted)",
-                        fontSize: 13,
-                      }}
-                    >
-                      No coordinates recorded for this availability.
-                    </p>
                   )}
 
-                  <section
-                    style={{
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 8,
-                      padding: 14,
-                    }}
-                  >
-                    <h4
-                      style={{
-                        margin: "0 0 12px",
-                        color: "var(--color-primary)",
-                        fontSize: 15,
-                      }}
+                  {/* Count Badge on Top of Bar */}
+                  {slot.count > 0 && (
+                    <span
+                      className={`mb-1 text-[10px] font-black ${isPeak ? "text-[#F5A623]" : "text-[var(--color-primary)]"
+                        }`}
                     >
-                      Driver
-                    </h4>
-                    <div className="avail-detail-grid">
-                      <div>
-                        <span className="avail-detail-label">Name</span>
-                        <span
-                          style={{
-                            color: "var(--color-primary)",
-                            fontSize: 14,
-                          }}
-                        >
-                          {detail.driverId?.name ?? "—"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="avail-detail-label">Phone</span>
-                        <span
-                          style={{
-                            color: "var(--color-primary)",
-                            fontSize: 14,
-                          }}
-                        >
-                          {detail.driverId?.phone ?? "—"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="avail-detail-label">Status</span>
-                        <AdminStatusBadge status={detail.status ?? "unknown"} />
-                      </div>
-                      <div>
-                        <span className="avail-detail-label">Matched</span>
-                        <span
-                          style={{
-                            color: "var(--color-primary)",
-                            fontSize: 14,
-                          }}
-                        >
-                          {detail.matched ? "Yes" : "No"}
-                        </span>
-                      </div>
-                    </div>
-                  </section>
+                      {slot.count}
+                    </span>
+                  )}
 
-                  <section
-                    style={{
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 8,
-                      padding: 14,
-                    }}
-                  >
-                    <h4
-                      style={{
-                        margin: "0 0 12px",
-                        color: "var(--color-primary)",
-                        fontSize: 15,
-                      }}
-                    >
-                      Locations
-                    </h4>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 12,
-                      }}
-                    >
-                      <div>
-                        <span className="avail-detail-label">
-                          Start location
-                        </span>
-                        <span
-                          style={{
-                            color: "var(--color-primary)",
-                            fontSize: 13,
-                          }}
-                        >
-                          <MapPin
-                            size={12}
-                            style={{
-                              verticalAlign: "-1px",
-                              color: "var(--color-secondary)",
-                            }}
-                          />{" "}
-                          {detail.startLocation?.address ?? "—"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="avail-detail-label">
-                          Nearest station to start
-                        </span>
-                        <span
-                          style={{
-                            color: "var(--color-primary)",
-                            fontSize: 13,
-                          }}
-                        >
-                          {detail.startNearestStation?.name ?? "—"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="avail-detail-label">End location</span>
-                        <span
-                          style={{
-                            color: "var(--color-primary)",
-                            fontSize: 13,
-                          }}
-                        >
-                          <MapPin
-                            size={12}
-                            style={{
-                              verticalAlign: "-1px",
-                              color: "var(--color-primary)",
-                            }}
-                          />{" "}
-                          {detail.endLocation?.address ?? "—"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="avail-detail-label">
-                          Nearest station to end
-                        </span>
-                        <span
-                          style={{
-                            color: "var(--color-primary)",
-                            fontSize: 13,
-                          }}
-                        >
-                          {detail.endNearestStation?.name ?? "—"}
-                        </span>
-                      </div>
-                    </div>
-                  </section>
-                </>
-              ) : null}
-            </div>
-          </aside>
+                  {/* Bar */}
+                  <div
+                    style={{ height: `${Math.max(heightPercent, 6)}%` }}
+                    className={`w-full rounded-t-md transition-all duration-200 ${slot.count === 0
+                        ? "bg-[#e2e8f0]"
+                        : isPeak
+                          ? "bg-gradient-to-t from-[#F5A623] to-[#ffd074]"
+                          : "bg-gradient-to-t from-[#00C2A8] to-[#6ee7d7]"
+                      } ${isHovered ? "opacity-100 scale-105" : "opacity-90"}`}
+                  />
+                  <span className="mt-1 text-[9px] font-mono text-[var(--color-muted)] truncate max-w-full">
+                    {slot.hour}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      ) : null}
+      </AdminCard>
 
-      {createOpen ? (
-        <div
-          className="avail-overlay"
-          style={{
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20,
-          }}
-          onClick={(event) => {
-            if (event.target === event.currentTarget && !creating)
-              closeCreate();
-          }}
-        >
-          <AdminFormLayout
-            onSubmit={handleCreate}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add new availability"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 14,
-              width: "min(540px, 100%)",
-              maxHeight: "min(88dvh, 760px)",
-              overflowY: "auto",
-              padding: 20,
-              borderRadius: 14,
-              borderTop: "3px solid var(--color-accent)",
-              background: "var(--color-panel)",
-              boxShadow: "0 20px 60px var(--color-shadow-strong)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
+      {/* Peak Hours Overview by Day - Clickable to open driver list modal */}
+      <AdminCard padding={18}>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-[var(--color-primary)]">
+            <Zap size={16} className="text-[#F5A623]" /> Peak Hours Overview by Day
+          </h3>
+          <span className="text-xs text-[var(--color-muted)]">
+            Click any day to view available drivers and schedules
+          </span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+          {DAYS.map((d) => {
+            const driverCount = perDayDriverCounts[d.id];
+            return (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setModalDay(d.id)}
+                className="group relative flex flex-col justify-between text-left rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] p-3.5 transition-all hover:border-[#00C2A8] hover:bg-[#effaf8] hover:shadow-sm"
+              >
+                <div>
+                  <span className="text-xs font-extrabold text-[var(--color-primary)] group-hover:text-[#00C2A8]">
+                    {d.label}
+                  </span>
+                  <div className="mt-2 flex items-baseline gap-1">
+                    <span className="text-2xl font-black text-[var(--color-primary)]">
+                      {driverCount}
+                    </span>
+                    <span className="text-xs font-semibold text-[var(--color-muted)]">
+                      driver{driverCount === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                </div>
+                <span className="mt-3 text-[11px] font-extrabold text-[#00C2A8] group-hover:underline">
+                  View drivers &rarr;
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </AdminCard>
+
+      {/* Drivers Available Modal */}
+      {modalDay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-xl max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-[var(--color-border)]">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4 bg-[var(--color-background)]">
               <div>
-                <h3
-                  style={{
-                    margin: 0,
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: "var(--color-primary)",
-                  }}
-                >
-                  Add new availability
+                <h3 className="text-lg font-extrabold text-[var(--color-primary)]">
+                  Drivers available on {DAYS.find((d) => d.id === modalDay)?.label}
                 </h3>
-                <p
-                  style={{
-                    margin: "4px 0 0",
-                    color: "var(--color-muted)",
-                    fontSize: 13,
-                  }}
-                >
-                  Assign a driver a new availability window.
+                <p className="text-xs text-[var(--color-muted)] mt-0.5">
+                  {modalDayDrivers.length} driver{modalDayDrivers.length === 1 ? "" : "s"} active on this day
                 </p>
               </div>
               <button
                 type="button"
-                onClick={closeCreate}
-                aria-label="Close"
-                disabled={creating}
-                style={{
-                  padding: 4,
-                  color: "var(--color-muted)",
-                  background: "var(--color-transparent)",
-                  border: "none",
-                  cursor: "pointer",
-                }}
+                onClick={() => setModalDay(null)}
+                className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-border)] hover:text-[var(--color-primary)]"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <label className="avail-field">
-              <span>Driver</span>
-              <select
-                value={driverId}
-                onChange={(event) => setDriverId(event.target.value)}
-                required
-              >
-                <option value="">Select a driver</option>
-                {drivers.map((driver) => (
-                  <option key={driver._id} value={driver._id}>
-                    {driver.userNumber ? `#${driver.userNumber} · ` : ""}
-                    {driver.name || driver.phone}
-                    {driver.carType
-                      ? ` · ${CAR_TYPE_LABELS[driver.carType] ?? driver.carType}`
-                      : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="p-5 overflow-y-auto space-y-3">
+              {modalDayDrivers.length === 0 ? (
+                <div className="py-8 text-center text-sm text-[var(--color-muted)]">
+                  No drivers are scheduled for {DAYS.find((d) => d.id === modalDay)?.label}.
+                </div>
+              ) : (
+                modalDayDrivers.map(({ driver, shifts }) => (
+                  <div
+                    key={driver.id}
+                    className="rounded-xl border border-[var(--color-border)] bg-[#f9fbfb] p-4 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#00C2A8]/15 text-[#00C2A8] font-bold text-xs">
+                          <User size={16} />
+                        </div>
+                        <div>
+                          <strong className="block text-sm font-bold text-[var(--color-primary)]">
+                            {driver.name || "Unnamed driver"}{" "}
+                            {driver.userNumber ? `#${driver.userNumber}` : ""}
+                          </strong>
+                          <span className="text-xs text-[var(--color-muted)] font-mono">
+                            {driver.phone || "No phone"}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="rounded-lg bg-[#00C2A8]/10 px-2.5 py-1 text-xs font-bold text-[#00C2A8]">
+                        {shifts.length} shift{shifts.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
 
-            <label className="avail-field">
-              <span>Date</span>
-              <input
-                type="date"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-                required
-              />
-            </label>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 12,
-              }}
-            >
-              <label className="avail-field">
-                <span>Start time</span>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(event) => setStartTime(event.target.value)}
-                  required
-                />
-              </label>
-              <label className="avail-field">
-                <span>End time</span>
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(event) => setEndTime(event.target.value)}
-                  required
-                />
-              </label>
+                    <div className="space-y-1.5 pt-1">
+                      {shifts.map((shift) => (
+                        <div
+                          key={shift._id}
+                          className="flex items-center justify-between text-xs rounded-lg border border-[var(--color-border)] bg-white px-3 py-2"
+                        >
+                          <span className="truncate text-[var(--color-primary)] font-medium max-w-[240px]">
+                            {shift.origin.address}
+                          </span>
+                          <span className="font-mono font-bold text-[#00C2A8] bg-[#effaf8] px-2 py-0.5 rounded-md">
+                            from: {shift.startTime} to: {shift.endTime}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
-            <div className="avail-field">
-              <span>Start location</span>
-              <AddressInput
-                id="avail-start"
-                placeholder="Search start address"
-                value={startLocation}
-                onChange={setStartLocation}
-              />
-            </div>
-
-            <div className="avail-field">
-              <span>End location</span>
-              <AddressInput
-                id="avail-end"
-                placeholder="Search end address"
-                value={endLocation}
-                onChange={setEndLocation}
-                iconColor="var(--color-primary)"
-              />
-            </div>
-
-            {createError ? (
-              <p
-                role="alert"
-                style={{
-                  margin: 0,
-                  color: "var(--color-danger)",
-                  fontSize: 13,
-                }}
-              >
-                {createError}
-              </p>
-            ) : null}
-
-            <div
-              style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
-            >
+            <div className="border-t border-[var(--color-border)] p-4 bg-[var(--color-background)] flex justify-end">
               <button
                 type="button"
-                className="avail-btn ghost"
-                onClick={closeCreate}
-                disabled={creating}
+                onClick={() => setModalDay(null)}
+                className="rounded-xl bg-[var(--color-primary)] px-5 py-2 text-sm font-extrabold text-white hover:bg-[var(--color-primary)]/90"
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="avail-btn primary"
-                disabled={creating}
-              >
-                {creating ? "Creating..." : "Create availability"}
+                Close
               </button>
             </div>
-          </AdminFormLayout>
+          </div>
         </div>
-      ) : null}
-    </AdminCard>
+      )}
+
+      {/* Driver Table Section with Search Filter */}
+      <AdminCard padding={0}>
+        <div className="p-4 border-b border-[var(--color-border)] flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h3 className="text-base font-bold text-[var(--color-primary)]">
+              Weekly Driver Schedules {selectedDay !== "all" && `(${DAYS.find((d) => d.id === selectedDay)?.label})`}
+            </h3>
+            <span className="text-xs text-[var(--color-muted)]">
+              Showing {visibleRows.length} of {initialRecords.length} registered drivers
+            </span>
+          </div>
+
+          {/* Filter / Search Input */}
+          <div className="relative min-w-[260px] sm:w-72">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, phone, or #userNumber (e.g. #2)..."
+              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] pl-9 pr-8 py-2 text-xs font-medium text-[var(--color-primary)] placeholder-[var(--color-muted)] focus:border-[#00C2A8] focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted)] hover:text-[var(--color-primary)]"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="divide-y divide-[var(--color-border)]">
+          {visibleRows.map((driver) => (
+            <section key={driver.id} className="p-4 sm:p-5">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong className="block text-sm text-[var(--color-primary)]">
+                      {driver.name || "Unnamed driver"}
+                    </strong>
+                    {driver.userNumber ? (
+                      <span className="rounded-md bg-[var(--color-border)] px-1.5 py-0.5 font-mono text-[11px] font-bold text-[var(--color-primary)]">
+                        #{driver.userNumber}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="text-xs font-mono text-[var(--color-muted)]">
+                    {driver.phone || "No phone"}
+                  </span>
+                </div>
+                <span className="rounded-lg bg-[#00C2A8]/10 px-2.5 py-1 text-xs font-bold text-[#00C2A8]">
+                  {driver.records.filter((record) => record.active).length} active shift{driver.records.filter((record) => record.active).length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+                {DAYS.filter((day) => selectedDay === "all" || day.id === selectedDay).map((day) => {
+                  const shifts = driver.records.filter(
+                    (item) => item.dayOfWeek === day.id && item.active,
+                  );
+                  return (
+                    <div
+                      key={day.id}
+                      className={`min-w-0 rounded-lg border p-2.5 ${selectedDay === day.id ? "border-[#00C2A8] bg-[#00C2A8]/5" : "border-[var(--color-border)] bg-[var(--color-background)]"}`}
+                    >
+                      <p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-[var(--color-primary)]">
+                        {day.short}
+                      </p>
+                      {shifts.length === 0 ? (
+                        <div className="flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
+                          <Minus className="h-3.5 w-3.5" /> No shift
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {shifts.map((shift) => (
+                            <div key={shift._id} className="min-w-0 rounded-md bg-[var(--color-secondary-tint)] px-2 py-2 text-xs text-[var(--color-primary)]">
+                              <div className="flex items-start gap-1.5">
+                                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-secondary)]" />
+                                <span
+                                  className="line-clamp-2 min-w-0 font-medium"
+                                  title={shift.origin.address}
+                                >
+                                  {shift.origin.address}
+                                </span>
+                              </div>
+                              <span className="mt-1 block font-mono text-[10px] font-bold text-[var(--color-muted)]">
+                                {shift.startTime}–{shift.endTime}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+        {visibleRows.length === 0 && (
+          <p className="p-8 text-center text-sm text-[var(--color-muted)]">
+            No drivers found matching your search criteria.
+          </p>
+        )}
+      </AdminCard>
+    </div>
   );
 }

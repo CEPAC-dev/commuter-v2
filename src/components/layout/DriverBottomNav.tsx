@@ -65,14 +65,14 @@ export default function DriverBottomNav() {
     {
       key: "cycles" as const,
       label: t("my_cycles"),
-      href: "/driver/my-cycles",
+      href: "/my-trips",
     },
     {
       key: "availability" as const,
       label: t("availability"),
-      href: "/driver/availability",
+      href: "/availability",
     },
-    { key: "profile" as const, label: t("profile"), href: "/driver/profile" },
+    { key: "profile" as const, label: t("profile"), href: "/profile" },
   ];
 
   return (

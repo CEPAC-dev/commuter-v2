@@ -18,6 +18,7 @@ const NotificationSchema = new Schema(
         "withdrawal_approved",
         "withdrawal_rejected",
         "referral_bonus",
+        "ride_offer",
       ],
     },
     title: { type: String, required: true, trim: true, maxlength: 120 },

@@ -324,7 +324,7 @@ export function AdminStatusBadge({
 
 export function AdminTable({ children, ariaLabel }: { children: ReactNode; ariaLabel?: string }) {
   return (
-    <div className="admin-table-scroll">
+    <div className="admin-table-scroll no-scrollbar">
       <table
         aria-label={ariaLabel}
         style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}

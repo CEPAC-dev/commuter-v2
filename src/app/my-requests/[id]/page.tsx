@@ -69,6 +69,7 @@ const STATUS_PILL: Record<
   completed: { label: "Completed", bg: "#0B1E3D", color: "#fff" },
   cancelled: { label: "Cancelled", bg: "#FFEBEE", color: "#E74C3C" },
   time_out: { label: "Timed out", bg: "#F5F5F5", color: "#9aa7b4" },
+  nomatch: { label: "No match found", bg: "#FFEBEE", color: "#E74C3C" },
 };
 
 function Pill({

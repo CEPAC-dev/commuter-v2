@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
-import { cancelRide } from "@/lib/services/rideService";
+import { deleteRideAndRestoreTrips } from "@/lib/services/rideService";
 import { normalizeSharedRidePassengers } from "@/lib/services/sharedRideManifest";
 import "@/models/Availability";
 import { Ride } from "@/models/Ride";
@@ -192,14 +192,14 @@ export async function DELETE(
 
   const { id } = await params;
   try {
-    const deleted = await cancelRide(id, "Cancelled by admin");
+    const deleted = await deleteRideAndRestoreTrips(id);
     if (!deleted) {
       return NextResponse.json({ error: "Ride not found" }, { status: 404 });
     }
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || "Failed to cancel ride" },
+      { error: err.message || "Failed to delete ride" },
       { status: 500 },
     );
   }

@@ -45,7 +45,14 @@ function currentTitle(pathname: string) {
 }
 
 export function AdminTopbarActions({ children }: { children: ReactNode }) {
-  const target = typeof document === "undefined" ? null : document.getElementById("admin-page-actions");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+  const target = document.getElementById("admin-page-actions");
   return target ? createPortal(children, target) : null;
 }
 
@@ -68,7 +75,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       .then((json) => {
         if (!cancelled && json) setStats(json);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       cancelled = true;
     };
