@@ -22,6 +22,7 @@ type RecordItem = {
   _id: string;
   dayOfWeek: Day;
   origin: { address: string };
+  startNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
   startTime: string;
   endTime: string;
   active: boolean;
@@ -643,6 +644,14 @@ export default function AdminAvailabilityTable({
                                   {shift.origin.address}
                                 </span>
                               </div>
+                              {shift.startNearestStation ? (
+                                <span
+                                  className="mt-1 block truncate text-[10px] text-[var(--color-muted)]"
+                                  title={shift.startNearestStation.name}
+                                >
+                                  Station: {shift.startNearestStation.name}
+                                </span>
+                              ) : null}
                               <span className="mt-1 block font-mono text-[10px] font-bold text-[var(--color-muted)]">
                                 {shift.startTime}–{shift.endTime}
                               </span>

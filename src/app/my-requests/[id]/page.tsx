@@ -63,7 +63,6 @@ const STATUS_PILL: Record<
   },
   submitted: { label: "Submitted", bg: "#E2E8F0", color: "#5A6A7A" },
   matched: { label: "Matched", bg: "#00C2A8", color: "#fff" },
-  nomatch: { label: "No match", bg: "#FFEBEE", color: "#E74C3C" },
   confirmed: { label: "Confirmed", bg: "#E8F5E9", color: "#27AE60" },
   active: { label: "Active", bg: "#00C2A8", color: "#fff" },
   completed: { label: "Completed", bg: "#0B1E3D", color: "#fff" },

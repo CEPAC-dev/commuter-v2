@@ -52,6 +52,7 @@ export default async function AdminAvailabilityPage() {
             _id: String(record._id),
             dayOfWeek: record.dayOfWeek,
             origin: record.origin,
+            startNearestStation: record.startNearestStation ?? null,
             startTime: record.startTime,
             endTime: record.endTime,
             active: record.active,

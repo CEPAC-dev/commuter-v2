@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
 import { Driver } from "@/models/Driver";
+import { Station } from "@/models/Station";
 import { getSession } from "@/lib/auth/session";
+import { findNearestStation } from "@/lib/geo/stations";
 import {
   DAYS_OF_WEEK,
   listDriverAvailability,
@@ -21,6 +23,26 @@ export async function GET() {
 
   const records = await listDriverAvailability(session.userId);
   return NextResponse.json({ data: records });
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSession();
+  if (!session || session.role !== "driver")
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = (await req.json().catch(() => null)) as { ids?: unknown } | null;
+  const ids = Array.isArray(body?.ids)
+    ? body.ids.filter((id): id is string => typeof id === "string" && isValidAvailabilityId(id))
+    : [];
+  if (ids.length === 0)
+    return NextResponse.json({ error: "Select at least one availability shift." }, { status: 400 });
+
+  await connectDB();
+  const result = await Availability.deleteMany({
+    _id: { $in: ids },
+    driverId: session.userId,
+  });
+  return NextResponse.json({ ok: true, deletedCount: result.deletedCount });
 }
 
 export async function PUT(req: NextRequest) {
@@ -68,6 +90,32 @@ export async function PUT(req: NextRequest) {
     if (!normalizedOrigin)
       return NextResponse.json({ error: "Origin is required." }, { status: 400 });
 
+    const stationDocs = await Station.find({ active: true }).lean();
+    const nearestStation = findNearestStation(
+      normalizedOrigin.lat,
+      normalizedOrigin.lng,
+      stationDocs.map((station) => ({
+        id: station.objectId,
+        name: station.name,
+        direction: station.direction,
+        stationType: station.stationType,
+        zones: station.zones,
+        description: station.description,
+        landmark: station.landmark,
+        lat: station.lat,
+        lng: station.lng,
+        popupInfo: "",
+      })),
+    );
+    const startNearestStation = nearestStation
+      ? {
+          id: nearestStation.id,
+          lat: nearestStation.lat,
+          lng: nearestStation.lng,
+          name: nearestStation.name,
+        }
+      : null;
+
     if (id != null && id !== "" && !isValidAvailabilityId(id))
       return NextResponse.json({ error: "Invalid shift id." }, { status: 400 });
 
@@ -112,6 +160,7 @@ export async function PUT(req: NextRequest) {
           $set: {
             dayOfWeek: targetDays[0],
             origin: normalizedOrigin,
+            startNearestStation,
             startTime,
             endTime,
             active: active ?? true,
@@ -131,6 +180,7 @@ export async function PUT(req: NextRequest) {
           driverId: session.userId,
           dayOfWeek: day,
           origin: normalizedOrigin,
+          startNearestStation,
           startTime,
           endTime,
           active: active ?? true,

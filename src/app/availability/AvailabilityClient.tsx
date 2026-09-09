@@ -28,6 +28,7 @@ type AvailabilityRecord = {
   _id: string;
   dayOfWeek: Day;
   origin: TripPoint;
+  startNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
   startTime: string;
   endTime: string;
   active: boolean;
@@ -93,6 +94,8 @@ export default function AvailabilityClient({
   const [activeFilterDay, setActiveFilterDay] = useState<Day | "all">("all");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [error, setError] = useState("");
 
   function beginAdd(initialDay?: Day) {
@@ -186,6 +189,7 @@ export default function AvailabilityClient({
         throw new Error(data.error ?? "Could not remove shift.");
       }
       setRecords((current) => current.filter((item) => item._id !== record._id));
+      setSelectedIds((current) => current.filter((id) => id !== record._id));
       if (editing?.id === record._id) setEditing(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not remove shift.");
@@ -217,6 +221,49 @@ export default function AvailabilityClient({
       return a.startTime.localeCompare(b.startTime);
     });
   }, [filteredRecords]);
+
+  const allFilteredSelected =
+    sortedRecords.length > 0 && sortedRecords.every((record) => selectedIds.includes(record._id));
+
+  function toggleShiftSelection(id: string) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  }
+
+  function toggleSelectAll() {
+    const filteredIds = sortedRecords.map((record) => record._id);
+    setSelectedIds((current) =>
+      allFilteredSelected
+        ? current.filter((id) => !filteredIds.includes(id))
+        : [...new Set([...current, ...filteredIds])],
+    );
+  }
+
+  async function removeSelectedShifts() {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.length} selected availability shift${selectedIds.length === 1 ? "" : "s"}?`)) return;
+
+    setBulkDeleting(true);
+    setError("");
+    try {
+      const response = await fetch("/api/driver/availability", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Could not remove selected shifts.");
+      const removed = new Set(selectedIds);
+      setRecords((current) => current.filter((record) => !removed.has(record._id)));
+      setSelectedIds([]);
+      if (editing?.id && removed.has(editing.id)) setEditing(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove selected shifts.");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
 
   return (
     <>
@@ -405,9 +452,22 @@ export default function AvailabilityClient({
               })}
             </div>
 
-            <span className="text-xs font-bold text-[#5A6A7A]">
-              {sortedRecords.length} active schedule{sortedRecords.length === 1 ? "" : "s"}
-            </span>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {sortedRecords.length > 0 ? (
+                <button type="button" onClick={toggleSelectAll} className="rounded-xl border border-[#cbd5e1] bg-white px-3 py-1.5 text-xs font-extrabold text-[#0B1E3D] hover:bg-[#f0f4f8]">
+                  {allFilteredSelected ? "Clear selection" : "Select all"}
+                </button>
+              ) : null}
+              {selectedIds.length > 0 ? (
+                <button type="button" onClick={() => void removeSelectedShifts()} disabled={bulkDeleting} className="inline-flex items-center gap-1.5 rounded-xl bg-[#e74c3c] px-3 py-1.5 text-xs font-extrabold text-white hover:bg-[#c0392b] disabled:opacity-50">
+                  {bulkDeleting ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                  Delete selected ({selectedIds.length})
+                </button>
+              ) : null}
+              <span className="text-xs font-bold text-[#5A6A7A]">
+                {sortedRecords.length} active schedule{sortedRecords.length === 1 ? "" : "s"}
+              </span>
+            </div>
           </div>
 
           {/* Schedule List / Empty State */}
@@ -438,15 +498,23 @@ export default function AvailabilityClient({
             <div className="grid gap-4 sm:grid-cols-2">
               {sortedRecords.map((shift) => {
                 const isEditingThis = editing?.id === shift._id;
+                const isSelected = selectedIds.includes(shift._id);
                 return (
                   <div
                     key={shift._id}
                     className={`group relative rounded-2xl border p-5 transition-all bg-white shadow-sm hover:shadow-md ${
-                      isEditingThis ? "border-[#00c2a8] ring-2 ring-[#00c2a8]/20" : "border-[#e2e8f0]"
+                      isEditingThis || isSelected ? "border-[#00c2a8] ring-2 ring-[#00c2a8]/20" : "border-[#e2e8f0]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleShiftSelection(shift._id)}
+                          aria-label={`Select ${DAY_LABELS[shift.dayOfWeek]} ${shift.startTime} shift`}
+                          className="h-4 w-4 accent-[#00c2a8]"
+                        />
                         <span className="rounded-xl bg-[#0B1E3D] px-3 py-1.5 text-xs font-black uppercase text-white tracking-wider">
                           {DAY_LABELS[shift.dayOfWeek]}
                         </span>
