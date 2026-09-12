@@ -17,6 +17,11 @@ export interface StopInput {
   waitingMinutes: number;
 }
 
+export interface RouteLegInput {
+  distanceKm: number;
+  passengers?: number;
+}
+
 export interface TripInput {
   pickup: GeoPoint;
   dropoff: GeoPoint;
@@ -25,6 +30,7 @@ export interface TripInput {
   pickupTime?: string;
   distanceKm: number;
   durationMinutes: number;
+  routeLegs?: RouteLegInput[];
   priceEgp: number;
   extraPassengers?: number;
   passengers?: PassengerInput[];

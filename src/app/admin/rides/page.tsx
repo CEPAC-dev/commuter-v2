@@ -10,7 +10,6 @@ import {
   RotateCcw,
   Route,
   Trash2,
-  UserCog,
   X,
 } from "lucide-react";
 import AdminDateRangeCalendar from "@/components/admin/AdminDateRangeCalendar";
@@ -64,6 +63,7 @@ interface RideRow {
   vehicleType: string;
   rideType: string;
   status: string;
+  needsManualAssignment?: boolean;
   totalCost: number;
   driverId?: {
     _id?: string;
@@ -90,19 +90,6 @@ interface RideRow {
   } | null;
   passengerDetails?: RidePassengerDetail[];
 }
-
-type AvailabilityOption = {
-  _id: string;
-  availabilityNumber?: number;
-  date?: string;
-  startTime?: string;
-  endTime?: string;
-  status?: string;
-  matched?: boolean;
-  startLocation?: { address?: string };
-  endLocation?: { address?: string };
-  driverId?: { _id?: string; name?: string; phone?: string } | null;
-};
 
 type SearchMode = "rideNumber" | "driverNumber";
 
@@ -292,6 +279,7 @@ export default function AdminRidesPage() {
     vehicleType: "",
     rideType: "",
     status: "",
+    needsManualAssignment: false,
   });
   const [reloadKey, setReloadKey] = useState(0);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -311,12 +299,14 @@ export default function AdminRidesPage() {
   const [password, setPassword] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [reassignRide, setReassignRide] = useState<RideRow | null>(null);
-  const [availOptions, setAvailOptions] = useState<AvailabilityOption[]>([]);
-  const [availLoading, setAvailLoading] = useState(false);
-  const [availSearch, setAvailSearch] = useState("");
-  const [reassignError, setReassignError] = useState<string | null>(null);
-  const [reassigningId, setReassigningId] = useState<string | null>(null);
+  const [drivers, setDrivers] = useState<
+    { _id: string; name: string; phone?: string; verificationStatus?: string }[]
+  >([]);
+  const [assignDriverByRide, setAssignDriverByRide] = useState<
+    Record<string, string>
+  >({});
+  const [assigningRideId, setAssigningRideId] = useState<string | null>(null);
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   const detailMapPoints = useMemo(
     () => (detail ? rideMapPoints(detail) : []),
@@ -332,48 +322,42 @@ export default function AdminRidesPage() {
     setReloadKey((key) => key + 1);
   }
 
-  function openReassign(ride: RideRow) {
-    setReassignRide(ride);
-    setAvailOptions([]);
-    setAvailSearch("");
-    setReassignError(null);
-    setAvailLoading(true);
-  }
+  useEffect(() => {
+    fetch("/api/admin/drivers")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.drivers) setDrivers(json.drivers);
+      })
+      .catch(() => {});
+  }, []);
 
-  function closeReassign() {
-    setReassignRide(null);
-    setAvailOptions([]);
-    setAvailSearch("");
-    setReassignError(null);
-    setReassigningId(null);
-  }
-
-  async function confirmReassign(availabilityId: string) {
-    if (!reassignRide) return;
-    setReassigningId(availabilityId);
-    setReassignError(null);
+  async function assignDriver(rideId: string) {
+    const driverId = assignDriverByRide[rideId];
+    if (!driverId) {
+      setAssignError("Choose a driver to assign.");
+      return;
+    }
+    setAssigningRideId(rideId);
+    setAssignError(null);
     try {
-      const res = await fetch(`/api/admin/rides/${reassignRide._id}/reassign`, {
+      const res = await fetch(`/api/admin/rides/${rideId}/reassign`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ availabilityId }),
+        body: JSON.stringify({ driverId }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error ?? "Failed to reassign driver");
-      closeReassign();
+      if (!res.ok) throw new Error(data?.error ?? "Failed to assign driver");
       refresh();
     } catch (err) {
-      setReassignError(
-        err instanceof Error ? err.message : "Failed to reassign driver",
-      );
+      setAssignError(err instanceof Error ? err.message : "Failed to assign driver");
     } finally {
-      setReassigningId(null);
+      setAssigningRideId(null);
     }
   }
 
   async function deleteRide(id: string) {
     const confirmed = window.confirm(
-      "Cancel and delete this ride? This will unassign the trips.",
+      "Permanently delete this ride? Its trips will return to the available pool.",
     );
     if (!confirmed) return;
     try {
@@ -446,6 +430,7 @@ export default function AdminRidesPage() {
         if (filters.vehicleType) params.set("vehicleType", filters.vehicleType);
         if (filters.rideType) params.set("rideType", filters.rideType);
         if (filters.status) params.set("status", filters.status);
+        if (filters.needsManualAssignment) params.set("needsManualAssignment", "true");
 
         const res = await fetch(`/api/admin/rides?${params.toString()}`);
         const data = (await res.json().catch(() => null)) as {
@@ -523,8 +508,8 @@ export default function AdminRidesPage() {
   }
 
   function updateFilter(
-    field: "vehicleType" | "rideType" | "status",
-    value: string,
+    field: "vehicleType" | "rideType" | "status" | "needsManualAssignment",
+    value: string | boolean,
   ) {
     setLoading(true);
     setPage(1);
@@ -556,6 +541,7 @@ export default function AdminRidesPage() {
       vehicleType: "",
       rideType: "",
       status: "",
+      needsManualAssignment: false,
     });
   }
 
@@ -646,68 +632,6 @@ export default function AdminRidesPage() {
       active = false;
     };
   }, [detailId]);
-
-  useEffect(() => {
-    if (!reassignRide) return;
-    let active = true;
-
-    const loadAvailabilities = async () => {
-      try {
-        const params = new URLSearchParams({
-          date: reassignRide.date,
-          limit: "200",
-        });
-        const res = await fetch(`/api/admin/availability?${params.toString()}`);
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-          records?: AvailabilityOption[];
-        } | null;
-        if (!res.ok) {
-          throw new Error(
-            data?.error ?? `Failed to load availabilities (HTTP ${res.status})`,
-          );
-        }
-        if (!active) return;
-        setAvailOptions(data?.records ?? []);
-        setReassignError(null);
-      } catch (err) {
-        if (!active) return;
-        setReassignError(
-          err instanceof Error ? err.message : "Failed to load availabilities",
-        );
-      } finally {
-        if (active) setAvailLoading(false);
-      }
-    };
-
-    void loadAvailabilities();
-    return () => {
-      active = false;
-    };
-  }, [reassignRide]);
-
-  const filteredAvailabilities = useMemo(() => {
-    const term = availSearch.trim().toLowerCase();
-    if (!term) return availOptions;
-    return availOptions.filter((option) =>
-      [
-        option.availabilityNumber != null
-          ? `#${option.availabilityNumber}`
-          : "",
-        option.driverId?.name,
-        option.driverId?.phone,
-        option.startTime,
-        option.endTime,
-        option.status,
-        option.startLocation?.address,
-        option.endLocation?.address,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [availOptions, availSearch]);
 
   return (
     <main className="rides-board">
@@ -844,7 +768,6 @@ export default function AdminRidesPage() {
         }
         .action-btn:hover { opacity: 0.75; }
         .action-btn.delete { background: var(--color-danger-tint); color: var(--rose); }
-        .action-btn.reassign { background: var(--color-secondary-tint); color: var(--teal-deep); }
         .action-btn.solid-danger { background: var(--rose); color: var(--color-on-primary); }
         .action-btn.ghost { background: var(--color-panel); color: var(--slate); border-color: var(--line); }
         .rides-board tbody tr.row-link { cursor: pointer; }
@@ -904,6 +827,23 @@ export default function AdminRidesPage() {
           </p>
         ) : null}
 
+        {assignError ? (
+          <p
+            role="alert"
+            style={{
+              marginBottom: 16,
+              padding: "12px 14px",
+              borderRadius: 10,
+              background: "var(--color-danger-tint)",
+              color: "var(--color-danger)",
+              border: "1px solid var(--color-danger)",
+              fontSize: 14,
+            }}
+          >
+            {assignError}
+          </p>
+        ) : null}
+
         <div
           style={{
             display: "flex",
@@ -931,6 +871,16 @@ export default function AdminRidesPage() {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="inline-flex items-center gap-2 self-end rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-bold text-[var(--color-primary)]">
+            <input
+              type="checkbox"
+              checked={filters.needsManualAssignment}
+              onChange={(event) =>
+                updateFilter("needsManualAssignment", event.target.checked)
+              }
+            />
+            Needs manual assignment
           </label>
           <label className="filter-field" style={{ flex: "1 1 230px" }}>
             <span>Search value</span>
@@ -1274,12 +1224,22 @@ export default function AdminRidesPage() {
                           </div>
                         </td>
                         <td>
-                          <span
-                            className="status-pill"
-                            style={{ background: st.bg, color: st.color }}
-                          >
-                            {st.label ?? ride.status}
-                          </span>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            <span
+                              className="status-pill"
+                              style={{ background: st.bg, color: st.color }}
+                            >
+                              {st.label ?? ride.status}
+                            </span>
+                            {ride.needsManualAssignment ? (
+                              <span
+                                className="status-pill"
+                                style={{ background: "var(--color-danger-tint)", color: "var(--color-danger)" }}
+                              >
+                                No driver accepted
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td onClick={(event) => event.stopPropagation()}>
                           <div
@@ -1287,17 +1247,46 @@ export default function AdminRidesPage() {
                               display: "flex",
                               gap: 8,
                               flexWrap: "wrap",
+                              alignItems: "center",
                             }}
                           >
-                            {ride.status === "matched" ? (
-                              <button
-                                type="button"
-                                className="action-btn reassign"
-                                onClick={() => openReassign(ride)}
-                                title="Reassign this ride to another availability"
-                              >
-                                <UserCog size={14} /> Reassign driver
-                              </button>
+                            {!ride.driverId && ride.status !== "completed" && ride.status !== "cancelled" ? (
+                              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                <select
+                                  value={assignDriverByRide[ride._id] ?? ""}
+                                  onChange={(event) =>
+                                    setAssignDriverByRide((current) => ({
+                                      ...current,
+                                      [ride._id]: event.target.value,
+                                    }))
+                                  }
+                                  style={{
+                                    fontSize: 12,
+                                    padding: "6px 8px",
+                                    borderRadius: 8,
+                                    border: "1px solid var(--color-border)",
+                                    maxWidth: 160,
+                                  }}
+                                >
+                                  <option value="">Assign driver…</option>
+                                  {drivers
+                                    .filter((driver) => driver.verificationStatus === "verified")
+                                    .map((driver) => (
+                                      <option key={driver._id} value={driver._id}>
+                                        {driver.name} {driver.phone ? `· ${driver.phone}` : ""}
+                                      </option>
+                                    ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  className="action-btn"
+                                  onClick={() => assignDriver(ride._id)}
+                                  disabled={assigningRideId === ride._id}
+                                  title="Force-assign this driver to the ride"
+                                >
+                                  {assigningRideId === ride._id ? "Assigning…" : "Assign"}
+                                </button>
+                              </div>
                             ) : null}
                             <button
                               type="button"
@@ -1306,7 +1295,7 @@ export default function AdminRidesPage() {
                               title={
                                 ride.status === "completed"
                                   ? "Cannot delete a completed ride"
-                                  : "Delete / cancel ride"
+                                  : "Permanently delete ride and restore trips"
                               }
                               disabled={ride.status === "completed"}
                               style={
@@ -1315,7 +1304,7 @@ export default function AdminRidesPage() {
                                   : undefined
                               }
                             >
-                              <Trash2 size={14} /> Cancel
+                              <Trash2 size={14} /> Delete
                             </button>
                           </div>
                         </td>
@@ -1852,221 +1841,6 @@ export default function AdminRidesPage() {
         </div>
       ) : null}
 
-      {reassignRide ? (
-        <div
-          className="detail-overlay"
-          style={{
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20,
-          }}
-          onClick={(event) => {
-            if (event.target === event.currentTarget && !reassigningId)
-              closeReassign();
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Reassign driver"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              width: "min(620px, 100%)",
-              maxHeight: "min(80dvh, 720px)",
-              borderRadius: 14,
-              borderTop: "3px solid var(--color-secondary)",
-              background: "var(--color-panel)",
-              boxShadow: "0 20px 60px var(--color-shadow-strong)",
-              overflow: "hidden",
-            }}
-          >
-            <header
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 12,
-                padding: "18px 20px",
-                borderBottom: "1px solid var(--color-border)",
-              }}
-            >
-              <div>
-                <p
-                  className="mono"
-                  style={{
-                    margin: 0,
-                    fontSize: 11,
-                    fontWeight: 600,
-                    letterSpacing: "0.14em",
-                    textTransform: "uppercase",
-                    color: "var(--color-secondary-deep)",
-                  }}
-                >
-                  Reassign driver
-                </p>
-                <h3
-                  className="display"
-                  style={{
-                    margin: "5px 0 0",
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: "var(--color-primary)",
-                  }}
-                >
-                  Ride #{reassignRide.rideNumber ?? reassignRide._id.slice(-6)}
-                </h3>
-                <p
-                  style={{ margin: "4px 0 0", color: "var(--color-muted)", fontSize: 13 }}
-                >
-                  Availabilities on {reassignRide.date}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeReassign}
-                aria-label="Close reassign dialog"
-                disabled={Boolean(reassigningId)}
-                style={{
-                  padding: 4,
-                  color: "var(--color-muted)",
-                  background: "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                }}
-              >
-                <X size={20} />
-              </button>
-            </header>
-
-            <div
-              style={{
-                padding: "14px 20px",
-                borderBottom: "1px solid var(--color-border)",
-              }}
-            >
-              <label className="filter-field" style={{ minWidth: 0 }}>
-                <span>Search availabilities</span>
-                <input
-                  autoFocus
-                  value={availSearch}
-                  onChange={(event) => setAvailSearch(event.target.value)}
-                  placeholder="Driver name, phone, number, time or address"
-                />
-              </label>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-                padding: 16,
-                overflowY: "auto",
-              }}
-            >
-              {reassignError ? (
-                <p
-                  role="alert"
-                  style={{
-                    margin: 0,
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    background: "var(--color-danger-tint)",
-                    color: "var(--color-danger)",
-                    border: "1px solid var(--color-danger)",
-                    fontSize: 13,
-                  }}
-                >
-                  {reassignError}
-                </p>
-              ) : null}
-              {availLoading ? (
-                <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 14 }}>
-                  Loading availabilities…
-                </p>
-              ) : filteredAvailabilities.length === 0 ? (
-                <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 14 }}>
-                  No availability found for {reassignRide.date}. Create one from
-                  the Availability page.
-                </p>
-              ) : (
-                filteredAvailabilities.map((option) => (
-                  <button
-                    key={option._id}
-                    type="button"
-                    className="avail-option"
-                    disabled={Boolean(reassigningId)}
-                    onClick={() => void confirmReassign(option._id)}
-                  >
-                    <span style={{ minWidth: 0 }}>
-                      <strong
-                        style={{
-                          display: "block",
-                          color: "var(--color-primary)",
-                          fontSize: 14,
-                        }}
-                      >
-                        {option.driverId?.name ?? "Unknown driver"}
-                        <span
-                          className="mono"
-                          style={{
-                            marginLeft: 8,
-                            color: "var(--color-secondary-deep)",
-                            fontSize: 12,
-                            fontWeight: 600,
-                          }}
-                        >
-                          #{option.availabilityNumber ?? option._id.slice(-6)}
-                        </span>
-                      </strong>
-                      <span
-                        style={{
-                          display: "block",
-                          marginTop: 2,
-                          color: "var(--color-muted)",
-                          fontSize: 12,
-                        }}
-                      >
-                        {option.driverId?.phone ?? "No phone"} ·{" "}
-                        {to12h(option.startTime ?? "")} –{" "}
-                        {to12h(option.endTime ?? "")} ·{" "}
-                        {option.status ?? "open"}
-                      </span>
-                      <span
-                        style={{
-                          display: "block",
-                          marginTop: 4,
-                          overflow: "hidden",
-                          color: "var(--color-muted)",
-                          fontSize: 12,
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        <MapPin size={11} style={{ verticalAlign: "-1px" }} />{" "}
-                        {option.startLocation?.address ?? "—"} →{" "}
-                        {option.endLocation?.address ?? "—"}
-                      </span>
-                    </span>
-                    <span
-                      style={{
-                        color: "var(--color-secondary-deep)",
-                        fontSize: 13,
-                        fontWeight: 600,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {reassigningId === option._id ? "Assigning…" : "Select"}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {pendingDeleteIds ? (
         <div
           className="detail-overlay"
@@ -2105,9 +1879,9 @@ export default function AdminRidesPage() {
               Delete selected rides
             </h3>
             <p style={{ margin: "6px 0 16px", color: "var(--color-muted)", fontSize: 13 }}>
-              This cancels {pendingDeleteIds.length} ride
-              {pendingDeleteIds.length === 1 ? "" : "s"} and unassigns their
-              trips. Enter the admin password to confirm.
+              This permanently deletes {pendingDeleteIds.length} ride
+              {pendingDeleteIds.length === 1 ? "" : "s"} and returns their
+              trips to the available pool. Enter the admin password to confirm.
             </p>
             <label className="filter-field" style={{ minWidth: 0 }}>
               <span>Admin password</span>

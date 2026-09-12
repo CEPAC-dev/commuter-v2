@@ -23,6 +23,7 @@ export default async function AvailabilityPage() {
       email={session.email}
       initialRecords={records}
       verificationStatus={profile.verificationStatus}
+      savedAddresses={profile.savedAddresses}
     />
   );
 }

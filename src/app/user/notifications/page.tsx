@@ -38,7 +38,13 @@ export default async function NotificationsPage() {
       dir="ltr"
       style={{ minHeight: "100dvh", background: "#f8f9fa", direction: "ltr" }}
     >
-      <AppHeader authed email={session.email} variant="app" backHref="/" />
+      <AppHeader
+        authed
+        email={session.email}
+        role={session.role === "driver" ? "driver" : "passenger"}
+        variant="app"
+        backHref={session.role === "driver" ? "/my-trips" : "/"}
+      />
       <main
         style={{ maxWidth: 640, margin: "0 auto", padding: "28px 20px 56px" }}
       >

@@ -1,29 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
-import { nextSequence } from "@/models/Counter";
 import { Driver } from "@/models/Driver";
 import { Station } from "@/models/Station";
 import { getSession } from "@/lib/auth/session";
 import { findNearestStation } from "@/lib/geo/stations";
-import type { GeoPoint as Point } from "@/types/geo";
-import { listDriverAvailability } from "@/lib/services/availability";
-import { canModifyAvailability, getAdminSettings } from "@/lib/cancellationPolicy";
-
-function isValidPoint(p: unknown): p is Point {
-  const point = p as Point;
-  return (
-    !!point &&
-    typeof point.address === "string" &&
-    point.address.trim().length > 0 &&
-    typeof point.lat === "number" &&
-    typeof point.lng === "number"
-  );
-}
-
-function isValidTime(t: unknown): t is string {
-  return typeof t === "string" && /^\d{2}:\d{2}$/.test(t);
-}
+import {
+  DAYS_OF_WEEK,
+  listDriverAvailability,
+  validateAvailabilityWindow,
+} from "@/lib/services/availability";
+import {
+  isValidAvailabilityId,
+  normalizeAvailabilityOrigin,
+  shiftsOverlap,
+} from "@/lib/time/availabilityWindow";
 
 export async function GET() {
   const session = await getSession();
@@ -34,129 +25,187 @@ export async function GET() {
   return NextResponse.json({ data: records });
 }
 
-export async function POST(req: NextRequest) {
+export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session || session.role !== "driver")
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const body = (await req.json().catch(() => null)) as { ids?: unknown } | null;
+  const ids = Array.isArray(body?.ids)
+    ? body.ids.filter((id): id is string => typeof id === "string" && isValidAvailabilityId(id))
+    : [];
+  if (ids.length === 0)
+    return NextResponse.json({ error: "Select at least one availability shift." }, { status: 400 });
+
   await connectDB();
-  const driver = await Driver.findOne({ userId: session.userId })
-    .select("verificationStatus carCapacity")
-    .lean<{ verificationStatus?: string; carCapacity?: number }>();
-  if (driver?.verificationStatus !== "verified")
-    return NextResponse.json(
-      { error: "Your profile must be verified before adding availability." },
-      { status: 403 },
-    );
-  const seats = driver?.carCapacity ?? 4;
+  const result = await Availability.deleteMany({
+    _id: { $in: ids },
+    driverId: session.userId,
+  });
+  return NextResponse.json({ ok: true, deletedCount: result.deletedCount });
+}
+
+export async function PUT(req: NextRequest) {
+  const session = await getSession();
+  if (!session || session.role !== "driver")
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { dates, startLocation, endLocation, startTime, endTime } =
-      await req.json();
+    await connectDB();
+    const driver = await Driver.findOne({ userId: session.userId })
+      .select("verificationStatus")
+      .lean<{ verificationStatus?: string }>();
+    if (driver?.verificationStatus !== "verified")
+      return NextResponse.json(
+        { error: "Your profile must be verified before adding availability." },
+        { status: 403 },
+      );
 
-    if (!Array.isArray(dates) || dates.length === 0)
-      return NextResponse.json(
-        { error: "Select at least one date." },
-        { status: 400 },
-      );
-    const settings = await getAdminSettings();
-    const lockedDate = dates.find(
-      (d) => !canModifyAvailability(d, new Date(), settings.availabilityLockTime),
-    );
-    if (lockedDate) {
-      return NextResponse.json(
-        {
-          error: `Availability creation is locked after ${settings.availabilityLockTime} on the day before (${lockedDate}).`,
-        },
-        { status: 400 },
-      );
+    const payload = await req.json();
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return NextResponse.json({ error: "Invalid availability payload." }, { status: 400 });
     }
-    if (!isValidPoint(startLocation) || !isValidPoint(endLocation))
-      return NextResponse.json(
-        { error: "Start and end locations are required." },
-        { status: 400 },
-      );
-    if (!isValidTime(startTime) || !isValidTime(endTime))
-      return NextResponse.json(
-        { error: "Start and end time are required." },
-        { status: 400 },
-      );
-    if (startTime >= endTime)
-      return NextResponse.json(
-        { error: "End time must be after start time." },
-        { status: 400 },
-      );
+
+    const { id, dayOfWeek, days, origin, startTime, endTime, active } = payload as {
+      id?: unknown;
+      dayOfWeek?: unknown;
+      days?: unknown;
+      origin?: unknown;
+      startTime?: unknown;
+      endTime?: unknown;
+      active?: unknown;
+    };
+
+    const targetDays: string[] = Array.isArray(days)
+      ? (days as string[]).filter((d) => DAYS_OF_WEEK.includes(d as (typeof DAYS_OF_WEEK)[number]))
+      : typeof dayOfWeek === "string" && DAYS_OF_WEEK.includes(dayOfWeek as (typeof DAYS_OF_WEEK)[number])
+        ? [dayOfWeek]
+        : [];
+
+    if (targetDays.length === 0) {
+      return NextResponse.json({ error: "At least one valid day must be selected." }, { status: 400 });
+    }
+
+    const normalizedOrigin = normalizeAvailabilityOrigin(origin);
+    if (!normalizedOrigin)
+      return NextResponse.json({ error: "Origin is required." }, { status: 400 });
 
     const stationDocs = await Station.find({ active: true }).lean();
-    const canonicalStations = stationDocs.map((station) => ({
-      id: station.objectId,
-      name: station.name || station.direction || "",
-      direction: station.direction,
-      stationType: station.stationType,
-      lat: station.lat,
-      lng: station.lng,
-      popupInfo: [station.direction, station.landmark, station.stationType]
-        .filter(Boolean)
-        .join("\n"),
-    }));
-    const startNearestStation = findNearestStation(
-      startLocation.lat,
-      startLocation.lng,
-      canonicalStations,
-    );
-    const endNearestStation = findNearestStation(
-      endLocation.lat,
-      endLocation.lng,
-      canonicalStations,
-    );
-
-    const docs = await Promise.all(
-      dates.map(async (date: string) => ({
-        availabilityNumber: await nextSequence("availabilityNumber"),
-        driverId: session.userId,
-        date,
-        startLocation: {
-          address: startLocation.address,
-          lat: startLocation.lat,
-          lng: startLocation.lng,
-        },
-        endLocation: {
-          address: endLocation.address,
-          lat: endLocation.lat,
-          lng: endLocation.lng,
-        },
-        // seatsRemaining: seats,
-        ...(startNearestStation && {
-          startNearestStation: {
-            id: startNearestStation.id,
-            name: startNearestStation.name,
-            direction: startNearestStation.direction,
-            stationType: startNearestStation.stationType,
-            lat: startNearestStation.lat,
-            lng: startNearestStation.lng,
-          },
-        }),
-        ...(endNearestStation && {
-          endNearestStation: {
-            id: endNearestStation.id,
-            name: endNearestStation.name,
-            direction: endNearestStation.direction,
-            stationType: endNearestStation.stationType,
-            lat: endNearestStation.lat,
-            lng: endNearestStation.lng,
-          },
-        }),
-        startTime,
-        endTime,
+    const nearestStation = findNearestStation(
+      normalizedOrigin.lat,
+      normalizedOrigin.lng,
+      stationDocs.map((station) => ({
+        id: station.objectId,
+        name: station.name,
+        direction: station.direction,
+        stationType: station.stationType,
+        zones: station.zones,
+        description: station.description,
+        landmark: station.landmark,
+        lat: station.lat,
+        lng: station.lng,
+        popupInfo: "",
       })),
     );
+    const startNearestStation = nearestStation
+      ? {
+          id: nearestStation.id,
+          lat: nearestStation.lat,
+          lng: nearestStation.lng,
+          name: nearestStation.name,
+        }
+      : null;
 
-    const created = await Availability.insertMany(docs);
-    return NextResponse.json({ ok: true, records: created }, { status: 201 });
-  } catch {
+    if (id != null && id !== "" && !isValidAvailabilityId(id))
+      return NextResponse.json({ error: "Invalid shift id." }, { status: 400 });
+
+    const windowError = validateAvailabilityWindow(startTime, endTime);
+    if (windowError)
+      return NextResponse.json({ error: windowError }, { status: 400 });
+
+    const DAY_NAMES: Record<string, string> = {
+      sun: "Sunday",
+      mon: "Monday",
+      tue: "Tuesday",
+      wed: "Wednesday",
+      thu: "Thursday",
+      fri: "Friday",
+      sat: "Saturday",
+    };
+
+    // Validate overlap for all target days
+    for (const day of targetDays) {
+      const sameDayShifts = await Availability.find({
+        driverId: session.userId,
+        dayOfWeek: day,
+        ...(id && isValidAvailabilityId(id) ? { _id: { $ne: id } } : {}),
+      })
+        .select("startTime endTime")
+        .lean<{ startTime: string; endTime: string }[]>();
+
+      if (shiftsOverlap(startTime as string, endTime as string, sameDayShifts)) {
+        return NextResponse.json(
+          {
+            error: `Shift overlaps with another shift on ${DAY_NAMES[day] ?? day} (${startTime}–${endTime}).`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (id && isValidAvailabilityId(id)) {
+      const record = await Availability.findOneAndUpdate(
+        { _id: id, driverId: session.userId },
+        {
+          $set: {
+            dayOfWeek: targetDays[0],
+            origin: normalizedOrigin,
+            startNearestStation,
+            startTime,
+            endTime,
+            active: active ?? true,
+          },
+        },
+        { new: true },
+      );
+      if (!record)
+        return NextResponse.json({ error: "Shift not found." }, { status: 404 });
+      return NextResponse.json({ ok: true, record, records: [record] }, { status: 200 });
+    }
+
+    // Create records for all selected target days
+    const createdRecords = await Promise.all(
+      targetDays.map((day) =>
+        Availability.create({
+          driverId: session.userId,
+          dayOfWeek: day,
+          origin: normalizedOrigin,
+          startNearestStation,
+          startTime,
+          endTime,
+          active: active ?? true,
+        }),
+      ),
+    );
+
     return NextResponse.json(
-      { error: "Could not create availability." },
+      { ok: true, record: createdRecords[0], records: createdRecords },
+      { status: 200 },
+    );
+  } catch (error) {
+    console.error("Driver availability save failed:", error);
+    return NextResponse.json(
+      {
+        error:
+          process.env.NODE_ENV === "production"
+            ? "Could not save availability."
+            : error instanceof Error
+              ? error.message
+              : "Could not save availability.",
+      },
       { status: 500 },
     );
   }
 }
+
+

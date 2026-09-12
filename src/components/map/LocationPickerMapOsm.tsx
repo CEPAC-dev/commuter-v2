@@ -21,12 +21,21 @@ const PIN_ICON = svgIcon(
   52,
 );
 
+export interface SavedAddress {
+  _id?: string;
+  label: string;
+  address: string;
+  lat: number;
+  lng: number;
+}
+
 interface Props {
   lat: string;
   lng: string;
   name: string;
   onChange: (lat: string, lng: string, name: string) => void;
   error?: string;
+  savedAddresses?: SavedAddress[];
 }
 
 function inCairo(lat: number, lng: number) {
@@ -38,12 +47,19 @@ function inCairo(lat: number, lng: number) {
   );
 }
 
+const SAVED_PIN_ICON = svgIcon(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="38"><path d="M15 0C6.7 0 0 6.7 0 15c0 11 15 23 15 23s15-12 15-23c0-8.3-6.7-15-15-15z" fill="#0B1E3D"/><circle cx="15" cy="15" r="6" fill="#F5A623"/></svg>`,
+  30,
+  38,
+);
+
 export default function LocationPickerMapOsm({
   lat,
   lng,
   name,
   onChange,
   error,
+  savedAddresses,
 }: Props) {
   const [map, setMap] = useState<L.Map | null>(null);
   const [query, setQuery] = useState(name);
@@ -86,6 +102,23 @@ export default function LocationPickerMapOsm({
   useEffect(() => {
     if (!map || !map.getPane("markerPane")) return;
     const layer = L.layerGroup().addTo(map);
+
+    if (savedAddresses && savedAddresses.length > 0) {
+      savedAddresses.forEach((place) => {
+        if (Number.isFinite(place.lat) && Number.isFinite(place.lng)) {
+          const savedPin = L.marker([place.lat, place.lng], {
+            icon: SAVED_PIN_ICON,
+            title: `${place.label}: ${place.address}`,
+          }).addTo(layer);
+          savedPin.on("click", () => {
+            setQuery(place.address);
+            onChange(place.lat.toFixed(6), place.lng.toFixed(6), place.address);
+            map.setView([place.lat, place.lng], 15);
+          });
+        }
+      });
+    }
+
     if (marker && Number.isFinite(marker.lat) && Number.isFinite(marker.lng)) {
       const pin = L.marker([marker.lat, marker.lng], {
         icon: PIN_ICON,
@@ -100,7 +133,7 @@ export default function LocationPickerMapOsm({
     return () => {
       layer.remove();
     };
-  }, [map, marker, setPoint]);
+  }, [map, marker, savedAddresses, setPoint]);
 
   const handleSearch = (value: string) => {
     setQuery(value);
@@ -137,6 +170,26 @@ export default function LocationPickerMapOsm({
 
   return (
     <div>
+      {savedAddresses && savedAddresses.length > 0 && (
+        <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-bold text-[#5A6A7A] mr-0.5">Saved places:</span>
+          {savedAddresses.map((place, idx) => (
+            <button
+              key={place._id ?? idx}
+              type="button"
+              onClick={() => {
+                setQuery(place.address);
+                onChange(place.lat.toFixed(6), place.lng.toFixed(6), place.address);
+                map?.setView([place.lat, place.lng], 15);
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#00c2a8]/40 bg-[#effaf8] px-2.5 py-1 text-xs font-extrabold text-[#008a76] hover:bg-[#00c2a8] hover:text-white transition-colors"
+            >
+              <MapPin size={12} />
+              <span>{place.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div style={{ position: "relative", marginBottom: 8 }}>
         <div
           style={{

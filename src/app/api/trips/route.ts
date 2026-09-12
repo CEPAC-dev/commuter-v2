@@ -13,8 +13,6 @@ import {
   priceForSelectedDate,
   type VehicleKey,
 } from "@/lib/config/vehicles";
-import { fetchRoute } from "@/lib/openrouteservice";
-import { fetchDirections } from "@/app/api/directions/route";
 import {
   isVehicleAvailableInRegion,
   normalizeRegion,
@@ -50,21 +48,6 @@ const PRIVATE_VEHICLE_KEYS = new Set<VehicleKey>([
   "private_car",
   "taxi_private",
 ]);
-
-async function calculateRoute(points: Array<{ lat: number; lng: number }>) {
-  const routes = await fetchRoute(points);
-  if (routes[0]) return routes[0];
-
-  const [origin, ...remainingPoints] = points;
-  const destination = remainingPoints.pop();
-  if (!origin || !destination) return null;
-  const fallbackRoutes = await fetchDirections(
-    `${origin.lat},${origin.lng}`,
-    `${destination.lat},${destination.lng}`,
-    remainingPoints.map((point) => `${point.lat},${point.lng}`).join("|"),
-  );
-  return fallbackRoutes[0] ?? null;
-}
 
 function stationPayload(
   station: Pick<GeoStation, "id" | "lat" | "lng" | "name">,
@@ -336,16 +319,29 @@ export async function POST(req: NextRequest) {
             },
       );
 
-      const routePoints = [t.pickup, ...stops.map((stop) => stop.point), t.dropoff];
-      const [route, ...legRoutes] = await Promise.all([
-        calculateRoute(routePoints),
-        ...routePoints.slice(0, -1).map((point, index) =>
-          calculateRoute([point, routePoints[index + 1]]),
-        ),
-      ]);
-      if (!route || legRoutes.some((legRoute) => !legRoute)) {
+      const submittedLegs = t.routeLegs ?? [];
+      if (
+        submittedLegs.length !== stops.length + 1 ||
+        submittedLegs.some(
+          (leg) =>
+            !Number.isFinite(leg.distanceKm) ||
+            leg.distanceKm < 0 ||
+            (leg.passengers != null &&
+              (!Number.isInteger(leg.passengers) || leg.passengers < 1)),
+        )
+      ) {
         return NextResponse.json(
-          { error: "Unable to calculate route" },
+          { error: "Invalid route legs" },
+          { status: 400 },
+        );
+      }
+      const routeDistanceKm = submittedLegs.reduce(
+        (sum, leg) => sum + leg.distanceKm,
+        0,
+      );
+      if (!Number.isFinite(t.durationMinutes) || t.durationMinutes < 0) {
+        return NextResponse.json(
+          { error: "Invalid trip durationMinutes" },
           { status: 400 },
         );
       }
@@ -364,10 +360,10 @@ export async function POST(req: NextRequest) {
         );
       }
       let passengersOnboard = numberOfPassengers;
-      const routeLegs = legRoutes.map((legRoute, index) => {
+      const routeLegs = submittedLegs.map((submittedLeg, index) => {
         const leg = {
-          distanceKm: legRoute!.distance_km,
-          passengers: passengersOnboard,
+          distanceKm: submittedLeg.distanceKm,
+          passengers: submittedLeg.passengers ?? passengersOnboard,
         };
         const stop = stops[index];
         if (stop) passengersOnboard += stop.boarding - stop.alighting;
@@ -406,8 +402,8 @@ export async function POST(req: NextRequest) {
         rideType: tripRideType,
         arrivalTime,
         pickupTime,
-        distanceKm: route.distance_km,
-        durationMinutes: route.duration_minutes,
+        distanceKm: routeDistanceKm,
+        durationMinutes: Math.round(Number(t.durationMinutes)),
         priceEgp,
         extraPassengers: 0,
         numberOfPassengers,
@@ -464,10 +460,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const route = await calculateRoute([selectedPickup, selectedDropoff]);
-    if (!route) {
+    if (!Number.isFinite(t.distanceKm) || t.distanceKm < 0) {
       return NextResponse.json(
-        { error: "Unable to calculate route" },
+        { error: "Invalid trip distanceKm" },
+        { status: 400 },
+      );
+    }
+    if (!Number.isFinite(t.durationMinutes) || t.durationMinutes < 0) {
+      return NextResponse.json(
+        { error: "Invalid trip durationMinutes" },
         { status: 400 },
       );
     }
@@ -496,7 +497,7 @@ export async function POST(req: NextRequest) {
     }
     const arrivalTime = snapToArrivalSlotMidpoint(t.arrivalTime);
     const priceEgp = computeTripPriceEgp({
-      distanceKm: route.distance_km,
+      distanceKm: Number(t.distanceKm),
       vehicleType: vKey,
       extraPassengers: Math.max(0, Math.round(Number(t.extraPassengers ?? 0))),
       vehiclesMap,
@@ -521,8 +522,8 @@ export async function POST(req: NextRequest) {
       rideType: tripRideType,
       arrivalTime,
       pickupTime,
-      distanceKm: route.distance_km,
-      durationMinutes: route.duration_minutes,
+      distanceKm: Number(t.distanceKm),
+      durationMinutes: Math.round(Number(t.durationMinutes)),
       priceEgp,
       extraPassengers,
       numberOfPassengers: 1,

@@ -17,12 +17,16 @@ const POLL_INTERVAL_MS = 30_000;
 
 function notificationHref(notification: NotificationItem): string {
   if (notification.type === "referral_bonus") return "/wallet";
+  if (notification.type === "ride_offer") return "/ride-requests";
 
   const bookingId = notification.data.bookingId;
   if (typeof bookingId === "string") return `/my-requests/${bookingId}`;
 
   const tripId = notification.data.tripId;
   if (typeof tripId === "string") return `/my-trips/${tripId}`;
+
+  const rideId = notification.data.rideId;
+  if (typeof rideId === "string") return "/my-trips";
 
   return "/user/notifications";
 }

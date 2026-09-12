@@ -71,11 +71,7 @@ export default async function AdminDashboardPage() {
 
   const charts = await loadDashboardCharts();
 
-  const [availabilities, drivers, trips] = await Promise.all([
-    Availability.find({ status: { $in: ["open", "matched"] } })
-      .select("_id date startTime endTime")
-      .sort({ date: 1, startTime: 1 })
-      .lean(),
+  const [drivers, trips] = await Promise.all([
     User.find({ role: "driver" })
       .select("_id name phone email")
       .sort({ name: 1 })
@@ -132,12 +128,6 @@ export default async function AdminDashboardPage() {
 
       <MatchRideForm
         initialDate={new Date().toISOString().slice(0, 10)}
-        availabilities={availabilities.map((item) => ({
-          _id: String(item._id),
-          date: item.date,
-          startTime: item.startTime,
-          endTime: item.endTime,
-        }))}
         drivers={drivers.map((driver) => ({
           _id: String(driver._id),
           name: driver.name,

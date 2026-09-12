@@ -3,10 +3,19 @@ import { isValidObjectId } from "mongoose";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { buildAssignedDriver } from "@/lib/services/trips";
-import { Availability } from "@/models/Availability";
+import { createNotification } from "@/lib/notifications/createNotification";
+import { Driver } from "@/models/Driver";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
+import { User } from "@/models/User";
 
+/**
+ * PATCH /api/admin/rides/:id/reassign
+ * Body: { driverId: string }
+ * Admin manual-assign escape hatch for rides broadcast with zero eligible
+ * drivers (needsManualAssignment). Force-assigns a driver directly instead
+ * of relying on the accept/reject offer flow.
+ */
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -20,14 +29,11 @@ export async function PATCH(
   }
 
   const body = (await req.json().catch(() => null)) as {
-    availabilityId?: unknown;
+    driverId?: unknown;
   } | null;
-  const availabilityId = String(body?.availabilityId ?? "");
-  if (!isValidObjectId(availabilityId)) {
-    return NextResponse.json(
-      { error: "availabilityId is required." },
-      { status: 400 },
-    );
+  const driverId = String(body?.driverId ?? "");
+  if (!isValidObjectId(driverId)) {
+    return NextResponse.json({ error: "driverId is required." }, { status: 400 });
   }
 
   await connectDB();
@@ -36,80 +42,60 @@ export async function PATCH(
   if (!ride) {
     return NextResponse.json({ error: "Ride not found." }, { status: 404 });
   }
-  if (ride.status !== "matched") {
+  if (ride.status === "completed" || ride.status === "cancelled") {
     return NextResponse.json(
-      { error: "Only rides with status 'matched' can be reassigned." },
+      { error: `Cannot assign a driver to a ${ride.status} ride.` },
       { status: 409 },
     );
   }
 
-  const availability = await Availability.findById(availabilityId);
-  if (!availability) {
-    return NextResponse.json(
-      { error: "Availability not found." },
-      { status: 404 },
-    );
+  const driverUser = await User.findOne({ _id: driverId, role: "driver" })
+    .select("_id")
+    .lean();
+  if (!driverUser) {
+    return NextResponse.json({ error: "Driver not found." }, { status: 404 });
   }
-  if (availability.date !== ride.date) {
+  const driverProfile = await Driver.findOne({ userId: driverId })
+    .select("verificationStatus")
+    .lean<{ verificationStatus?: string }>();
+  if (driverProfile?.verificationStatus !== "verified") {
     return NextResponse.json(
-      { error: "Availability date does not match the ride date." },
-      { status: 400 },
-    );
-  }
-  if (!availability.driverId) {
-    return NextResponse.json(
-      { error: "Availability has no driver attached." },
-      { status: 400 },
+      { error: "Driver must be verified before being assigned a ride." },
+      { status: 409 },
     );
   }
 
-  const driverId = availability.driverId;
   const assignedDriver = await buildAssignedDriver(driverId);
   if (!assignedDriver) {
     return NextResponse.json(
-      { error: "Could not resolve the driver of this availability." },
+      { error: "Could not resolve the driver's profile." },
       { status: 404 },
     );
   }
 
-  const previousAvailabilityId = ride.availabilityId
-    ? String(ride.availabilityId)
-    : null;
-
-  ride.availabilityId = availability._id;
-  ride.driverId = driverId;
+  ride.driverId = driverId as unknown as typeof ride.driverId;
   ride.assignedDriver = assignedDriver;
+  ride.offeredToDriverIds = [];
+  ride.needsManualAssignment = false;
+  if (ride.status === "matched") ride.status = "confirmed";
   await ride.save();
 
-  // `details` is a Mixed field that defaults to null — seed it before writing a dotted path.
+  const tripIds = (ride.passengers as unknown as Array<{ tripId?: unknown }>)
+    .map((passenger) => passenger.tripId)
+    .filter(Boolean);
   await Trip.updateMany(
-    {
-      rideId: ride._id,
-      $or: [{ details: null }, { details: { $exists: false } }],
-    },
-    { $set: { details: {} } },
-  );
-  await Trip.updateMany(
-    { rideId: ride._id },
-    {
-      $set: {
-        driverId,
-        assignedDriver,
-        "details.availabilityId": availability._id,
-      },
-    },
+    { _id: { $in: tripIds }, rideId: ride._id },
+    { $set: { driverId, assignedDriver, status: "confirmed" } },
   );
 
-  if (previousAvailabilityId && previousAvailabilityId !== availabilityId) {
-    await Availability.findByIdAndUpdate(previousAvailabilityId, {
-      $set: { matched: false, rideId: null, status: "open" },
-    });
-  }
-
-  availability.matched = true;
-  availability.rideId = ride._id;
-  availability.status = "matched";
-  await availability.save();
+  await createNotification({
+    userId: driverId,
+    type: "driver_assigned",
+    title: "You've been assigned a ride",
+    body: `${ride.date} at ${ride.startTime} · ${ride.totalCost} EGP`,
+    data: { rideId: String(ride._id) },
+  });
 
   return NextResponse.json({ ok: true });
 }
+
