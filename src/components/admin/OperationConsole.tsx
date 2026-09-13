@@ -24,7 +24,11 @@ function currentLocalDateTime() {
   return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
-export default function OperationConsole() {
+export default function OperationConsole({
+  regionCode,
+}: {
+  regionCode: string;
+}) {
   const [matchDate, setMatchDate] = useState("");
   const [matrixProvider, setMatrixProvider] = useState("osrm");
   const [valhallaCosting, setValhallaCosting] = useState("auto");
@@ -370,6 +374,7 @@ export default function OperationConsole() {
 
     try {
       const target = new URL("/api/stations", window.location.origin);
+      target.searchParams.set("region", regionCode);
       if (stationNumberQuery.trim()) {
         target.searchParams.set("stationNumber", stationNumberQuery.trim());
       }
@@ -412,6 +417,7 @@ export default function OperationConsole() {
         "/api/admin/stations/matrix",
         window.location.origin,
       );
+      target.searchParams.set("region", regionCode);
       target.searchParams.set("matrixProvider", stationsMatrixProvider);
       if (stationsMatrixProvider === "valhalla") {
         target.searchParams.set("valhallaCosting", stationsValhallaCosting);
@@ -480,19 +486,22 @@ export default function OperationConsole() {
     }
 
     try {
-      const response = await fetch("/api/stations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: stationFormName,
-          direction: stationFormDirection,
-          stationType: stationFormType,
-          landmark: stationFormLandmark,
-          lat,
-          lng,
-          active: true,
-        }),
-      });
+      const response = await fetch(
+        `/api/stations?region=${encodeURIComponent(regionCode)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: stationFormName,
+            direction: stationFormDirection,
+            stationType: stationFormType,
+            landmark: stationFormLandmark,
+            lat,
+            lng,
+            active: true,
+          }),
+        },
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(payload?.error || "Unable to create station.");
@@ -560,11 +569,14 @@ export default function OperationConsole() {
     }
 
     try {
-      const response = await fetch(`/api/stations/${stationPatchId.trim()}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        `/api/stations/${stationPatchId.trim()}?region=${encodeURIComponent(regionCode)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
       const result = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(result?.error || "Unable to update station.");
@@ -601,9 +613,12 @@ export default function OperationConsole() {
     }
 
     try {
-      const response = await fetch(`/api/stations/${stationDeleteId.trim()}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `/api/stations/${stationDeleteId.trim()}?region=${encodeURIComponent(regionCode)}`,
+        {
+          method: "DELETE",
+        },
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(payload?.error || "Unable to delete station.");
@@ -791,7 +806,13 @@ export default function OperationConsole() {
             >
               Export match data
             </h2>
-            <p style={{ margin: "6px 0 0", color: "var(--color-muted)", fontSize: 14 }}>
+            <p
+              style={{
+                margin: "6px 0 0",
+                color: "var(--color-muted)",
+                fontSize: 14,
+              }}
+            >
               Create the compressed match-data bundle for a chosen date. Leave
               the date blank to use the default next day.
             </p>
@@ -815,7 +836,13 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--color-primary)",
+              }}
+            >
               Date (optional)
             </span>
             <input
@@ -838,7 +865,13 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--color-primary)",
+              }}
+            >
               Matrix API calculator
             </span>
             <select
@@ -870,7 +903,11 @@ export default function OperationConsole() {
                 }}
               >
                 <span
-                  style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--color-primary)",
+                  }}
                 >
                   Valhalla costing
                 </span>
@@ -899,7 +936,11 @@ export default function OperationConsole() {
                 }}
               >
                 <span
-                  style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--color-primary)",
+                  }}
                 >
                   Traffic time
                 </span>
@@ -931,7 +972,11 @@ export default function OperationConsole() {
                   }}
                 >
                   <span
-                    style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "var(--color-primary)",
+                    }}
                   >
                     Traffic date and time
                   </span>
@@ -964,7 +1009,11 @@ export default function OperationConsole() {
                 }}
               >
                 <span
-                  style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--color-primary)",
+                  }}
                 >
                   Transportation type
                 </span>
@@ -995,7 +1044,11 @@ export default function OperationConsole() {
                 }}
               >
                 <span
-                  style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--color-primary)",
+                  }}
                 >
                   Departure time
                 </span>
@@ -1022,7 +1075,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: loadingMatchData ? "var(--color-disabled)" : "var(--color-secondary)",
+              background: loadingMatchData
+                ? "var(--color-disabled)"
+                : "var(--color-secondary)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -1066,7 +1121,13 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--color-primary)",
+              }}
+            >
               From date
             </span>
             <input
@@ -1089,7 +1150,13 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--color-primary)",
+              }}
+            >
               To date
             </span>
             <input
@@ -1110,7 +1177,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: loadingShiftDates ? "var(--color-disabled)" : "var(--color-primary)",
+              background: loadingShiftDates
+                ? "var(--color-disabled)"
+                : "var(--color-primary)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -1153,7 +1222,13 @@ export default function OperationConsole() {
               minWidth: 260,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--color-primary)",
+              }}
+            >
               Import workbook
             </span>
             <input
@@ -1177,7 +1252,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: loadingImport ? "var(--color-disabled)" : "var(--color-primary)",
+              background: loadingImport
+                ? "var(--color-disabled)"
+                : "var(--color-primary)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -1193,7 +1270,9 @@ export default function OperationConsole() {
             style={{
               margin: "10px 0 0",
               fontSize: 14,
-              color: importMessage.includes("success") ? "var(--color-secondary-deep)" : "var(--color-danger)",
+              color: importMessage.includes("success")
+                ? "var(--color-secondary-deep)"
+                : "var(--color-danger)",
             }}
           >
             {importMessage}
@@ -1213,7 +1292,13 @@ export default function OperationConsole() {
           >
             Rides cleanup
           </h2>
-          <p style={{ margin: "6px 0 0", color: "var(--color-muted)", fontSize: 14 }}>
+          <p
+            style={{
+              margin: "6px 0 0",
+              color: "var(--color-muted)",
+              fontSize: 14,
+            }}
+          >
             Delete rides by a specific date, clear all rides, or remove only
             rides created for today.
           </p>
@@ -1236,7 +1321,13 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--color-primary)",
+              }}
+            >
               Date (optional)
             </span>
             <input
@@ -1257,7 +1348,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: ridesPurgeLoading ? "var(--color-disabled)" : "var(--color-danger)",
+              background: ridesPurgeLoading
+                ? "var(--color-disabled)"
+                : "var(--color-danger)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -1281,7 +1374,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: ridesPurgeTodayLoading ? "var(--color-disabled)" : "var(--color-muted)",
+              background: ridesPurgeTodayLoading
+                ? "var(--color-disabled)"
+                : "var(--color-muted)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -1330,7 +1425,13 @@ export default function OperationConsole() {
             >
               Availabilities
             </h2>
-            <p style={{ margin: "6px 0 0", color: "var(--color-muted)", fontSize: 14 }}>
+            <p
+              style={{
+                margin: "6px 0 0",
+                color: "var(--color-muted)",
+                fontSize: 14,
+              }}
+            >
               Inspect current records, download a JSON backup, or restore a
               saved availability snapshot.
             </p>
@@ -1353,7 +1454,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: availabilityBackupLoading ? "var(--color-disabled)" : "var(--color-secondary)",
+              background: availabilityBackupLoading
+                ? "var(--color-disabled)"
+                : "var(--color-secondary)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -1384,7 +1487,13 @@ export default function OperationConsole() {
               minWidth: 260,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--color-primary)",
+              }}
+            >
               Restore JSON backup
             </span>
             <input
@@ -1408,7 +1517,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: availabilityRestoreLoading ? "var(--color-disabled)" : "var(--color-primary)",
+              background: availabilityRestoreLoading
+                ? "var(--color-disabled)"
+                : "var(--color-primary)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -1438,7 +1549,13 @@ export default function OperationConsole() {
               minWidth: 220,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--color-primary)",
+              }}
+            >
               Date (optional)
             </span>
             <input
@@ -1501,7 +1618,13 @@ export default function OperationConsole() {
               padding: 12,
             }}
           >
-            <p style={{ margin: "0 0 8px", color: "var(--color-primary)", fontWeight: 700 }}>
+            <p
+              style={{
+                margin: "0 0 8px",
+                color: "var(--color-primary)",
+                fontWeight: 700,
+              }}
+            >
               Found {availabilitySummary.totalCount ?? 0} record(s)
             </p>
             {availabilitySummary.records?.length ? (
@@ -1527,7 +1650,9 @@ export default function OperationConsole() {
                   ))}
               </ul>
             ) : (
-              <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}>
+              <p
+                style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}
+              >
                 No records available for this filter.
               </p>
             )}
@@ -1547,7 +1672,13 @@ export default function OperationConsole() {
           >
             Stations operations
           </h2>
-          <p style={{ margin: "6px 0 0", color: "var(--color-muted)", fontSize: 14 }}>
+          <p
+            style={{
+              margin: "6px 0 0",
+              color: "var(--color-muted)",
+              fontSize: 14,
+            }}
+          >
             Use station APIs to list/search, create, update, delete, and bulk
             import station points.
           </p>
@@ -1804,7 +1935,13 @@ export default function OperationConsole() {
               minWidth: 240,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--color-primary)",
+              }}
+            >
               Station number (optional)
             </span>
             <input
@@ -1825,7 +1962,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: stationsLoading ? "var(--color-disabled)" : "var(--color-secondary)",
+              background: stationsLoading
+                ? "var(--color-disabled)"
+                : "var(--color-secondary)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -1918,7 +2057,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: stationsCreateLoading ? "var(--color-disabled)" : "var(--color-primary)",
+              background: stationsCreateLoading
+                ? "var(--color-disabled)"
+                : "var(--color-primary)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -1955,7 +2096,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: stationsPatchLoading ? "var(--color-muted)" : "var(--color-muted)",
+              background: stationsPatchLoading
+                ? "var(--color-muted)"
+                : "var(--color-muted)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -1996,7 +2139,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: stationsDeleteLoading ? "var(--color-disabled)" : "var(--color-danger)",
+              background: stationsDeleteLoading
+                ? "var(--color-disabled)"
+                : "var(--color-danger)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -2037,7 +2182,9 @@ export default function OperationConsole() {
             style={{
               border: "none",
               borderRadius: 10,
-              background: stationsImportLoading ? "var(--color-disabled)" : "var(--color-secondary)",
+              background: stationsImportLoading
+                ? "var(--color-disabled)"
+                : "var(--color-secondary)",
               color: "var(--color-on-primary)",
               fontWeight: 700,
               padding: "10px 16px",
@@ -2074,7 +2221,13 @@ export default function OperationConsole() {
               padding: 12,
             }}
           >
-            <p style={{ margin: "0 0 8px", color: "var(--color-primary)", fontWeight: 700 }}>
+            <p
+              style={{
+                margin: "0 0 8px",
+                color: "var(--color-primary)",
+                fontWeight: 700,
+              }}
+            >
               Showing {Math.min(stationsData.length, 10)} of{" "}
               {stationsData.length} station(s)
             </p>

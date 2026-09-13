@@ -5,7 +5,6 @@ import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { nextSequence } from "@/models/Counter";
 import { Station } from "@/models/Station";
-import { User } from "@/models/User";
 import {
   VEHICLES,
   computePrivateTripPriceEgp,
@@ -13,10 +12,8 @@ import {
   priceForSelectedDate,
   type VehicleKey,
 } from "@/lib/config/vehicles";
-import {
-  isVehicleAvailableInRegion,
-  normalizeRegion,
-} from "@/lib/config/regions";
+import { isVehicleAvailableInRegion } from "@/lib/config/regions";
+import { resolveActiveRegion } from "@/lib/regions/resolveActiveRegion";
 import { isDateInWindow } from "@/lib/time/bookingDates";
 import {
   ARRIVAL_SLOT_END_MIN,
@@ -164,16 +161,17 @@ export async function POST(req: NextRequest) {
 
   await connectDB();
 
-  const userRegionDoc = await User.findById(userId).select("region").lean<{
-    region?: string;
-  }>();
-  const userRegion = normalizeRegion(userRegionDoc?.region);
+  const activeRegion = await resolveActiveRegion({ userId });
+  const userRegion = activeRegion.code;
   const allowedVehicleSet = new Set(
     Object.keys(vehiclesMap).filter((key) =>
       isVehicleAvailableInRegion(key, userRegion),
     ),
   );
-  const stationDocs = await Station.find({ active: true }).lean();
+  const stationDocs = await Station.find({
+    regionCode: userRegion,
+    active: true,
+  }).lean();
   const canonicalStations: GeoStation[] = stationDocs.map((station) => ({
     id: station.objectId,
     name: station.name || station.direction || "",
@@ -638,6 +636,7 @@ export async function POST(req: NextRequest) {
   try {
     const request = await Request.create({
       userId: new Types.ObjectId(userId),
+      regionCode: userRegion,
       tripIds: tripInstances.map((instance) => instance.id),
       dates,
       amountEgp,
@@ -652,6 +651,7 @@ export async function POST(req: NextRequest) {
         _id: instance.id,
         tripNumber: await nextSequence("tripNumber"),
         requestId: request._id,
+        regionCode: userRegion,
         userId: new Types.ObjectId(userId),
         date: instance.date,
         cycleIndex: instance.cycleIndex,

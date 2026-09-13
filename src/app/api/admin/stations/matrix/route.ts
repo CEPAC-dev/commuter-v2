@@ -61,7 +61,10 @@ function styleMatrixWorksheet(sheet: ExcelJS.Worksheet) {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth();
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+  );
   if (!auth.authorized) return auth.response;
 
   const requestedProvider = req.nextUrl.searchParams.get("matrixProvider");
@@ -101,7 +104,7 @@ export async function GET(req: NextRequest) {
       : new Date().toISOString();
 
   await connectDB();
-  const stations = await Station.find({})
+  const stations = await Station.find({ regionCode: auth.region.code })
     .select("objectId lat lng name zones description landmark direction")
     .sort({ objectId: 1 })
     .lean<StationRow[]>();

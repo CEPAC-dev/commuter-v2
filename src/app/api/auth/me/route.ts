@@ -4,7 +4,7 @@ import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
 import { getSession } from "@/lib/auth/session";
 import { carTypeToCapacity, type CarType } from "@/lib/config/driver";
-import { isRegionKey } from "@/lib/config/regions";
+import { isRegionKey, normalizeRegion } from "@/lib/config/regions";
 import { getProfile } from "@/lib/services/profile";
 import {
   normalizePlainText,
@@ -43,7 +43,7 @@ export async function PATCH(req: NextRequest) {
       if (!isRegionKey(region)) {
         return NextResponse.json({ error: "Invalid region." }, { status: 400 });
       }
-      userUpdate.region = region;
+      userUpdate.region = normalizeRegion(region);
     }
     if (phone !== undefined) {
       const trimmed = typeof phone === "string" ? phone.trim() : "";
@@ -76,8 +76,11 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (typeof userUpdate.phone === "string") {
-      const currentUser = await User.findById(session.userId).select("phone").lean();
-      if (currentUser?.phone !== userUpdate.phone) userUpdate.phoneVerifiedAt = null;
+      const currentUser = await User.findById(session.userId)
+        .select("phone")
+        .lean();
+      if (currentUser?.phone !== userUpdate.phone)
+        userUpdate.phoneVerifiedAt = null;
     }
 
     const user = await User.findByIdAndUpdate(session.userId, userUpdate, {

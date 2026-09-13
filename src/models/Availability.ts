@@ -22,6 +22,12 @@ const AvailabilitySchema = new Schema(
       required: true,
       index: true,
     },
+    regionCode: {
+      type: String,
+      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      default: null,
+      index: true,
+    },
     dayOfWeek: {
       type: String,
       required: true,
@@ -43,7 +49,12 @@ const AvailabilitySchema = new Schema(
 // Not unique — a driver can have multiple shifts (records) on the same day.
 AvailabilitySchema.index({ driverId: 1, dayOfWeek: 1 });
 
+const existingAvailabilityModel = models.Availability;
+if (existingAvailabilityModel && !existingAvailabilityModel.schema.path("regionCode")) {
+  existingAvailabilityModel.schema.add({ regionCode: AvailabilitySchema.obj.regionCode });
+}
+
 export type AvailabilityDoc = InferSchemaType<typeof AvailabilitySchema>;
 export const Availability =
-  models.Availability || model("Availability", AvailabilitySchema);
+  existingAvailabilityModel || model("Availability", AvailabilitySchema);
 

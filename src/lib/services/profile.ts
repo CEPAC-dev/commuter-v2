@@ -4,7 +4,11 @@ import type { UserRole } from "@/lib/auth/session";
 import { Driver } from "@/models/Driver";
 import { User } from "@/models/User";
 import type { SavedAddress } from "@/types/shared";
-import { isRegionKey, type RegionKey } from "@/lib/config/regions";
+import {
+  isRegionKey,
+  normalizeRegion,
+  type RegionCode,
+} from "@/lib/config/regions";
 
 interface ProfileUser {
   userNumber: number;
@@ -13,7 +17,7 @@ interface ProfileUser {
   phone: string;
   phoneVerifiedAt: string | null;
   hasSecurityQuestion: boolean;
-  region: RegionKey | null;
+  region: RegionCode | null;
   savedAddresses: SavedAddress[];
 }
 
@@ -52,7 +56,9 @@ export async function getProfile(
   await connectDB();
 
   const user = await User.findById(userId)
-    .select("userNumber name email phone phoneVerifiedAt securityQuestionId +securityAnswerHash profilePic region savedAddresses")
+    .select(
+      "userNumber name email phone phoneVerifiedAt securityQuestionId +securityAnswerHash profilePic region savedAddresses",
+    )
     .lean<{
       userNumber: number;
       name: string;
@@ -78,7 +84,7 @@ export async function getProfile(
     hasSecurityQuestion: Boolean(
       user.securityQuestionId && user.securityAnswerHash,
     ),
-    region: isRegionKey(user.region) ? user.region : null,
+    region: isRegionKey(user.region) ? normalizeRegion(user.region) : null,
     savedAddresses: serializeAddresses(user.savedAddresses),
   };
   if (role !== "driver")

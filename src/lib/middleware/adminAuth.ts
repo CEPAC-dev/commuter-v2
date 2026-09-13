@@ -3,8 +3,38 @@ import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import {
+  RegionAccessError,
+  resolveActiveRegion,
+  type ActiveRegion,
+} from "@/lib/regions/resolveActiveRegion";
 
-export async function adminAuth(requiredPermission?: PermissionKey) {
+type AdminAuthFailure = {
+  authorized: false;
+  response: NextResponse;
+};
+
+type AdminAuthSuccess = {
+  authorized: true;
+  userId: string;
+  permissions: string[];
+};
+
+type RegionAdminAuthSuccess = AdminAuthSuccess & {
+  region: ActiveRegion;
+};
+
+export function adminAuth(
+  requiredPermission: PermissionKey | undefined,
+  requestedRegion: string | null,
+): Promise<AdminAuthFailure | RegionAdminAuthSuccess>;
+export function adminAuth(
+  requiredPermission?: PermissionKey,
+): Promise<AdminAuthFailure | AdminAuthSuccess>;
+export async function adminAuth(
+  requiredPermission?: PermissionKey,
+  requestedRegion?: string | null,
+): Promise<AdminAuthFailure | AdminAuthSuccess | RegionAdminAuthSuccess> {
   const session = await getSession();
   if (!session) {
     return {
@@ -39,6 +69,29 @@ export async function adminAuth(requiredPermission?: PermissionKey) {
         { status: 403 },
       ),
     };
+  }
+
+  if (requestedRegion !== undefined) {
+    try {
+      const region = await resolveActiveRegion({
+        userId: session.userId,
+        requested: requestedRegion,
+      });
+      return {
+        authorized: true as const,
+        userId: session.userId,
+        permissions: user.permissions ?? [],
+        region,
+      };
+    } catch (error) {
+      const status = error instanceof RegionAccessError ? error.status : 403;
+      const message =
+        error instanceof Error ? error.message : "Region access denied.";
+      return {
+        authorized: false as const,
+        response: NextResponse.json({ error: message }, { status }),
+      };
+    }
   }
 
   return {
