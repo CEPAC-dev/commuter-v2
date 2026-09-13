@@ -8,6 +8,7 @@ import {
 } from "@/lib/regions/resolveActiveRegion";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { StationAuditLog } from "@/models/StationAuditLog";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 
 interface StationSource {
   objectId?: number;
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
 // Admin — create a single station point
 export async function POST(req: NextRequest) {
   const auth = await adminAuth(
-    undefined,
+    PERMISSIONS.STATIONS_MANAGE,
     req.nextUrl.searchParams.get("region"),
   );
   if (!auth.authorized) return auth.response;
@@ -118,19 +119,23 @@ export async function POST(req: NextRequest) {
 
   const lat = Number(body.lat);
   const lng = Number(body.lng);
-  if (!isFinite(lat) || !isFinite(lng)) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
     return NextResponse.json({ error: "Invalid lat/lng" }, { status: 400 });
   }
 
   await connectDB();
 
-  const maxDoc = await Station.findOne()
-    .sort({ objectId: -1 })
-    .select("objectId");
-  const nextObjectId = (maxDoc?.objectId ?? 0) + 1;
+  const objectId = Number(body.objectId ?? body.sourceObjectId);
+  if (!Number.isInteger(objectId) || objectId < 0) {
+    return NextResponse.json({ error: "A non-negative objectId is required." }, { status: 400 });
+  }
+  const duplicate = await Station.exists({ objectId });
+  if (duplicate) return NextResponse.json({ error: "objectId already exists; the legacy global identity index remains in force." }, { status: 409 });
 
   const station = await Station.create({
-    objectId: nextObjectId,
+    objectId,
+    sourceObjectId: objectId,
+    sourceKind: "manual",
     name: String(body.name ?? ""),
     direction: String(body.direction ?? ""),
     zones: String(body.zones ?? ""),
@@ -147,7 +152,8 @@ export async function POST(req: NextRequest) {
     action: "manual_create",
     regionCode: auth.region.code,
     actorId: auth.userId,
-    metadata: { objectId: station.objectId },
+    stationId: station._id,
+    metadata: { objectId: station.objectId, after: station.toObject() },
   });
 
   return NextResponse.json({ station: serialize(station) }, { status: 201 });

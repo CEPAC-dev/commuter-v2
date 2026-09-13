@@ -17,6 +17,11 @@ export interface StationDatasetDiff {
   removedCount: number;
   unchangedCount: number;
 }
+export interface StationDatasetDiffDetails extends StationDatasetDiff {
+  added: StationDatasetRecord[];
+  removed: StationDatasetRecord[];
+  updated: Array<{ station: StationDatasetRecord; changedFields: Array<keyof StationDatasetRecord> }>;
+}
 
 export function diffStationDataset(
   incoming: StationDatasetRecord[],
@@ -50,4 +55,21 @@ export function diffStationDataset(
     removedCount: active.filter((station) => !incomingIds.has(station.objectId))
       .length,
   };
+}
+
+export function diffStationDatasetDetailed(incoming: StationDatasetRecord[], active: StationDatasetRecord[]): StationDatasetDiffDetails {
+  const activeById = new Map(active.map((station) => [station.objectId, station]));
+  const incomingIds = new Set(incoming.map((station) => station.objectId));
+  const added: StationDatasetRecord[] = [];
+  const updated: StationDatasetDiffDetails["updated"] = [];
+  for (const station of incoming) {
+    const current = activeById.get(station.objectId);
+    if (!current) added.push(station);
+    else {
+      const changedFields = COMPARISON_FIELDS.filter((field) => station[field] !== current[field]);
+      if (changedFields.length) updated.push({ station, changedFields });
+    }
+  }
+  const removed = active.filter((station) => !incomingIds.has(station.objectId));
+  return { added, removed, updated, ...diffStationDataset(incoming, active) };
 }

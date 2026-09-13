@@ -25,6 +25,7 @@ const StationSchema = new Schema(
       default: null,
     },
     sourceObjectId: { type: Number, required: false, default: null },
+    sourceKind: { type: String, enum: ["dataset", "manual"], default: "dataset" },
   },
   { timestamps: true },
 );

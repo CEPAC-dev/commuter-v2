@@ -75,7 +75,7 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
   taxi_shared: {
     key: "taxi_shared",
     label: "Shared Taxi",
-    rate: 5,
+    rate: 4,
     additional_rate: 0.5, // EGP per km for extra passengers
     ride: "shared",
     vehicle_type: 2,

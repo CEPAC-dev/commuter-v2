@@ -8,6 +8,7 @@ import {
 import { formatMoney } from "../src/lib/money.ts";
 import { validateStationGeoJson } from "../src/lib/stations/validateGeoJson.ts";
 import { diffStationDataset } from "../src/lib/stations/diffDataset.ts";
+import { diffStationDatasetDetailed } from "../src/lib/stations/diffDataset.ts";
 
 test("normalizes legacy region aliases", () => {
     assert.equal(normalizeRegion("EG"), "EG-CAIRO");
@@ -96,4 +97,14 @@ test("formats money using the regional currency", () => {
     assert.match(formatMoney("en", 125, "EG-CAIRO"), /EGP/);
     assert.match(formatMoney("en", 125, "SA"), /SAR/);
     assert.match(formatMoney("en", 125, "AE-ABU-DHABI"), /AED/);
+});
+
+test("includes changed source fields in station dataset previews", () => {
+    const base = { direction: "N", zones: "Z", description: "", landmark: "", stationType: "1", lat: 30, lng: 31 };
+    const detail = diffStationDatasetDetailed(
+        [{ ...base, objectId: 1, name: "New name", lat: 30.1 }],
+        [{ ...base, objectId: 1, name: "Old name" }],
+    );
+    assert.equal(detail.updated.length, 1);
+    assert.deepEqual(detail.updated[0].changedFields, ["name", "lat"]);
 });

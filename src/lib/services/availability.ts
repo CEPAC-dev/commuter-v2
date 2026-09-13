@@ -2,12 +2,9 @@ import "server-only";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
 import { Station } from "@/models/Station";
+import type { RegionCode } from "@/lib/config/regions";
 import { findNearestStation } from "@/lib/geo/stations";
 import type { GeoPoint } from "@/types/geo";
-import {
-  MAX_AVAILABILITY_MINUTES,
-  validateAvailabilityWindow,
-} from "@/lib/time/availabilityWindow";
 
 export const DAYS_OF_WEEK = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 export type DayOfWeek = (typeof DAYS_OF_WEEK)[number];
@@ -26,6 +23,7 @@ export interface AvailabilityRecord {
 
 export async function listDriverAvailability(
   driverId: string,
+  regionCode: RegionCode,
 ): Promise<AvailabilityRecord[]> {
   await connectDB();
   const records = await Availability.find({ driverId }).lean<
@@ -40,7 +38,7 @@ export async function listDriverAvailability(
     }[]
   >();
 
-  const stations = await Station.find({ active: true })
+  const stations = await Station.find({ active: true, regionCode })
     .select("objectId name direction stationType zones description landmark lat lng")
     .lean();
   const stationData = stations.map((station) => ({

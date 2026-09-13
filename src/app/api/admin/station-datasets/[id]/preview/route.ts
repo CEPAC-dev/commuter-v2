@@ -5,7 +5,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Station } from "@/models/Station";
 import { StationDataset } from "@/models/StationDataset";
 import { StationAuditLog } from "@/models/StationAuditLog";
-import { diffStationDataset } from "@/lib/stations/diffDataset";
+import { diffStationDatasetDetailed } from "@/lib/stations/diffDataset";
 
 export async function GET(
   req: NextRequest,
@@ -42,7 +42,7 @@ export async function GET(
       "objectId name direction zones description landmark stationType lat lng",
     )
     .lean();
-  const diff = diffStationDataset(dataset.normalizedStations, active);
+  const diff = diffStationDatasetDetailed(dataset.normalizedStations, active);
   await StationDataset.updateOne({ _id: dataset._id }, { $set: diff });
   await StationAuditLog.create({
     action: "preview",

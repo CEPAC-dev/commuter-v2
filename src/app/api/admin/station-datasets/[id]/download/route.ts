@@ -4,6 +4,7 @@ import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { StationDataset } from "@/models/StationDataset";
 import { getStationDatasetSource } from "@/lib/storage/stationDatasetStorage";
+import { StationAuditLog } from "@/models/StationAuditLog";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,7 @@ export async function GET(
   try {
     const source = await getStationDatasetSource(dataset.file.storageKey);
     const safeName = dataset.file.originalName.replace(/[^A-Za-z0-9._-]/g, "_");
+    await StationAuditLog.create({ action: "download", regionCode: auth.region.code, datasetVersionId: dataset._id, actorId: auth.userId });
     return new NextResponse(Buffer.from(source.bytes), {
       headers: {
         "Content-Type": source.contentType,
