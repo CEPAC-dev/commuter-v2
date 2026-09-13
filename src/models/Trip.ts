@@ -95,6 +95,12 @@ const TripSchema = new Schema(
       required: true,
       index: true,
     },
+    regionCode: {
+      type: String,
+      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      default: null,
+      index: true,
+    },
     userId: { type: Types.ObjectId, ref: "User", required: true, index: true },
     driverId: {
       type: Types.ObjectId,
@@ -121,6 +127,7 @@ const TripSchema = new Schema(
         "shared_car",
         "van_shared",
         "microbus_shared",
+        "mini_bus",
       ],
     },
     rideType: { type: String, required: true, enum: ["private", "shared"] },
@@ -263,10 +270,9 @@ TripSchema.index({ requestId: 1, date: 1 });
 TripSchema.index({ userId: 1, date: -1 });
 TripSchema.index({ driverId: 1, date: -1 });
 
-// const existingTripModel = models.Trip;
-// if (existingTripModel && !existingTripModel.schema.path("tripNumber")) {
-//   existingTripModel.schema.add({ tripNumber: TripSchema.obj.tripNumber });
-// }
-
 export type TripDoc = InferSchemaType<typeof TripSchema>;
-export const Trip = models.Trip || model("Trip", TripSchema);
+const existingTripModel = models.Trip;
+if (existingTripModel && !existingTripModel.schema.path("regionCode")) {
+  existingTripModel.schema.add({ regionCode: TripSchema.obj.regionCode });
+}
+export const Trip = existingTripModel || model("Trip", TripSchema);

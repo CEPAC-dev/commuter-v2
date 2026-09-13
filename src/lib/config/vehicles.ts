@@ -6,7 +6,8 @@ export type VehicleKey =
   | "taxi_shared"
   | "shared_car"
   | "van_shared"
-  | "microbus_shared";
+  | "microbus_shared"
+  | "mini_bus";
 export type RideType = "private" | "shared";
 
 export interface VehicleConfig {
@@ -116,6 +117,21 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     min_occupancy: 3,
     minimum_charge: 50, // EGP minimum charge for microbus rides
   },
+  mini_bus: {
+    key: "mini_bus",
+    label: "Mini Bus",
+    rate: 3.5,
+    additional_rate: 0.5,
+    ride: "shared",
+    vehicle_type: 4,
+    trip_type: 7,
+    buffer: 45,
+    window: 30,
+    capacity: 14,
+    occupancy: 14,
+    min_occupancy: 4,
+    minimum_charge: 50,
+  },
 };
 
 export const VEHICLE_LIST = Object.values(VEHICLES);
@@ -156,6 +172,7 @@ export function maxExtraPassengers(key: VehicleKey | ""): number {
   if (key === "taxi_shared" || key === "shared_car") return 2;
   if (key === "van_shared") return 4;
   if (key === "microbus_shared") return 9;
+  if (key === "mini_bus") return 13;
   return 2; // private_car, taxi_private, taxi_shared, or unset
 }
 
@@ -200,6 +217,10 @@ export function finalPrice(
       if (n === 8) return r(4);
       if (n === 9) return r(4.5);
       return basePrice;
+    }
+
+    if (vehicleType === "mini_bus") {
+      return r(Math.min(n, 13) * 0.5);
     }
 
     return basePrice;

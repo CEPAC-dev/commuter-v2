@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Station } from "@/models/Station";
+import { StationAuditLog } from "@/models/StationAuditLog";
 
 // Admin — update a station point (by its objectId, not Mongo _id)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getSession();
-  if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+  );
+  if (!auth.authorized) return auth.response;
 
   const { id } = await params;
   const objectId = Number(id);
@@ -51,12 +53,19 @@ export async function PATCH(
 
   await connectDB();
   const station = await Station.findOneAndUpdate(
-    { objectId },
+    { objectId, regionCode: auth.region.code },
     { $set: patch },
     { returnDocument: "after" },
   );
   if (!station)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await StationAuditLog.create({
+    action: "manual_update",
+    regionCode: auth.region.code,
+    actorId: auth.userId,
+    metadata: { objectId, fields: Object.keys(patch) },
+  });
 
   return NextResponse.json({
     station: {
@@ -72,13 +81,14 @@ export async function PATCH(
 
 // Admin — remove a station point
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getSession();
-  if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+  );
+  if (!auth.authorized) return auth.response;
 
   const { id } = await params;
   const objectId = Number(id);
@@ -87,9 +97,19 @@ export async function DELETE(
   }
 
   await connectDB();
-  const res = await Station.deleteOne({ objectId });
-  if (res.deletedCount === 0)
+  const station = await Station.findOneAndUpdate(
+    { objectId, regionCode: auth.region.code },
+    { $set: { active: false } },
+  );
+  if (!station)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await StationAuditLog.create({
+    action: "manual_delete",
+    regionCode: auth.region.code,
+    actorId: auth.userId,
+    metadata: { objectId, softDelete: true },
+  });
 
   return NextResponse.json({ ok: true });
 }

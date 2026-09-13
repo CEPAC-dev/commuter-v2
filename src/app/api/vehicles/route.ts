@@ -10,6 +10,7 @@ const ALLOWED_KEYS = [
   "shared_car",
   "van_shared",
   "microbus_shared",
+  "mini_bus",
 ];
 const ALLOWED_RIDE = ["private", "shared"];
 

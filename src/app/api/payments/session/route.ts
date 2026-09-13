@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     );
 
   const totalEgp = Number(booking.amountEgp);
-  if (!Number.isFinite(totalEgp) || totalEgp <= 0)
+  if (!Number.isFinite(totalEgp) || totalEgp < 0)
     return NextResponse.json(
       { error: "Invalid booking amount." },
       { status: 400 },

@@ -13,6 +13,7 @@ const VehicleSchema = new Schema(
         "shared_car",
         "van_shared",
         "microbus_shared",
+        "mini_bus",
       ],
     },
     label: { type: String, required: true },

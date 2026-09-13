@@ -3,8 +3,15 @@ import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import {
+  RegionAccessError,
+  resolveActiveRegion,
+} from "@/lib/regions/resolveActiveRegion";
 
-export async function adminAuth(requiredPermission?: PermissionKey) {
+export async function adminAuth(
+  requiredPermission?: PermissionKey,
+  requestedRegion?: string | null,
+) {
   const session = await getSession();
   if (!session) {
     return {
@@ -39,6 +46,29 @@ export async function adminAuth(requiredPermission?: PermissionKey) {
         { status: 403 },
       ),
     };
+  }
+
+  if (requestedRegion !== undefined) {
+    try {
+      const region = await resolveActiveRegion({
+        userId: session.userId,
+        requested: requestedRegion,
+      });
+      return {
+        authorized: true as const,
+        userId: session.userId,
+        permissions: user.permissions ?? [],
+        region,
+      };
+    } catch (error) {
+      const status = error instanceof RegionAccessError ? error.status : 403;
+      const message =
+        error instanceof Error ? error.message : "Region access denied.";
+      return {
+        authorized: false as const,
+        response: NextResponse.json({ error: message }, { status }),
+      };
+    }
   }
 
   return {

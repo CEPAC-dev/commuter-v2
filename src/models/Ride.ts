@@ -93,6 +93,12 @@ const RideSchema = new Schema(
       sparse: true,
       immutable: true,
     },
+    regionCode: {
+      type: String,
+      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      default: null,
+      index: true,
+    },
     availabilityId: {
       type: Types.ObjectId,
       ref: "Availability",
@@ -122,6 +128,7 @@ const RideSchema = new Schema(
         "shared_car",
         "van_shared",
         "microbus_shared",
+        "mini_bus",
       ],
     },
     // combined, ordered pickup/dropoff sequence across all passengers on this ride
@@ -168,5 +175,10 @@ RideSchema.index({ driverId: 1, date: -1 });
 RideSchema.index({ availabilityId: 1 });
 RideSchema.index({ "passengers.tripId": 1 });
 
+const existingRideModel = models.Ride;
+if (existingRideModel && !existingRideModel.schema.path("regionCode")) {
+  existingRideModel.schema.add({ regionCode: RideSchema.obj.regionCode });
+}
+
 export type RideDoc = InferSchemaType<typeof RideSchema>;
-export const Ride = models.Ride || model("Ride", RideSchema);
+export const Ride = existingRideModel || model("Ride", RideSchema);
