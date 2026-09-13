@@ -31,6 +31,7 @@ export async function GET(
     _id: id,
     regionCode: region.code,
   }).lean();
+
   if (!dataset)
     return NextResponse.json({ error: "Dataset not found." }, { status: 404 });
   try {
