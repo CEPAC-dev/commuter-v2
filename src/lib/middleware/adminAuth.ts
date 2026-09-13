@@ -6,12 +6,35 @@ import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import {
   RegionAccessError,
   resolveActiveRegion,
+  type ActiveRegion,
 } from "@/lib/regions/resolveActiveRegion";
 
+type AdminAuthFailure = {
+  authorized: false;
+  response: NextResponse;
+};
+
+type AdminAuthSuccess = {
+  authorized: true;
+  userId: string;
+  permissions: string[];
+};
+
+type RegionAdminAuthSuccess = AdminAuthSuccess & {
+  region: ActiveRegion;
+};
+
+export function adminAuth(
+  requiredPermission: PermissionKey | undefined,
+  requestedRegion: string | null,
+): Promise<AdminAuthFailure | RegionAdminAuthSuccess>;
+export function adminAuth(
+  requiredPermission?: PermissionKey,
+): Promise<AdminAuthFailure | AdminAuthSuccess>;
 export async function adminAuth(
   requiredPermission?: PermissionKey,
   requestedRegion?: string | null,
-) {
+): Promise<AdminAuthFailure | AdminAuthSuccess | RegionAdminAuthSuccess> {
   const session = await getSession();
   if (!session) {
     return {

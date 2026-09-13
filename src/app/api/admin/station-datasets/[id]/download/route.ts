@@ -17,20 +17,31 @@ export async function GET(
     req.nextUrl.searchParams.get("region"),
   );
   if (!auth.authorized) return auth.response;
+  if (!auth.region)
+    return NextResponse.json(
+      { error: "Region context is required." },
+      { status: 500 },
+    );
+  const region = auth.region;
   const { id } = await params;
   if (!Types.ObjectId.isValid(id))
     return NextResponse.json({ error: "Invalid dataset id." }, { status: 400 });
   await connectDB();
   const dataset = await StationDataset.findOne({
     _id: id,
-    regionCode: auth.region.code,
+    regionCode: region.code,
   }).lean();
   if (!dataset)
     return NextResponse.json({ error: "Dataset not found." }, { status: 404 });
   try {
     const source = await getStationDatasetSource(dataset.file.storageKey);
     const safeName = dataset.file.originalName.replace(/[^A-Za-z0-9._-]/g, "_");
-    await StationAuditLog.create({ action: "download", regionCode: auth.region.code, datasetVersionId: dataset._id, actorId: auth.userId });
+    await StationAuditLog.create({
+      action: "download",
+      regionCode: region.code,
+      datasetVersionId: dataset._id,
+      actorId: auth.userId,
+    });
     return new NextResponse(Buffer.from(source.bytes), {
       headers: {
         "Content-Type": source.contentType,

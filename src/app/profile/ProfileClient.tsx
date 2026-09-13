@@ -580,7 +580,7 @@ export default function ProfileClient({
                   <select
                     id="p-region"
                     value={region}
-                    onChange={(e) => setRegion(e.target.value as RegionKey)}
+                    onChange={(e) => setRegion(e.target.value as RegionCode)}
                     style={{
                       width: "100%",
                       minWidth: 0,

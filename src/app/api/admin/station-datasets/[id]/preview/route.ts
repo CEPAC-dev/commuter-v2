@@ -16,13 +16,19 @@ export async function GET(
     req.nextUrl.searchParams.get("region"),
   );
   if (!auth.authorized) return auth.response;
+  if (!auth.region)
+    return NextResponse.json(
+      { error: "Region context is required." },
+      { status: 500 },
+    );
+  const region = auth.region;
   const { id } = await params;
   if (!Types.ObjectId.isValid(id))
     return NextResponse.json({ error: "Invalid dataset id." }, { status: 400 });
   await connectDB();
   const dataset = await StationDataset.findOne({
     _id: id,
-    regionCode: auth.region.code,
+    regionCode: region.code,
   })
     .select("+normalizedStations")
     .lean();
@@ -35,7 +41,7 @@ export async function GET(
     );
   }
   const active = await Station.find({
-    regionCode: auth.region.code,
+    regionCode: region.code,
     active: true,
   })
     .select(
@@ -46,7 +52,7 @@ export async function GET(
   await StationDataset.updateOne({ _id: dataset._id }, { $set: diff });
   await StationAuditLog.create({
     action: "preview",
-    regionCode: auth.region.code,
+    regionCode: region.code,
     datasetVersionId: dataset._id,
     actorId: auth.userId,
     metadata: diff,
