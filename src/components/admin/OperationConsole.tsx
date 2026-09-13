@@ -1908,7 +1908,7 @@ export default function OperationConsole({
                 flexBasis: "100%",
                 margin: 0,
                 fontSize: 14,
-                color: stationsMatrixMessage.includes("success")
+                color: stationsMatrixMessage?.includes("success")
                   ? "#00877A"
                   : "#B94A48",
               }}
@@ -2200,8 +2200,8 @@ export default function OperationConsole({
             style={{
               margin: "12px 0 0",
               color:
-                stationsMessage.includes("success") ||
-                stationsMessage.includes("Loaded")
+                stationsMessage?.includes("success") ||
+                stationsMessage?.includes("Loaded")
                   ? "var(--color-secondary-deep)"
                   : "var(--color-danger)",
               fontSize: 14,
