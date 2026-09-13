@@ -657,7 +657,13 @@ export async function reconcileWalletFromLedger(
                       {
                         $in: [
                           "$type",
-                          ["topup", "refund", "earning", "referral_bonus"],
+                          [
+                            "topup",
+                            "refund",
+                            "earning",
+                            "referral_bonus",
+                            "compensation",
+                          ],
                         ],
                       },
                     ],
@@ -675,7 +681,16 @@ export async function reconcileWalletFromLedger(
                       {
                         $and: [
                           { $eq: ["$status", "completed"] },
-                          { $in: ["$type", ["payment", "payment_captured"]] },
+                          {
+                            $in: [
+                              "$type",
+                              [
+                                "payment",
+                                "payment_captured",
+                                "cancellation_penalty",
+                              ],
+                            ],
+                          },
                         ],
                       },
                       {

@@ -4,6 +4,8 @@
  * treated as full-access admin for backward compatibility.
  */
 export const PERMISSIONS = {
+  STATIONS_MANAGE: "stations.manage",
+  STATIONS_PUBLISH: "stations.publish",
   TRANSACTIONS_VIEW: "transactions.view",
   TRANSACTIONS_DETAILS: "transactions.details",
   TRANSACTIONS_EXPORT: "transactions.export",

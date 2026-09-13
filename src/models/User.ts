@@ -65,6 +65,17 @@ const UserSchema = new Schema(
       enum: ["EG", "KSA", null],
       index: true,
     },
+    defaultRegionCode: {
+      type: String,
+      default: null,
+      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI", null],
+      index: true,
+    },
+    allowedRegionCodes: {
+      type: [String],
+      default: [],
+      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+    },
     savedAddresses: { type: [SavedAddressSchema], default: [] },
     // Fine-grained admin permissions (e.g. "transactions.view"). Empty/absent
     // for role=admin = full access (backward compat with pre-permission admins).
@@ -86,6 +97,25 @@ if (existingUserModel) {
         default: null,
         enum: ["EG", "KSA", null],
         index: true,
+      },
+    });
+  }
+  if (!existingUserModel.schema.path("defaultRegionCode")) {
+    existingUserModel.schema.add({
+      defaultRegionCode: {
+        type: String,
+        default: null,
+        enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI", null],
+        index: true,
+      },
+    });
+  }
+  if (!existingUserModel.schema.path("allowedRegionCodes")) {
+    existingUserModel.schema.add({
+      allowedRegionCodes: {
+        type: [String],
+        default: [],
+        enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
       },
     });
   }

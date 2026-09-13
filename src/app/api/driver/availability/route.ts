@@ -5,6 +5,7 @@ import { Driver } from "@/models/Driver";
 import { Station } from "@/models/Station";
 import { getSession } from "@/lib/auth/session";
 import { findNearestStation } from "@/lib/geo/stations";
+import { resolveActiveRegion } from "@/lib/regions/resolveActiveRegion";
 import {
   DAYS_OF_WEEK,
   listDriverAvailability,
@@ -21,7 +22,8 @@ export async function GET() {
   if (!session || session.role !== "driver")
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const records = await listDriverAvailability(session.userId);
+  const region = await resolveActiveRegion({ userId: session.userId });
+  const records = await listDriverAvailability(session.userId, region.code);
   return NextResponse.json({ data: records });
 }
 
@@ -90,7 +92,8 @@ export async function PUT(req: NextRequest) {
     if (!normalizedOrigin)
       return NextResponse.json({ error: "Origin is required." }, { status: 400 });
 
-    const stationDocs = await Station.find({ active: true }).lean();
+    const region = await resolveActiveRegion({ userId: session.userId });
+    const stationDocs = await Station.find({ active: true, regionCode: region.code }).lean();
     const nearestStation = findNearestStation(
       normalizedOrigin.lat,
       normalizedOrigin.lng,

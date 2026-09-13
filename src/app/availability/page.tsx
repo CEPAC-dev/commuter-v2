@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
+import { resolveActiveRegion } from "@/lib/regions/resolveActiveRegion";
 import { listDriverAvailability } from "@/lib/services/availability";
 import { getProfile } from "@/lib/services/profile";
 import AvailabilityClient from "./AvailabilityClient";
@@ -11,9 +12,12 @@ export default async function AvailabilityPage() {
   if (!session) redirect("/login?redirect=/availability");
   if (session.role === "admin") redirect("/admin/dashboard");
   if (session.role !== "driver") redirect("/my-trips");
+  const { code: regionCode } = await resolveActiveRegion({
+    userId: session.userId,
+  });
 
   const [records, profile] = await Promise.all([
-    listDriverAvailability(session.userId),
+    listDriverAvailability(session.userId, regionCode),
     getProfile(session.userId, session.role),
   ]);
   if (!profile || profile.role !== "driver") redirect("/login");

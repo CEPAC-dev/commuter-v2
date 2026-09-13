@@ -19,6 +19,7 @@ const ICONS: Record<
   shared_car: Users,
   van_shared: Truck,
   microbus_shared: Bus,
+  mini_bus: Bus,
 };
 
 const PALETTE: Record<VehicleKey, { color: string; bg: string }> = {
@@ -28,6 +29,7 @@ const PALETTE: Record<VehicleKey, { color: string; bg: string }> = {
   shared_car: { color: "#00A38F", bg: "rgba(0,163,143,0.09)" },
   van_shared: { color: "#F5A623", bg: "rgba(245,166,35,0.10)" },
   microbus_shared: { color: "#5A6A7A", bg: "rgba(90,106,122,0.08)" },
+  mini_bus: { color: "#5A6A7A", bg: "rgba(90,106,122,0.08)" },
 };
 
 export default function VehicleTypes() {

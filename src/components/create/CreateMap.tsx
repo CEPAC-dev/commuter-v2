@@ -7,9 +7,13 @@ import { reverseGeocode, formatDisplayName } from "@/lib/nominatim";
 import { loadLeaflet, svgDataUrl, MAP_COLORS } from "@/lib/leaflet";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import { isSharedVehicle } from "@/lib/geo/stations";
+import type { RegionCode, RegionConfig } from "@/lib/config/regions";
 
-const CAIRO: [number, number] = [30.0444, 31.2357];
-const ROUTE_COLORS = [MAP_COLORS.route, MAP_COLORS.accent, MAP_COLORS.secondary];
+const ROUTE_COLORS = [
+  MAP_COLORS.route,
+  MAP_COLORS.accent,
+  MAP_COLORS.secondary,
+];
 
 const STATION_ICON = svgDataUrl(
   `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22">
@@ -54,6 +58,8 @@ function routeLabelHtml(text: string, color: string): string {
 }
 
 interface Props {
+  regionCode: RegionCode;
+  mapConfig: RegionConfig["map"];
   trips: TripData[];
   picking?: { tripId: string; field: "pickup" | "dropoff" } | null;
   onMapPick?: (point: TripPoint) => void;
@@ -69,6 +75,8 @@ interface ZoneLabel {
 }
 
 export default function CreateMap({
+  regionCode,
+  mapConfig,
   trips,
   picking,
   onMapPick,
@@ -83,42 +91,61 @@ export default function CreateMap({
   const [zoneLabels, setZoneLabels] = useState<ZoneLabel[]>([]);
 
   useEffect(() => {
+    if (regionCode !== "EG-CAIRO") {
+      setZoneLabels([]);
+      return;
+    }
     let cancelled = false;
     fetch("/geo/zone_centroid.geojson")
       .then((r) => r.json())
       .then((fc) => {
         if (cancelled) return;
-        const labels: ZoneLabel[] = fc.features.map((feature: { id: unknown; properties?: { NO?: number; NAME?: string }; geometry: { coordinates: [number, number] } }) => {
-          const idStr = String(feature.id);
-          const noMatch = idStr.match(/\d+/);
-          return {
-            id: String(feature.id),
-            no: feature.properties?.NO ?? (noMatch ? parseInt(noMatch[0], 10) : 0),
-            name: feature.properties?.NAME ?? "",
-            lat: feature.geometry.coordinates[1],
-            lng: feature.geometry.coordinates[0],
-          };
-        });
+        const labels: ZoneLabel[] = fc.features.map(
+          (feature: {
+            id: unknown;
+            properties?: { NO?: number; NAME?: string };
+            geometry: { coordinates: [number, number] };
+          }) => {
+            const idStr = String(feature.id);
+            const noMatch = idStr.match(/\d+/);
+            return {
+              id: String(feature.id),
+              no:
+                feature.properties?.NO ??
+                (noMatch ? parseInt(noMatch[0], 10) : 0),
+              name: feature.properties?.NAME ?? "",
+              lat: feature.geometry.coordinates[1],
+              lng: feature.geometry.coordinates[0],
+            };
+          },
+        );
         setZoneLabels(labels);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [regionCode]);
 
   const allPoints = useMemo(() => {
     const points: Array<{ lat: number; lng: number }> = [];
     for (const trip of trips) {
       trip.stops.forEach((stop) => {
-        if (stop.point) points.push({ lat: stop.point.lat, lng: stop.point.lng });
+        if (stop.point)
+          points.push({ lat: stop.point.lat, lng: stop.point.lng });
       });
       trip.routeCoordinates?.forEach(([lat, lng]) => points.push({ lat, lng }));
-      if (trip.pickup) points.push({ lat: trip.pickup.lat, lng: trip.pickup.lng });
-      if (trip.dropoff) points.push({ lat: trip.dropoff.lat, lng: trip.dropoff.lng });
+      if (trip.pickup)
+        points.push({ lat: trip.pickup.lat, lng: trip.pickup.lng });
+      if (trip.dropoff)
+        points.push({ lat: trip.dropoff.lat, lng: trip.dropoff.lng });
       if (isSharedVehicle(trip.vehicleType)) {
-        trip.pickupStationOptions.forEach((station) => points.push({ lat: station.lat, lng: station.lng }));
-        trip.dropoffStationOptions.forEach((station) => points.push({ lat: station.lat, lng: station.lng }));
+        trip.pickupStationOptions.forEach((station) =>
+          points.push({ lat: station.lat, lng: station.lng }),
+        );
+        trip.dropoffStationOptions.forEach((station) =>
+          points.push({ lat: station.lat, lng: station.lng }),
+        );
       }
     }
     return points;
@@ -133,7 +160,10 @@ export default function CreateMap({
       const map = L.map(mapContainerRef.current, {
         zoomControl: false,
         attributionControl: false,
-      }).setView(CAIRO, 11);
+      }).setView(
+        [mapConfig.defaultCenter.lat, mapConfig.defaultCenter.lng],
+        mapConfig.defaultZoom,
+      );
 
       L.tileLayer(MAP_COLORS.tileUrl, {
         attribution: MAP_COLORS.tileAttribution,
@@ -145,22 +175,24 @@ export default function CreateMap({
       setLeafletReady(true);
       map.on("zoomend", () => setZoom(map.getZoom()));
 
-      fetch("/geo/zone_polygon.geojson")
-        .then((response) => response.json())
-        .then((geojson) => {
-          if (!mapRef.current) return;
-          zoneLayerRef.current = L.geoJSON(geojson, {
-            style: {
-              fillColor: "rgb(10, 0, 168)",
-              fillOpacity: 0.08,
-              color: "rgba(255, 0, 168, 1)",
-              weight: 1.2,
-              opacity: 0.6,
-            },
-            interactive: false,
-          }).addTo(mapRef.current);
-        })
-        .catch(() => {});
+      if (regionCode === "EG-CAIRO") {
+        fetch("/geo/zone_polygon.geojson")
+          .then((response) => response.json())
+          .then((geojson) => {
+            if (!mapRef.current) return;
+            zoneLayerRef.current = L.geoJSON(geojson, {
+              style: {
+                fillColor: "rgb(10, 0, 168)",
+                fillOpacity: 0.08,
+                color: "rgba(255, 0, 168, 1)",
+                weight: 1.2,
+                opacity: 0.6,
+              },
+              interactive: false,
+            }).addTo(mapRef.current);
+          })
+          .catch(() => {});
+      }
     });
 
     return () => {
@@ -173,7 +205,12 @@ export default function CreateMap({
       mapRef.current = null;
       setLeafletReady(false);
     };
-  }, []);
+  }, [
+    mapConfig.defaultCenter.lat,
+    mapConfig.defaultCenter.lng,
+    mapConfig.defaultZoom,
+    regionCode,
+  ]);
 
   useEffect(() => {
     if (!mapRef.current || !allPoints.length) return;
@@ -202,16 +239,25 @@ export default function CreateMap({
           iconSize: [72, 16],
           iconAnchor: [36, 8],
         });
-        L.marker([label.lat, label.lng], { icon, interactive: false }).addTo(layers);
+        L.marker([label.lat, label.lng], { icon, interactive: false }).addTo(
+          layers,
+        );
       });
 
       trips.forEach((trip, index) => {
         const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
-        const routePath = trip.routeCoordinates?.map(([lat, lng]) => [lat, lng] as [number, number]) ?? [];
+        const routePath =
+          trip.routeCoordinates?.map(
+            ([lat, lng]) => [lat, lng] as [number, number],
+          ) ?? [];
 
         if (routePath.length >= 2) {
-          L.polyline(routePath, { color, opacity: 0.15, weight: 14 }).addTo(layers);
-          L.polyline(routePath, { color, opacity: 0.9, weight: 5 }).addTo(layers);
+          L.polyline(routePath, { color, opacity: 0.15, weight: 14 }).addTo(
+            layers,
+          );
+          L.polyline(routePath, { color, opacity: 0.9, weight: 5 }).addTo(
+            layers,
+          );
 
           const midpoint = routePath[Math.floor(routePath.length / 2)];
           const labelIcon = L.divIcon({
@@ -220,10 +266,16 @@ export default function CreateMap({
             iconSize: [58, 22],
             iconAnchor: [29, 11],
           });
-          L.marker(midpoint, { icon: labelIcon, interactive: false }).addTo(layers);
+          L.marker(midpoint, { icon: labelIcon, interactive: false }).addTo(
+            layers,
+          );
         }
 
-        if (isSharedVehicle(trip.vehicleType) && trip.pickup && trip.pickupStation) {
+        if (
+          isSharedVehicle(trip.vehicleType) &&
+          trip.pickup &&
+          trip.pickupStation
+        ) {
           L.polyline(
             [
               [trip.pickup.lat, trip.pickup.lng],
@@ -233,7 +285,11 @@ export default function CreateMap({
           ).addTo(layers);
         }
 
-        if (isSharedVehicle(trip.vehicleType) && trip.dropoff && trip.dropoffStation) {
+        if (
+          isSharedVehicle(trip.vehicleType) &&
+          trip.dropoff &&
+          trip.dropoffStation
+        ) {
           L.polyline(
             [
               [trip.dropoffStation.lat, trip.dropoffStation.lng],
@@ -288,7 +344,11 @@ export default function CreateMap({
 
         if (trip.pickup) {
           L.marker([trip.pickup.lat, trip.pickup.lng], {
-            icon: L.icon({ iconUrl: ORIGIN_ICON, iconSize: [36, 36], iconAnchor: [18, 18] }),
+            icon: L.icon({
+              iconUrl: ORIGIN_ICON,
+              iconSize: [36, 36],
+              iconAnchor: [18, 18],
+            }),
             title: `Trip ${index + 1} pickup`,
             zIndexOffset: 1000 + index,
           }).addTo(layers);
@@ -296,7 +356,11 @@ export default function CreateMap({
 
         if (trip.dropoff) {
           L.marker([trip.dropoff.lat, trip.dropoff.lng], {
-            icon: L.icon({ iconUrl: DEST_ICON, iconSize: [36, 48], iconAnchor: [18, 48] }),
+            icon: L.icon({
+              iconUrl: DEST_ICON,
+              iconSize: [36, 48],
+              iconAnchor: [18, 48],
+            }),
             title: `Trip ${index + 1} dropoff`,
             zIndexOffset: 1000 + index,
           }).addTo(layers);
@@ -313,7 +377,9 @@ export default function CreateMap({
     if (!mapRef.current) return;
     let active = true;
 
-    const handleMapClick = async (event: { latlng: { lat: number; lng: number } }) => {
+    const handleMapClick = async (event: {
+      latlng: { lat: number; lng: number };
+    }) => {
       if (!picking || !onMapPick || !active) return;
       const lat = event.latlng.lat;
       const lng = event.latlng.lng;
@@ -353,7 +419,9 @@ export default function CreateMap({
     });
   }
 
-  const activeTrip = trips.find((trip) => trip.distanceKm && trip.durationMinutes);
+  const activeTrip = trips.find(
+    (trip) => trip.distanceKm && trip.durationMinutes,
+  );
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>

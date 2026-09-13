@@ -3,6 +3,12 @@ import { Schema, model, models, Types, type InferSchemaType } from "mongoose";
 const RequestSchema = new Schema(
   {
     userId: { type: Types.ObjectId, ref: "User", required: true, index: true },
+    regionCode: {
+      type: String,
+      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      default: null,
+      index: true,
+    },
     tripIds: {
       type: [Types.ObjectId],
       ref: "Trip",
@@ -50,4 +56,8 @@ const RequestSchema = new Schema(
 );
 
 export type RequestDoc = InferSchemaType<typeof RequestSchema>;
-export const Request = models.Request || model("Request", RequestSchema);
+const existingRequestModel = models.Request;
+if (existingRequestModel && !existingRequestModel.schema.path("regionCode")) {
+  existingRequestModel.schema.add({ regionCode: RequestSchema.obj.regionCode });
+}
+export const Request = existingRequestModel || model("Request", RequestSchema);

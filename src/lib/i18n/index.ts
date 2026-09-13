@@ -1,8 +1,18 @@
 import type { Locale } from "./config";
 import { MESSAGES, type MessageKey } from "./messages";
 
+export { formatMoney } from "@/lib/money";
+
 export type { Locale } from "./config";
-export { DEFAULT_LOCALE, LOCALE_COOKIE, SUPPORTED_LOCALES, isLocale, parseLocale, localeDirection, intlLocale } from "./config";
+export {
+  DEFAULT_LOCALE,
+  LOCALE_COOKIE,
+  SUPPORTED_LOCALES,
+  isLocale,
+  parseLocale,
+  localeDirection,
+  intlLocale,
+} from "./config";
 export type { MessageKey } from "./messages";
 
 const ARABIC_DIGITS = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
@@ -13,8 +23,15 @@ export function toArabicDigits(input: string): string {
 }
 
 /** Looks up a key; unknown keys fall back to English, then the raw key. */
-export function translate(locale: Locale, key: string, params?: Record<string, string | number>): string {
-  const raw = MESSAGES[locale][key as MessageKey] ?? MESSAGES.en[key as MessageKey] ?? key;
+export function translate(
+  locale: Locale,
+  key: string,
+  params?: Record<string, string | number>,
+): string {
+  const raw =
+    MESSAGES[locale][key as MessageKey] ??
+    MESSAGES.en[key as MessageKey] ??
+    key;
   const filled = !params
     ? raw
     : Object.entries(params).reduce(

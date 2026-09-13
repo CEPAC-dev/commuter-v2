@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Station } from "@/models/Station";
+import {
+  RegionAccessError,
+  resolveActiveRegion,
+} from "@/lib/regions/resolveActiveRegion";
+import { adminAuth } from "@/lib/middleware/adminAuth";
+import { StationAuditLog } from "@/models/StationAuditLog";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 
 interface StationSource {
   objectId?: number;
@@ -37,11 +44,32 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const stationId = url.searchParams.get("stationId");
   const stationNumber = url.searchParams.get("stationNumber");
+  const session = await getSession();
+  if (!session)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let region;
+  try {
+    region = await resolveActiveRegion({
+      userId: session.userId,
+      requested: url.searchParams.get("region"),
+    });
+  } catch (error) {
+    const status = error instanceof RegionAccessError ? error.status : 403;
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Region access denied.",
+      },
+      { status },
+    );
+  }
 
   await connectDB();
 
   if (stationId) {
-    const station = await Station.findById(stationId).lean();
+    const station = await Station.findOne({
+      _id: stationId,
+      regionCode: region.code,
+    }).lean();
     if (!station) {
       return NextResponse.json({ error: "Station not found" }, { status: 404 });
     }
@@ -57,23 +85,30 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const station = await Station.findOne({ objectId }).lean();
+    const station = await Station.findOne({
+      objectId,
+      regionCode: region.code,
+    }).lean();
     if (!station) {
       return NextResponse.json({ error: "Station not found" }, { status: 404 });
     }
     return NextResponse.json({ station: serialize(station) });
   }
 
-  const stations = await Station.find({ active: true }).lean();
+  const stations = await Station.find({
+    regionCode: region.code,
+    active: true,
+  }).lean();
   return NextResponse.json({ stations: stations.map(serialize) });
 }
 
 // Admin — create a single station point
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const auth = await adminAuth(
+    PERMISSIONS.STATIONS_MANAGE,
+    req.nextUrl.searchParams.get("region"),
+  );
+  if (!auth.authorized) return auth.response;
 
   let body: Record<string, unknown>;
   try {
@@ -84,19 +119,23 @@ export async function POST(req: NextRequest) {
 
   const lat = Number(body.lat);
   const lng = Number(body.lng);
-  if (!isFinite(lat) || !isFinite(lng)) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
     return NextResponse.json({ error: "Invalid lat/lng" }, { status: 400 });
   }
 
   await connectDB();
 
-  const maxDoc = await Station.findOne()
-    .sort({ objectId: -1 })
-    .select("objectId");
-  const nextObjectId = (maxDoc?.objectId ?? 0) + 1;
+  const objectId = Number(body.objectId ?? body.sourceObjectId);
+  if (!Number.isInteger(objectId) || objectId < 0) {
+    return NextResponse.json({ error: "A non-negative objectId is required." }, { status: 400 });
+  }
+  const duplicate = await Station.exists({ objectId });
+  if (duplicate) return NextResponse.json({ error: "objectId already exists; the legacy global identity index remains in force." }, { status: 409 });
 
   const station = await Station.create({
-    objectId: nextObjectId,
+    objectId,
+    sourceObjectId: objectId,
+    sourceKind: "manual",
     name: String(body.name ?? ""),
     direction: String(body.direction ?? ""),
     zones: String(body.zones ?? ""),
@@ -106,6 +145,15 @@ export async function POST(req: NextRequest) {
     lat,
     lng,
     active: body.active !== false,
+    regionCode: auth.region.code,
+  });
+
+  await StationAuditLog.create({
+    action: "manual_create",
+    regionCode: auth.region.code,
+    actorId: auth.userId,
+    stationId: station._id,
+    metadata: { objectId: station.objectId, after: station.toObject() },
   });
 
   return NextResponse.json({ station: serialize(station) }, { status: 201 });

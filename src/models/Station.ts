@@ -1,4 +1,4 @@
-import { Schema, model, models, type InferSchemaType } from "mongoose";
+import { Schema, model, models, Types, type InferSchemaType } from "mongoose";
 
 const StationSchema = new Schema(
   {
@@ -12,6 +12,20 @@ const StationSchema = new Schema(
     lat: { type: Number, required: true },
     lng: { type: Number, required: true },
     active: { type: Boolean, default: true },
+    // Optional until all legacy stations are backfilled and queries migrate.
+    regionCode: {
+      type: String,
+      required: false,
+      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+    },
+    datasetVersionId: {
+      type: Types.ObjectId,
+      ref: "StationDataset",
+      required: false,
+      default: null,
+    },
+    sourceObjectId: { type: Number, required: false, default: null },
+    sourceKind: { type: String, enum: ["dataset", "manual"], default: "dataset" },
   },
   { timestamps: true },
 );
@@ -20,4 +34,21 @@ StationSchema.index({ objectId: 1 }, { unique: true });
 StationSchema.index({ lat: 1, lng: 1 });
 
 export type StationDoc = InferSchemaType<typeof StationSchema>;
-export const Station = models.Station || model("Station", StationSchema);
+const existingStationModel = models.Station;
+if (existingStationModel && !existingStationModel.schema.path("regionCode")) {
+  existingStationModel.schema.add({
+    regionCode: {
+      type: String,
+      required: false,
+      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+    },
+    datasetVersionId: {
+      type: Types.ObjectId,
+      ref: "StationDataset",
+      required: false,
+      default: null,
+    },
+    sourceObjectId: { type: Number, required: false, default: null },
+  });
+}
+export const Station = existingStationModel || model("Station", StationSchema);

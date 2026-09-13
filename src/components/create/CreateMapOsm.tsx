@@ -8,8 +8,8 @@ import { isSharedVehicle } from "@/lib/geo/stations";
 import { formatDisplayName, reverseGeocode } from "@/lib/nominatim";
 import OsmMapCanvas, { type OsmPoint } from "@/components/map/OsmMapCanvas";
 import { fitPoints, svgIcon } from "@/components/map/leafletLayers";
+import type { RegionCode, RegionConfig } from "@/lib/config/regions";
 
-const CAIRO = { lat: 30.0444, lng: 31.2357 };
 const ROUTE_COLORS = ["#4361EE", "#F5A623", "#00C2A8"];
 const ORIGIN_ICON = svgIcon(
   `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><circle cx="18" cy="18" r="16" fill="#0B1E3D" stroke="#00C2A8" stroke-width="3"/><circle cx="18" cy="18" r="6" fill="#fff"/></svg>`,
@@ -133,14 +133,20 @@ function isLeafletMapReady(map: L.Map | null): map is L.Map {
   };
   return Boolean(
     internalMap._loaded &&
-      internalMap._mapPane &&
-      internalMap._container?.isConnected,
+    internalMap._mapPane &&
+    internalMap._container?.isConnected,
   );
 }
 
 interface Props {
+  regionCode: RegionCode;
+  mapConfig: RegionConfig["map"];
   trips: TripData[];
-  picking?: { tripId: string; field: "pickup" | "dropoff" | "stop"; stopId?: string } | null;
+  picking?: {
+    tripId: string;
+    field: "pickup" | "dropoff" | "stop";
+    stopId?: string;
+  } | null;
   onMapPick?: (point: TripPoint) => void;
   onStationSelect?: (
     tripId: string,
@@ -151,6 +157,8 @@ interface Props {
 }
 
 export default function CreateMapOsm({
+  regionCode,
+  mapConfig,
   trips,
   picking,
   onMapPick,
@@ -166,6 +174,11 @@ export default function CreateMapOsm({
 
   useEffect(() => {
     if (!isLeafletMapReady(map)) return;
+    if (regionCode !== "EG-CAIRO") {
+      zoneFeaturesRef.current = [];
+      zoneLabelLocationsRef.current = [];
+      return;
+    }
 
     const maskLayer = L.layerGroup().addTo(map);
     const zoneLayer = L.layerGroup().addTo(map);
@@ -313,7 +326,7 @@ export default function CreateMapOsm({
       zoneLayer.remove();
       zoneFeaturesRef.current = [];
     };
-  }, [map]);
+  }, [map, regionCode]);
 
   useEffect(() => {
     if (!isLeafletMapReady(map)) return;
@@ -448,8 +461,8 @@ export default function CreateMapOsm({
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <OsmMapCanvas
-        center={CAIRO}
-        zoom={11}
+        center={mapConfig.defaultCenter}
+        zoom={mapConfig.defaultZoom}
         cursor={picking ? "crosshair" : undefined}
         onReady={setMap}
         onClick={handleClick}
@@ -474,7 +487,10 @@ export default function CreateMapOsm({
             whiteSpace: "nowrap",
           }}
         >
-          <span>Click map to set {picking.field === "stop" ? "stop point" : picking.field}</span>
+          <span>
+            Click map to set{" "}
+            {picking.field === "stop" ? "stop point" : picking.field}
+          </span>
           <button
             type="button"
             onClick={onCancelPick}

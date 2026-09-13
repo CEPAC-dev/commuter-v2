@@ -22,14 +22,15 @@ Transit station points used to snap pickup/dropoff for shared vehicles
 `public/geo/PT910ExcelToTab_FeaturesToJSO3.geojson` is the source-of-truth
 starter file (fixed GeoJSON `FeatureCollection` of `Point` features).
 
-Run once against a fresh DB:
+Run only against a disposable, fresh development DB:
 
 ```
 npm run seed:stations
 ```
 
-This wipes and reloads the `stations` collection from that file
-(`scripts/seed-stations.cjs`). Safe to re-run.
+This legacy seed wipes and reloads the `stations` collection and must never be
+used for production station operations. Production uploads use the versioned,
+private dataset workflow in the regional admin console.
 
 ## 3. CRUD API
 
@@ -39,7 +40,7 @@ This wipes and reloads the `stations` collection from that file
 | `/api/stations` | POST | admin | Create one station point |
 | `/api/stations/[id]` | PATCH | admin | Update a station point (`id` = `objectId`) |
 | `/api/stations/[id]` | DELETE | admin | Remove a station point |
-| `/api/stations/import` | POST (multipart `file`) | admin | **Full override** — replaces the entire collection with an uploaded GeoJSON/JSON file matching the fixed structure below |
+| `/api/stations/import` | POST | admin | Disabled (`410`). Use the versioned dataset workflow. |
 
 ### Fixed import structure
 
@@ -62,10 +63,8 @@ This wipes and reloads the `stations` collection from that file
 }
 ```
 
-`/api/stations/import` validates every feature (`Point` geometry, numeric
-coordinates, numeric `OBJECTID`/`id`) before committing. On success it does
-`deleteMany({})` + `insertMany(docs)` — an all-or-nothing replace, so a bad
-file never leaves the collection half-updated.
+Production imports never use `deleteMany({})`. They upload to private storage,
+validate, preview, and publish a region-scoped projection only after confirmation.
 
 ## 4. Runtime consumption (`/create`)
 

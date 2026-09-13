@@ -39,13 +39,15 @@ import {
 } from "@/lib/config/vehicles";
 import {
   DEFAULT_REGION,
+  getMapConfig,
+  isVehicleAvailableInRegion,
   vehiclesForRegion,
-  type RegionKey,
+  type RegionCode,
 } from "@/lib/config/regions";
 
 interface Props {
   userEmail: string;
-  region?: RegionKey;
+  region?: RegionCode;
   onAddressSaved?: (saved: SavedAddress) => void;
 }
 
@@ -96,6 +98,7 @@ export default function CreateClient({
   userEmail,
   region = DEFAULT_REGION,
 }: Props) {
+  const mapConfig = getMapConfig(region);
   const { pickup, dropoff } = useTripStore();
   const [mounted, setMounted] = useState(false);
   const [selectedDates, setSelectedDates] = useState<string[]>([
@@ -162,13 +165,15 @@ export default function CreateClient({
 
   // Load wallet balance, saved addresses, and transit stations
   useEffect(() => {
-    fetch("/api/stations", { cache: "no-store" })
+    fetch(`/api/stations?region=${encodeURIComponent(region)}`, {
+      cache: "no-store",
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.stations) setStations(d.stations as Station[]);
       })
       .catch(() => {});
-  }, []);
+  }, [region]);
 
   useEffect(() => {
     (async () => {
@@ -207,8 +212,9 @@ export default function CreateClient({
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!d?.vehicles?.length) return;
-        const map: Record<string, (typeof VEHICLES)[keyof typeof VEHICLES]> =
-          {};
+        const map: Record<string, (typeof VEHICLES)[keyof typeof VEHICLES]> = {
+          ...VEHICLES,
+        };
         for (const v of d.vehicles) map[v.key] = v;
         setVehiclesMap(map);
       })
@@ -308,7 +314,7 @@ export default function CreateClient({
         vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType];
       const singleTripPrice =
         vehicle.ride === "private"
-          ? trip.priceEgp ?? 0
+          ? (trip.priceEgp ?? 0)
           : computeTripPriceEgp({
               distanceKm: trip.distanceKm ?? undefined,
               vehicleType: trip.vehicleType,
@@ -387,7 +393,10 @@ export default function CreateClient({
         setPromoWarning(t("create.promo_partially_applied"));
       }
 
-      if (typeof data.bookingId !== "string" || !Number.isFinite(data.amountEgp)) {
+      if (
+        typeof data.bookingId !== "string" ||
+        !Number.isFinite(data.amountEgp)
+      ) {
         setSubmitError(t("create.booking_create_failed"));
         return null;
       }
@@ -403,17 +412,14 @@ export default function CreateClient({
   }
 
   async function handleConfirmRequest() {
-    const booking = await createBooking();
-    if (!booking) return;
     setShowPreview(false);
+    if (grandTotalEgp === 0) setUseWallet(true);
     setShowPaymentModal(true);
   }
 
   async function handleSubmit() {
-    if (!createdBooking) {
-      setSubmitError(t("create.booking_create_failed"));
-      return;
-    }
+    const booking = createdBooking ?? (await createBooking());
+    if (!booking) return;
     setSubmitting(true);
     setSubmitError("");
     let navigating = false;
@@ -421,7 +427,7 @@ export default function CreateClient({
       const payRes = await fetch("/api/payments/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: createdBooking.id, useWallet }),
+        body: JSON.stringify({ bookingId: booking.id, useWallet }),
       });
       const payData = await payRes.json();
       if (!payRes.ok) {
@@ -839,6 +845,27 @@ export default function CreateClient({
             {/* Trip cycles */}
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {trips.map((trip, i) => {
+                const allVehicles = vehiclesMap
+                  ? Object.values(vehiclesMap)
+                  : VEHICLE_LIST;
+                const availableVehicles = vehiclesForRegion(
+                  allVehicles,
+                  region,
+                );
+                const vehicleList =
+                  region === "EG-CAIRO"
+                    ? [
+                        ...availableVehicles,
+                        ...allVehicles.filter(
+                          (vehicle) =>
+                            (vehicle.key === "van_shared" ||
+                              vehicle.key === "microbus_shared") &&
+                            !availableVehicles.some(
+                              (available) => available.key === vehicle.key,
+                            ),
+                        ),
+                      ]
+                    : availableVehicles;
                 // Minimum arrival time = prev trip's arrival + this trip's drive + buffer
                 let minArrivalTime: string | null = null;
                 if (i > 0) {
@@ -882,10 +909,13 @@ export default function CreateClient({
                     stations={stations}
                     minArrivalTime={minArrivalTime}
                     vehiclesMap={vehiclesMap ?? undefined}
-                    vehicleList={vehiclesForRegion(
-                      vehiclesMap ? Object.values(vehiclesMap) : VEHICLE_LIST,
-                      region,
-                    )}
+                    vehicleList={vehicleList}
+                    disabledVehicleKeys={vehicleList
+                      .filter(
+                        (vehicle) =>
+                          !isVehicleAvailableInRegion(vehicle.key, region),
+                      )
+                      .map((vehicle) => vehicle.key)}
                     onStopErrorChange={(error) =>
                       handleTripStopErrorChange(trip.id, error)
                     }
@@ -1059,6 +1089,8 @@ export default function CreateClient({
           className="create-right"
         >
           <CreateMap
+            regionCode={region}
+            mapConfig={mapConfig}
             trips={trips}
             picking={picking}
             onMapPick={handleMapPick}
@@ -1754,13 +1786,15 @@ export default function CreateClient({
                 style={{
                   width: "100%",
                   height: 52,
-                  background: agreedTerms && !submitting ? "#0B1E3D" : "#d0d8e0",
+                  background:
+                    agreedTerms && !submitting ? "#0B1E3D" : "#d0d8e0",
                   color: agreedTerms && !submitting ? "#ffffff" : "#9aa5b4",
                   fontWeight: 700,
                   fontSize: 15,
                   border: "none",
                   borderRadius: 12,
-                  cursor: agreedTerms && !submitting ? "pointer" : "not-allowed",
+                  cursor:
+                    agreedTerms && !submitting ? "pointer" : "not-allowed",
                   fontFamily: "inherit",
                   transition: "background 0.2s",
                   display: "flex",
@@ -1769,13 +1803,17 @@ export default function CreateClient({
                   gap: 8,
                 }}
                 onMouseEnter={(e) => {
-                  if (agreedTerms && !submitting) e.currentTarget.style.background = "#00C2A8";
+                  if (agreedTerms && !submitting)
+                    e.currentTarget.style.background = "#00C2A8";
                 }}
                 onMouseLeave={(e) => {
-                  if (agreedTerms && !submitting) e.currentTarget.style.background = "#0B1E3D";
+                  if (agreedTerms && !submitting)
+                    e.currentTarget.style.background = "#0B1E3D";
                 }}
               >
-                {submitting ? t("create.submitting") : t("create.confirm_request")}
+                {submitting
+                  ? t("create.submitting")
+                  : t("create.confirm_request")}
               </button>
             </div>
           </div>
@@ -1890,7 +1928,7 @@ export default function CreateClient({
                   ? Math.min(checkoutTotalEgp, avail)
                   : 0;
                 const cardPortion = checkoutTotalEgp - walletPortion;
-                const walletDisabled = avail <= 0;
+                const walletDisabled = checkoutTotalEgp > 0 && avail <= 0;
                 return (
                   <div>
                     <span
@@ -1905,45 +1943,46 @@ export default function CreateClient({
                       {t("create.payment_method_label")}
                     </span>
 
-                    {/* Card — always active */}
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        padding: "12px 14px",
-                        borderRadius: 12,
-                        border: "1.5px solid #0B1E3D",
-                        background: "rgba(11,30,61,0.04)",
-                        marginBottom: 10,
-                      }}
-                    >
-                      <span>
-                        <span
-                          style={{
-                            display: "block",
-                            fontSize: 14,
-                            fontWeight: 700,
-                            color: "#0B1E3D",
-                          }}
-                        >
-                          Card
-                        </span>
-                        <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                          Pay via Kashier
-                        </span>
-                      </span>
-                      <strong
+                    {checkoutTotalEgp > 0 && (
+                      <div
                         style={{
-                          fontSize: 14,
-                          color: "#0B1E3D",
-                          fontVariantNumeric: "tabular-nums",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          padding: "12px 14px",
+                          borderRadius: 12,
+                          border: "1.5px solid #0B1E3D",
+                          background: "rgba(11,30,61,0.04)",
+                          marginBottom: 10,
                         }}
                       >
-                        {formatEgp(locale, cardPortion)}
-                      </strong>
-                    </div>
+                        <span>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 14,
+                              fontWeight: 700,
+                              color: "#0B1E3D",
+                            }}
+                          >
+                            Card
+                          </span>
+                          <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                            Pay via Kashier
+                          </span>
+                        </span>
+                        <strong
+                          style={{
+                            fontSize: 14,
+                            color: "#0B1E3D",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {formatEgp(locale, cardPortion)}
+                        </strong>
+                      </div>
+                    )}
 
                     <label
                       style={{

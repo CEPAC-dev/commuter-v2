@@ -15,7 +15,7 @@ import {
   DEFAULT_REGION,
   REGION_LIST,
   regionFromCoordinates,
-  type RegionKey,
+  type RegionCode,
 } from "@/lib/config/regions";
 
 interface Props {
@@ -25,7 +25,7 @@ interface Props {
   initialPhone: string;
   initialPhoneVerified: boolean;
   initialHasSecurityQuestion: boolean;
-  initialRegion: RegionKey | null;
+  initialRegion: RegionCode | null;
   initialProfilePic?: string | null;
   initialSavedAddresses: SavedAddress[];
 }
@@ -45,7 +45,7 @@ export default function ProfileClient({
   const { t, dir, locale } = useClientLocale();
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
-  const [region, setRegion] = useState<RegionKey>(
+  const [region, setRegion] = useState<RegionCode>(
     initialRegion ?? DEFAULT_REGION,
   );
   const [detectingRegion, setDetectingRegion] = useState(false);
@@ -580,7 +580,7 @@ export default function ProfileClient({
                   <select
                     id="p-region"
                     value={region}
-                    onChange={(e) => setRegion(e.target.value as RegionKey)}
+                    onChange={(e) => setRegion(e.target.value as RegionCode)}
                     style={{
                       width: "100%",
                       minWidth: 0,
@@ -599,7 +599,7 @@ export default function ProfileClient({
                     }}
                   >
                     {REGION_LIST.map((r) => (
-                      <option key={r.key} value={r.key}>
+                      <option key={r.code} value={r.code}>
                         {locale === "ar" ? r.labelAr : r.label}
                       </option>
                     ))}

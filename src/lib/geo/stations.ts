@@ -30,6 +30,7 @@ const SHARED_TYPES = new Set([
   "shared_car",
   "van_shared",
   "microbus_shared",
+  "mini_bus",
 ]);
 const DEFAULT_STATION_TYPES = new Set(["1", "2", "3"]);
 const MICROBUS_STATION_TYPES = new Set(["2", "3"]);
@@ -39,7 +40,7 @@ export function isSharedVehicle(vehicleType: string): boolean {
 }
 
 function allowedStationTypes(vehicleType?: string | null): Set<string> {
-  return vehicleType === "microbus_shared"
+  return vehicleType === "microbus_shared" || vehicleType === "mini_bus"
     ? MICROBUS_STATION_TYPES
     : DEFAULT_STATION_TYPES;
 }
