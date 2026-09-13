@@ -17,7 +17,15 @@ function markerHtml(color: string, ring: string, order?: number) {
   return `<span style="display:flex;width:22px;height:22px;border-radius:50%;background:${color};border:3px solid ${ring};box-shadow:0 2px 6px var(--color-shadow-strong);align-items:center;justify-content:center;color:var(--color-on-primary);font:700 10px/1 sans-serif">${label}</span>`;
 }
 
-export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
+export default function AdminTripMap({
+  points,
+  stationOnly = false,
+  focusPoint,
+}: {
+  points: TripMapPoint[];
+  stationOnly?: boolean;
+  focusPoint?: { lat: number; lng: number } | null;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
 
@@ -30,7 +38,7 @@ export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
       const map = L.map(containerRef.current, {
         zoomControl: true,
         attributionControl: true,
-        scrollWheelZoom: false,
+        scrollWheelZoom: stationOnly,
       });
       L.tileLayer(MAP_COLORS.tileUrl, {
         attribution: MAP_COLORS.tileAttribution,
@@ -59,7 +67,7 @@ export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
           .bindTooltip(point.label, { direction: "top", offset: [0, -10] });
       });
 
-      if (points.length > 1) {
+      if (!stationOnly && points.length > 1) {
         const [origin, ...remainingPoints] = points;
         const destination = remainingPoints.pop();
         if (!origin || !destination) return;
@@ -104,7 +112,8 @@ export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
           .catch(() => undefined);
       }
 
-      if (latLngs.length === 1) map.setView(latLngs[0], 14);
+      if (focusPoint) map.setView([focusPoint.lat, focusPoint.lng], 17);
+      else if (latLngs.length === 1) map.setView(latLngs[0], 14);
       else if (latLngs.length > 1)
         map.fitBounds(L.latLngBounds(latLngs), { padding: [32, 32] });
       else map.setView([30.0444, 31.2357], 11);
@@ -118,7 +127,7 @@ export default function AdminTripMap({ points }: { points: TripMapPoint[] }) {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [points]);
+  }, [focusPoint, points, stationOnly]);
 
   return (
     <div
