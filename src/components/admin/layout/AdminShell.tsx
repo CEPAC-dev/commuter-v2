@@ -70,6 +70,7 @@ const sections = [
     icon: Gift,
     statKey: null,
   },
+  { href: "/admin/stations", label: "Stations", icon: ListChecks, statKey: null },
   {
     href: "/admin/operation",
     label: "Operation",
@@ -88,10 +89,11 @@ type Stats = {
 const COLLAPSE_STORAGE_KEY = "admin-sidebar-collapsed";
 
 function currentTitle(pathname: string) {
-  if (pathname.startsWith("/admin/transactions/")) return "Transaction details";
+  const normalizedPath = pathname.replace(/^\/(eg|sa|ae)(?=\/admin)/, "");
+  if (normalizedPath.startsWith("/admin/transactions/")) return "Transaction details";
   return (
     sections.find(
-      ({ href }) => pathname === href || pathname.startsWith(`${href}/`),
+      ({ href }) => normalizedPath === href || normalizedPath.startsWith(`${href}/`),
     )?.label ?? "Admin"
   );
 }
@@ -148,6 +150,29 @@ export default function AdminShell({
     });
   }
 
+  function changeRegion(regionSlug: string) {
+    const regionalPath = pathname.match(/^\/(eg|sa|ae)\/admin\/(.+)$/);
+    if (regionalPath) {
+      router.push(`/${regionSlug}/admin/${regionalPath[2]}`);
+      return;
+    }
+    if (pathname === "/admin/operation" || pathname === "/admin/stations") {
+      router.push(`/${regionSlug}${pathname}`);
+      return;
+    }
+    router.refresh();
+  }
+
+  function sidebarHref(href: string) {
+    if (
+      activeRegionSlug &&
+      (href === "/admin/operation" || href === "/admin/stations")
+    ) {
+      return `/${activeRegionSlug}${href}`;
+    }
+    return href;
+  }
+
   if (isAuthPage) return <div className="admin-shell">{children}</div>;
 
   return (
@@ -171,14 +196,16 @@ export default function AdminShell({
         </Link>
         <nav className="admin-sidebar-nav" aria-label="Admin sections">
           {sections.map(({ href, label, icon: Icon, statKey }) => {
+            const destination = sidebarHref(href);
+            const normalizedPath = pathname.replace(/^\/(eg|sa|ae)(?=\/admin)/, "");
             const active =
-              pathname === href ||
-              (href !== "/admin/dashboard" && pathname.startsWith(`${href}/`));
+              normalizedPath === href ||
+              (href !== "/admin/dashboard" && normalizedPath.startsWith(`${href}/`));
             const count = statKey ? stats?.[statKey] : undefined;
             return (
               <Link
                 key={href}
-                href={href}
+                href={destination}
                 className="admin-sidebar-link"
                 aria-current={active ? "page" : undefined}
               >
@@ -217,9 +244,7 @@ export default function AdminShell({
                 <select
                   aria-label="Active region"
                   value={activeRegionSlug}
-                  onChange={(event) =>
-                    router.push(`/${event.target.value}/admin/operation`)
-                  }
+                  onChange={(event) => changeRegion(event.target.value)}
                   style={{
                     border: "1px solid var(--color-border)",
                     borderRadius: 8,

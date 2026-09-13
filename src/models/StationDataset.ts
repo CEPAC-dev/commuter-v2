@@ -75,7 +75,7 @@ const StationDatasetSchema = new Schema(
       select: false,
     },
   },
-  { timestamps: true },
+  { timestamps: true, suppressReservedKeysWarning: true },
 );
 
 StationDatasetSchema.index({ regionCode: 1, version: 1 }, { unique: true });

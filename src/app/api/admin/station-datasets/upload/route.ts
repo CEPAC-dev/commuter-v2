@@ -66,7 +66,6 @@ export async function POST(req: NextRequest) {
     await putStationDatasetSource({
       storageKey,
       body: bytes,
-      contentType: file.type || "application/geo+json",
     });
     const dataset = await StationDataset.create({
       _id: datasetId,
@@ -105,7 +104,6 @@ export async function POST(req: NextRequest) {
       },
     }).catch(() => undefined);
     const message = error instanceof Error ? error.message : "Upload failed.";
-    const status = message.includes("not configured") ? 503 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
