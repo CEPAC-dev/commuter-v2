@@ -32,7 +32,7 @@ export async function publishStationDataset({ datasetId, regionCode, actorId, ro
   const session = await mongoose.startSession();
   try {
     let result: Record<string, number> = {};
-    await session.withTransaction(async () => {
+    const applyProjection = async () => {
       const dataset = await StationDataset.findOne({ _id: datasetId, regionCode })
         .select("+normalizedStations")
         .session(session);
@@ -70,7 +70,18 @@ export async function publishStationDataset({ datasetId, regionCode, actorId, ro
       await StationRegionState.updateOne({ regionCode }, { $set: { activeDatasetVersionId: dataset._id } }, { session });
       await StationAuditLog.create([{ action: rollback ? "rollback" : "publish", regionCode, datasetVersionId: dataset._id, actorId, metadata: { previousDatasetVersionId: previousId, upserted: source.length, deactivated: removed.length, overridden: overrides.length } }], { session });
       result = { upserted: source.length, deactivated: removed.length, overridden: overrides.length };
-    });
+    };
+    try {
+      await session.withTransaction(applyProjection);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const standaloneMongo = /Transaction numbers are only allowed|does not support transactions|replica set/i.test(message);
+      if (!standaloneMongo) throw error;
+      // A standalone VPS MongoDB server cannot start transactions. The same
+      // per-region lock and ordered writes keep the operation controlled.
+      await applyProjection();
+      result.nonTransactional = 1;
+    }
     return result;
   } catch (error) {
     await StationAuditLog.create({ action: "failed", regionCode, datasetVersionId: Types.ObjectId.isValid(datasetId) ? datasetId : null, actorId, metadata: { operation: rollback ? "rollback" : "publish", message: error instanceof Error ? error.message : "Publication failed" } }).catch(() => undefined);

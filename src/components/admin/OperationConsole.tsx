@@ -1660,7 +1660,7 @@ export default function OperationConsole({
         ) : null}
       </AdminCard>
 
-      <AdminCard padding={20}>
+      {false ? <AdminCard padding={20}>
         <div style={{ marginBottom: 12 }}>
           <h2
             style={{
@@ -2250,7 +2250,7 @@ export default function OperationConsole({
             </ul>
           </div>
         ) : null}
-      </AdminCard>
+      </AdminCard> : null}
     </div>
   );
 }
