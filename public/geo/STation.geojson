@@ -1185,7 +1185,7 @@
                 "zones": "العبور والسلام",
                 "direction": "أ",
                 "landmark": "بنزينة مصر قبل موقف الشباب",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة الشباب,بنزينة مصر قبل موقف الشباب"
             }
         },
@@ -1471,7 +1471,7 @@
                 "zones": "العبور والسلام",
                 "direction": "ب",
                 "landmark": "كريتتف مول",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة الحي الثالث,كريتتف مول"
             }
         },
@@ -1493,7 +1493,7 @@
                 "zones": "العبور والسلام",
                 "direction": "",
                 "landmark": "محطة مول بلاتنيوم",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مول بلاتنيوم,محطة مول بلاتنيوم"
             }
         },
@@ -4067,7 +4067,7 @@
                 "zones": "المعادي وطرة والمقطم والاسمرات",
                 "direction": "ب",
                 "landmark": "امام مكتب صحة الاسمرات 1",
-                "stationType": null,
+                "stationType": 3,
                 "description": "ميدان حي الاسمرات,امام مكتب صحة الاسمرات 1"
             }
         },
@@ -5453,7 +5453,7 @@
                 "zones": "شبرا مصر",
                 "direction": "أ",
                 "landmark": "لابوار1",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة المظلات,لابوار1"
             }
         },
@@ -7807,7 +7807,7 @@
                 "zones": "الزاوية الحمراء",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة قطار الزاوية الحمراء,"
             }
         },
@@ -8093,7 +8093,7 @@
                 "zones": "حدائق القبة",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو منشية الصدر,"
             }
         },
@@ -8137,7 +8137,7 @@
                 "zones": "حدائق القبة",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو  الدمرداش,"
             }
         },
@@ -8577,7 +8577,7 @@
                 "zones": "الزيتون",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو سراي القبة,"
             }
         },
@@ -8643,7 +8643,7 @@
                 "zones": "الزيتون",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو حمامات القبة,"
             }
         },
@@ -8665,7 +8665,7 @@
                 "zones": "الزيتون",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو كوبري القبة,"
             }
         },
@@ -8775,7 +8775,7 @@
                 "zones": "الزيتون",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو حدائق الزيتون,"
             }
         },
@@ -9171,7 +9171,7 @@
                 "zones": "المرج",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو المرج,"
             }
         },
@@ -9325,7 +9325,7 @@
                 "zones": "المرج",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو المرج الجديدة,"
             }
         },
@@ -10183,7 +10183,7 @@
                 "zones": "المطرية",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو المطرية,"
             }
         },
@@ -10711,7 +10711,7 @@
                 "zones": "مصر الجديدة",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو ألف مسكن,"
             }
         },
@@ -10733,7 +10733,7 @@
                 "zones": "عين شمس",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو ألف مسكن,"
             }
         },
@@ -11437,7 +11437,7 @@
                 "zones": "الشروق",
                 "direction": "ب",
                 "landmark": "امام كمباوند سبرنجزز3",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة كمباوند سبرنجز,امام كمباوند سبرنجزز3"
             }
         },
@@ -12647,7 +12647,7 @@
                 "zones": "الشروق",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مسجد ال خليفه,"
             }
         },
@@ -13329,7 +13329,7 @@
                 "zones": "الشروق",
                 "direction": "أ",
                 "landmark": "بجانب مول بارادايس الشروق",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مول بارادايس الشروق,بجانب مول بارادايس الشروق"
             }
         },
@@ -17795,7 +17795,7 @@
                 "zones": "مصر الجديدة",
                 "direction": "أ",
                 "landmark": "امام اكرامي موتورز",
-                "stationType": null,
+                "stationType": 3,
                 "description": "الاتربي باشا,امام اكرامي موتورز"
             }
         },
@@ -17861,7 +17861,7 @@
                 "zones": "مدينة المستقبل",
                 "direction": "ج",
                 "landmark": "امام مسجد خاتم المرسبين",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة نادي الدراجات,امام مسجد خاتم المرسبين"
             }
         },
@@ -17883,7 +17883,7 @@
                 "zones": "مدينة المستقبل",
                 "direction": "أ",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة نادي الياسمين3,"
             }
         },
@@ -21205,7 +21205,7 @@
                 "zones": "مدينة نصر والمنشية",
                 "direction": "ب",
                 "landmark": "تقع المحطة فى تقاطع شارع مصطفي النحاس مع محور شينزو آبي",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مسجد المؤمن و شينزو آبي,تقع المحطة فى تقاطع شارع مصطفي النحاس مع محور شينزو آبي"
             }
         },
@@ -21359,7 +21359,7 @@
                 "zones": "مصر الجديدة",
                 "direction": "ب",
                 "landmark": "تقع المحطة فى تقاطع امتداد ارع مكرم عبيد و شارع الإمداد و التموين ",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مول سيتى ستارز,تقع المحطة فى تقاطع امتداد ارع مكرم عبيد و شارع الإمداد و التموين "
             }
         },
@@ -21623,7 +21623,7 @@
                 "zones": "مدينة نصر والمنشية",
                 "direction": "",
                 "landmark": "تقع المحطة على شارع سمير عبد الرؤوف امام مطعم الجناني و بجان السراج مول، و تكنولجي مول",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة السراج مول ب,تقع المحطة على شارع سمير عبد الرؤوف امام مطعم الجناني و بجان السراج مول، و تكنولجي مول"
             }
         },
@@ -22349,7 +22349,7 @@
                 "zones": "مدينة نصر والمنشية",
                 "direction": "",
                 "landmark": "تقع المحطة على شارع سمير عبد الرؤوف امام مطعم الجناني و بجان السراج مول، و تكنولجي مول",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة السراج مول ب,تقع المحطة على شارع سمير عبد الرؤوف امام مطعم الجناني و بجان السراج مول، و تكنولجي مول"
             }
         },
@@ -22833,7 +22833,7 @@
                 "zones": "مصر الجديدة",
                 "direction": "أ",
                 "landmark": "تقع المحطة فى تقاطع امتداد ارع مكرم عبيد و شارع الإمداد و التموين ",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مول سيتى ستارز,تقع المحطة فى تقاطع امتداد ارع مكرم عبيد و شارع الإمداد و التموين "
             }
         },
@@ -23009,7 +23009,7 @@
                 "zones": "مدينة نصر والمنشية",
                 "direction": "أ",
                 "landmark": "تقع المحطة فى تقاطع شارع مصطفي النحاس مع محور شينزو آبي",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مسجد المؤمن و شينزو آبي,تقع المحطة فى تقاطع شارع مصطفي النحاس مع محور شينزو آبي"
             }
         },
@@ -23053,7 +23053,7 @@
                 "zones": "مدينة نصر والمنشية",
                 "direction": "",
                 "landmark": "تقع المحطة على تقاطع طريق النصر مع شارع إمتداد رمسيس و امام مطعم نعمة و امام مطعم الشبراوي و بجانب GO BUS",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة نادى السكة أ,تقع المحطة على تقاطع طريق النصر مع شارع إمتداد رمسيس و امام مطعم نعمة و امام مطعم الشبراوي و بجانب GO BUS"
             }
         },
@@ -25693,7 +25693,7 @@
                 "zones": "حلوان و15 مايو",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو جامعة حلوان,"
             }
         },
@@ -25715,7 +25715,7 @@
                 "zones": "حلوان و15 مايو",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "عين حلوان,"
             }
         },
@@ -32381,7 +32381,7 @@
                 "zones": "6 أكتوبر",
                 "direction": "أ",
                 "landmark": "امام بوابة كمبوند جنة مصر3",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة كمبوند جنة مصر,امام بوابة كمبوند جنة مصر3"
             }
         },
@@ -33283,7 +33283,7 @@
                 "zones": "6 أكتوبر",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة كمبوند نيوم أكتوبر,"
             }
         },
@@ -36297,7 +36297,7 @@
                 "zones": "ناهيا-كرداسة-العشرين-بولاق-كفر طهرمس-الملك فيصل-زنين",
                 "direction": "ب",
                 "landmark": "باور للدعايه والاعلان",
-                "stationType": null,
+                "stationType": 3,
                 "description": "ناهيا طريق المصرف,باور للدعايه والاعلان"
             }
         },
@@ -39179,7 +39179,7 @@
                 "zones": "منشأه البكري-عمرانية-طالبيه-كونيسة-منيب-حدائق الأهرام",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو حدائق الأهرام,"
             }
         },
@@ -39267,7 +39267,7 @@
                 "zones": "منشأه البكري-عمرانية-طالبيه-كونيسة-منيب-حدائق الأهرام",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو الرماية,"
             }
         },
@@ -39377,7 +39377,7 @@
                 "zones": "منشأه البكري-عمرانية-طالبيه-كونيسة-منيب-حدائق الأهرام",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو الاهرام,"
             }
         },
@@ -39619,7 +39619,7 @@
                 "zones": "منشأه البكري-عمرانية-طالبيه-كونيسة-منيب-حدائق الأهرام",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "مترو المريوطية,"
             }
         },
@@ -40169,7 +40169,7 @@
                 "zones": "Untitled Polygon",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مترو أم المصريين,"
             }
         },
@@ -40191,7 +40191,7 @@
                 "zones": "منشأه البكري-عمرانية-طالبيه-كونيسة-منيب-حدائق الأهرام",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مترو أم المصريين,"
             }
         },
@@ -40213,7 +40213,7 @@
                 "zones": "Untitled Polygon",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مترو الجيزة,"
             }
         },
@@ -40235,7 +40235,7 @@
                 "zones": "منشأه البكري-عمرانية-طالبيه-كونيسة-منيب-حدائق الأهرام",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مترو الجيزة,"
             }
         },
@@ -40257,7 +40257,7 @@
                 "zones": "Untitled Polygon",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مترو ساقية مكي,"
             }
         },
@@ -40279,7 +40279,7 @@
                 "zones": "منشأه البكري-عمرانية-طالبيه-كونيسة-منيب-حدائق الأهرام",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مترو ساقية مكي,"
             }
         },
@@ -40411,7 +40411,7 @@
                 "zones": "منشأه البكري-عمرانية-طالبيه-كونيسة-منيب-حدائق الأهرام",
                 "direction": "أ",
                 "landmark": "(أ)أمام التوحيد والنور بالطالبية",
-                "stationType": null,
+                "stationType": 3,
                 "description": "التوحيد و النور,(أ)أمام التوحيد والنور بالطالبية"
             }
         },
@@ -45383,7 +45383,7 @@
                 "zones": "كرداسة وناهيا وعزبة السلماوي",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مونوريل المنصورية,"
             }
         },
@@ -45427,7 +45427,7 @@
                 "zones": "كرداسة وناهيا وعزبة السلماوي",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مونوريل المريوطية,"
             }
         },
@@ -46175,7 +46175,7 @@
                 "zones": "القاهرة الجديدة",
                 "direction": "أ",
                 "landmark": "امام بينجو",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطه صينية نادي رويال,امام بينجو"
             }
         },
@@ -50047,7 +50047,7 @@
                 "zones": "القاهرة الجديدة",
                 "direction": "ب",
                 "landmark": "الجهة المقابلة للكشك",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة الكشك,الجهة المقابلة للكشك"
             }
         },
@@ -50355,7 +50355,7 @@
                 "zones": "القاهرة الجديدة",
                 "direction": "ب",
                 "landmark": "الاتجاة المقابل للمدرسة",
-                "stationType": null,
+                "stationType": 3,
                 "description": "اخناتون,الاتجاة المقابل للمدرسة"
             }
         },
@@ -50883,7 +50883,7 @@
                 "zones": "حدايق العاصمة وزهرة العاصمة",
                 "direction": "",
                 "landmark": "",
-                "stationType": null,
+                "stationType": 3,
                 "description": "محطة مسجد الحبيب المصطفى مدينة حدائق العاصمة,"
             }
         },
