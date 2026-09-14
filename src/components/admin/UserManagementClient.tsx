@@ -42,6 +42,8 @@ import {
 type UserRole = "passenger" | "driver" | "admin";
 type VerificationStatus = "incomplete" | "pending" | "verified";
 type ToneKey = "slate" | "amber" | "teal" | "navy";
+type UserSort = "createdAt" | "referralUsageCount";
+type SortDirection = "asc" | "desc";
 
 type DriverProfile = {
   verificationStatus?: VerificationStatus;
@@ -180,6 +182,18 @@ export default function UserManagementClient({
   const [verificationFilter, setVerificationFilter] = useState<
     VerificationStatus | null
   >(null);
+  const [signupDate, setSignupDate] = useState("");
+  const [sortBy, setSortBy] = useState<UserSort>("createdAt");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  function resetFilters() {
+    setQuery("");
+    setRoleFilter("passenger");
+    setVerificationFilter(null);
+    setSignupDate("");
+    setSortBy("createdAt");
+    setSortDirection("desc");
+  }
 
   const summary = useMemo(() => {
     const passengerCount = rows.filter((r) => r.role === "passenger").length;
@@ -189,29 +203,59 @@ export default function UserManagementClient({
   }, [rows]);
 
   const filteredRows = useMemo(() => {
-    return rows.filter((row) => {
-      const rowRole = row.role || "passenger";
-      if (rowRole !== roleFilter) return false;
-      if (
-        roleFilter === "driver" &&
-        verificationFilter &&
-        row.driver?.verificationStatus !== verificationFilter
-      )
-        return false;
-      const search = query.trim();
-      if (!search) return true;
+    const visibleRows = rows.filter((row) => {
+        if (signupDate) {
+          const rowDate = row.createdAt?.slice(0, 10);
+          if (rowDate !== signupDate) return false;
+        }
+        const rowRole = row.role || "passenger";
+        if (rowRole !== roleFilter) return false;
+        if (
+          roleFilter === "driver" &&
+          verificationFilter &&
+          row.driver?.verificationStatus !== verificationFilter
+        )
+          return false;
+        const search = query.trim();
+        if (!search) return true;
 
-      const normalizedSearch = search.toLowerCase();
-      const numberMatch = normalizedSearch.match(/^#(\d+)$/);
-      if (numberMatch) {
-        return String(row.userNumber ?? "").includes(numberMatch[1]);
-      }
+        const normalizedSearch = search.toLowerCase();
+        const numberMatch = normalizedSearch.match(/^#(\d+)$/);
+        if (numberMatch) {
+          return String(row.userNumber ?? "").includes(numberMatch[1]);
+        }
 
-      const haystack =
-        `${row.name || ""} ${row.phone || ""} ${row.email || ""}`.toLowerCase();
-      return haystack.includes(normalizedSearch);
+        const haystack =
+          `${row.name || ""} ${row.phone || ""} ${row.email || ""}`.toLowerCase();
+        return haystack.includes(normalizedSearch);
+      });
+
+    return [...visibleRows].sort((left, right) => {
+      const leftValue =
+        sortBy === "createdAt"
+          ? new Date(left.createdAt ?? 0).getTime()
+          : left.referralUsageCount ?? 0;
+      const rightValue =
+        sortBy === "createdAt"
+          ? new Date(right.createdAt ?? 0).getTime()
+          : right.referralUsageCount ?? 0;
+      const comparison = leftValue - rightValue;
+      return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [rows, query, roleFilter, verificationFilter]);
+  }, [
+    rows,
+    query,
+    roleFilter,
+    verificationFilter,
+    signupDate,
+    sortBy,
+    sortDirection,
+  ]);
+
+  const signupDateCount = useMemo(() => {
+    if (!signupDate) return null;
+    return rows.filter((row) => row.createdAt?.slice(0, 10) === signupDate).length;
+  }, [rows, signupDate]);
 
   function toggleExpanded(userId: string) {
     setExpandedId((current) => (current === userId ? null : userId));
@@ -358,6 +402,54 @@ export default function UserManagementClient({
               ))}
             </div>
           )}
+          <div className="flex flex-wrap gap-2">
+            <label className="flex items-center gap-2 text-xs font-semibold text-[var(--color-muted)]">
+              Signed up on
+              <input
+                type="date"
+                value={signupDate}
+                onChange={(event) => setSignupDate(event.target.value)}
+                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-xs font-semibold text-[var(--color-primary)] outline-none focus:border-[var(--color-secondary)]"
+                style={{ accentColor: "var(--color-secondary)" }}
+              />
+            </label>
+            {signupDateCount !== null && (
+              <span className="flex items-center rounded-lg bg-[var(--color-secondary-tint)] px-3 py-2 text-xs font-semibold text-[var(--color-secondary-deep)]">
+                {signupDateCount} {signupDateCount === 1 ? "person" : "people"} signed up
+              </span>
+            )}
+            <label className="flex items-center gap-2 text-xs font-semibold text-[var(--color-muted)]">
+              Sort by
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value as UserSort)}
+                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-xs font-semibold text-[var(--color-primary)] outline-none focus:border-[var(--color-secondary)]"
+              >
+                <option value="createdAt">Date joined</option>
+                <option value="referralUsageCount">Referral usage</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs font-semibold text-[var(--color-muted)]">
+              Order
+              <select
+                value={sortDirection}
+                onChange={(event) =>
+                  setSortDirection(event.target.value as SortDirection)
+                }
+                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-xs font-semibold text-[var(--color-primary)] outline-none focus:border-[var(--color-secondary)]"
+              >
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-xs font-semibold text-[var(--color-muted)] transition hover:border-[var(--color-secondary)] hover:text-[var(--color-primary)]"
+            >
+              Reset filters
+            </button>
+          </div>
         </div>
       </div>
 
@@ -400,6 +492,14 @@ export default function UserManagementClient({
                       <div className="mt-1 truncate font-mono text-xs text-[var(--color-muted)]">
                         {user.referralCode || "No referral code"} · Used by{" "}
                         {user.referralUsageCount ?? 0}
+                      </div>
+                      <div className="mt-1 truncate text-xs text-[var(--color-muted)]">
+                        Joined: {user.createdAt
+                          ? new Date(user.createdAt).toLocaleString([], {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })
+                          : "—"}
                       </div>
                     </div>
                   </div>
@@ -444,7 +544,10 @@ export default function UserManagementClient({
                           label="Joined"
                           value={
                             user.createdAt
-                              ? new Date(user.createdAt).toLocaleDateString()
+                              ? new Date(user.createdAt).toLocaleString([], {
+                                  dateStyle: "medium",
+                                  timeStyle: "short",
+                                })
                               : "—"
                           }
                         />
