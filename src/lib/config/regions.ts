@@ -104,7 +104,7 @@ export const REGION_LIST = Object.values(REGIONS);
 export const DEFAULT_REGION: RegionCode = "EG-CAIRO";
 
 /** Which regions each vehicle type is offered in ("all" = every region). */
-export const VEHICLE_REGIONS: Record<VehicleKey, RegionCode[] | "all"> = {
+export const VEHICLE_REGIONS: Partial<Record<VehicleKey, RegionCode[] | "all">> = {
   private_car: ["EG-CAIRO", "SA"],
   taxi_private: "all",
   taxi_shared: "all",
@@ -173,9 +173,12 @@ export function vehiclesForRegion<T extends Pick<VehicleConfig, "key">>(
   list: T[],
   region: RegionCode,
 ): T[] {
-  return list.filter((vehicle) =>
-    isVehicleAvailableInRegion(vehicle.key, region),
-  );
+  return list.filter((vehicle) => {
+    const assigned = (vehicle as T & { regionCodes?: string[] }).regionCodes;
+    return Array.isArray(assigned)
+      ? assigned.includes(region)
+      : isVehicleAvailableInRegion(vehicle.key, region);
+  });
 }
 
 /**
