@@ -20,7 +20,11 @@ import {
   Gift,
   type LucideIcon,
 } from "lucide-react";
-import { AdminCard, AdminEmptyState, AdminStatusBadge } from "@/components/admin/layout";
+import {
+  AdminCard,
+  AdminEmptyState,
+  AdminStatusBadge,
+} from "@/components/admin/layout";
 
 /**
  * ---------------------------------------------------------------------
@@ -103,8 +107,10 @@ const DOC_LABELS: Record<string, string> = {
 };
 
 const TONE_CLASSES: Record<ToneKey, string> = {
-  slate: "bg-[var(--color-background)] text-[var(--color-muted)] ring-[var(--color-border)]",
-  amber: "bg-[var(--color-warning-tint)] text-[var(--color-warning)] ring-[var(--color-warning)]",
+  slate:
+    "bg-[var(--color-background)] text-[var(--color-muted)] ring-[var(--color-border)]",
+  amber:
+    "bg-[var(--color-warning-tint)] text-[var(--color-warning)] ring-[var(--color-warning)]",
   teal: "bg-[var(--color-success-tint)] text-[var(--color-success)] ring-[var(--color-success)]",
   navy: "bg-[var(--color-primary-tint)] text-[var(--color-primary)] ring-[var(--color-primary)]",
 };
@@ -266,7 +272,9 @@ export default function UserManagementClient({
             <h2 className="text-xl font-bold tracking-tight text-[var(--color-primary)]">
               {title}
             </h2>
-            <p className="mt-1 text-sm text-[var(--color-muted)]">{description}</p>
+            <p className="mt-1 text-sm text-[var(--color-muted)]">
+              {description}
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -366,7 +374,8 @@ export default function UserManagementClient({
                         {user.email || "—"}
                       </div>
                       <div className="mt-1 truncate font-mono text-xs text-[var(--color-muted)]">
-                        {user.referralCode || "No referral code"} · Used by {user.referralUsageCount ?? 0}
+                        {user.referralCode || "No referral code"} · Used by{" "}
+                        {user.referralUsageCount ?? 0}
                       </div>
                     </div>
                   </div>
@@ -376,9 +385,17 @@ export default function UserManagementClient({
                     {verification && (
                       <span className="hidden sm:inline-flex">
                         <AdminStatusBadge
-                          status={user.driver?.verificationStatus ?? "incomplete"}
+                          status={
+                            user.driver?.verificationStatus ?? "incomplete"
+                          }
                           label={verification.label}
-                          tone={verification.tone === "teal" ? "success" : verification.tone === "amber" ? "warning" : "muted"}
+                          tone={
+                            verification.tone === "teal"
+                              ? "success"
+                              : verification.tone === "amber"
+                                ? "warning"
+                                : "muted"
+                          }
                         />
                       </span>
                     )}
@@ -529,6 +546,10 @@ export default function UserManagementClient({
                                   if (!value) return null;
                                   const docLabel =
                                     key in DOC_LABELS ? DOC_LABELS[key] : key;
+                                  const fileUrl = value.replace(
+                                    "/assets/uploads/documents/",
+                                    "/api/upload/",
+                                  );
                                   const isImage =
                                     /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(
                                       value,
@@ -536,7 +557,7 @@ export default function UserManagementClient({
                                   return (
                                     <a
                                       key={key}
-                                      href={value}
+                                      href={fileUrl}
                                       target="_blank"
                                       rel="noreferrer"
                                       className="group overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] transition hover:border-[var(--color-secondary)] hover:shadow-md"
@@ -544,7 +565,7 @@ export default function UserManagementClient({
                                       <div className="relative aspect-4/3 w-full overflow-hidden bg-[var(--color-background)]">
                                         {isImage ? (
                                           <img
-                                            src={value}
+                                            src={fileUrl}
                                             alt={docLabel}
                                             className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                                           />
@@ -632,7 +653,12 @@ function StatPill({
 }
 
 function RoleBadge({ role }: { role?: string }) {
-  return <AdminStatusBadge status={role || "passenger"} tone={role === "driver" ? "success" : role === "admin" ? "info" : "muted"} />;
+  return (
+    <AdminStatusBadge
+      status={role || "passenger"}
+      tone={role === "driver" ? "success" : role === "admin" ? "info" : "muted"}
+    />
+  );
 }
 
 function Avatar({ name }: { name?: string }) {
@@ -711,7 +737,9 @@ function FieldSelect({
 }) {
   return (
     <label className="grid gap-1.5">
-      <span className="text-xs font-semibold text-[var(--color-muted)]">{label}</span>
+      <span className="text-xs font-semibold text-[var(--color-muted)]">
+        {label}
+      </span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
