@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
+import { GridFSBucket } from "mongodb";
 import { getSession } from "@/lib/auth/session";
-
-const UPLOAD_DIR = path.join(
-  process.cwd(),
-  "public",
-  "assets",
-  "uploads",
-  "documents",
-);
+import { connectDB } from "@/lib/db/mongoose";
 
 const ALLOWED_TYPES: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -46,13 +38,24 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
 
-    await mkdir(UPLOAD_DIR, { recursive: true });
-
     const filename = `${randomUUID()}${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(UPLOAD_DIR, filename), buffer);
+    const mongoose = await connectDB();
+    const db = mongoose.connection.db;
+    if (!db) throw new Error("Database connection is unavailable");
+    const bucket = new GridFSBucket(db, {
+      bucketName: "uploads",
+    });
+    await new Promise<void>((resolve, reject) => {
+      const uploadStream = bucket.openUploadStream(filename, {
+        metadata: { contentType: file.type, originalName: file.name },
+      });
+      uploadStream.once("error", reject);
+      uploadStream.once("finish", () => resolve());
+      uploadStream.end(buffer);
+    });
 
-    const relativePath = `/assets/uploads/documents/${filename}`;
+    const relativePath = `/api/upload/${filename}`;
     return NextResponse.json({ ok: true, path: relativePath }, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Upload failed." }, { status: 500 });

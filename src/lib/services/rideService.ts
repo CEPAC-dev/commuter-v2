@@ -7,6 +7,7 @@ import { WalletTransaction } from "../../models/WalletTransaction";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { getEligibleDriverIds } from "@/lib/services/rideMatching";
 import { getAdminSettings, getCancellationTier } from "@/lib/cancellationPolicy";
+import { isRegionCode } from "@/lib/config/regions";
 import type {
   RideDetailView,
   RideListRow,
@@ -390,6 +391,10 @@ function toStation(value: unknown): StationSelection | null {
   }
   return {
     id: raw.id,
+    regionCode:
+      typeof raw.regionCode === "string" && isRegionCode(raw.regionCode)
+        ? raw.regionCode
+        : undefined,
     lat: raw.lat,
     lng: raw.lng,
     name: typeof raw.name === "string" ? raw.name : "—",
@@ -550,6 +555,7 @@ async function getDriverRide(
       ? await Station.find({ objectId: { $in: stationIds } }).lean<
           Array<{
             objectId: number;
+            regionCode?: string;
             name?: string;
             direction?: string;
             landmark?: string;
@@ -566,6 +572,7 @@ async function getDriverRide(
     if (!doc) return station;
     return {
       ...station,
+      regionCode: asString(station.regionCode, doc.regionCode),
       direction: asString(station.direction, doc.direction),
       landmark: asString(station.landmark, doc.landmark),
       stationType: asString(station.stationType, doc.stationType),

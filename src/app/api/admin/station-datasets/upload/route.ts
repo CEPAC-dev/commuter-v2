@@ -104,6 +104,16 @@ export async function POST(req: NextRequest) {
       },
     }).catch(() => undefined);
     const message = error instanceof Error ? error.message : "Upload failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const readOnlyDeployment =
+      process.env.VERCEL === "1" ||
+      /ENOENT|EROFS|EPERM/.test(message);
+    return NextResponse.json(
+      {
+        error: readOnlyDeployment
+          ? "This deployment cannot write uploads to public/geo. Commit the GeoJSON file to public/geo and use “Use file”, or deploy the app on a VPS with a writable persistent filesystem."
+          : message,
+      },
+      { status: readOnlyDeployment ? 503 : 500 },
+    );
   }
 }

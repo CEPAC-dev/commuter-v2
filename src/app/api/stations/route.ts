@@ -9,9 +9,11 @@ import {
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { StationAuditLog } from "@/models/StationAuditLog";
 import { PERMISSIONS } from "@/lib/auth/permissions";
+import type { RegionCode } from "@/lib/config/regions";
 
 interface StationSource {
   objectId?: number;
+  regionCode?: RegionCode;
   name?: string;
   direction?: string;
   zones?: string;
@@ -25,6 +27,7 @@ interface StationSource {
 function serialize(s: StationSource) {
   return {
     id: s.objectId,
+    regionCode: s.regionCode,
     name: s.name || s.direction || "",
     direction: s.direction,
     zones: s.zones || "",
