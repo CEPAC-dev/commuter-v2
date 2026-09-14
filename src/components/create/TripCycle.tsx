@@ -88,6 +88,7 @@ export interface TripData {
   returnTrip?: boolean; // UI flag — reverse of source trip
   pickupStation: {
     id: number;
+    regionCode?: import("@/lib/config/regions").RegionCode;
     lat: number;
     lng: number;
     name: string;
@@ -96,6 +97,7 @@ export interface TripData {
   } | null;
   dropoffStation: {
     id: number;
+    regionCode?: import("@/lib/config/regions").RegionCode;
     lat: number;
     lng: number;
     name: string;
@@ -1083,6 +1085,7 @@ export default function TripCycle({
 
     const selectedStation = {
       id: station.id,
+      regionCode: station.regionCode,
       lat: station.lat,
       lng: station.lng,
       name: station.name,

@@ -1,3 +1,5 @@
+import type { RegionCode } from "@/lib/config/regions";
+
 // Shared geo primitives. Import these instead of re-declaring per file.
 
 export interface LatLng {
@@ -15,6 +17,7 @@ export interface GeoPoint {
 /** A user-selected station (shared/station ride pickup or dropoff). */
 export interface StationSelection {
   id: number;
+  regionCode?: RegionCode;
   name: string;
   direction?: string;
   landmark?: string;
