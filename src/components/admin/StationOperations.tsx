@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AdminCard } from "@/components/admin/layout";
+import { FileCheck2, Trash2, Upload } from "lucide-react";
 
 type Dataset = { _id: string; version: number; status: string; file: { originalName: string; size: number; checksumSha256: string }; stationCount: number; newCount: number; updatedCount: number; removedCount: number; unchangedCount: number; publishedAt?: string; uploadedAt?: string };
 type GeoFile = { path: string; size: number; modifiedAt: string };
@@ -62,6 +63,19 @@ export default function StationOperations({ regionCode }: { regionCode: string }
     try { await request("/api/admin/station-files", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: filePath }) }); setMessage("GeoJSON file removed."); await load(); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Could not remove file."); }
   }
+  async function createDatasetFromFile(filePath: string) {
+    try {
+      const result = await request("/api/admin/station-datasets/from-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: filePath }),
+      });
+      setMessage(`Created dataset version ${result.version} from ${filePath}. Validate it before publishing.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not use the selected file.");
+    }
+  }
   const stats = (summary?.statistics ?? {}) as Record<string, number>;
   const activeDataset = summary?.activeDataset as Dataset | null | undefined;
   return <div style={{ display: "grid", gap: 18, marginBottom: 24 }}>
@@ -71,11 +85,11 @@ export default function StationOperations({ regionCode }: { regionCode: string }
       </div>
       <p style={{ marginBottom: 0 }}>{activeDataset ? <>Active dataset: <strong>v{activeDataset.version}</strong> · {activeDataset.stationCount} source stations · {activeDataset.file.originalName}</> : "No active region dataset. Upload and validate a GeoJSON source to begin."}</p>
     </AdminCard>
-    <AdminCard title="GeoJSON files" description="Files currently available under public/geo. Removing a source file also makes its dataset download unavailable.">
-      <div style={{ overflowX: "auto" }}><table className="admin-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}><thead><tr><th style={{ textAlign: "left", padding: "10px 12px" }}>Path</th><th style={{ textAlign: "left", padding: "10px 12px" }}>Size</th><th style={{ textAlign: "left", padding: "10px 12px" }}>Modified</th><th style={{ padding: "10px 12px" }}>Action</th></tr></thead><tbody>{files.map((geoFile) => <tr key={geoFile.path}><td style={{ padding: "10px 12px", wordBreak: "break-word" }}>{geoFile.path}</td><td style={{ padding: "10px 12px" }}>{(geoFile.size / 1024).toFixed(1)} KB</td><td style={{ padding: "10px 12px" }}>{new Date(geoFile.modifiedAt).toLocaleString()}</td><td style={{ padding: "10px 12px" }}><button type="button" style={{ ...buttonStyle, background: "var(--color-danger)" }} onClick={() => removeFile(geoFile.path)}>Remove</button></td></tr>)}</tbody></table></div>
+    <AdminCard title="GeoJSON files" description="Files currently available under public/geo. Use a file to create a dataset version without uploading it again.">
+      <div style={{ overflowX: "auto" }}><table className="admin-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}><thead><tr><th style={{ textAlign: "left", padding: "10px 12px" }}>Path</th><th style={{ textAlign: "left", padding: "10px 12px" }}>Size</th><th style={{ textAlign: "left", padding: "10px 12px" }}>Modified</th><th style={{ padding: "10px 12px" }}>Actions</th></tr></thead><tbody>{files.map((geoFile) => <tr key={geoFile.path}><td style={{ padding: "10px 12px", wordBreak: "break-word" }}>{geoFile.path}</td><td style={{ padding: "10px 12px" }}>{(geoFile.size / 1024).toFixed(1)} KB</td><td style={{ padding: "10px 12px" }}>{new Date(geoFile.modifiedAt).toLocaleString()}</td><td style={{ padding: "10px 12px" }}><div style={{ display: "flex", justifyContent: "center", gap: 8 }}><button aria-label={`Use ${geoFile.path}`} title="Use file" type="button" style={{ ...buttonStyle, padding: 8 }} onClick={() => void createDatasetFromFile(geoFile.path)}><FileCheck2 size={16} aria-hidden="true" /></button><button aria-label={`Remove ${geoFile.path}`} title="Remove file" type="button" style={{ ...buttonStyle, background: "var(--color-danger)", padding: 8 }} onClick={() => removeFile(geoFile.path)}><Trash2 size={16} aria-hidden="true" /></button></div></td></tr>)}</tbody></table></div>
     </AdminCard>
     <AdminCard title="Dataset management" description="Uploading never changes live stations. Validate and review changes before publishing.">
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}><input style={fieldStyle} type="file" accept=".geojson,.json,application/geo+json,application/json" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /><button style={buttonStyle} type="button" onClick={upload}>Upload GeoJSON</button></div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}><input style={fieldStyle} type="file" accept=".geojson,.json,application/geo+json,application/json" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /><button aria-label="Upload GeoJSON" title="Upload GeoJSON" style={{ ...buttonStyle, display: "inline-flex", alignItems: "center", gap: 6 }} type="button" onClick={upload}><Upload size={16} aria-hidden="true" />Upload GeoJSON</button></div>
       {message && <p role="status">{message}</p>}
       <div style={{ overflowX: "auto", marginTop: 16 }}><table className="admin-table" style={{ width: "100%", minWidth: 760, borderCollapse: "separate", borderSpacing: 0 }}><thead><tr>{["Version", "Status", "Source", "Changes", "Actions"].map((head) => <th key={head} style={{ padding: "12px 14px", textAlign: "left" }}>{head}</th>)}</tr></thead><tbody>{datasets.map((dataset) => <tr key={dataset._id}><td style={{ padding: "12px 14px" }}>v{dataset.version}</td><td style={{ padding: "12px 14px" }}>{dataset.status}</td><td style={{ padding: "12px 14px" }}>{dataset.file.originalName}</td><td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>+{dataset.newCount} / ~{dataset.updatedCount} / −{dataset.removedCount}</td><td style={{ padding: "12px 14px" }}><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{["UPLOADED", "INVALID"].includes(dataset.status) && <button style={buttonStyle} onClick={() => validate(dataset)}>Validate</button>}{["VALID", "PUBLISHED", "ARCHIVED"].includes(dataset.status) && <button style={buttonStyle} onClick={() => inspect(dataset)}>Preview</button>}{dataset.status === "VALID" && <button style={buttonStyle} onClick={() => publish(dataset)}>Publish</button>}{dataset.status === "ARCHIVED" && <button style={buttonStyle} onClick={() => publish(dataset, true)}>Rollback</button>}<a style={{ alignSelf: "center" }} href={`/api/admin/station-datasets/${dataset._id}/download?region=${encodeURIComponent(regionCode)}`}>Download</a></div></td></tr>)}</tbody></table></div>
       {preview && <div style={{ marginTop: 16, padding: 16, border: "1px solid var(--color-border)", borderRadius: 10 }}><strong>Preview: v{String(preview.version)}</strong><p>New {String(preview.newCount)} · Updated {String(preview.updatedCount)} · Removed {String(preview.removedCount)} · Unchanged {String(preview.unchangedCount)}</p><ul>{Array.isArray(preview.updated) && preview.updated.slice(0, 10).map((item: { station: PreviewStation; changedFields: string[] }) => <li key={item.station.objectId}>#{item.station.objectId} {item.station.name}: {item.changedFields.join(", ")}</li>)}</ul></div>}
