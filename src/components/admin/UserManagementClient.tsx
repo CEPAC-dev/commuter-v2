@@ -176,22 +176,28 @@ export default function UserManagementClient({
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
   const [feedback, setFeedback] = useState<FeedbackState>({});
   const [query, setQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [roleFilter, setRoleFilter] = useState<UserRole>("passenger");
+  const [verificationFilter, setVerificationFilter] = useState<
+    VerificationStatus | null
+  >(null);
 
   const summary = useMemo(() => {
+    const passengerCount = rows.filter((r) => r.role === "passenger").length;
     const driverCount = rows.filter((r) => r.role === "driver").length;
     const adminCount = rows.filter((r) => r.role === "admin").length;
-    const pendingCount = rows.filter(
-      (r) => r.driver?.verificationStatus === "pending",
-    ).length;
-    return { total: rows.length, driverCount, adminCount, pendingCount };
+    return { total: rows.length, passengerCount, driverCount, adminCount };
   }, [rows]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const matchesRole =
-        roleFilter === "all" || (row.role || "passenger") === roleFilter;
-      if (!matchesRole) return false;
+      const rowRole = row.role || "passenger";
+      if (rowRole !== roleFilter) return false;
+      if (
+        roleFilter === "driver" &&
+        verificationFilter &&
+        row.driver?.verificationStatus !== verificationFilter
+      )
+        return false;
       const search = query.trim();
       if (!search) return true;
 
@@ -205,7 +211,7 @@ export default function UserManagementClient({
         `${row.name || ""} ${row.phone || ""} ${row.email || ""}`.toLowerCase();
       return haystack.includes(normalizedSearch);
     });
-  }, [rows, query, roleFilter]);
+  }, [rows, query, roleFilter, verificationFilter]);
 
   function toggleExpanded(userId: string) {
     setExpandedId((current) => (current === userId ? null : userId));
@@ -285,30 +291,28 @@ export default function UserManagementClient({
               value={summary.total}
             />
             <StatPill
+              icon={Users}
+              tone="navy"
+              label="Passenger"
+              value={summary.passengerCount}
+            />
+            <StatPill
               icon={Car}
               tone="teal"
-              label="Drivers"
+              label="Driver"
               value={summary.driverCount}
             />
             <StatPill
               icon={ShieldCheck}
               tone="slate"
-              label="Admins"
+              label="Admin"
               value={summary.adminCount}
             />
-            {summary.pendingCount > 0 && (
-              <StatPill
-                icon={Clock}
-                tone="amber"
-                label="Pending review"
-                value={summary.pendingCount}
-              />
-            )}
           </div>
         </div>
 
         {/* Search + filter */}
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-col gap-3">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
             <input
@@ -319,11 +323,11 @@ export default function UserManagementClient({
             />
           </div>
           <div className="flex gap-2 overflow-x-auto">
-            {["all", ...ROLE_OPTIONS].map((role) => (
+            {ROLE_OPTIONS.map((role) => (
               <button
                 key={role}
                 type="button"
-                onClick={() => setRoleFilter(role)}
+                onClick={() => setRoleFilter(role as UserRole)}
                 className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold capitalize transition ${
                   roleFilter === role
                     ? "bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-sm"
@@ -334,6 +338,26 @@ export default function UserManagementClient({
               </button>
             ))}
           </div>
+          {roleFilter === "driver" && (
+            <div className="flex gap-2 overflow-x-auto">
+              {Object.entries(VERIFICATION_META).map(([value, meta]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() =>
+                    setVerificationFilter(value as VerificationStatus)
+                  }
+                  className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition ${
+                    verificationFilter === value
+                      ? "bg-[var(--color-secondary)] text-[var(--color-on-secondary)] shadow-sm"
+                      : "bg-[var(--color-background)] text-[var(--color-muted)] hover:bg-[var(--color-secondary-tint)]"
+                  }`}
+                >
+                  {value === "verified" ? "Completed" : meta.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -546,10 +570,7 @@ export default function UserManagementClient({
                                   if (!value) return null;
                                   const docLabel =
                                     key in DOC_LABELS ? DOC_LABELS[key] : key;
-                                  const fileUrl = value.replace(
-                                    "/assets/uploads/documents/",
-                                    "/api/upload/",
-                                  );
+                                  const fileUrl = value;
                                   const isImage =
                                     /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(
                                       value,

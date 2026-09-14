@@ -72,7 +72,6 @@ const sections = [
     icon: Gift,
     statKey: null,
   },
-  { href: "/admin/stations", label: "Stations", icon: ListChecks, statKey: null },
   {
     href: "/admin/operation",
     label: "Operation",
