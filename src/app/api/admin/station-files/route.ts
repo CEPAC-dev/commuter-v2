@@ -35,6 +35,10 @@ export async function DELETE(req: NextRequest) {
   if (!auth.authorized) return auth.response;
   let filePath: string;
   try { filePath = String((await req.json()).path ?? ""); await rm(target(filePath)); }
-  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not remove file." }, { status: 400 }); }
+  catch (error) {
+    const message = error instanceof Error ? error.message : "Could not remove file.";
+    const readOnlyDeployment = process.env.VERCEL === "1" || /EROFS|EPERM|ENOENT/.test(message);
+    return NextResponse.json({ error: readOnlyDeployment ? "This deployment cannot remove files from public/geo. Remove the file from the repository and redeploy." : message }, { status: readOnlyDeployment ? 503 : 400 });
+  }
   return NextResponse.json({ ok: true });
 }
