@@ -9,6 +9,7 @@ import {
   CalendarClock,
   Car,
   ChartNoAxesCombined,
+  CarFront,
   Gauge,
   Gift,
   ListChecks,
@@ -39,6 +40,7 @@ const sections = [
   { href: "/admin/users", label: "Users", icon: Users, statKey: "users" },
   { href: "/admin/trips", label: "Trips", icon: Route, statKey: "trips" },
   { href: "/admin/rides", label: "Rides", icon: Car, statKey: "rides" },
+  { href: "/admin/vehicles", label: "Vehicles", icon: CarFront, statKey: null },
   {
     href: "/admin/availability",
     label: "Availability",

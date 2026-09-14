@@ -40,8 +40,6 @@ import {
 import {
   DEFAULT_REGION,
   getMapConfig,
-  isVehicleAvailableInRegion,
-  vehiclesForRegion,
   type RegionCode,
 } from "@/lib/config/regions";
 
@@ -208,18 +206,16 @@ export default function CreateClient({
 
   // Vehicles — DB-hydrated (mobile-parity source of truth); falls back to static config on failure
   useEffect(() => {
-    fetch("/api/vehicles", { cache: "no-store" })
+    fetch(`/api/vehicles?region=${encodeURIComponent(region)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!d?.vehicles?.length) return;
-        const map: Record<string, (typeof VEHICLES)[keyof typeof VEHICLES]> = {
-          ...VEHICLES,
-        };
+        if (!Array.isArray(d?.vehicles)) return;
+        const map: Record<string, (typeof VEHICLES)[keyof typeof VEHICLES]> = {};
         for (const v of d.vehicles) map[v.key] = v;
         setVehiclesMap(map);
       })
       .catch(() => {});
-  }, []);
+  }, [region]);
 
   const handleMapPick = useCallback(
     (point: TripPoint) => {
@@ -849,24 +845,7 @@ export default function CreateClient({
                 const allVehicles = vehiclesMap
                   ? Object.values(vehiclesMap)
                   : VEHICLE_LIST;
-                const availableVehicles = vehiclesForRegion(
-                  allVehicles,
-                  region,
-                );
-                const vehicleList =
-                  region === "EG-CAIRO"
-                    ? [
-                        ...availableVehicles,
-                        ...allVehicles.filter(
-                          (vehicle) =>
-                            (vehicle.key === "van_shared" ||
-                              vehicle.key === "microbus_shared") &&
-                            !availableVehicles.some(
-                              (available) => available.key === vehicle.key,
-                            ),
-                        ),
-                      ]
-                    : availableVehicles;
+                const vehicleList = allVehicles;
                 // Minimum arrival time = prev trip's arrival + this trip's drive + buffer
                 let minArrivalTime: string | null = null;
                 if (i > 0) {
@@ -874,7 +853,7 @@ export default function CreateClient({
                   if (prev.arrivalTime) {
                     const prevMins = toMinutes(prev.arrivalTime);
                     if (trip.durationMinutes && trip.vehicleType) {
-                      const vWindow = VEHICLES[trip.vehicleType].window;
+                      const vWindow = (vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType]).window;
                       minArrivalTime = toHHMM(
                         prevMins + trip.durationMinutes + vWindow,
                       );
@@ -911,12 +890,7 @@ export default function CreateClient({
                     minArrivalTime={minArrivalTime}
                     vehiclesMap={vehiclesMap ?? undefined}
                     vehicleList={vehicleList}
-                    disabledVehicleKeys={vehicleList
-                      .filter(
-                        (vehicle) =>
-                          !isVehicleAvailableInRegion(vehicle.key, region),
-                      )
-                      .map((vehicle) => vehicle.key)}
+                    disabledVehicleKeys={[]}
                     onStopErrorChange={(error) =>
                       handleTripStopErrorChange(trip.id, error)
                     }

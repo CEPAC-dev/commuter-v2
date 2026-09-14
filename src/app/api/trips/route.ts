@@ -10,9 +10,7 @@ import {
   computePrivateTripPriceEgp,
   computeTripPriceEgp,
   priceForSelectedDate,
-  type VehicleKey,
 } from "@/lib/config/vehicles";
-import { isVehicleAvailableInRegion } from "@/lib/config/regions";
 import { resolveActiveRegion } from "@/lib/regions/resolveActiveRegion";
 import { isDateInWindow } from "@/lib/time/bookingDates";
 import {
@@ -40,11 +38,6 @@ import {
   rollbackPromoCodeUsage,
   type PromoDiscountType,
 } from "@/lib/promoCode";
-
-const PRIVATE_VEHICLE_KEYS = new Set<VehicleKey>([
-  "private_car",
-  "taxi_private",
-]);
 
 function stationPayload(
   station: Pick<GeoStation, "id" | "lat" | "lng" | "name" | "regionCode">,
@@ -158,16 +151,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const vehiclesMap = await getVehicles();
-
   await connectDB();
 
   const activeRegion = await resolveActiveRegion({ userId });
   const userRegion = activeRegion.code;
+  const vehiclesMap = await getVehicles(userRegion);
   const allowedVehicleSet = new Set(
-    Object.keys(vehiclesMap).filter((key) =>
-      isVehicleAvailableInRegion(key, userRegion),
-    ),
+    Object.keys(vehiclesMap),
   );
   const stationDocs = await Station.find({
     regionCode: userRegion,
@@ -227,11 +217,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const vKey = t.vehicleType as keyof typeof VEHICLES;
+    const vKey = t.vehicleType;
     const vehicle = vehiclesMap[vKey];
-    const tripRideType = PRIVATE_VEHICLE_KEYS.has(vKey as VehicleKey)
-      ? "private"
-      : "shared";
+    const tripRideType = vehicle.ride;
 
     if (tripRideType === "private") {
       if (!t.pickupTime || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.pickupTime)) {
