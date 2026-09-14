@@ -1,5 +1,8 @@
+import type { RegionCode } from "@/lib/config/regions";
+
 export interface Station {
   id: number;
+  regionCode?: RegionCode;
   name: string;
   direction?: string;
   stationType: string;
@@ -13,6 +16,7 @@ export interface Station {
 
 export interface StationOption {
   id: number;
+  regionCode?: RegionCode;
   name: string;
   direction?: string;
   stationType: string;
@@ -89,6 +93,7 @@ export function findNearestStations(
       const distanceKm = haversineKm(lat, lng, station.lat, station.lng);
       return {
         id: station.id,
+        regionCode: station.regionCode,
         name: station.name,
         direction: station.direction,
         stationType: station.stationType,

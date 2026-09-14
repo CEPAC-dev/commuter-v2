@@ -47,10 +47,11 @@ const PRIVATE_VEHICLE_KEYS = new Set<VehicleKey>([
 ]);
 
 function stationPayload(
-  station: Pick<GeoStation, "id" | "lat" | "lng" | "name">,
+  station: Pick<GeoStation, "id" | "lat" | "lng" | "name" | "regionCode">,
 ) {
   return {
     id: station.id,
+    regionCode: station.regionCode,
     lat: station.lat,
     lng: station.lng,
     name: station.name,
@@ -174,6 +175,7 @@ export async function POST(req: NextRequest) {
   }).lean();
   const canonicalStations: GeoStation[] = stationDocs.map((station) => ({
     id: station.objectId,
+    regionCode: station.regionCode,
     name: station.name || station.direction || "",
     direction: station.direction,
     stationType: station.stationType ?? "",

@@ -257,6 +257,7 @@ export default function CreateClient({
 
           const selectedStation = {
             id: station.id,
+            regionCode: station.regionCode,
             lat: station.lat,
             lng: station.lng,
             name: station.name,
