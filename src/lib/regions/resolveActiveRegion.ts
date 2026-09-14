@@ -68,7 +68,9 @@ export async function resolveActiveRegion({
     ? user.defaultRegionCode
     : user.region
       ? normalizeRegion(user.region)
-      : null;
+      : user.role === "admin"
+        ? DEFAULT_REGION
+        : null;
   const activeCode = requestedCode ?? defaultRegionCode;
 
   if (!activeCode) {
