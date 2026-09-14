@@ -1,13 +1,7 @@
 import { bookingWindow } from "../time/bookingDates.ts";
 
-export type VehicleKey =
-  | "private_car"
-  | "taxi_private"
-  | "taxi_shared"
-  | "shared_car"
-  | "van_shared"
-  | "microbus_shared"
-  | "mini_bus";
+/** Database keys are deliberately open-ended: admins can add vehicle classes. */
+export type VehicleKey = string;
 export type RideType = "private" | "shared";
 
 export interface VehicleConfig {
@@ -24,6 +18,27 @@ export interface VehicleConfig {
   occupancy: number; // current occupancy (integer, placeholder)
   min_occupancy: number; // minimum occupancy required (integer, placeholder)
   minimum_charge: number; // EGP minimum charge for this vehicle type
+  /** Empty means no region is assigned. Stored on Vehicle; static seed omits it. */
+  regionCodes?: string[];
+  active?: boolean;
+  sortOrder?: number;
+  currencyCode?: string;
+  regionConfigs?: VehicleRegionConfig[];
+}
+
+export interface VehicleRegionConfig {
+  regionCode: string;
+  rate: number;
+  additional_rate: number;
+  buffer: number;
+  window: number;
+  capacity: number;
+  occupancy: number;
+  min_occupancy: number;
+  minimum_charge: number;
+  vehicle_type: number;
+  trip_type: number;
+  sortOrder: number;
 }
 
 export const VEHICLES: Record<VehicleKey, VehicleConfig> = {

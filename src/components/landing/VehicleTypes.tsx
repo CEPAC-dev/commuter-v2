@@ -1,18 +1,18 @@
 "use client";
 import { motion } from "motion/react";
+import { useEffect, useState } from "react";
 import { Car, CarFront, Users, Truck, Bus } from "lucide-react";
-import { VEHICLE_LIST } from "@/lib/config/vehicles";
-import { DEFAULT_REGION, vehiclesForRegion } from "@/lib/config/regions";
-import type { VehicleKey } from "@/lib/config/vehicles";
+import { VEHICLE_LIST, type VehicleConfig, type VehicleKey } from "@/lib/config/vehicles";
+import { DEFAULT_REGION } from "@/lib/config/regions";
 
-const ICONS: Record<
+const ICONS: Partial<Record<
   VehicleKey,
   React.ComponentType<{
     size?: number;
     style?: React.CSSProperties;
     "aria-hidden"?: boolean;
   }>
-> = {
+>> = {
   private_car: Car,
   taxi_private: CarFront,
   taxi_shared: Users,
@@ -22,7 +22,7 @@ const ICONS: Record<
   mini_bus: Bus,
 };
 
-const PALETTE: Record<VehicleKey, { color: string; bg: string }> = {
+const PALETTE: Partial<Record<VehicleKey, { color: string; bg: string }>> = {
   private_car: { color: "#0B1E3D", bg: "rgba(11,30,61,0.07)" },
   taxi_private: { color: "#1C3557", bg: "rgba(28,53,87,0.07)" },
   taxi_shared: { color: "#00C2A8", bg: "rgba(0,194,168,0.09)" },
@@ -33,6 +33,13 @@ const PALETTE: Record<VehicleKey, { color: string; bg: string }> = {
 };
 
 export default function VehicleTypes() {
+  const [vehicles, setVehicles] = useState<VehicleConfig[]>(VEHICLE_LIST);
+  useEffect(() => {
+    fetch(`/api/vehicles?region=${encodeURIComponent(DEFAULT_REGION)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => { if (Array.isArray(data?.vehicles)) setVehicles(data.vehicles); })
+      .catch(() => {});
+  }, []);
   return (
     <section
       id="vehicles"
@@ -85,9 +92,9 @@ export default function VehicleTypes() {
           }}
           className="vehicles-grid"
         >
-          {vehiclesForRegion(VEHICLE_LIST, DEFAULT_REGION).map((v, i) => {
-            const Icon = ICONS[v.key];
-            const { color, bg } = PALETTE[v.key];
+          {vehicles.map((v, i) => {
+            const Icon = ICONS[v.key] ?? Car;
+            const { color, bg } = PALETTE[v.key] ?? PALETTE.private_car!;
             return (
               <motion.article
                 key={v.key}
