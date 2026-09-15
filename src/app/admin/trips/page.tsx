@@ -50,6 +50,7 @@ type StationRef = { id?: number; name?: string; lat?: number; lng?: number };
 
 type TripDetail = TripRow &
   Record<string, unknown> & {
+    stops?: unknown[];
     pickupStation?: StationRef | null;
     dropoffStation?: StationRef | null;
     requestId?: {
@@ -1231,6 +1232,10 @@ export default function AdminTripsPage() {
                         <span className="v mono">{detail.arrivalTime}</span>
                       </div>
                       <div className="detail-item">
+                        <span className="k">Stops</span>
+                        <span className="v">{detail.stops?.length ?? 0}</span>
+                      </div>
+                      <div className="detail-item">
                         <span className="k">Created</span>
                         <span className="v">
                           {formatCreatedAt(detail.createdAt).date}{" "}
@@ -1252,12 +1257,20 @@ export default function AdminTripsPage() {
                       <h4>Stations</h4>
                       <div className="detail-grid">
                         <div className="detail-item">
-                          <span className="k">Pickup station</span>
+                          <span className="k">Pickup station name</span>
                           <span className="v">{detail.pickupStation?.name ?? "—"}</span>
                         </div>
                         <div className="detail-item">
-                          <span className="k">Dropoff station</span>
+                          <span className="k">Pickup station number</span>
+                          <span className="v mono">{detail.pickupStation?.id ?? "—"}</span>
+                        </div>
+                        <div className="detail-item">
+                          <span className="k">Dropoff station name</span>
                           <span className="v">{detail.dropoffStation?.name ?? "—"}</span>
+                        </div>
+                        <div className="detail-item">
+                          <span className="k">Dropoff station number</span>
+                          <span className="v mono">{detail.dropoffStation?.id ?? "—"}</span>
                         </div>
                         <div className="detail-item">
                           <span className="k">Walk to station</span>

@@ -21,15 +21,15 @@ const triggerStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: 8,
-  border: "1px solid #e2e8ec",
+  border: "1px solid var(--color-border)",
   borderRadius: 10,
   padding: "9px 14px",
   fontSize: 13,
   fontWeight: 600,
-  color: "#0B1E3D",
+  color: "var(--color-primary)",
   fontFamily: "inherit",
   cursor: "pointer",
-  background: "#fff",
+  background: "var(--color-panel)",
   minHeight: 38,
 };
 
@@ -152,10 +152,10 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
             top: "calc(100% + 8px)",
             left: 0,
             zIndex: 30,
-            background: "#fff",
+            background: "var(--color-panel)",
             borderRadius: 14,
-            border: "1px solid #eef0f3",
-            boxShadow: "0 8px 24px rgba(11,30,61,0.12)",
+            border: "1px solid var(--color-border)",
+            boxShadow: "0 8px 24px var(--color-shadow)",
             padding: 16,
             width: 300,
           }}
@@ -180,9 +180,9 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
                 display: "flex",
               }}
             >
-              <ChevronLeft size={16} color="#5A6A7A" aria-hidden="true" />
+              <ChevronLeft size={16} color="var(--color-muted)" aria-hidden="true" />
             </button>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-primary)" }}>
               {format(month, "MMMM yyyy")}
             </span>
             <button
@@ -197,7 +197,7 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
                 display: "flex",
               }}
             >
-              <ChevronRight size={16} color="#5A6A7A" aria-hidden="true" />
+              <ChevronRight size={16} color="var(--color-muted)" aria-hidden="true" />
             </button>
           </div>
 
@@ -215,7 +215,7 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
-                  color: "#9aa7b4",
+                  color: "var(--color-muted)",
                   textAlign: "center",
                   padding: "4px 0",
                 }}
@@ -256,11 +256,11 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
                     fontWeight: isEdge ? 800 : 500,
                     cursor: "pointer",
                     background: isEdge
-                      ? "#0B1E3D"
-                      : inRange
-                        ? "#E6F8F5"
+                      ? "var(--color-primary)"
+                        : inRange
+                        ? "var(--color-secondary-tint)"
                         : "transparent",
-                    color: isEdge ? "#fff" : "#0B1E3D",
+                    color: isEdge ? "var(--color-on-primary)" : "var(--color-primary)",
                   }}
                 >
                   {format(day, "d")}
@@ -276,7 +276,7 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
               justifyContent: "space-between",
               marginTop: 14,
               paddingTop: 12,
-              borderTop: "1px solid #f4f6f8",
+              borderTop: "1px solid var(--color-border)",
             }}
           >
             <button
@@ -285,7 +285,7 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
               style={{
                 background: "none",
                 border: "none",
-                color: "#9aa7b4",
+                color: "var(--color-muted)",
                 fontWeight: 700,
                 fontSize: 12,
                 cursor: "pointer",
@@ -299,7 +299,7 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
               onClick={apply}
               disabled={!draftFrom}
               style={{
-                background: "#00C2A8",
+                background: "var(--color-secondary)",
                 border: "none",
                 color: "#fff",
                 fontWeight: 700,

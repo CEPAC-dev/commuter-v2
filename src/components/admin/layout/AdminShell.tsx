@@ -13,6 +13,7 @@ import {
   Gauge,
   Gift,
   ListChecks,
+  MapPinned,
   Menu,
   Route,
   Settings,
@@ -39,6 +40,7 @@ const sections = [
   { href: "/admin/dashboard", label: "Dashboard", icon: Gauge, statKey: null },
   { href: "/admin/users", label: "Users", icon: Users, statKey: "users" },
   { href: "/admin/trips", label: "Trips", icon: Route, statKey: "trips" },
+  { href: "/admin/stations", label: "Stations", icon: MapPinned, statKey: null },
   { href: "/admin/rides", label: "Rides", icon: Car, statKey: "rides" },
   { href: "/admin/vehicles", label: "Vehicles", icon: CarFront, statKey: null },
   {
@@ -72,7 +74,6 @@ const sections = [
     icon: Gift,
     statKey: null,
   },
-  { href: "/admin/stations", label: "Stations", icon: ListChecks, statKey: null },
   {
     href: "/admin/operation",
     label: "Operation",

@@ -21,7 +21,7 @@ import {
 } from "@/lib/services/sharedRideManifest";
 
 type MatchResult = {
-  availabilityId: Types.ObjectId | string;
+  availabilityId?: Types.ObjectId | string | null;
   driverId?: Types.ObjectId | string | null;
   date: string;
   vehicleType: string;
@@ -188,7 +188,7 @@ async function createRide(matchResult: MatchResult) {
     const rideNumber = await getNextSequence("rideNumber", session);
     const rideDoc = new Ride({
       rideNumber,
-      availabilityId: matchResult.availabilityId,
+      availabilityId: matchResult.availabilityId ?? null,
       driverId: matchResult.driverId,
       date: matchResult.date,
       vehicleType: matchResult.vehicleType,
