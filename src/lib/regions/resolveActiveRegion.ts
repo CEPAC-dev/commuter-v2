@@ -68,19 +68,27 @@ export async function resolveActiveRegion({
     ? user.defaultRegionCode
     : user.region
       ? normalizeRegion(user.region)
-      : user.role === "admin"
+      : user.role === "admin" || user.role === "driver"
         ? DEFAULT_REGION
         : null;
   const activeCode = requestedCode ?? defaultRegionCode;
+  const effectiveAllowedRegionCodes =
+    user.role === "driver" && configuredAllowed.length === 0 && activeCode
+      ? [activeCode]
+      : allowedRegionCodes;
 
   if (!activeCode) {
     throw new RegionAccessError(403, "No default region configured.");
   }
-  if (!allowedRegionCodes.includes(activeCode)) {
+  if (!effectiveAllowedRegionCodes.includes(activeCode)) {
     throw new RegionAccessError(403, "Region access denied.");
   }
 
-  return { code: activeCode, config: REGIONS[activeCode], allowedRegionCodes };
+  return {
+    code: activeCode,
+    config: REGIONS[activeCode],
+    allowedRegionCodes: effectiveAllowedRegionCodes,
+  };
 }
 
 export function legacyDefaultRegion(): RegionCode {
