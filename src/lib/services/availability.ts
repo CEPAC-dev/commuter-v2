@@ -5,6 +5,10 @@ import { Station } from "@/models/Station";
 import type { RegionCode } from "@/lib/config/regions";
 import { findNearestStation } from "@/lib/geo/stations";
 import type { GeoPoint } from "@/types/geo";
+import {
+  normalizeAvailabilityDestination,
+  normalizeAvailabilityOrigin,
+} from "@/lib/time/availabilityWindow";
 
 export const DAYS_OF_WEEK = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 export type DayOfWeek = (typeof DAYS_OF_WEEK)[number];
@@ -31,16 +35,57 @@ export async function listDriverAvailability(
   const records = await Availability.find({ driverId }).lean<
     {
       _id: unknown;
-      dayOfWeek: DayOfWeek;
-      origin: GeoPoint;
-      destination?: GeoPoint | null;
+      dayOfWeek?: DayOfWeek;
+      origin?: unknown;
+      destination?: unknown;
+      startLocation?: unknown;
+      endLocation?: unknown;
       startNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
       destinationNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
-      startTime: string;
-      endTime: string;
-      active: boolean;
+      startTime?: string;
+      endTime?: string;
+      active?: boolean;
     }[]
   >();
+
+  const validRecords = records.flatMap((record): AvailabilityRecord[] => {
+    const origin = normalizeAvailabilityOrigin(record.origin ?? record.startLocation);
+    const destination = normalizeAvailabilityDestination(
+      record.destination ?? record.endLocation,
+    );
+    const dayOfWeek = record.dayOfWeek;
+    const startTime = record.startTime;
+    const endTime = record.endTime;
+
+    if (
+      !origin ||
+      !destination ||
+      !dayOfWeek ||
+      !DAYS_OF_WEEK.includes(dayOfWeek) ||
+      !startTime ||
+      !endTime
+    ) {
+      console.warn("Skipping malformed driver availability record", {
+        id: String(record._id),
+        driverId,
+      });
+      return [];
+    }
+
+    return [
+      {
+        _id: String(record._id),
+        dayOfWeek,
+        origin,
+        destination,
+        startNearestStation: record.startNearestStation ?? null,
+        destinationNearestStation: record.destinationNearestStation ?? null,
+        startTime,
+        endTime,
+        active: record.active ?? true,
+      },
+    ];
+  });
 
   const stations = await Station.find({ active: true, regionCode })
     .select("objectId name direction stationType zones description landmark lat lng")
@@ -58,7 +103,7 @@ export async function listDriverAvailability(
     popupInfo: "",
   }));
 
-  const recordsWithStations = records.map((record) => {
+  const recordsWithStations = validRecords.map((record) => {
     const nearestStation = findNearestStation(
       record.origin.lat,
       record.origin.lng,
@@ -113,12 +158,12 @@ export async function listDriverAvailability(
     _id: String(record._id),
     dayOfWeek: record.dayOfWeek,
     origin: record.origin,
-    destination: record.destination ?? null,
+    destination: record.destination,
     startNearestStation,
     destinationNearestStation,
     startTime: record.startTime,
     endTime: record.endTime,
-    active: record.active,
+    active: record.active ?? true,
   }));
 }
 
