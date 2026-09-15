@@ -29,11 +29,11 @@ function getTomorrowDate() {
   return `${year}-${month}-${day}`;
 }
 
-function getIsoWeekdayNumber(dateText: string): number | null {
+function getAvailabilityWeekday(dateText: string): string | null {
   const parsedDate = new Date(`${dateText}T00:00:00`);
   if (Number.isNaN(parsedDate.getTime())) return null;
 
-  return parsedDate.getDay() === 0 ? 7 : parsedDate.getDay();
+  return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][parsedDate.getDay()];
 }
 
 interface PrivateRow {
@@ -87,7 +87,6 @@ interface SharedRow {
 }
 
 interface AvailabilityRow {
-  availabilityId: number;
   driverId: number | null;
   startStationNo: number | null;
   endStationNo: number | null;
@@ -145,7 +144,6 @@ const SHARED_COLUMNS: (keyof SharedRow)[] = [
 ];
 
 const AVAILABILITY_COLUMNS: (keyof AvailabilityRow)[] = [
-  "availabilityId",
   "driverId",
   "startStationNo",
   "startTime",
@@ -159,9 +157,9 @@ const SHARED_HEADER_LABELS: Record<string, string> = {
 };
 
 const AVAILABILITY_HEADER_LABELS: Record<string, string> = {
-  availabilityId: "Trip_ID",
   driverId: "Driver_ID",
   startStationNo: "Origin_Reg_ID",
+  endStationNo: "Dest_Reg_ID",
   startTime: "Ready work From",
   endTime: "Ready Work To",
   vehicleType: "Vehicle_Type",
@@ -381,7 +379,7 @@ export async function GET(req: NextRequest) {
       ? requestedTravelTimeDepartureTime
       : new Date().toISOString();
 
-  const targetIsoWeekday = getIsoWeekdayNumber(targetDate);
+  const targetAvailabilityWeekday = getAvailabilityWeekday(targetDate);
 
   const privateTrips = await Trip.find({
     date: targetDate,
@@ -427,33 +425,22 @@ export async function GET(req: NextRequest) {
     }[]
   >();
 
-  const availabilities = targetIsoWeekday
+  const availabilities = targetAvailabilityWeekday
     ? await Availability.find({
-        $expr: {
-          $eq: [
-            {
-              $isoDayOfWeek: {
-                $dateFromString: {
-                  dateString: "$date",
-                  format: "%Y-%m-%d",
-                },
-              },
-            },
-            targetIsoWeekday,
-          ],
-        },
+        dayOfWeek: targetAvailabilityWeekday,
+        active: true,
       }).lean<
         {
-          availabilityNumber: number;
+          _id: unknown;
           driverId: unknown;
-          date: string;
-          startLocation: { lat: number; lng: number };
-          endLocation: { lat: number; lng: number };
+          dayOfWeek: string;
+          origin: { lat: number; lng: number };
+          destination?: { lat: number; lng: number } | null;
           startNearestStation?: { id: number };
-          endNearestStation?: { id: number };
+          destinationNearestStation?: { id: number };
           startTime: string;
           endTime: string;
-          matched?: boolean;
+          active: boolean;
         }[]
       >()
     : [];
@@ -676,14 +663,11 @@ export async function GET(req: NextRequest) {
   const availabilityRows: AvailabilityRow[] = availabilities.map(
     (availability) => {
       const carType = carTypeMap.get(String(availability.driverId));
-      const startStationNo = resolveAvailabilityStationNo(
-        availability.startLocation,
-      );
+      const startStationNo = resolveAvailabilityStationNo(availability.origin);
       const endStationNo = resolveAvailabilityStationNo(
-        availability.endLocation,
+        availability.destination,
       );
       return {
-        availabilityId: availability.availabilityNumber,
         driverId: userNumberMap.get(String(availability.driverId)) ?? null,
         startStationNo,
         endStationNo,
