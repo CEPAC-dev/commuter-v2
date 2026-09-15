@@ -15,7 +15,9 @@ export interface AvailabilityRecord {
   _id: string;
   dayOfWeek: DayOfWeek;
   origin: GeoPoint;
+  destination?: GeoPoint | null;
   startNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
+  destinationNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
   startTime: string;
   endTime: string;
   active: boolean;
@@ -31,7 +33,9 @@ export async function listDriverAvailability(
       _id: unknown;
       dayOfWeek: DayOfWeek;
       origin: GeoPoint;
+      destination?: GeoPoint | null;
       startNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
+      destinationNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
       startTime: string;
       endTime: string;
       active: boolean;
@@ -68,33 +72,50 @@ export async function listDriverAvailability(
           name: nearestStation.name,
         }
       : null;
+    const destinationNearest = record.destination
+      ? findNearestStation(record.destination.lat, record.destination.lng, stationData)
+      : null;
+    const destinationNearestStation = destinationNearest
+      ? {
+          id: destinationNearest.id,
+          lat: destinationNearest.lat,
+          lng: destinationNearest.lng,
+          name: destinationNearest.name,
+        }
+      : null;
 
-    return { record, startNearestStation };
+    return { record, startNearestStation, destinationNearestStation };
   });
 
   const incompleteStationRecords = recordsWithStations.filter(
-    ({ record, startNearestStation }) =>
-      startNearestStation &&
-      (!record.startNearestStation ||
+    ({ record, startNearestStation, destinationNearestStation }) =>
+      ((startNearestStation &&
+        (!record.startNearestStation ||
         !Number.isFinite(record.startNearestStation.lat) ||
-        !Number.isFinite(record.startNearestStation.lng)),
+        !Number.isFinite(record.startNearestStation.lng))) ||
+        (destinationNearestStation &&
+          (!record.destinationNearestStation ||
+            !Number.isFinite(record.destinationNearestStation.lat) ||
+            !Number.isFinite(record.destinationNearestStation.lng)))),
   );
   if (incompleteStationRecords.length > 0) {
     await Availability.bulkWrite(
-      incompleteStationRecords.map(({ record, startNearestStation }) => ({
+      incompleteStationRecords.map(({ record, startNearestStation, destinationNearestStation }) => ({
         updateOne: {
           filter: { _id: record._id },
-          update: { $set: { startNearestStation } },
+          update: { $set: { startNearestStation, destinationNearestStation } },
         },
       })),
     );
   }
 
-  return recordsWithStations.map(({ record, startNearestStation }) => ({
+  return recordsWithStations.map(({ record, startNearestStation, destinationNearestStation }) => ({
     _id: String(record._id),
     dayOfWeek: record.dayOfWeek,
     origin: record.origin,
+    destination: record.destination ?? null,
     startNearestStation,
+    destinationNearestStation,
     startTime: record.startTime,
     endTime: record.endTime,
     active: record.active,

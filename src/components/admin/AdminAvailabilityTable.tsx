@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Calendar,
-  Check,
   Clock,
   Minus,
   Search,
@@ -13,6 +12,7 @@ import {
   Users,
   X,
   Zap,
+  MapPin,
 } from "lucide-react";
 import { AdminCard } from "@/components/admin/layout";
 
@@ -21,8 +21,10 @@ type Day = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 type RecordItem = {
   _id: string;
   dayOfWeek: Day;
-  origin: { address: string };
+  origin: { address: string; lat: number; lng: number };
+  destination?: { address: string; lat: number; lng: number } | null;
   startNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
+  destinationNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
   startTime: string;
   endTime: string;
   active: boolean;
@@ -77,6 +79,19 @@ export default function AdminAvailabilityTable({
   const [searchQuery, setSearchQuery] = useState("");
   const [hoveredHour, setHoveredHour] = useState<number | null>(null);
   const [modalDay, setModalDay] = useState<Day | null>(null);
+  const [selectedShift, setSelectedShift] = useState<{
+    driver: DriverRow;
+    shift: RecordItem;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!selectedShift) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedShift(null);
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [selectedShift]);
 
   // 1. Overall & Per-Day Unique Drivers Analytics
   const overallAvailableCount = useMemo(() => {
@@ -526,17 +541,28 @@ export default function AdminAvailabilityTable({
 
                     <div className="space-y-1.5 pt-1">
                       {shifts.map((shift) => (
-                        <div
+                        <button
                           key={shift._id}
-                          className="flex items-center justify-between text-xs rounded-lg border border-[var(--color-border)] bg-white px-3 py-2"
+                          type="button"
+                          onClick={() => setSelectedShift({ driver, shift })}
+                          aria-label={`View shift from ${shift.startTime} to ${shift.endTime}`}
+                          className="group flex w-full items-center gap-2.5 rounded-xl border border-[#c9eee8] bg-[#f1fbf9] px-3 py-2.5 text-left transition-all hover:border-[#00C2A8] hover:bg-[#e5f8f4] focus:outline-none focus:ring-2 focus:ring-[#00C2A8]/30"
                         >
-                          <span className="truncate text-[var(--color-primary)] font-medium max-w-[240px]">
-                            {shift.origin.address}
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#00C2A8]/15 text-[#008a76]">
+                            <Clock size={14} />
                           </span>
-                          <span className="font-mono font-bold text-[#00C2A8] bg-[#effaf8] px-2 py-0.5 rounded-md">
-                            from: {shift.startTime} to: {shift.endTime}
+                          <span className="flex min-w-0 items-center gap-2 font-mono">
+                            <span>
+                              <span className="block text-[9px] font-bold uppercase tracking-wider text-[#5A6A7A]">Start</span>
+                              <span className="block text-[11px] font-extrabold text-[var(--color-primary)]">{shift.startTime}</span>
+                            </span>
+                            <span className="text-xs font-bold text-[#00a990]" aria-hidden="true">→</span>
+                            <span>
+                              <span className="block text-[9px] font-bold uppercase tracking-wider text-[#5A6A7A]">End</span>
+                              <span className="block text-[11px] font-extrabold text-[var(--color-primary)]">{shift.endTime}</span>
+                            </span>
                           </span>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -548,6 +574,108 @@ export default function AdminAvailabilityTable({
               <button
                 type="button"
                 onClick={() => setModalDay(null)}
+                className="rounded-xl bg-[var(--color-primary)] px-5 py-2 text-sm font-extrabold text-white hover:bg-[var(--color-primary)]/90"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedShift && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#07152b]/65 p-4 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedShift(null);
+          }}
+        >
+          <div
+            className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_24px_80px_rgba(7,21,43,0.28)]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="availability-details-title"
+          >
+            <div className="flex items-start justify-between border-b border-[var(--color-border)] bg-[var(--color-background)] px-6 py-5">
+              <div>
+                <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#00a990]">
+                  Driver shift
+                </p>
+                <h3 id="availability-details-title" className="text-xl font-black tracking-tight text-[var(--color-primary)]">
+                  Availability details
+                </h3>
+                <p className="mt-1 text-sm font-medium text-[var(--color-muted)]">
+                  {selectedShift.driver.name || "Unnamed driver"}{" "}
+                  {selectedShift.driver.userNumber ? `#${selectedShift.driver.userNumber}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close availability details"
+                onClick={() => setSelectedShift(null)}
+                className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-border)] hover:text-[var(--color-primary)]"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#f3fbfa] p-4">
+                <span className="rounded-xl bg-[var(--color-primary)] px-3 py-2 text-sm font-black text-white">
+                  {DAYS.find((day) => day.id === selectedShift.shift.dayOfWeek)?.label}
+                </span>
+                <span className="font-mono text-base font-black tracking-tight text-[var(--color-primary)]">
+                  {selectedShift.shift.startTime} <span className="px-1 text-[#00a990]">→</span> {selectedShift.shift.endTime}
+                </span>
+                <span className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-emerald-700">
+                  {selectedShift.shift.active ? "Active" : "Inactive"}
+                </span>
+              </div>
+
+              <div className="relative grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-[#dcebea] bg-[#fbfdfd] p-4">
+                  <p className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--color-muted)]">
+                    <MapPin size={13} className="text-[#00C2A8]" /> Origin
+                  </p>
+                  <p className="text-sm font-bold leading-5 text-[var(--color-primary)]">
+                    {selectedShift.shift.origin.address}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[#f1e2bf] bg-[#fffdf8] p-4">
+                  <p className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--color-muted)]">
+                    <MapPin size={13} className="text-[#F5A623]" /> Destination
+                  </p>
+                  <p className="text-sm font-bold leading-5 text-[var(--color-primary)]">
+                    {selectedShift.shift.destination?.address ?? "No destination saved for this shift"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-[#F5A623]/30 bg-[#fffaf0] px-4 py-3.5">
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#8a5b00]">
+                    Nearest origin station
+                  </p>
+                  <p className="text-sm font-bold text-[var(--color-primary)]">
+                    {selectedShift.shift.startNearestStation?.name ?? "Not available"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[#F5A623]/30 bg-[#fffaf0] px-4 py-3.5">
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#8a5b00]">
+                    Nearest destination station
+                  </p>
+                  <p className="text-sm font-bold text-[var(--color-primary)]">
+                    {selectedShift.shift.destinationNearestStation?.name ?? "Not available"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end border-t border-[var(--color-border)] bg-[var(--color-background)] p-4">
+              <button
+                type="button"
+                onClick={() => setSelectedShift(null)}
                 className="rounded-xl bg-[var(--color-primary)] px-5 py-2 text-sm font-extrabold text-white hover:bg-[var(--color-primary)]/90"
               >
                 Close
@@ -634,28 +762,19 @@ export default function AdminAvailabilityTable({
                       ) : (
                         <div className="space-y-2">
                           {shifts.map((shift) => (
-                            <div key={shift._id} className="min-w-0 rounded-md bg-[var(--color-secondary-tint)] px-2 py-2 text-xs text-[var(--color-primary)]">
-                              <div className="flex items-start gap-1.5">
-                                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-secondary)]" />
-                                <span
-                                  className="line-clamp-2 min-w-0 font-medium"
-                                  title={shift.origin.address}
-                                >
-                                  {shift.origin.address}
-                                </span>
-                              </div>
-                              {shift.startNearestStation ? (
-                                <span
-                                  className="mt-1 block truncate text-[10px] text-[var(--color-muted)]"
-                                  title={shift.startNearestStation.name}
-                                >
-                                  Station: {shift.startNearestStation.name}
-                                </span>
-                              ) : null}
-                              <span className="mt-1 block font-mono text-[10px] font-bold text-[var(--color-muted)]">
-                                {shift.startTime}–{shift.endTime}
+                            <button
+                              key={shift._id}
+                              type="button"
+                              onClick={() => setSelectedShift({ driver, shift })}
+                              aria-label={`View shift from ${shift.startTime} to ${shift.endTime}`}
+                              className="flex min-w-0 w-full items-center gap-2 rounded-xl border border-[#c9eee8] bg-[#f1fbf9] px-3 py-2 text-left transition-all hover:border-[#00C2A8] hover:bg-[#e5f8f4] focus:outline-none focus:ring-2 focus:ring-[#00C2A8]/30"
+                              title="View shift details"
+                            >
+                              <Clock size={14} className="shrink-0 text-[#008a76]" />
+                              <span className="font-mono text-[11px] font-extrabold text-[var(--color-primary)]">
+                                {shift.startTime} <span className="px-1 text-[#00a990]" aria-hidden="true">→</span> {shift.endTime}
                               </span>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       )}

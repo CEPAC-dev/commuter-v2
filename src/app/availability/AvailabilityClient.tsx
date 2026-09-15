@@ -11,7 +11,7 @@ import {
   Plus,
   Save,
   Trash2,
-  Zap,
+  X,
 } from "lucide-react";
 import AppHeader from "@/components/layout/AppHeader";
 import type { TripPoint } from "@/lib/store/useTripStore";
@@ -28,6 +28,7 @@ type AvailabilityRecord = {
   _id: string;
   dayOfWeek: Day;
   origin: TripPoint;
+  destination?: TripPoint | null;
   startNearestStation?: { id: number; lat: number; lng: number; name: string } | null;
   startTime: string;
   endTime: string;
@@ -58,6 +59,7 @@ type EditingShift = {
   id: string | null; // null = new shift
   days: Day[];
   origin: TripPoint | null;
+  destination: TripPoint | null;
   startTime: string;
   endTime: string;
 };
@@ -94,15 +96,24 @@ export default function AvailabilityClient({
   const [activeFilterDay, setActiveFilterDay] = useState<Day | "all">("all");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState<AvailabilityRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [error, setError] = useState("");
+  const [availableSavedAddresses, setAvailableSavedAddresses] = useState(savedAddresses);
+
+  function handleAddressSaved(saved: SavedAddress) {
+    setAvailableSavedAddresses((current) =>
+      current.some((place) => place._id === saved._id) ? current : [...current, saved],
+    );
+  }
 
   function beginAdd(initialDay?: Day) {
     setEditing({
       id: null,
       days: initialDay ? [initialDay] : ["sun", "mon", "tue", "wed", "thu"],
       origin: null,
+      destination: null,
       startTime: "08:00",
       endTime: "16:00",
     });
@@ -114,6 +125,7 @@ export default function AvailabilityClient({
       id: record._id,
       days: [record.dayOfWeek],
       origin: record.origin,
+      destination: record.destination ?? null,
       startTime: record.startTime,
       endTime: record.endTime,
     });
@@ -124,6 +136,10 @@ export default function AvailabilityClient({
     if (!editing) return;
     if (!editing.origin) {
       setError("Choose your starting location.");
+      return;
+    }
+    if (!editing.destination) {
+      setError("Choose your destination.");
       return;
     }
     if (editing.days.length === 0) {
@@ -154,6 +170,7 @@ export default function AvailabilityClient({
           id: editing.id,
           days: editing.days,
           origin: editing.origin,
+          destination: editing.destination,
           startTime: editing.startTime,
           endTime: editing.endTime,
           active: true,
@@ -179,6 +196,7 @@ export default function AvailabilityClient({
 
   async function removeShift(record: AvailabilityRecord) {
     setDeleting(record._id);
+    setConfirmingDelete(null);
     setError("");
     try {
       const response = await fetch(`/api/driver/availability/${record._id}`, {
@@ -273,9 +291,6 @@ export default function AvailabilityClient({
           {/* Hero Header Banner */}
           <div className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-r from-[#0B1E3D] to-[#163666] p-6 text-white shadow-xl sm:p-8">
             <div>
-              <span className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-[#00c2a8]/20 px-3 py-1 text-xs font-bold text-[#00c2a8]">
-                <Zap size={14} /> Recurring Driver Work Hours
-              </span>
               <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
                 My Availability
               </h1>
@@ -297,6 +312,67 @@ export default function AvailabilityClient({
           {error && (
             <div className="mb-6 rounded-2xl border border-[#e74c3c] bg-[#ffebee] p-4 text-sm font-semibold text-[#c0392b] shadow-sm">
               {error}
+            </div>
+          )}
+
+          {confirmingDelete && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-[#07152b]/60 p-4 backdrop-blur-sm"
+              role="presentation"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) setConfirmingDelete(null);
+              }}
+            >
+              <div
+                className="w-full max-w-md rounded-3xl border border-white/70 bg-white p-6 shadow-[0_24px_80px_rgba(7,21,43,0.28)]"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="delete-availability-title"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#fff0ee] text-[#e74c3c]">
+                      <Trash2 size={21} />
+                    </div>
+                    <h2 id="delete-availability-title" className="text-xl font-black text-[#0B1E3D]">
+                      Delete availability?
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-[#5A6A7A]">
+                      This will remove the {DAY_LABELS[confirmingDelete.dayOfWeek]} shift from{" "}
+                      <strong className="text-[#0B1E3D]">
+                        {confirmingDelete.startTime} to {confirmingDelete.endTime}
+                      </strong>
+                      . This action cannot be undone.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close delete confirmation"
+                    onClick={() => setConfirmingDelete(null)}
+                    className="rounded-xl p-2 text-[#5A6A7A] hover:bg-[#f0f4f8] hover:text-[#0B1E3D]"
+                  >
+                    <X size={19} />
+                  </button>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(null)}
+                    className="rounded-xl px-4 py-2.5 text-sm font-extrabold text-[#5A6A7A] hover:bg-[#f0f4f8]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void removeShift(confirmingDelete)}
+                    disabled={deleting === confirmingDelete._id}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#e74c3c] px-4 py-2.5 text-sm font-extrabold text-white hover:bg-[#c0392b] disabled:opacity-50"
+                  >
+                    {deleting === confirmingDelete._id ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />}
+                    Delete shift
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -346,7 +422,7 @@ export default function AvailabilityClient({
                 </div>
               </div>
 
-              <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_140px_140px]">
+              <div className="grid gap-5 sm:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
                     Starting Location
@@ -355,13 +431,39 @@ export default function AvailabilityClient({
                     lat={editing.origin ? String(editing.origin.lat) : ""}
                     lng={editing.origin ? String(editing.origin.lng) : ""}
                     name={editing.origin?.address ?? ""}
-                    savedAddresses={savedAddresses}
+                    savedAddresses={availableSavedAddresses}
+                    onSaved={handleAddressSaved}
                     onChange={(lat, lng, name) =>
                       setEditing((current) =>
                         current
                           ? {
                               ...current,
                               origin:
+                                lat && lng
+                                  ? { address: name, lat: Number(lat), lng: Number(lng) }
+                                  : null,
+                            }
+                          : current,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
+                    Destination
+                  </label>
+                  <LocationPickerMap
+                    lat={editing.destination ? String(editing.destination.lat) : ""}
+                    lng={editing.destination ? String(editing.destination.lng) : ""}
+                    name={editing.destination?.address ?? ""}
+                    savedAddresses={availableSavedAddresses}
+                    onSaved={handleAddressSaved}
+                    onChange={(lat, lng, name) =>
+                      setEditing((current) =>
+                        current
+                          ? {
+                              ...current,
+                              destination:
                                 lat && lng
                                   ? { address: name, lat: Number(lat), lng: Number(lng) }
                                   : null,
@@ -534,7 +636,7 @@ export default function AvailabilityClient({
                           </button>
                           <button
                             type="button"
-                            onClick={() => void removeShift(shift)}
+                            onClick={() => setConfirmingDelete(shift)}
                             disabled={deleting === shift._id}
                             className="rounded-xl p-2 text-[#e74c3c] hover:bg-[#fff0ee] disabled:opacity-50 transition-colors"
                           >
@@ -562,6 +664,14 @@ export default function AvailabilityClient({
                           {shift.origin.address}
                         </span>
                       </div>
+                      {shift.destination && (
+                        <div className="flex items-start gap-2 text-xs text-[#5A6A7A]">
+                          <MapPin size={15} className="text-[#F5A623] shrink-0 mt-0.5" />
+                          <span className="font-medium line-clamp-2" title={shift.destination.address}>
+                            {shift.destination.address}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

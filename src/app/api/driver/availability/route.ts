@@ -13,6 +13,7 @@ import {
 } from "@/lib/services/availability";
 import {
   isValidAvailabilityId,
+  normalizeAvailabilityDestination,
   normalizeAvailabilityOrigin,
   shiftsOverlap,
 } from "@/lib/time/availabilityWindow";
@@ -68,11 +69,12 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Invalid availability payload." }, { status: 400 });
     }
 
-    const { id, dayOfWeek, days, origin, startTime, endTime, active } = payload as {
+    const { id, dayOfWeek, days, origin, destination, startTime, endTime, active } = payload as {
       id?: unknown;
       dayOfWeek?: unknown;
       days?: unknown;
       origin?: unknown;
+      destination?: unknown;
       startTime?: unknown;
       endTime?: unknown;
       active?: unknown;
@@ -91,6 +93,9 @@ export async function PUT(req: NextRequest) {
     const normalizedOrigin = normalizeAvailabilityOrigin(origin);
     if (!normalizedOrigin)
       return NextResponse.json({ error: "Origin is required." }, { status: 400 });
+    const normalizedDestination = normalizeAvailabilityDestination(destination);
+    if (!normalizedDestination)
+      return NextResponse.json({ error: "Destination is required." }, { status: 400 });
 
     const region = await resolveActiveRegion({ userId: session.userId });
     const stationDocs = await Station.find({ active: true, regionCode: region.code }).lean();
@@ -116,6 +121,30 @@ export async function PUT(req: NextRequest) {
           lat: nearestStation.lat,
           lng: nearestStation.lng,
           name: nearestStation.name,
+        }
+      : null;
+    const destinationNearest = findNearestStation(
+      normalizedDestination.lat,
+      normalizedDestination.lng,
+      stationDocs.map((station) => ({
+        id: station.objectId,
+        name: station.name,
+        direction: station.direction,
+        stationType: station.stationType,
+        zones: station.zones,
+        description: station.description,
+        landmark: station.landmark,
+        lat: station.lat,
+        lng: station.lng,
+        popupInfo: "",
+      })),
+    );
+    const destinationNearestStation = destinationNearest
+      ? {
+          id: destinationNearest.id,
+          lat: destinationNearest.lat,
+          lng: destinationNearest.lng,
+          name: destinationNearest.name,
         }
       : null;
 
@@ -163,7 +192,9 @@ export async function PUT(req: NextRequest) {
           $set: {
             dayOfWeek: targetDays[0],
             origin: normalizedOrigin,
+            destination: normalizedDestination,
             startNearestStation,
+            destinationNearestStation,
             startTime,
             endTime,
             active: active ?? true,
@@ -183,7 +214,9 @@ export async function PUT(req: NextRequest) {
           driverId: session.userId,
           dayOfWeek: day,
           origin: normalizedOrigin,
+          destination: normalizedDestination,
           startNearestStation,
+          destinationNearestStation,
           startTime,
           endTime,
           active: active ?? true,

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useClientLocale } from "@/lib/locale.client";
 import L from "leaflet";
-import { Crosshair, Loader2, MapPin, Search, X } from "lucide-react";
+import { Bookmark, Crosshair, Loader2, MapPin, Search, X } from "lucide-react";
 import OsmMapCanvas, { type OsmPoint } from "./OsmMapCanvas";
 import { svgIcon } from "./leafletLayers";
 import {
@@ -34,6 +34,7 @@ interface Props {
   lng: string;
   name: string;
   onChange: (lat: string, lng: string, name: string) => void;
+  onSaved?: (saved: SavedAddress) => void;
   error?: string;
   savedAddresses?: SavedAddress[];
 }
@@ -58,6 +59,7 @@ export default function LocationPickerMapOsm({
   lng,
   name,
   onChange,
+  onSaved,
   error,
   savedAddresses,
 }: Props) {
@@ -68,9 +70,39 @@ export default function LocationPickerMapOsm({
   >([]);
   const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [outOfBounds, setOutOfBounds] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const marker = lat && lng ? { lat: Number(lat), lng: Number(lng) } : null;
+  const isSaved = savedAddresses?.some(
+    (place) => place.lat === Number(lat) && place.lng === Number(lng),
+  );
+
+  async function saveCurrentLocation() {
+    if (!lat || !lng || !name || isSaved || saving) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      const response = await fetch("/api/auth/addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: name.split(",")[0].trim(),
+          address: name,
+          lat: Number(lat),
+          lng: Number(lng),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Could not save location.");
+      onSaved?.(data.savedAddress);
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : "Could not save location.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // Sync query with name prop
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -333,6 +365,18 @@ export default function LocationPickerMapOsm({
           </div>
         )}
       </div>
+      {onSaved && lat && lng && name && !isSaved && (
+        <button
+          type="button"
+          onClick={() => void saveCurrentLocation()}
+          disabled={saving}
+          className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#5A6A7A] hover:text-[#008a76] disabled:opacity-50"
+        >
+          <Bookmark size={13} />
+          {saving ? "Saving..." : "Save this location"}
+        </button>
+      )}
+      {saveError && <p className="mt-1 text-xs font-semibold text-[#c0392b]">{saveError}</p>}
     </div>
   );
 }
