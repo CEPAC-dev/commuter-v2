@@ -7,7 +7,7 @@ function timeToMinutes(value: string): number {
   return hours * 60 + minutes;
 }
 
-export function normalizeAvailabilityOrigin(
+function normalizeAvailabilityPoint(
   value: unknown,
 ): { address: string; lat: number; lng: number } | null {
   if (!value || typeof value !== "object") return null;
@@ -23,6 +23,9 @@ export function normalizeAvailabilityOrigin(
 
   return { address, lat, lng };
 }
+
+export const normalizeAvailabilityOrigin = normalizeAvailabilityPoint;
+export const normalizeAvailabilityDestination = normalizeAvailabilityPoint;
 
 export function isValidAvailabilityId(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0 && Types.ObjectId.isValid(value);
