@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const vehicles = await Vehicle.find({ active: true })
     .sort({ sortOrder: 1 })
     .select(
-      "key label rate additional_rate ride vehicle_type trip_type buffer window capacity occupancy min_occupancy minimum_charge regionCodes sortOrder active",
+      "key label rate additional_rate ride vehicle_type trip_type buffer window capacity occupancy min_occupancy minimum_charge regionCodes regionConfigs sortOrder active",
     )
     .lean();
   const scoped = region
