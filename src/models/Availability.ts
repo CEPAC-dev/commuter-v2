@@ -34,7 +34,13 @@ const AvailabilitySchema = new Schema(
       enum: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
     },
     origin: { type: PointSchema, required: true },
+    destination: { type: PointSchema, required: false, default: null },
     startNearestStation: {
+      type: NearestStationSchema,
+      required: false,
+      default: null,
+    },
+    destinationNearestStation: {
       type: NearestStationSchema,
       required: false,
       default: null,
