@@ -14,6 +14,7 @@ import {
   isPlausibleSecurityAnswer,
   verifySecurityAnswer,
 } from "@/lib/auth/securityQuestion";
+import { isValidSecurityQuestionId } from "@/lib/config/verification";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -24,8 +25,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { newPassword, confirmPassword, otp, securityAnswer, forceReset } =
-      await req.json();
+    const {
+      newPassword,
+      confirmPassword,
+      otp,
+      securityAnswer,
+      securityQuestionId,
+      forceReset,
+    } = await req.json();
 
     if (typeof newPassword !== "string" || typeof confirmPassword !== "string")
       return NextResponse.json(
@@ -54,7 +61,22 @@ export async function POST(req: NextRequest) {
 
     if (forceReset === true && user.resetPassword === true) {
       const method = await getActiveVerificationMethod();
-      if (method === "sms_otp") {
+      if (method === "security_question") {
+        if (!isValidSecurityQuestionId(securityQuestionId)) {
+          return NextResponse.json(
+            { error: "Choose a valid security question." },
+            { status: 400 },
+          );
+        }
+        if (!isPlausibleSecurityAnswer(securityAnswer)) {
+          return NextResponse.json(
+            { error: "Enter the answer to your security question." },
+            { status: 400 },
+          );
+        }
+        user.securityQuestionId = securityQuestionId;
+        user.securityAnswerHash = await bcrypt.hash(securityAnswer.trim(), 12);
+      } else {
         const validOtp = await consumeSmsOtp(
           {
             purpose: "password_change",
