@@ -27,6 +27,7 @@ import {
   AdminEmptyState,
   AdminStatusBadge,
 } from "@/components/admin/layout";
+import { REGION_CODES, REGIONS, type RegionCode } from "@/lib/config/regions";
 
 /**
  * ---------------------------------------------------------------------
@@ -70,6 +71,8 @@ type UserRow = {
   phone?: string;
   email?: string;
   role?: string;
+  defaultRegionCode?: RegionCode;
+  allowedRegionCodes?: RegionCode[];
   createdAt?: string;
   referralCode?: string;
   referralUsageCount?: number;
@@ -271,6 +274,10 @@ export default function UserManagementClient({
 
   async function saveChanges(user: UserRow) {
     const userId = user._id;
+    const defaultRegionCode = user.defaultRegionCode ?? "EG-CAIRO";
+    const allowedRegionCodes = Array.from(
+      new Set([...(user.allowedRegionCodes ?? []), defaultRegionCode]),
+    ) as RegionCode[];
     setSavingIds((current) => ({ ...current, [userId]: true }));
     setFeedback((current) => ({
       ...current,
@@ -278,10 +285,16 @@ export default function UserManagementClient({
     }));
 
     try {
-      const payload: { role: string; verificationStatus?: VerificationStatus } =
-        {
-          role: user.role ?? "passenger",
-        };
+      const payload: {
+        role: string;
+        defaultRegionCode?: RegionCode;
+        allowedRegionCodes?: RegionCode[];
+        verificationStatus?: VerificationStatus;
+      } = {
+        role: user.role ?? "passenger",
+        defaultRegionCode,
+        allowedRegionCodes,
+      };
       if (user.driver) {
         payload.verificationStatus =
           user.driver.verificationStatus ?? "incomplete";
@@ -630,6 +643,72 @@ export default function UserManagementClient({
                           }
                           options={ROLE_OPTIONS}
                         />
+
+                        <FieldSelect
+                          label="Default region"
+                          value={user.defaultRegionCode ?? "EG-CAIRO"}
+                          onChange={(value) =>
+                            updateRow(user._id, {
+                              defaultRegionCode: value as RegionCode,
+                              allowedRegionCodes: Array.from(
+                                new Set([
+                                  ...(user.allowedRegionCodes ?? []),
+                                  value as RegionCode,
+                                ]),
+                              ),
+                            })
+                          }
+                          options={[...REGION_CODES]}
+                          optionLabels={Object.fromEntries(
+                            REGION_CODES.map((code) => [
+                              code,
+                              REGIONS[code].label,
+                            ]),
+                          )}
+                        />
+
+                        <div className="grid gap-2">
+                          <span className="text-xs font-semibold text-[var(--color-muted)]">
+                            Allowed regions
+                          </span>
+                          {REGION_CODES.map((code) => {
+                            const checked = (
+                              user.allowedRegionCodes ?? []
+                            ).includes(code);
+                            return (
+                              <label
+                                key={code}
+                                className="flex items-center gap-2 text-sm text-[var(--color-primary)]"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(event) => {
+                                    const next = event.target.checked
+                                      ? Array.from(
+                                          new Set([
+                                            ...(user.allowedRegionCodes ?? []),
+                                            code,
+                                          ]),
+                                        )
+                                      : (user.allowedRegionCodes ?? []).filter(
+                                          (item) => item !== code,
+                                        );
+                                    updateRow(user._id, {
+                                      allowedRegionCodes: next,
+                                      ...(code === user.defaultRegionCode &&
+                                      !event.target.checked
+                                        ? { defaultRegionCode: next[0] }
+                                        : {}),
+                                    });
+                                  }}
+                                  className="h-4 w-4 accent-[var(--color-secondary)]"
+                                />
+                                {REGIONS[code].label}
+                              </label>
+                            );
+                          })}
+                        </div>
 
                         {user.driver && (
                           <FieldSelect

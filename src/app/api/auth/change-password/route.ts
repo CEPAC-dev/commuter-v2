@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
     const user = await User.findById(session.userId).select(
-      "+passwordHash +securityAnswerHash phone role securityQuestionId",
+      "+passwordHash +securityAnswerHash phone role securityQuestionId resetPassword",
     );
     if (!user)
       return NextResponse.json({ error: "User not found." }, { status: 404 });
