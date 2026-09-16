@@ -10,7 +10,11 @@ const SmsOtpSchema = new Schema(
     },
     userId: { type: Types.ObjectId, ref: "User", default: null, index: true },
     phone: { type: String, required: true, index: true },
-    role: { type: String, enum: ["passenger", "driver"], default: null },
+    role: {
+      type: String,
+      enum: ["passenger", "driver", "admin"],
+      default: null,
+    },
     codeHash: { type: String, required: true, select: false },
     attempts: { type: Number, required: true, default: 0 },
     expiresAt: { type: Date, required: true, expires: 0, index: true },

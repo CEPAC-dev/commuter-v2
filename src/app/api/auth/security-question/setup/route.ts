@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   try {
-    const { securityQuestionId, securityAnswer } = await req.json();
+    const { securityQuestionId, securityAnswer, forceReset } = await req.json();
     if (!isValidSecurityQuestionId(securityQuestionId)) {
       return NextResponse.json(
         { error: "Choose a valid security question." },
@@ -50,15 +50,17 @@ export async function POST(req: NextRequest) {
 
     const securityAnswerHash = await hashSecurityAnswer(securityAnswer);
     const result = await User.updateOne(
-      {
-        _id: session.userId,
-        $or: [
-          { securityQuestionId: null },
-          { securityQuestionId: { $exists: false } },
-          { securityAnswerHash: null },
-          { securityAnswerHash: { $exists: false } },
-        ],
-      },
+      forceReset === true
+        ? { _id: session.userId, resetPassword: true }
+        : {
+            _id: session.userId,
+            $or: [
+              { securityQuestionId: null },
+              { securityQuestionId: { $exists: false } },
+              { securityAnswerHash: null },
+              { securityAnswerHash: { $exists: false } },
+            ],
+          },
       { $set: { securityQuestionId, securityAnswerHash } },
     );
 

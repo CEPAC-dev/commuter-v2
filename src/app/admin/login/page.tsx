@@ -15,6 +15,7 @@ import {
 } from "@/lib/auth/validation";
 import PasswordInput from "@/components/shared/PasswordInput";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
+import { useVerificationConfig } from "@/lib/auth/useVerificationConfig";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -25,6 +26,12 @@ export default function AdminLoginPage() {
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [replacementPassword, setReplacementPassword] = useState("");
   const [replacementConfirmation, setReplacementConfirmation] = useState("");
+  const { method: verificationMethod, questions: securityQuestions } =
+    useVerificationConfig();
+  const [resetQuestionId, setResetQuestionId] = useState("");
+  const [resetAnswer, setResetAnswer] = useState("");
+  const [resetOtp, setResetOtp] = useState("");
+  const [resetCodeSent, setResetCodeSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,8 +80,31 @@ export default function AdminLoginPage() {
       setError("New passwords do not match.");
       return;
     }
+    if (verificationMethod === "security_question") {
+      if (!resetQuestionId) return setError("Choose a security question.");
+      if (resetAnswer.trim().length < 2)
+        return setError("Enter an answer to your security question.");
+    } else if (!/^\d{6}$/.test(resetOtp)) {
+      return setError("Enter the 6-digit verification code.");
+    }
     setLoading(true);
     try {
+      if (verificationMethod === "security_question") {
+        const setupResponse = await fetch("/api/auth/security-question/setup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            securityQuestionId: resetQuestionId,
+            securityAnswer: resetAnswer.trim(),
+            forceReset: true,
+          }),
+        });
+        const setupData = await setupResponse.json();
+        if (!setupResponse.ok)
+          throw new Error(
+            setupData.error ?? "Could not save security question.",
+          );
+      }
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -82,6 +112,7 @@ export default function AdminLoginPage() {
           newPassword: replacementPassword,
           confirmPassword: replacementConfirmation,
           forceReset: true,
+          ...(verificationMethod === "sms_otp" && { otp: resetOtp }),
         }),
       });
       const data = await res.json();
@@ -91,6 +122,30 @@ export default function AdminLoginPage() {
       setError(
         error instanceof Error ? error.message : "Failed to change password.",
       );
+      setLoading(false);
+    }
+  }
+
+  async function sendResetCode() {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purpose: "password_change" }),
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.error ?? "Could not send verification code.");
+      setResetCodeSent(true);
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not send verification code.",
+      );
+    } finally {
       setLoading(false);
     }
   }
@@ -226,6 +281,107 @@ export default function AdminLoginPage() {
                 setReplacementConfirmation(event.target.value)
               }
             />
+            {verificationMethod === "security_question" ? (
+              <>
+                <label
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    color: "var(--color-primary)",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  Security question
+                  <select
+                    value={resetQuestionId}
+                    onChange={(event) => setResetQuestionId(event.target.value)}
+                    required
+                    style={{
+                      height: 48,
+                      borderRadius: 10,
+                      border: "1.5px solid var(--color-border)",
+                      padding: "0 12px",
+                      fontSize: 14,
+                    }}
+                  >
+                    <option value="">Choose a question</option>
+                    {securityQuestions.map((question) => (
+                      <option key={question.id} value={question.id}>
+                        {question.question}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    color: "var(--color-primary)",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  Answer
+                  <input
+                    value={resetAnswer}
+                    onChange={(event) =>
+                      setResetAnswer(event.target.value.slice(0, 120))
+                    }
+                    required
+                    style={{
+                      height: 48,
+                      borderRadius: 10,
+                      border: "1.5px solid var(--color-border)",
+                      padding: "0 12px",
+                      fontSize: 14,
+                    }}
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={sendResetCode}
+                  disabled={loading}
+                  style={{
+                    height: 46,
+                    borderRadius: 10,
+                    border: "1px solid var(--color-secondary)",
+                    background: "transparent",
+                    color: "var(--color-secondary)",
+                    fontWeight: 700,
+                  }}
+                >
+                  {resetCodeSent
+                    ? "Resend verification code"
+                    : "Send verification code"}
+                </button>
+                {resetCodeSent && (
+                  <input
+                    value={resetOtp}
+                    onChange={(event) =>
+                      setResetOtp(
+                        event.target.value.replace(/\D/g, "").slice(0, 6),
+                      )
+                    }
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="6-digit verification code"
+                    required
+                    style={{
+                      height: 48,
+                      borderRadius: 10,
+                      border: "1.5px solid var(--color-border)",
+                      padding: "0 12px",
+                      fontSize: 14,
+                      letterSpacing: 3,
+                    }}
+                  />
+                )}
+              </>
+            )}
             {error ? (
               <p
                 role="alert"

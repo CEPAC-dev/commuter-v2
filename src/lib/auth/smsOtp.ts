@@ -12,7 +12,7 @@ type OtpTarget = {
   purpose: SmsOtpPurpose;
   userId?: string;
   phone: string;
-  role?: "passenger" | "driver";
+  role?: "passenger" | "driver" | "admin";
 };
 
 const OTP_TTL_MS = 10 * 60 * 1000;
