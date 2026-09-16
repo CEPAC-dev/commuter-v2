@@ -44,12 +44,13 @@ export async function POST(req: NextRequest) {
         ? { email: normalizedIdentifier, role: "admin" }
         : { phone: normalizedIdentifier, role: "admin" },
     )
-      .select("+passwordHash email name")
+      .select("+passwordHash email name resetPassword")
       .lean<{
         _id?: unknown;
         passwordHash?: string;
         email?: string;
         name?: string;
+        resetPassword?: boolean;
       }>();
 
     if (!user?.passwordHash) {
@@ -73,7 +74,11 @@ export async function POST(req: NextRequest) {
       role: "admin",
     });
 
-    return NextResponse.json({ ok: true, role: "admin" });
+    return NextResponse.json({
+      ok: true,
+      role: "admin",
+      mustChangePassword: Boolean(user.resetPassword),
+    });
   } catch (error) {
     console.error("Admin login error:", error);
     return NextResponse.json(

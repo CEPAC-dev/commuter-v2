@@ -100,6 +100,7 @@ interface StationInfo {
   name: string;
   lat: number;
   lng: number;
+  regionCode?: string;
   zones?: string;
   direction?: string;
   description?: string;
@@ -146,6 +147,7 @@ const SHARED_COLUMNS: (keyof SharedRow)[] = [
 const AVAILABILITY_COLUMNS: (keyof AvailabilityRow)[] = [
   "driverId",
   "startStationNo",
+  "endStationNo",
   "startTime",
   "endTime",
   "vehicleType",
@@ -390,6 +392,7 @@ export async function GET(req: NextRequest) {
     {
       tripNumber: number;
       userId: unknown;
+      regionCode?: string | null;
       pickup?: { lat: number; lng: number };
       dropoff?: { lat: number; lng: number };
       pickupStation?: { id: number };
@@ -416,6 +419,7 @@ export async function GET(req: NextRequest) {
     {
       tripNumber: number;
       userId: unknown;
+      regionCode?: string | null;
       pickupStation?: { id: number };
       dropoffStation?: { id: number };
       pickupTime: string;
@@ -424,6 +428,14 @@ export async function GET(req: NextRequest) {
       extraPassengers: number;
     }[]
   >();
+
+  const targetRegionCodes = Array.from(
+    new Set(
+      [...privateTrips, ...sharedTrips]
+        .map((trip) => trip.regionCode)
+        .filter((regionCode): regionCode is string => Boolean(regionCode)),
+    ),
+  );
 
   const availabilities = targetAvailabilityWeekday
     ? await Availability.find({
@@ -632,8 +644,11 @@ export async function GET(req: NextRequest) {
 
   const existingStations = await Station.find({
     objectId: { $in: existingStationIds },
+    ...(targetRegionCodes.length > 0
+      ? { regionCode: { $in: targetRegionCodes } }
+      : {}),
   })
-    .select("objectId name lat lng zones direction description")
+    .select("objectId name lat lng regionCode zones direction description")
     .lean<StationInfo[]>();
   const existingStationCoordinateToId = new Map(
     existingStations.map((station) => [
@@ -695,8 +710,13 @@ export async function GET(req: NextRequest) {
     ),
   );
 
-  const stations = await Station.find({ objectId: { $in: stationIds } })
-    .select("objectId name lat lng zones direction description")
+  const stations = await Station.find({
+    objectId: { $in: stationIds },
+    ...(targetRegionCodes.length > 0
+      ? { regionCode: { $in: targetRegionCodes } }
+      : {}),
+  })
+    .select("objectId name lat lng regionCode zones direction description")
     .lean<StationInfo[]>();
 
   const stationMap = new Map(
