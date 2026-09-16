@@ -59,18 +59,20 @@ export async function resolveActiveRegion({
   const configuredAllowed = Array.isArray(user.allowedRegionCodes)
     ? user.allowedRegionCodes.filter(isRegionCode)
     : [];
-  // Initial rollout policy: admins without explicit assignments access all active regions.
-  const allowedRegionCodes =
-    user.role === "admin" && configuredAllowed.length === 0
-      ? [...REGION_CODES]
-      : configuredAllowed;
   const defaultRegionCode = isRegionCode(user.defaultRegionCode)
     ? user.defaultRegionCode
     : user.region
       ? normalizeRegion(user.region)
-      : user.role === "admin" || user.role === "driver"
-        ? DEFAULT_REGION
-        : null;
+      : DEFAULT_REGION;
+  // Initial rollout policy: admins without explicit assignments access all
+  // active regions. Legacy passengers/drivers without assignments inherit
+  // their default region so existing accounts remain usable.
+  const allowedRegionCodes =
+    user.role === "admin" && configuredAllowed.length === 0
+      ? [...REGION_CODES]
+      : configuredAllowed.length > 0
+        ? configuredAllowed
+        : [defaultRegionCode];
   const activeCode = requestedCode ?? defaultRegionCode;
   const effectiveAllowedRegionCodes =
     user.role === "driver" && configuredAllowed.length === 0 && activeCode

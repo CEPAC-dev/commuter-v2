@@ -6,6 +6,7 @@ import { ReferralUsage } from "@/models/ReferralUsage";
 import { connectDB } from "@/lib/db/mongoose";
 import UserManagementClient from "@/components/admin/UserManagementClient";
 import { AdminPageContainer, AdminPageHeader } from "@/components/admin/layout";
+import { isRegionCode, REGION_CODES } from "@/lib/config/regions";
 
 function toPlainValue(value: unknown): unknown {
   if (value === null || value === undefined) return value;
@@ -16,7 +17,9 @@ function toPlainValue(value: unknown): unknown {
       return toPlainValue((value as { toJSON: () => unknown }).toJSON());
     }
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [key, toPlainValue(nestedValue)]),
+      Object.entries(value as Record<string, unknown>).map(
+        ([key, nestedValue]) => [key, toPlainValue(nestedValue)],
+      ),
     );
   }
   return value;
@@ -35,41 +38,69 @@ export default async function AdminUsersPage() {
       { $group: { _id: "$referrer", count: { $sum: 1 } } },
     ]),
   ]);
-  const driverMap = new Map(driverProfiles.map((driver) => [String(driver.userId), driver]));
+  const driverMap = new Map(
+    driverProfiles.map((driver) => [String(driver.userId), driver]),
+  );
   const referralUsageMap = new Map(
     referralUsageCounts.map((item) => [String(item._id), item.count]),
   );
 
   const rows = users.map((user) => {
-    const plainUser = toPlainValue(user) as Record<string, unknown> & { _id?: unknown };
+    const plainUser = toPlainValue(user) as Record<string, unknown> & {
+      _id?: unknown;
+    };
     const driverProfile = driverMap.get(String(plainUser._id));
-    const plainDriver = driverProfile ? (toPlainValue(driverProfile) as Record<string, unknown>) : undefined;
+    const plainDriver = driverProfile
+      ? (toPlainValue(driverProfile) as Record<string, unknown>)
+      : undefined;
 
     return {
       ...(plainUser as Record<string, unknown>),
       _id: String(plainUser._id),
-      userNumber: typeof plainUser.userNumber === "number" ? plainUser.userNumber : undefined,
+      userNumber:
+        typeof plainUser.userNumber === "number"
+          ? plainUser.userNumber
+          : undefined,
       role: typeof plainUser.role === "string" ? plainUser.role : "passenger",
-      referralCode: typeof plainUser.referralCode === "string" ? plainUser.referralCode : undefined,
+      defaultRegionCode: isRegionCode(plainUser.defaultRegionCode)
+        ? plainUser.defaultRegionCode
+        : undefined,
+      allowedRegionCodes: Array.isArray(plainUser.allowedRegionCodes)
+        ? plainUser.allowedRegionCodes.filter(
+            (code): code is (typeof REGION_CODES)[number] =>
+              typeof code === "string" &&
+              (REGION_CODES as readonly string[]).includes(code),
+          )
+        : [],
+      referralCode:
+        typeof plainUser.referralCode === "string"
+          ? plainUser.referralCode
+          : undefined,
       referralUsageCount: referralUsageMap.get(String(plainUser._id)) ?? 0,
       driver: plainDriver
         ? {
-          _id: String(plainDriver._id),
-          userId: String(plainDriver.userId),
-          verificationStatus: (plainDriver.verificationStatus as "incomplete" | "pending" | "verified" | undefined),
-          carType: plainDriver.carType as string | undefined,
-          carBrand: plainDriver.carBrand as string | undefined,
-          carModel: plainDriver.carModel as string | undefined,
-          modelYear: plainDriver.modelYear as number | undefined,
-          vehicleColor: plainDriver.vehicleColor as string | undefined,
-          plateChar1: plainDriver.plateChar1 as string | undefined,
-          plateChar2: plainDriver.plateChar2 as string | undefined,
-          plateChar3: plainDriver.plateChar3 as string | undefined,
-          plateDigits: plainDriver.plateDigits as string | undefined,
-          licenseExpiry: plainDriver.licenseExpiry as string | undefined,
-          carCapacity: plainDriver.carCapacity as number | undefined,
-          documents: plainDriver.documents as Record<string, string | null> | undefined,
-        }
+            _id: String(plainDriver._id),
+            userId: String(plainDriver.userId),
+            verificationStatus: plainDriver.verificationStatus as
+              | "incomplete"
+              | "pending"
+              | "verified"
+              | undefined,
+            carType: plainDriver.carType as string | undefined,
+            carBrand: plainDriver.carBrand as string | undefined,
+            carModel: plainDriver.carModel as string | undefined,
+            modelYear: plainDriver.modelYear as number | undefined,
+            vehicleColor: plainDriver.vehicleColor as string | undefined,
+            plateChar1: plainDriver.plateChar1 as string | undefined,
+            plateChar2: plainDriver.plateChar2 as string | undefined,
+            plateChar3: plainDriver.plateChar3 as string | undefined,
+            plateDigits: plainDriver.plateDigits as string | undefined,
+            licenseExpiry: plainDriver.licenseExpiry as string | undefined,
+            carCapacity: plainDriver.carCapacity as number | undefined,
+            documents: plainDriver.documents as
+              | Record<string, string | null>
+              | undefined,
+          }
         : undefined,
     };
   });

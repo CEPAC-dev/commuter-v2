@@ -8,6 +8,7 @@ import { Ride } from "@/models/Ride";
 import { Wallet } from "@/models/Wallet";
 import { Types } from "mongoose";
 import { validateMutationRequest } from "@/lib/security/request";
+import { isRegionCode } from "@/lib/config/regions";
 
 export async function GET(
   req: NextRequest,
@@ -52,6 +53,47 @@ export async function PATCH(
       updates.role = body.role;
     } else if (body.role !== undefined) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+    }
+
+    if (body.defaultRegionCode !== undefined) {
+      if (!isRegionCode(body.defaultRegionCode)) {
+        return NextResponse.json(
+          { error: "Invalid default region" },
+          { status: 400 },
+        );
+      }
+      updates.defaultRegionCode = body.defaultRegionCode;
+    }
+
+    if (body.allowedRegionCodes !== undefined) {
+      if (
+        !Array.isArray(body.allowedRegionCodes) ||
+        !body.allowedRegionCodes.every(isRegionCode)
+      ) {
+        return NextResponse.json(
+          { error: "Invalid allowed regions" },
+          { status: 400 },
+        );
+      }
+      const allowedRegionCodes = Array.from(new Set(body.allowedRegionCodes));
+      const currentUser = await User.findById(id)
+        .select("defaultRegionCode")
+        .lean();
+      if (!currentUser) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+      const requestedDefault =
+        body.defaultRegionCode ?? currentUser.defaultRegionCode ?? "EG-CAIRO";
+      if (
+        !isRegionCode(requestedDefault) ||
+        !allowedRegionCodes.includes(requestedDefault)
+      ) {
+        return NextResponse.json(
+          { error: "Allowed regions must include the default region" },
+          { status: 400 },
+        );
+      }
+      updates.allowedRegionCodes = allowedRegionCodes;
     }
 
     if (body.verificationStatus) {
