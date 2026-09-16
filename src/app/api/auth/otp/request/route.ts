@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       purpose: SmsOtpPurpose;
       userId?: string;
       phone: string;
-      role?: "passenger" | "driver";
+      role?: "passenger" | "driver" | "admin";
     };
 
     if (purpose === "password_reset") {
@@ -101,7 +101,12 @@ export async function POST(req: NextRequest) {
         purpose,
         userId: session.userId,
         phone: user.phone,
-        role: user.role === "driver" ? "driver" : "passenger",
+        role:
+          user.role === "driver"
+            ? "driver"
+            : user.role === "admin"
+              ? "admin"
+              : "passenger",
       };
     }
 
