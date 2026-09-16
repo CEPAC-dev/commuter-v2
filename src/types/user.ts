@@ -53,6 +53,7 @@ export interface CoPassenger {
 
 export interface UserProfile {
   id:              string;
+  resetPassword:   boolean;
   name:            string;
   email:           string;
   phone:           string;       // normalised from phone_number

@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { newPassword, confirmPassword, otp, securityAnswer } =
+    const { newPassword, confirmPassword, otp, securityAnswer, forceReset } =
       await req.json();
 
     if (typeof newPassword !== "string" || typeof confirmPassword !== "string")
@@ -51,6 +51,13 @@ export async function POST(req: NextRequest) {
     );
     if (!user)
       return NextResponse.json({ error: "User not found." }, { status: 404 });
+
+    if (forceReset === true && user.resetPassword === true) {
+      user.passwordHash = await bcrypt.hash(newPassword, 12);
+      user.resetPassword = false;
+      await user.save();
+      return NextResponse.json({ ok: true });
+    }
 
     const method = await getActiveVerificationMethod();
     if (method === "security_question") {

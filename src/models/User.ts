@@ -41,6 +41,7 @@ const UserSchema = new Schema(
     },
     phoneVerifiedAt: { type: Date, default: null },
     passwordHash: { type: String, required: true, select: false },
+    resetPassword: { type: Boolean, required: true, default: false },
     // Security-question verification (used when AdminSettings.verificationMethod
     // === "security_question"). Answer is bcrypt-hashed and never returned.
     securityQuestionId: { type: String, default: null },
@@ -127,6 +128,11 @@ if (existingUserModel) {
   if (!existingUserModel.schema.path("phoneVerifiedAt")) {
     existingUserModel.schema.add({
       phoneVerifiedAt: { type: Date, default: null },
+    });
+  }
+  if (!existingUserModel.schema.path("resetPassword")) {
+    existingUserModel.schema.add({
+      resetPassword: { type: Boolean, required: true, default: false },
     });
   }
   if (!existingUserModel.schema.path("securityQuestionId")) {
