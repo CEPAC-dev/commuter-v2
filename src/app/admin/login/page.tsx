@@ -89,22 +89,6 @@ export default function AdminLoginPage() {
     }
     setLoading(true);
     try {
-      if (verificationMethod === "security_question") {
-        const setupResponse = await fetch("/api/auth/security-question/setup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            securityQuestionId: resetQuestionId,
-            securityAnswer: resetAnswer.trim(),
-            forceReset: true,
-          }),
-        });
-        const setupData = await setupResponse.json();
-        if (!setupResponse.ok)
-          throw new Error(
-            setupData.error ?? "Could not save security question.",
-          );
-      }
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,6 +96,10 @@ export default function AdminLoginPage() {
           newPassword: replacementPassword,
           confirmPassword: replacementConfirmation,
           forceReset: true,
+          ...(verificationMethod === "security_question" && {
+            securityQuestionId: resetQuestionId,
+            securityAnswer: resetAnswer.trim(),
+          }),
           ...(verificationMethod === "sms_otp" && { otp: resetOtp }),
         }),
       });
