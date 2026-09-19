@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, Copy, Loader2, Share2, WalletCards } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Check, Copy, Loader2, Share2, WalletCards, Download } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 import { useClientLocale } from "@/lib/i18n/client";
 
 interface ReferralData {
@@ -24,6 +25,7 @@ export default function ReferralCard() {
   const [data, setData] = useState<ReferralData | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const qrRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +33,11 @@ export default function ReferralCard() {
       .then(async (response) => {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error ?? t("referral.load_failed"));
-        if (!cancelled) setData(result.data);
+        if (!cancelled) {
+          const shareUrl = new URL("/", window.location.origin);
+          shareUrl.searchParams.set("ref", result.data.referralCode);
+          setData({ ...result.data, shareUrl: shareUrl.toString() });
+        }
       })
       .catch((loadError: unknown) => {
         if (!cancelled) {
@@ -65,6 +71,18 @@ export default function ReferralCard() {
       }
     }
     await copyLink();
+  }
+
+  function downloadQR() {
+    if (!qrRef.current || !data) return;
+    const canvas = qrRef.current;
+    const url = canvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `referral-${data.referralCode}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   const remaining = data
@@ -174,13 +192,43 @@ export default function ReferralCard() {
               {copied ? <Check size={18} /> : <Copy size={18} />}
             </button>
           </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          <div style={{ marginTop: 12 }}>
+            <label htmlFor="referral-invitation-link" style={{ display: "block", marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#5A6A7A" }}>
+              Invitation link
+            </label>
+            <input
+              id="referral-invitation-link"
+              readOnly
+              value={data.shareUrl}
+              onFocus={(event) => event.currentTarget.select()}
+              style={{ width: "100%", boxSizing: "border-box", minHeight: 42, padding: "0 12px", border: "1px solid #e8edf0", borderRadius: 10, background: "#f8f9fa", color: "#0B1E3D", fontSize: 12, direction: "ltr" }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 24, padding: 20, background: "rgba(0,194,168,0.08)", borderRadius: 12, border: "1px solid rgba(0,194,168,0.24)" }}>
+            <QRCodeCanvas
+              value={data.shareUrl}
+              size={180}
+              bgColor={"#ffffff"}
+              fgColor={"#00877A"}
+              level={"Q"}
+              includeMargin={false}
+              ref={qrRef}
+              style={{ borderRadius: 8, padding: 8, background: "#ffffff", boxShadow: "0 2px 8px rgba(11,30,61,0.06)" }}
+            />
+            <p style={{ margin: "12px 0 0", fontSize: 13, color: "#5A6A7A", textAlign: "center", fontWeight: 600 }}>
+              {t("referral.share_title") || "Scan to redeem code"}
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 20, flexWrap: "wrap" }}>
             <button type="button" onClick={copyLink} style={buttonStyle("#0B1E3D")}>
               {copied ? <Check size={16} /> : <Copy size={16} />}
               {copied ? t("referral.copied") : t("referral.copy_link")}
             </button>
             <button type="button" onClick={shareLink} style={buttonStyle("#00C2A8")}>
               <Share2 size={16} /> {t("referral.share")}
+            </button>
+            <button type="button" onClick={downloadQR} style={buttonStyle("#5A6A7A")}>
+              <Download size={16} /> Download PNG
             </button>
           </div>
         </>

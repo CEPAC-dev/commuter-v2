@@ -262,8 +262,9 @@ export default function CreateMapOsm({
 
     refreshMask();
     refreshZoneLabels();
-    map.on("move zoom", refreshMask);
-    map.on("zoom", refreshZoneLabels);
+    map.on("moveend", refreshMask);
+    map.on("zoomend", refreshMask);
+    map.on("zoomend", refreshZoneLabels);
 
     fetch("/geo/zone_polygon.geojson")
       .then((response) => response.json())
@@ -317,8 +318,9 @@ export default function CreateMapOsm({
 
     return () => {
       cancelled = true;
-      map.off("move zoom", refreshMask);
-      map.off("zoom", refreshZoneLabels);
+      map.off("moveend", refreshMask);
+      map.off("zoomend", refreshMask);
+      map.off("zoomend", refreshZoneLabels);
       zoneLabelMarkersRef.current.forEach((marker) => marker.remove());
       zoneLabelMarkersRef.current = [];
       zoneLabelLocationsRef.current = [];

@@ -11,6 +11,7 @@ import { useClientLocale } from "@/lib/locale.client";
 
 interface Props {
   authed?: boolean;
+  referralCode?: string;
 }
 
 const InputSkeleton = () => (
@@ -24,13 +25,16 @@ const InputSkeleton = () => (
   />
 );
 
-export default function Hero({ authed = false }: Props) {
+export default function Hero({ authed = false, referralCode }: Props) {
   const router = useRouter();
   const { t, locale } = useClientLocale();
   const isArabic = locale === "ar";
   const [mounted, setMounted] = useState(false);
   const { pickup, dropoff, setPickup, setDropoff } = useTripStore();
   const [error, setError] = useState("");
+  const loginHref = referralCode
+    ? `/login?redirect=%2Fcreate&ref=${encodeURIComponent(referralCode)}`
+    : "/login?redirect=/create";
 
   // Prevent sessionStorage hydration mismatch
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -338,7 +342,7 @@ export default function Hero({ authed = false }: Props) {
                   </button>
                 ) : (
                   <Link
-                    href="/login?redirect=/create"
+                    href={loginHref}
                     style={{
                       marginTop: 16,
                       display: "flex",

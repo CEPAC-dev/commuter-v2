@@ -21,9 +21,26 @@ export default function ReferralUserOverrides() {
   const { t } = useClientLocale();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [activeLoading, setActiveLoading] = useState(true);
+  const [activeUsers, setActiveUsers] = useState<SearchUserResult[]>([]);
   const [users, setUsers] = useState<SearchUserResult[]>([]);
   const [error, setError] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/users/unlimited")
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "Failed to load active overrides.");
+        setActiveUsers(json.data ?? []);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load active overrides.");
+      })
+      .finally(() => {
+        setActiveLoading(false);
+      });
+  }, []);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -73,12 +90,23 @@ export default function ReferralUserOverrides() {
           u.id === user.id ? { ...u, referralUnlimited: nextState } : u,
         ),
       );
+      setActiveUsers((prev) => {
+        if (nextState) {
+          const updatedUser = { ...user, referralUnlimited: true };
+          return prev.some((u) => u.id === user.id)
+            ? prev.map((u) => (u.id === user.id ? updatedUser : u))
+            : [...prev, updatedUser];
+        }
+        return prev.filter((u) => u.id !== user.id);
+      });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Update failed.");
     } finally {
       setTogglingId(null);
     }
   }
+
+  const displayedUsers = query.trim() ? users : activeUsers;
 
   return (
     <section
@@ -160,7 +188,11 @@ export default function ReferralUserOverrides() {
         </p>
       ) : null}
 
-      {users.length > 0 ? (
+      {!query.trim() && !activeLoading && activeUsers.length === 0 && !error ? (
+        <p style={{ color: "#5A6A7A", fontSize: 14, margin: "12px 0 0" }}>
+          No activated unlimited referral overrides.
+        </p>
+      ) : displayedUsers.length > 0 ? (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
@@ -174,7 +206,7 @@ export default function ReferralUserOverrides() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {displayedUsers.map((u) => (
                 <tr key={u.id} style={{ borderBottom: "1px solid #f0f3f6" }}>
                   <td style={{ padding: "12px", fontWeight: 700, color: "#0B1E3D" }}>
                     #{u.userNumber ?? "N/A"}

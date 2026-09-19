@@ -36,12 +36,9 @@ export async function GET(req: NextRequest) {
     ),
   ]);
 
-  const appUrl =
-    process.env.APP_URL ??
-    (process.env.NODE_ENV === "production"
-      ? "https://www.commuter.site"
-      : req.nextUrl.origin);
-  const shareUrl = new URL("/login", appUrl);
+  // Build the invitation from the active request origin so local and deployed
+  // links always point to the site the user is currently using.
+  const shareUrl = new URL("/", req.nextUrl.origin);
   shareUrl.searchParams.set("ref", user.referralCode);
 
   return NextResponse.json({
