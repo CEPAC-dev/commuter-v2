@@ -900,6 +900,7 @@ export default function AdminRidesPage() {
               dateFrom={range.dateFrom}
               dateTo={range.dateTo}
               onApply={applyDateRange}
+              align="end"
             />
           </div>
           <label className="filter-field">

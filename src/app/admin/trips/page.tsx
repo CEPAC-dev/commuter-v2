@@ -898,6 +898,7 @@ export default function AdminTripsPage() {
               dateFrom={range.dateFrom}
               dateTo={range.dateTo}
               onApply={handleRangeApply}
+              align="end"
             />
           </div>
           <button type="button" onClick={resetFilters} className="action-btn ghost">
