@@ -29,11 +29,11 @@ function getTomorrowDate() {
   return `${year}-${month}-${day}`;
 }
 
-function getIsoWeekdayNumber(dateText: string): number | null {
+function getAvailabilityWeekday(dateText: string): string | null {
   const parsedDate = new Date(`${dateText}T00:00:00`);
   if (Number.isNaN(parsedDate.getTime())) return null;
 
-  return parsedDate.getDay() === 0 ? 7 : parsedDate.getDay();
+  return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][parsedDate.getDay()];
 }
 
 interface PrivateRow {
@@ -87,7 +87,6 @@ interface SharedRow {
 }
 
 interface AvailabilityRow {
-  availabilityId: number;
   driverId: number | null;
   startStationNo: number | null;
   endStationNo: number | null;
@@ -101,6 +100,7 @@ interface StationInfo {
   name: string;
   lat: number;
   lng: number;
+  regionCode?: string;
   zones?: string;
   direction?: string;
   description?: string;
@@ -145,9 +145,9 @@ const SHARED_COLUMNS: (keyof SharedRow)[] = [
 ];
 
 const AVAILABILITY_COLUMNS: (keyof AvailabilityRow)[] = [
-  "availabilityId",
   "driverId",
   "startStationNo",
+  "endStationNo",
   "startTime",
   "endTime",
   "vehicleType",
@@ -159,9 +159,9 @@ const SHARED_HEADER_LABELS: Record<string, string> = {
 };
 
 const AVAILABILITY_HEADER_LABELS: Record<string, string> = {
-  availabilityId: "Trip_ID",
   driverId: "Driver_ID",
   startStationNo: "Origin_Reg_ID",
+  endStationNo: "Dest_Reg_ID",
   startTime: "Ready work From",
   endTime: "Ready Work To",
   vehicleType: "Vehicle_Type",
@@ -381,7 +381,7 @@ export async function GET(req: NextRequest) {
       ? requestedTravelTimeDepartureTime
       : new Date().toISOString();
 
-  const targetIsoWeekday = getIsoWeekdayNumber(targetDate);
+  const targetAvailabilityWeekday = getAvailabilityWeekday(targetDate);
 
   const privateTrips = await Trip.find({
     date: targetDate,
@@ -392,6 +392,7 @@ export async function GET(req: NextRequest) {
     {
       tripNumber: number;
       userId: unknown;
+      regionCode?: string | null;
       pickup?: { lat: number; lng: number };
       dropoff?: { lat: number; lng: number };
       pickupStation?: { id: number };
@@ -418,6 +419,7 @@ export async function GET(req: NextRequest) {
     {
       tripNumber: number;
       userId: unknown;
+      regionCode?: string | null;
       pickupStation?: { id: number };
       dropoffStation?: { id: number };
       pickupTime: string;
@@ -427,33 +429,30 @@ export async function GET(req: NextRequest) {
     }[]
   >();
 
-  const availabilities = targetIsoWeekday
+  const targetRegionCodes = Array.from(
+    new Set(
+      [...privateTrips, ...sharedTrips]
+        .map((trip) => trip.regionCode)
+        .filter((regionCode): regionCode is string => Boolean(regionCode)),
+    ),
+  );
+
+  const availabilities = targetAvailabilityWeekday
     ? await Availability.find({
-        $expr: {
-          $eq: [
-            {
-              $isoDayOfWeek: {
-                $dateFromString: {
-                  dateString: "$date",
-                  format: "%Y-%m-%d",
-                },
-              },
-            },
-            targetIsoWeekday,
-          ],
-        },
+        dayOfWeek: targetAvailabilityWeekday,
+        active: true,
       }).lean<
         {
-          availabilityNumber: number;
+          _id: unknown;
           driverId: unknown;
-          date: string;
-          startLocation: { lat: number; lng: number };
-          endLocation: { lat: number; lng: number };
+          dayOfWeek: string;
+          origin: { lat: number; lng: number };
+          destination?: { lat: number; lng: number } | null;
           startNearestStation?: { id: number };
-          endNearestStation?: { id: number };
+          destinationNearestStation?: { id: number };
           startTime: string;
           endTime: string;
-          matched?: boolean;
+          active: boolean;
         }[]
       >()
     : [];
@@ -645,8 +644,11 @@ export async function GET(req: NextRequest) {
 
   const existingStations = await Station.find({
     objectId: { $in: existingStationIds },
+    ...(targetRegionCodes.length > 0
+      ? { regionCode: { $in: targetRegionCodes } }
+      : {}),
   })
-    .select("objectId name lat lng zones direction description")
+    .select("objectId name lat lng regionCode zones direction description")
     .lean<StationInfo[]>();
   const existingStationCoordinateToId = new Map(
     existingStations.map((station) => [
@@ -676,14 +678,11 @@ export async function GET(req: NextRequest) {
   const availabilityRows: AvailabilityRow[] = availabilities.map(
     (availability) => {
       const carType = carTypeMap.get(String(availability.driverId));
-      const startStationNo = resolveAvailabilityStationNo(
-        availability.startLocation,
-      );
+      const startStationNo = resolveAvailabilityStationNo(availability.origin);
       const endStationNo = resolveAvailabilityStationNo(
-        availability.endLocation,
+        availability.destination,
       );
       return {
-        availabilityId: availability.availabilityNumber,
         driverId: userNumberMap.get(String(availability.driverId)) ?? null,
         startStationNo,
         endStationNo,
@@ -711,8 +710,13 @@ export async function GET(req: NextRequest) {
     ),
   );
 
-  const stations = await Station.find({ objectId: { $in: stationIds } })
-    .select("objectId name lat lng zones direction description")
+  const stations = await Station.find({
+    objectId: { $in: stationIds },
+    ...(targetRegionCodes.length > 0
+      ? { regionCode: { $in: targetRegionCodes } }
+      : {}),
+  })
+    .select("objectId name lat lng regionCode zones direction description")
     .lean<StationInfo[]>();
 
   const stationMap = new Map(

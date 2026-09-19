@@ -71,6 +71,10 @@ export async function POST(req: NextRequest) {
       role,
     });
 
+    if (user.resetPassword) {
+      return NextResponse.json({ ok: true, role, mustChangePassword: true });
+    }
+
     if (role !== "driver") return NextResponse.json({ ok: true, role });
 
     const driver = await Driver.findOne({ userId: user._id })

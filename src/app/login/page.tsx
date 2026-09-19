@@ -17,6 +17,7 @@ import {
 import Image from "next/image";
 import DriverRegisterForm from "@/components/auth/DriverRegisterForm";
 import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
+import PasswordInput from "@/components/shared/PasswordInput";
 import {
   isStrongPassword,
   normalizeEgyptPhone,
@@ -63,6 +64,13 @@ function LoginForm() {
     useVerificationConfig();
   const [securityQuestionId, setSecurityQuestionId] = useState<string>("");
   const [securityAnswer, setSecurityAnswer] = useState("");
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [replacementPassword, setReplacementPassword] = useState("");
+  const [replacementConfirmation, setReplacementConfirmation] = useState("");
+  const [resetQuestionId, setResetQuestionId] = useState("");
+  const [resetAnswer, setResetAnswer] = useState("");
+  const [resetOtp, setResetOtp] = useState("");
+  const [resetCodeSent, setResetCodeSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -120,6 +128,12 @@ function LoginForm() {
         return;
       }
 
+      if (mode === "login" && data.mustChangePassword) {
+        setMustChangePassword(true);
+        setLoading(false);
+        return;
+      }
+
       if (mode === "login" && role === "driver") {
         router.replace(
           data.verificationStatus === "verified" ? "/my-trips" : "/profile",
@@ -129,6 +143,78 @@ function LoginForm() {
       router.replace(redirect);
     } catch {
       setError(t("auth.network_error"));
+      setLoading(false);
+    }
+  }
+
+  async function handleForcedPasswordChange(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!isStrongPassword(replacementPassword)) {
+      setError(
+        "Password must be at least 8 characters and include uppercase, lowercase, a number and a symbol.",
+      );
+      return;
+    }
+    if (replacementPassword !== replacementConfirmation) {
+      setError("New passwords do not match.");
+      return;
+    }
+    if (verificationMethod === "security_question") {
+      if (!resetQuestionId) return setError("Choose a security question.");
+      if (resetAnswer.trim().length < 2)
+        return setError("Enter an answer to your security question.");
+    } else if (!/^\d{6}$/.test(resetOtp)) {
+      return setError("Enter the 6-digit verification code.");
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newPassword: replacementPassword,
+          confirmPassword: replacementConfirmation,
+          forceReset: true,
+          ...(verificationMethod === "security_question" && {
+            securityQuestionId: resetQuestionId,
+            securityAnswer: resetAnswer.trim(),
+          }),
+          ...(verificationMethod === "sms_otp" && { otp: resetOtp }),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to change password.");
+      router.replace(role === "driver" ? "/profile" : redirect);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Failed to change password.",
+      );
+      setLoading(false);
+    }
+  }
+
+  async function sendResetCode() {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purpose: "password_change" }),
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.error ?? "Could not send verification code.");
+      setResetCodeSent(true);
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not send verification code.",
+      );
+    } finally {
       setLoading(false);
     }
   }
@@ -297,450 +383,309 @@ function LoginForm() {
           </Link>
         </div>
 
-        {/* Role switcher */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            background: "#eef2f5",
-            borderRadius: 12,
-            padding: 4,
-            marginBottom: 12,
-          }}
-          role="tablist"
-          aria-label="Passenger or driver"
-        >
-          {(["passenger", "driver"] as Role[]).map((r) => (
-            <button
-              key={r}
-              type="button"
-              role="tab"
-              aria-selected={role === r}
-              onClick={() => {
-                setRole(r);
-                setMode("login");
-                setError("");
-              }}
+        {mustChangePassword ? (
+          <form onSubmit={handleForcedPasswordChange} noValidate>
+            <h1 style={{ margin: "0 0 8px", color: "#0B1E3D", fontSize: 24 }}>
+              Change your password
+            </h1>
+            <p
               style={{
-                padding: "10px 16px",
-                borderRadius: 9,
-                border: "none",
-                cursor: "pointer",
-                fontWeight: 700,
+                margin: "0 0 20px",
+                color: "#5A6A7A",
                 fontSize: 14,
-                fontFamily: "inherit",
-                background: role === r ? "#0B1E3D" : "transparent",
-                color: role === r ? "#ffffff" : "#5A6A7A",
-                transition: "all 0.2s",
-                minHeight: 44,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                textAlign: "center",
+                lineHeight: 1.5,
               }}
             >
-              {r === "passenger"
-                ? t("auth.passenger.role")
-                : t("auth.driver.role")}
-            </button>
-          ))}
-        </div>
-
-        {/* Mode tabs */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            background: "#f8f9fa",
-            borderRadius: 12,
-            padding: 4,
-            marginBottom: 28,
-          }}
-          role="tablist"
-          aria-label="Login or register"
-        >
-          {(["login", "register"] as Mode[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              aria-selected={mode === m}
-              onClick={() => {
-                setMode(m);
-                setError("");
-              }}
-              style={{
-                padding: "10px 16px",
-                borderRadius: 9,
-                border: "none",
-                cursor: "pointer",
-                fontWeight: 700,
-                fontSize: 14,
-                fontFamily: "inherit",
-                background: mode === m ? "#ffffff" : "transparent",
-                color: mode === m ? "#0B1E3D" : "#5A6A7A",
-                boxShadow: mode === m ? "0 1px 6px rgba(0,0,0,0.1)" : "none",
-                transition: "all 0.2s",
-                minHeight: 44,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                textAlign: "center",
-              }}
-            >
-              {m === "login" ? t("auth.login_tab") : t("auth.register_tab")}
-            </button>
-          ))}
-        </div>
-
-        {role === "driver" && mode === "register" ? (
-          <DriverRegisterForm
-            name={name}
-            setName={setName}
-            phone={phone}
-            setPhone={setPhone}
-            password={password}
-            setPassword={setPassword}
-            email={email}
-            setEmail={setEmail}
-            gender={gender}
-            setGender={setGender}
-            referralCode={referralCode}
-            onSuccess={() => router.replace("/profile")}
-          />
-        ) : (
-          <form onSubmit={handleSubmit} noValidate>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {mode === "login" ? (
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <Link
-                    href="/forgot-password"
-                    style={{
-                      fontSize: 13,
-                      color: "#00C2A8",
-                      textDecoration: "none",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t("auth.forgot_password")}
-                  </Link>
-                </div>
-              ) : null}
-
-              {/* Name (register only) */}
-              {mode === "register" && (
-                <div>
+              Admin reset your password. Choose new password before continuing.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <PasswordInput
+                label="New password"
+                autoComplete="new-password"
+                value={replacementPassword}
+                onChange={(event) => setReplacementPassword(event.target.value)}
+              />
+              <PasswordStrengthMeter password={replacementPassword} />
+              <PasswordInput
+                label="Confirm new password"
+                autoComplete="new-password"
+                value={replacementConfirmation}
+                onChange={(event) =>
+                  setReplacementConfirmation(event.target.value)
+                }
+              />
+              {verificationMethod === "security_question" ? (
+                <>
                   <label
-                    htmlFor="name"
                     style={{
+                      display: "grid",
+                      gap: 6,
                       fontSize: 13,
                       fontWeight: 600,
                       color: "#0B1E3D",
-                      display: "block",
-                      marginBottom: 6,
                     }}
                   >
-                    {t("auth.full_name")}{" "}
-                    <span aria-hidden="true" style={{ color: "#e74c3c" }}>
-                      *
-                    </span>
-                  </label>
-                  <div
-                    style={fieldStyle}
-                    onFocusCapture={(e) =>
-                      focusField(e.currentTarget as HTMLDivElement)
-                    }
-                    onBlurCapture={(e) =>
-                      blurField(e.currentTarget as HTMLDivElement)
-                    }
-                  >
-                    <User
-                      size={17}
-                      style={{ color: "#5A6A7A", flexShrink: 0 }}
-                      aria-hidden="true"
-                    />
-                    <input
-                      id="name"
-                      type="text"
-                      autoComplete="name"
-                      placeholder="Mohamed Ahmed"
+                    Security question
+                    <select
+                      value={resetQuestionId}
+                      onChange={(event) =>
+                        setResetQuestionId(event.target.value)
+                      }
                       required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      style={inputStyle}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Phone (primary) */}
-              <div>
-                <label
-                  htmlFor="phone"
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "#0B1E3D",
-                    display: "block",
-                    marginBottom: 6,
-                  }}
-                >
-                  {t("auth.phone")}{" "}
-                  <span aria-hidden="true" style={{ color: "#e74c3c" }}>
-                    *
-                  </span>
-                </label>
-                <div
-                  dir="ltr"
-                  style={{
-                    ...fieldStyle,
-                    padding: 0,
-                    overflow: "hidden",
-                    flexDirection: "row",
-                    unicodeBidi: "isolate",
-                  }}
-                  onFocusCapture={(e) =>
-                    focusField(e.currentTarget as HTMLDivElement)
-                  }
-                  onBlurCapture={(e) =>
-                    blurField(e.currentTarget as HTMLDivElement)
-                  }
-                >
-                  <span
-                    dir="ltr"
-                    style={{
-                      display: "flex",
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                      height: "100%",
-                      padding: "0 12px",
-                      background: "#eef1f3",
-                      borderRight: "1.5px solid #e8edf0",
-                      fontWeight: 600,
-                      color: "#0B1E3D",
-                      flexShrink: 0,
-                      direction: "ltr",
-                      unicodeBidi: "isolate",
-                    }}
-                  >
-                    <Phone
-                      size={17}
-                      style={{ color: "#5A6A7A" }}
-                      aria-hidden="true"
-                    />
-                    <span
-                      dir="ltr"
-                      style={{ direction: "ltr", unicodeBidi: "plaintext" }}
-                    >
-                      +20
-                    </span>
-                  </span>
-                  <input
-                    id="phone"
-                    type="tel"
-                    inputMode="numeric"
-                    autoComplete="tel"
-                    placeholder="1XXXXXXXXX"
-                    required
-                    maxLength={13}
-                    value={phone.replace(/^\+?20/, "")}
-                    onChange={(e) => {
-                      const digits = toNationalDigits(e.target.value);
-                      setPhone(digits ? `+20${digits}` : "");
-                    }}
-                    style={{ ...inputStyle, padding: "0 14px" }}
-                  />
-                </div>
-              </div>
-
-              {/* Password */}
-              <div>
-                <label
-                  htmlFor="password"
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "#0B1E3D",
-                    display: "block",
-                    marginBottom: 6,
-                  }}
-                >
-                  {t("auth.password")}{" "}
-                  <span aria-hidden="true" style={{ color: "#e74c3c" }}>
-                    *
-                  </span>
-                </label>
-                <div
-                  style={fieldStyle}
-                  onFocusCapture={(e) =>
-                    focusField(e.currentTarget as HTMLDivElement)
-                  }
-                  onBlurCapture={(e) =>
-                    blurField(e.currentTarget as HTMLDivElement)
-                  }
-                >
-                  <Lock
-                    size={17}
-                    style={{ color: "#5A6A7A", flexShrink: 0 }}
-                    aria-hidden="true"
-                  />
-                  <input
-                    id="password"
-                    type={showPass ? "text" : "password"}
-                    autoComplete={
-                      mode === "login" ? "current-password" : "new-password"
-                    }
-                    placeholder={
-                      mode === "register"
-                        ? t("auth.password_placeholder_register")
-                        : t("auth.password_placeholder_login")
-                    }
-                    required
-                    minLength={mode === "register" ? 8 : undefined}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    style={inputStyle}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPass((v) => !v)}
-                    aria-label={
-                      showPass
-                        ? t("auth.hide_password")
-                        : t("auth.show_password")
-                    }
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "#5A6A7A",
-                      padding: 4,
-                      flexShrink: 0,
-                      minWidth: 32,
-                      minHeight: 32,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                {mode === "register" && (
-                  <>
-                    <PasswordStrengthMeter password={password} />
-                    <p
                       style={{
-                        fontSize: 12,
-                        color: "#5A6A7A",
-                        marginTop: 5,
-                        marginBottom: 0,
+                        height: 48,
+                        borderRadius: 10,
+                        border: "1.5px solid #d0d8e0",
+                        padding: "0 12px",
+                        fontSize: 14,
+                        background: "#fff",
                       }}
                     >
-                      {t("auth.password_rules")}
-                    </p>
-                  </>
-                )}
-              </div>
-
-              {/* Email (register only, optional, last) */}
-              {mode === "register" && (
-                <div>
+                      <option value="">Choose a question</option>
+                      {securityQuestions.map((question) => (
+                        <option key={question.id} value={question.id}>
+                          {question.question}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <label
-                    htmlFor="email"
                     style={{
+                      display: "grid",
+                      gap: 6,
                       fontSize: 13,
                       fontWeight: 600,
                       color: "#0B1E3D",
-                      display: "block",
-                      marginBottom: 6,
                     }}
                   >
-                    {t("auth.email")}{" "}
-                    <span style={{ fontWeight: 400, color: "#5A6A7A" }}>
-                      {t("auth.email_optional")}
-                    </span>
-                  </label>
-                  <div
-                    style={fieldStyle}
-                    onFocusCapture={(e) =>
-                      focusField(e.currentTarget as HTMLDivElement)
-                    }
-                    onBlurCapture={(e) =>
-                      blurField(e.currentTarget as HTMLDivElement)
-                    }
-                  >
-                    <Mail
-                      size={17}
-                      style={{ color: "#5A6A7A", flexShrink: 0 }}
-                      aria-hidden="true"
-                    />
+                    Answer
                     <input
-                      id="email"
-                      type="email"
-                      autoComplete="email"
-                      placeholder={t("auth.email_placeholder")}
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      style={inputStyle}
+                      value={resetAnswer}
+                      onChange={(event) =>
+                        setResetAnswer(event.target.value.slice(0, 120))
+                      }
+                      required
+                      style={{
+                        height: 48,
+                        borderRadius: 10,
+                        border: "1.5px solid #d0d8e0",
+                        padding: "0 12px",
+                        fontSize: 14,
+                      }}
                     />
-                  </div>
-                </div>
+                  </label>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={sendResetCode}
+                    disabled={loading}
+                    style={{
+                      height: 46,
+                      borderRadius: 10,
+                      border: "1px solid #00C2A8",
+                      background: "#fff",
+                      color: "#008f7d",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {resetCodeSent
+                      ? "Resend verification code"
+                      : "Send verification code"}
+                  </button>
+                  {resetCodeSent && (
+                    <input
+                      value={resetOtp}
+                      onChange={(event) =>
+                        setResetOtp(
+                          event.target.value.replace(/\D/g, "").slice(0, 6),
+                        )
+                      }
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="6-digit verification code"
+                      required
+                      style={{
+                        height: 48,
+                        borderRadius: 10,
+                        border: "1.5px solid #d0d8e0",
+                        padding: "0 12px",
+                        fontSize: 14,
+                        letterSpacing: 3,
+                      }}
+                    />
+                  )}
+                </>
               )}
+              {error && (
+                <p
+                  role="alert"
+                  style={{ margin: 0, color: "#e74c3c", fontSize: 13 }}
+                >
+                  {error}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  height: 50,
+                  border: 0,
+                  borderRadius: 11,
+                  background: "#00C2A8",
+                  color: "#fff",
+                  fontWeight: 700,
+                  cursor: loading ? "wait" : "pointer",
+                  opacity: loading ? 0.65 : 1,
+                }}
+              >
+                {loading ? "Updating…" : "Update password"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            {/* Role switcher */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                background: "#eef2f5",
+                borderRadius: 12,
+                padding: 4,
+                marginBottom: 12,
+              }}
+              role="tablist"
+              aria-label="Passenger or driver"
+            >
+              {(["passenger", "driver"] as Role[]).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  role="tab"
+                  aria-selected={role === r}
+                  onClick={() => {
+                    setRole(r);
+                    setMode("login");
+                    setError("");
+                  }}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 9,
+                    border: "none",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                    fontSize: 14,
+                    fontFamily: "inherit",
+                    background: role === r ? "#0B1E3D" : "transparent",
+                    color: role === r ? "#ffffff" : "#5A6A7A",
+                    transition: "all 0.2s",
+                    minHeight: 44,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    textAlign: "center",
+                  }}
+                >
+                  {r === "passenger"
+                    ? t("auth.passenger.role")
+                    : t("auth.driver.role")}
+                </button>
+              ))}
+            </div>
 
-              {mode === "register" &&
-                verificationMethod === "security_question" && (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 12,
-                    }}
-                  >
-                    <div>
-                      <label
-                        htmlFor="sec-question"
+            {/* Mode tabs */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                background: "#f8f9fa",
+                borderRadius: 12,
+                padding: 4,
+                marginBottom: 28,
+              }}
+              role="tablist"
+              aria-label="Login or register"
+            >
+              {(["login", "register"] as Mode[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === m}
+                  onClick={() => {
+                    setMode(m);
+                    setError("");
+                  }}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 9,
+                    border: "none",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                    fontSize: 14,
+                    fontFamily: "inherit",
+                    background: mode === m ? "#ffffff" : "transparent",
+                    color: mode === m ? "#0B1E3D" : "#5A6A7A",
+                    boxShadow:
+                      mode === m ? "0 1px 6px rgba(0,0,0,0.1)" : "none",
+                    transition: "all 0.2s",
+                    minHeight: 44,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    textAlign: "center",
+                  }}
+                >
+                  {m === "login" ? t("auth.login_tab") : t("auth.register_tab")}
+                </button>
+              ))}
+            </div>
+
+            {role === "driver" && mode === "register" ? (
+              <DriverRegisterForm
+                name={name}
+                setName={setName}
+                phone={phone}
+                setPhone={setPhone}
+                password={password}
+                setPassword={setPassword}
+                email={email}
+                setEmail={setEmail}
+                gender={gender}
+                setGender={setGender}
+                referralCode={referralCode}
+                onSuccess={() => router.replace("/profile")}
+              />
+            ) : (
+              <form onSubmit={handleSubmit} noValidate>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 12 }}
+                >
+                  {mode === "login" ? (
+                    <div
+                      style={{ display: "flex", justifyContent: "flex-end" }}
+                    >
+                      <Link
+                        href="/forgot-password"
                         style={{
                           fontSize: 13,
+                          color: "#00C2A8",
+                          textDecoration: "none",
                           fontWeight: 600,
-                          color: "#0B1E3D",
-                          display: "block",
-                          marginBottom: 6,
                         }}
                       >
-                        {t("security_question.title")}
-                      </label>
-                      <select
-                        id="sec-question"
-                        value={securityQuestionId}
-                        onChange={(e) => setSecurityQuestionId(e.target.value)}
-                        required
-                        style={{
-                          width: "100%",
-                          height: 52,
-                          padding: "0 14px",
-                          background: "#f8f9fa",
-                          border: "1.5px solid #e8edf0",
-                          borderRadius: 12,
-                          fontSize: 15,
-                          fontFamily: "inherit",
-                          color: "#0B1E3D",
-                        }}
-                      >
-                        <option value="">
-                          {t("security_question.choose_placeholder")}
-                        </option>
-                        {securityQuestions.map((q) => (
-                          <option key={q.id} value={q.id}>
-                            {locale === "ar" ? q.questionAr : q.question}
-                          </option>
-                        ))}
-                      </select>
+                        {t("auth.forgot_password")}
+                      </Link>
                     </div>
+                  ) : null}
+
+                  {/* Name (register only) */}
+                  {mode === "register" && (
                     <div>
                       <label
-                        htmlFor="sec-answer"
+                        htmlFor="name"
                         style={{
                           fontSize: 13,
                           fontWeight: 600,
@@ -749,184 +694,501 @@ function LoginForm() {
                           marginBottom: 6,
                         }}
                       >
-                        {t("security_question.your_answer_placeholder")}
+                        {t("auth.full_name")}{" "}
+                        <span aria-hidden="true" style={{ color: "#e74c3c" }}>
+                          *
+                        </span>
                       </label>
-                      <input
-                        id="sec-answer"
-                        type="text"
-                        autoComplete="off"
-                        placeholder={t(
-                          "security_question.answer_placeholder_short",
-                        )}
-                        value={securityAnswer}
-                        onChange={(e) =>
-                          setSecurityAnswer(e.target.value.slice(0, 120))
+                      <div
+                        style={fieldStyle}
+                        onFocusCapture={(e) =>
+                          focusField(e.currentTarget as HTMLDivElement)
                         }
-                        required
-                        style={{
-                          width: "100%",
-                          height: 52,
-                          padding: "0 14px",
-                          background: "#f8f9fa",
-                          border: "1.5px solid #e8edf0",
-                          borderRadius: 12,
-                          fontSize: 15,
-                          fontFamily: "inherit",
-                          color: "#0B1E3D",
-                        }}
-                      />
-                      <p
-                        style={{
-                          margin: "6px 0 0",
-                          fontSize: 12,
-                          color: "#5A6A7A",
-                        }}
+                        onBlurCapture={(e) =>
+                          blurField(e.currentTarget as HTMLDivElement)
+                        }
                       >
-                        {t("security_question.usage_hint")}
-                      </p>
+                        <User
+                          size={17}
+                          style={{ color: "#5A6A7A", flexShrink: 0 }}
+                          aria-hidden="true"
+                        />
+                        <input
+                          id="name"
+                          type="text"
+                          autoComplete="name"
+                          placeholder="Mohamed Ahmed"
+                          required
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          style={inputStyle}
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-              {mode === "register" && (
-                <div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: 6,
-                    }}
-                  >
+                  {/* Phone (primary) */}
+                  <div>
                     <label
-                      htmlFor="referral-code"
+                      htmlFor="phone"
                       style={{
                         fontSize: 13,
                         fontWeight: 600,
                         color: "#0B1E3D",
+                        display: "block",
+                        marginBottom: 6,
                       }}
                     >
-                      {t("auth.referral_code")}{" "}
-                      <span style={{ fontWeight: 400, color: "#5A6A7A" }}>
-                        {t("auth.email_optional")}
+                      {t("auth.phone")}{" "}
+                      <span aria-hidden="true" style={{ color: "#e74c3c" }}>
+                        *
                       </span>
                     </label>
-                    {referralCodeFromUrl ? (
+                    <div
+                      dir="ltr"
+                      style={{
+                        ...fieldStyle,
+                        padding: 0,
+                        overflow: "hidden",
+                        flexDirection: "row",
+                        unicodeBidi: "isolate",
+                      }}
+                      onFocusCapture={(e) =>
+                        focusField(e.currentTarget as HTMLDivElement)
+                      }
+                      onBlurCapture={(e) =>
+                        blurField(e.currentTarget as HTMLDivElement)
+                      }
+                    >
                       <span
+                        dir="ltr"
                         style={{
-                          background: "rgba(0,194,168,0.12)",
-                          color: "#00877A",
-                          padding: "2px 8px",
-                          borderRadius: 6,
-                          fontSize: 11,
-                          fontWeight: 700,
+                          display: "flex",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                          height: "100%",
+                          padding: "0 12px",
+                          background: "#eef1f3",
+                          borderRight: "1.5px solid #e8edf0",
+                          fontWeight: 600,
+                          color: "#0B1E3D",
+                          flexShrink: 0,
+                          direction: "ltr",
+                          unicodeBidi: "isolate",
                         }}
                       >
-                        Applied from link
+                        <Phone
+                          size={17}
+                          style={{ color: "#5A6A7A" }}
+                          aria-hidden="true"
+                        />
+                        <span
+                          dir="ltr"
+                          style={{ direction: "ltr", unicodeBidi: "plaintext" }}
+                        >
+                          +20
+                        </span>
                       </span>
-                    ) : null}
+                      <input
+                        id="phone"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        placeholder="1XXXXXXXXX"
+                        required
+                        maxLength={13}
+                        value={phone.replace(/^\+?20/, "")}
+                        onChange={(e) => {
+                          const digits = toNationalDigits(e.target.value);
+                          setPhone(digits ? `+20${digits}` : "");
+                        }}
+                        style={{ ...inputStyle, padding: "0 14px" }}
+                      />
+                    </div>
                   </div>
-                  <div
-                    style={{
-                      ...fieldStyle,
-                      background: referralCodeFromUrl ? "#f1fcf9" : "#f8f9fa",
-                      borderColor: referralCodeFromUrl ? "#00C2A8" : "#e8edf0",
-                    }}
-                    onFocusCapture={(e) =>
-                      focusField(e.currentTarget as HTMLDivElement)
-                    }
-                    onBlurCapture={(e) =>
-                      blurField(e.currentTarget as HTMLDivElement)
-                    }
-                  >
-                    <TicketPercent
-                      size={17}
+
+                  {/* Password */}
+                  <div>
+                    <label
+                      htmlFor="password"
                       style={{
-                        color: referralCodeFromUrl ? "#00877A" : "#5A6A7A",
-                        flexShrink: 0,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "#0B1E3D",
+                        display: "block",
+                        marginBottom: 6,
                       }}
-                      aria-hidden="true"
-                    />
-                    <input
-                      id="referral-code"
-                      type="text"
-                      autoComplete="off"
-                      placeholder="REF-XXXXXX"
-                      readOnly={Boolean(referralCodeFromUrl)}
-                      value={referralCode}
-                      onChange={(e) =>
-                        setReferralCode(e.target.value.toUpperCase())
+                    >
+                      {t("auth.password")}{" "}
+                      <span aria-hidden="true" style={{ color: "#e74c3c" }}>
+                        *
+                      </span>
+                    </label>
+                    <div
+                      style={fieldStyle}
+                      onFocusCapture={(e) =>
+                        focusField(e.currentTarget as HTMLDivElement)
                       }
-                      style={{
-                        ...inputStyle,
-                        fontWeight: referralCodeFromUrl ? 700 : 400,
-                        color: referralCodeFromUrl ? "#00877A" : "#0B1E3D",
-                      }}
-                    />
+                      onBlurCapture={(e) =>
+                        blurField(e.currentTarget as HTMLDivElement)
+                      }
+                    >
+                      <Lock
+                        size={17}
+                        style={{ color: "#5A6A7A", flexShrink: 0 }}
+                        aria-hidden="true"
+                      />
+                      <input
+                        id="password"
+                        type={showPass ? "text" : "password"}
+                        autoComplete={
+                          mode === "login" ? "current-password" : "new-password"
+                        }
+                        placeholder={
+                          mode === "register"
+                            ? t("auth.password_placeholder_register")
+                            : t("auth.password_placeholder_login")
+                        }
+                        required
+                        minLength={mode === "register" ? 8 : undefined}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        style={inputStyle}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPass((v) => !v)}
+                        aria-label={
+                          showPass
+                            ? t("auth.hide_password")
+                            : t("auth.show_password")
+                        }
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "#5A6A7A",
+                          padding: 4,
+                          flexShrink: 0,
+                          minWidth: 32,
+                          minHeight: 32,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                    {mode === "register" && (
+                      <>
+                        <PasswordStrengthMeter password={password} />
+                        <p
+                          style={{
+                            fontSize: 12,
+                            color: "#5A6A7A",
+                            marginTop: 5,
+                            marginBottom: 0,
+                          }}
+                        >
+                          {t("auth.password_rules")}
+                        </p>
+                      </>
+                    )}
                   </div>
+
+                  {/* Email (register only, optional, last) */}
+                  {mode === "register" && (
+                    <div>
+                      <label
+                        htmlFor="email"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#0B1E3D",
+                          display: "block",
+                          marginBottom: 6,
+                        }}
+                      >
+                        {t("auth.email")}{" "}
+                        <span style={{ fontWeight: 400, color: "#5A6A7A" }}>
+                          {t("auth.email_optional")}
+                        </span>
+                      </label>
+                      <div
+                        style={fieldStyle}
+                        onFocusCapture={(e) =>
+                          focusField(e.currentTarget as HTMLDivElement)
+                        }
+                        onBlurCapture={(e) =>
+                          blurField(e.currentTarget as HTMLDivElement)
+                        }
+                      >
+                        <Mail
+                          size={17}
+                          style={{ color: "#5A6A7A", flexShrink: 0 }}
+                          aria-hidden="true"
+                        />
+                        <input
+                          id="email"
+                          type="email"
+                          autoComplete="email"
+                          placeholder={t("auth.email_placeholder")}
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {mode === "register" &&
+                    verificationMethod === "security_question" && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 12,
+                        }}
+                      >
+                        <div>
+                          <label
+                            htmlFor="sec-question"
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "#0B1E3D",
+                              display: "block",
+                              marginBottom: 6,
+                            }}
+                          >
+                            {t("security_question.title")}
+                          </label>
+                          <select
+                            id="sec-question"
+                            value={securityQuestionId}
+                            onChange={(e) =>
+                              setSecurityQuestionId(e.target.value)
+                            }
+                            required
+                            style={{
+                              width: "100%",
+                              height: 52,
+                              padding: "0 14px",
+                              background: "#f8f9fa",
+                              border: "1.5px solid #e8edf0",
+                              borderRadius: 12,
+                              fontSize: 15,
+                              fontFamily: "inherit",
+                              color: "#0B1E3D",
+                            }}
+                          >
+                            <option value="">
+                              {t("security_question.choose_placeholder")}
+                            </option>
+                            {securityQuestions.map((q) => (
+                              <option key={q.id} value={q.id}>
+                                {locale === "ar" ? q.questionAr : q.question}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="sec-answer"
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "#0B1E3D",
+                              display: "block",
+                              marginBottom: 6,
+                            }}
+                          >
+                            {t("security_question.your_answer_placeholder")}
+                          </label>
+                          <input
+                            id="sec-answer"
+                            type="text"
+                            autoComplete="off"
+                            placeholder={t(
+                              "security_question.answer_placeholder_short",
+                            )}
+                            value={securityAnswer}
+                            onChange={(e) =>
+                              setSecurityAnswer(e.target.value.slice(0, 120))
+                            }
+                            required
+                            style={{
+                              width: "100%",
+                              height: 52,
+                              padding: "0 14px",
+                              background: "#f8f9fa",
+                              border: "1.5px solid #e8edf0",
+                              borderRadius: 12,
+                              fontSize: 15,
+                              fontFamily: "inherit",
+                              color: "#0B1E3D",
+                            }}
+                          />
+                          <p
+                            style={{
+                              margin: "6px 0 0",
+                              fontSize: 12,
+                              color: "#5A6A7A",
+                            }}
+                          >
+                            {t("security_question.usage_hint")}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                  {mode === "register" && (
+                    <div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginBottom: 6,
+                        }}
+                      >
+                        <label
+                          htmlFor="referral-code"
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: "#0B1E3D",
+                          }}
+                        >
+                          {t("auth.referral_code")}{" "}
+                          <span style={{ fontWeight: 400, color: "#5A6A7A" }}>
+                            {t("auth.email_optional")}
+                          </span>
+                        </label>
+                        {referralCodeFromUrl ? (
+                          <span
+                            style={{
+                              background: "rgba(0,194,168,0.12)",
+                              color: "#00877A",
+                              padding: "2px 8px",
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontWeight: 700,
+                            }}
+                          >
+                            Applied from link
+                          </span>
+                        ) : null}
+                      </div>
+                      <div
+                        style={{
+                          ...fieldStyle,
+                          background: referralCodeFromUrl
+                            ? "#f1fcf9"
+                            : "#f8f9fa",
+                          borderColor: referralCodeFromUrl
+                            ? "#00C2A8"
+                            : "#e8edf0",
+                        }}
+                        onFocusCapture={(e) =>
+                          focusField(e.currentTarget as HTMLDivElement)
+                        }
+                        onBlurCapture={(e) =>
+                          blurField(e.currentTarget as HTMLDivElement)
+                        }
+                      >
+                        <TicketPercent
+                          size={17}
+                          style={{
+                            color: referralCodeFromUrl ? "#00877A" : "#5A6A7A",
+                            flexShrink: 0,
+                          }}
+                          aria-hidden="true"
+                        />
+                        <input
+                          id="referral-code"
+                          type="text"
+                          autoComplete="off"
+                          placeholder="REF-XXXXXX"
+                          readOnly={Boolean(referralCodeFromUrl)}
+                          value={referralCode}
+                          onChange={(e) =>
+                            setReferralCode(e.target.value.toUpperCase())
+                          }
+                          style={{
+                            ...inputStyle,
+                            fontWeight: referralCodeFromUrl ? 700 : 400,
+                            color: referralCodeFromUrl ? "#00877A" : "#0B1E3D",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Error */}
-            {error && (
-              <p
-                role="alert"
-                aria-live="assertive"
-                style={{
-                  fontSize: 13,
-                  color: "#e74c3c",
-                  background: "rgba(231,76,60,0.07)",
-                  border: "1px solid rgba(231,76,60,0.2)",
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  marginTop: 14,
-                  marginBottom: 0,
-                }}
-              >
-                {error}
-              </p>
+                {/* Error */}
+                {error && (
+                  <p
+                    role="alert"
+                    aria-live="assertive"
+                    style={{
+                      fontSize: 13,
+                      color: "#e74c3c",
+                      background: "rgba(231,76,60,0.07)",
+                      border: "1px solid rgba(231,76,60,0.2)",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      marginTop: 14,
+                      marginBottom: 0,
+                    }}
+                  >
+                    {error}
+                  </p>
+                )}
+
+                {/* Submit */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    marginTop: 20,
+                    width: "100%",
+                    height: 52,
+                    background: loading ? "#5A6A7A" : "#0B1E3D",
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: 15,
+                    border: "none",
+                    borderRadius: 12,
+                    cursor: loading ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    fontFamily: "inherit",
+                    transition: "background 0.2s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!loading) e.currentTarget.style.background = "#00C2A8";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!loading) e.currentTarget.style.background = "#0B1E3D";
+                  }}
+                >
+                  {loading && (
+                    <Loader2 size={18} className="spin" aria-hidden="true" />
+                  )}
+                  {loading
+                    ? t("auth.please_wait")
+                    : mode === "login"
+                      ? t("auth.log_in_button")
+                      : t("auth.create_account_button")}
+                </button>
+              </form>
             )}
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                marginTop: 20,
-                width: "100%",
-                height: 52,
-                background: loading ? "#5A6A7A" : "#0B1E3D",
-                color: "#ffffff",
-                fontWeight: 700,
-                fontSize: 15,
-                border: "none",
-                borderRadius: 12,
-                cursor: loading ? "not-allowed" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                fontFamily: "inherit",
-                transition: "background 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) e.currentTarget.style.background = "#00C2A8";
-              }}
-              onMouseLeave={(e) => {
-                if (!loading) e.currentTarget.style.background = "#0B1E3D";
-              }}
-            >
-              {loading && (
-                <Loader2 size={18} className="spin" aria-hidden="true" />
-              )}
-              {loading
-                ? t("auth.please_wait")
-                : mode === "login"
-                  ? t("auth.log_in_button")
-                  : t("auth.create_account_button")}
-            </button>
-          </form>
+          </>
         )}
 
         {/* Switch mode */}

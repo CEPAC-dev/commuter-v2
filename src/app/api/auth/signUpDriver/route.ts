@@ -24,6 +24,7 @@ import {
   isPlausibleSecurityAnswer,
 } from "@/lib/auth/securityQuestion";
 import { isValidSecurityQuestionId } from "@/lib/config/verification";
+import { DEFAULT_REGION } from "@/lib/config/regions";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -145,6 +146,8 @@ export async function POST(req: NextRequest) {
       passwordHash,
       email: normalizedEmail,
       role: "driver",
+      defaultRegionCode: DEFAULT_REGION,
+      allowedRegionCodes: [DEFAULT_REGION],
       referralCode,
       ...(normalizedQuestionId && { securityQuestionId: normalizedQuestionId }),
       ...(securityAnswerHash && { securityAnswerHash }),

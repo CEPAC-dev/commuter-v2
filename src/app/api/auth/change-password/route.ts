@@ -14,6 +14,7 @@ import {
   isPlausibleSecurityAnswer,
   verifySecurityAnswer,
 } from "@/lib/auth/securityQuestion";
+import { isValidSecurityQuestionId } from "@/lib/config/verification";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -24,8 +25,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { newPassword, confirmPassword, otp, securityAnswer } =
-      await req.json();
+    const {
+      newPassword,
+      confirmPassword,
+      otp,
+      securityAnswer,
+      securityQuestionId,
+      forceReset,
+    } = await req.json();
 
     if (typeof newPassword !== "string" || typeof confirmPassword !== "string")
       return NextResponse.json(
@@ -47,10 +54,55 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
     const user = await User.findById(session.userId).select(
-      "+passwordHash +securityAnswerHash phone role securityQuestionId",
+      "+passwordHash +securityAnswerHash phone role securityQuestionId resetPassword",
     );
     if (!user)
       return NextResponse.json({ error: "User not found." }, { status: 404 });
+
+    if (forceReset === true && user.resetPassword === true) {
+      const method = await getActiveVerificationMethod();
+      if (method === "security_question") {
+        if (!isValidSecurityQuestionId(securityQuestionId)) {
+          return NextResponse.json(
+            { error: "Choose a valid security question." },
+            { status: 400 },
+          );
+        }
+        if (!isPlausibleSecurityAnswer(securityAnswer)) {
+          return NextResponse.json(
+            { error: "Enter the answer to your security question." },
+            { status: 400 },
+          );
+        }
+        user.securityQuestionId = securityQuestionId;
+        user.securityAnswerHash = await bcrypt.hash(securityAnswer.trim(), 12);
+      } else {
+        const validOtp = await consumeSmsOtp(
+          {
+            purpose: "password_change",
+            userId: session.userId,
+            phone: user.phone,
+            role:
+              user.role === "driver"
+                ? "driver"
+                : user.role === "admin"
+                  ? "admin"
+                  : "passenger",
+          },
+          otp,
+        );
+        if (!validOtp) {
+          return NextResponse.json(
+            { error: "Invalid or expired verification code." },
+            { status: 400 },
+          );
+        }
+      }
+      user.passwordHash = await bcrypt.hash(newPassword, 12);
+      user.resetPassword = false;
+      await user.save();
+      return NextResponse.json({ ok: true });
+    }
 
     const method = await getActiveVerificationMethod();
     if (method === "security_question") {

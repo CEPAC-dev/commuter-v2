@@ -18,6 +18,8 @@ import {
   Gauge,
   Palette,
   Gift,
+  KeyRound,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -25,6 +27,7 @@ import {
   AdminEmptyState,
   AdminStatusBadge,
 } from "@/components/admin/layout";
+import { REGION_CODES, REGIONS, type RegionCode } from "@/lib/config/regions";
 
 /**
  * ---------------------------------------------------------------------
@@ -68,6 +71,8 @@ type UserRow = {
   phone?: string;
   email?: string;
   role?: string;
+  defaultRegionCode?: RegionCode;
+  allowedRegionCodes?: RegionCode[];
   createdAt?: string;
   referralCode?: string;
   referralUsageCount?: number;
@@ -179,9 +184,8 @@ export default function UserManagementClient({
   const [feedback, setFeedback] = useState<FeedbackState>({});
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole>("passenger");
-  const [verificationFilter, setVerificationFilter] = useState<
-    VerificationStatus | null
-  >(null);
+  const [verificationFilter, setVerificationFilter] =
+    useState<VerificationStatus | null>(null);
   const [signupDate, setSignupDate] = useState("");
   const [sortBy, setSortBy] = useState<UserSort>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -204,41 +208,41 @@ export default function UserManagementClient({
 
   const filteredRows = useMemo(() => {
     const visibleRows = rows.filter((row) => {
-        if (signupDate) {
-          const rowDate = row.createdAt?.slice(0, 10);
-          if (rowDate !== signupDate) return false;
-        }
-        const rowRole = row.role || "passenger";
-        if (rowRole !== roleFilter) return false;
-        if (
-          roleFilter === "driver" &&
-          verificationFilter &&
-          row.driver?.verificationStatus !== verificationFilter
-        )
-          return false;
-        const search = query.trim();
-        if (!search) return true;
+      if (signupDate) {
+        const rowDate = row.createdAt?.slice(0, 10);
+        if (rowDate !== signupDate) return false;
+      }
+      const rowRole = row.role || "passenger";
+      if (rowRole !== roleFilter) return false;
+      if (
+        roleFilter === "driver" &&
+        verificationFilter &&
+        row.driver?.verificationStatus !== verificationFilter
+      )
+        return false;
+      const search = query.trim();
+      if (!search) return true;
 
-        const normalizedSearch = search.toLowerCase();
-        const numberMatch = normalizedSearch.match(/^#(\d+)$/);
-        if (numberMatch) {
-          return String(row.userNumber ?? "").includes(numberMatch[1]);
-        }
+      const normalizedSearch = search.toLowerCase();
+      const numberMatch = normalizedSearch.match(/^#(\d+)$/);
+      if (numberMatch) {
+        return String(row.userNumber ?? "").includes(numberMatch[1]);
+      }
 
-        const haystack =
-          `${row.name || ""} ${row.phone || ""} ${row.email || ""}`.toLowerCase();
-        return haystack.includes(normalizedSearch);
-      });
+      const haystack =
+        `${row.name || ""} ${row.phone || ""} ${row.email || ""}`.toLowerCase();
+      return haystack.includes(normalizedSearch);
+    });
 
     return [...visibleRows].sort((left, right) => {
       const leftValue =
         sortBy === "createdAt"
           ? new Date(left.createdAt ?? 0).getTime()
-          : left.referralUsageCount ?? 0;
+          : (left.referralUsageCount ?? 0);
       const rightValue =
         sortBy === "createdAt"
           ? new Date(right.createdAt ?? 0).getTime()
-          : right.referralUsageCount ?? 0;
+          : (right.referralUsageCount ?? 0);
       const comparison = leftValue - rightValue;
       return sortDirection === "asc" ? comparison : -comparison;
     });
@@ -254,7 +258,8 @@ export default function UserManagementClient({
 
   const signupDateCount = useMemo(() => {
     if (!signupDate) return null;
-    return rows.filter((row) => row.createdAt?.slice(0, 10) === signupDate).length;
+    return rows.filter((row) => row.createdAt?.slice(0, 10) === signupDate)
+      .length;
   }, [rows, signupDate]);
 
   function toggleExpanded(userId: string) {
@@ -269,6 +274,10 @@ export default function UserManagementClient({
 
   async function saveChanges(user: UserRow) {
     const userId = user._id;
+    const defaultRegionCode = user.defaultRegionCode ?? "EG-CAIRO";
+    const allowedRegionCodes = Array.from(
+      new Set([...(user.allowedRegionCodes ?? []), defaultRegionCode]),
+    ) as RegionCode[];
     setSavingIds((current) => ({ ...current, [userId]: true }));
     setFeedback((current) => ({
       ...current,
@@ -276,10 +285,16 @@ export default function UserManagementClient({
     }));
 
     try {
-      const payload: { role: string; verificationStatus?: VerificationStatus } =
-        {
-          role: user.role ?? "passenger",
-        };
+      const payload: {
+        role: string;
+        defaultRegionCode?: RegionCode;
+        allowedRegionCodes?: RegionCode[];
+        verificationStatus?: VerificationStatus;
+      } = {
+        role: user.role ?? "passenger",
+        defaultRegionCode,
+        allowedRegionCodes,
+      };
       if (user.driver) {
         payload.verificationStatus =
           user.driver.verificationStatus ?? "incomplete";
@@ -299,6 +314,60 @@ export default function UserManagementClient({
       setFeedback((current) => ({
         ...current,
         [userId]: { type: "success", message: "Changes saved successfully." },
+      }));
+    } catch (error) {
+      setFeedback((current) => ({
+        ...current,
+        [userId]: {
+          type: "error",
+          message: error instanceof Error ? error.message : "Unexpected error.",
+        },
+      }));
+    } finally {
+      setSavingIds((current) => ({ ...current, [userId]: false }));
+    }
+  }
+
+  async function requestAdminAction(
+    user: UserRow,
+    action: "delete" | "reset-password",
+  ) {
+    const password = window.prompt(
+      `Enter ADMIN_PASSWORD to confirm ${action}.`,
+    );
+    if (password === null) return;
+    const userId = user._id;
+    setSavingIds((current) => ({ ...current, [userId]: true }));
+    try {
+      const response = await fetch(
+        action === "delete"
+          ? `/api/admin/users/${userId}`
+          : `/api/admin/users/${userId}/reset-password`,
+        {
+          method: action === "delete" ? "DELETE" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-password": password,
+          },
+        },
+      );
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok)
+        throw new Error(result?.error || "Admin action failed.");
+
+      if (action === "delete") {
+        setRows((current) => current.filter((row) => row._id !== userId));
+        setExpandedId(null);
+      }
+      setFeedback((current) => ({
+        ...current,
+        [userId]: {
+          type: "success",
+          message:
+            action === "delete"
+              ? "User deleted successfully."
+              : "Password reset successfully.",
+        },
       }));
     } catch (error) {
       setFeedback((current) => ({
@@ -415,7 +484,8 @@ export default function UserManagementClient({
             </label>
             {signupDateCount !== null && (
               <span className="flex items-center rounded-lg bg-[var(--color-secondary-tint)] px-3 py-2 text-xs font-semibold text-[var(--color-secondary-deep)]">
-                {signupDateCount} {signupDateCount === 1 ? "person" : "people"} signed up
+                {signupDateCount} {signupDateCount === 1 ? "person" : "people"}{" "}
+                signed up
               </span>
             )}
             <label className="flex items-center gap-2 text-xs font-semibold text-[var(--color-muted)]">
@@ -494,7 +564,8 @@ export default function UserManagementClient({
                         {user.referralUsageCount ?? 0}
                       </div>
                       <div className="mt-1 truncate text-xs text-[var(--color-muted)]">
-                        Joined: {user.createdAt
+                        Joined:{" "}
+                        {user.createdAt
                           ? new Date(user.createdAt).toLocaleString([], {
                               dateStyle: "medium",
                               timeStyle: "short",
@@ -573,6 +644,72 @@ export default function UserManagementClient({
                           options={ROLE_OPTIONS}
                         />
 
+                        <FieldSelect
+                          label="Default region"
+                          value={user.defaultRegionCode ?? "EG-CAIRO"}
+                          onChange={(value) =>
+                            updateRow(user._id, {
+                              defaultRegionCode: value as RegionCode,
+                              allowedRegionCodes: Array.from(
+                                new Set([
+                                  ...(user.allowedRegionCodes ?? []),
+                                  value as RegionCode,
+                                ]),
+                              ),
+                            })
+                          }
+                          options={[...REGION_CODES]}
+                          optionLabels={Object.fromEntries(
+                            REGION_CODES.map((code) => [
+                              code,
+                              REGIONS[code].label,
+                            ]),
+                          )}
+                        />
+
+                        <div className="grid gap-2">
+                          <span className="text-xs font-semibold text-[var(--color-muted)]">
+                            Allowed regions
+                          </span>
+                          {REGION_CODES.map((code) => {
+                            const checked = (
+                              user.allowedRegionCodes ?? []
+                            ).includes(code);
+                            return (
+                              <label
+                                key={code}
+                                className="flex items-center gap-2 text-sm text-[var(--color-primary)]"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(event) => {
+                                    const next = event.target.checked
+                                      ? Array.from(
+                                          new Set([
+                                            ...(user.allowedRegionCodes ?? []),
+                                            code,
+                                          ]),
+                                        )
+                                      : (user.allowedRegionCodes ?? []).filter(
+                                          (item) => item !== code,
+                                        );
+                                    updateRow(user._id, {
+                                      allowedRegionCodes: next,
+                                      ...(code === user.defaultRegionCode &&
+                                      !event.target.checked
+                                        ? { defaultRegionCode: next[0] }
+                                        : {}),
+                                    });
+                                  }}
+                                  className="h-4 w-4 accent-[var(--color-secondary)]"
+                                />
+                                {REGIONS[code].label}
+                              </label>
+                            );
+                          })}
+                        </div>
+
                         {user.driver && (
                           <FieldSelect
                             label="Verification status"
@@ -605,6 +742,29 @@ export default function UserManagementClient({
                         >
                           {savingIds[user._id] ? "Saving…" : "Save changes"}
                         </button>
+
+                        <div className="flex flex-wrap gap-2 border-t border-[var(--color-border)] pt-3">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              requestAdminAction(user, "reset-password")
+                            }
+                            disabled={savingIds[user._id]}
+                            className="inline-flex items-center gap-2 rounded-full border border-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-primary)] transition hover:bg-[var(--color-primary-tint)] disabled:cursor-wait disabled:opacity-60"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                            Reset password
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => requestAdminAction(user, "delete")}
+                            disabled={savingIds[user._id]}
+                            className="inline-flex items-center gap-2 rounded-full border border-[var(--color-danger)] px-4 py-2 text-sm font-semibold text-[var(--color-danger)] transition hover:bg-[var(--color-danger-tint)] disabled:cursor-wait disabled:opacity-60"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete user
+                          </button>
+                        </div>
 
                         {feedbackMessage && (
                           <div

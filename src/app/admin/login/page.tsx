@@ -4,7 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Lock, Phone, ShieldCheck } from "lucide-react";
-import { normalizeEgyptPhone, toNationalDigits, PHONE_RULES_MESSAGE } from "@/lib/auth/validation";
+import {
+  normalizeEgyptPhone,
+  toNationalDigits,
+  PHONE_RULES_MESSAGE,
+} from "@/lib/auth/validation";
+import {
+  isStrongPassword,
+  PASSWORD_RULES_MESSAGE,
+} from "@/lib/auth/validation";
+import PasswordInput from "@/components/shared/PasswordInput";
+import PasswordStrengthMeter from "@/components/shared/PasswordStrengthMeter";
+import { useVerificationConfig } from "@/lib/auth/useVerificationConfig";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -12,6 +23,15 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [replacementPassword, setReplacementPassword] = useState("");
+  const [replacementConfirmation, setReplacementConfirmation] = useState("");
+  const { method: verificationMethod, questions: securityQuestions } =
+    useVerificationConfig();
+  const [resetQuestionId, setResetQuestionId] = useState("");
+  const [resetAnswer, setResetAnswer] = useState("");
+  const [resetOtp, setResetOtp] = useState("");
+  const [resetCodeSent, setResetCodeSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,9 +57,83 @@ export default function AdminLoginPage() {
         setLoading(false);
         return;
       }
-      router.replace("/admin/dashboard");
+      if (data.mustChangePassword) {
+        setMustChangePassword(true);
+        setLoading(false);
+      } else {
+        router.replace("/admin/dashboard");
+      }
     } catch {
       setError("Network error. Please try again.");
+      setLoading(false);
+    }
+  }
+
+  async function handleForcedPasswordChange(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!isStrongPassword(replacementPassword)) {
+      setError(PASSWORD_RULES_MESSAGE);
+      return;
+    }
+    if (replacementPassword !== replacementConfirmation) {
+      setError("New passwords do not match.");
+      return;
+    }
+    if (verificationMethod === "security_question") {
+      if (!resetQuestionId) return setError("Choose a security question.");
+      if (resetAnswer.trim().length < 2)
+        return setError("Enter an answer to your security question.");
+    } else if (!/^\d{6}$/.test(resetOtp)) {
+      return setError("Enter the 6-digit verification code.");
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newPassword: replacementPassword,
+          confirmPassword: replacementConfirmation,
+          forceReset: true,
+          ...(verificationMethod === "security_question" && {
+            securityQuestionId: resetQuestionId,
+            securityAnswer: resetAnswer.trim(),
+          }),
+          ...(verificationMethod === "sms_otp" && { otp: resetOtp }),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to change password.");
+      router.replace("/admin/dashboard");
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Failed to change password.",
+      );
+      setLoading(false);
+    }
+  }
+
+  async function sendResetCode() {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purpose: "password_change" }),
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.error ?? "Could not send verification code.");
+      setResetCodeSent(true);
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not send verification code.",
+      );
+    } finally {
       setLoading(false);
     }
   }
@@ -56,72 +150,424 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="ltr-field" style={{ minHeight: "100dvh", background: "var(--color-primary)", padding: "24px 16px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ width: "100%", maxWidth: 440, background: "var(--color-panel)", borderRadius: 24, padding: "32px 28px", boxShadow: "0 24px 80px var(--color-shadow-strong)" }}>
-        <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--color-muted)", textDecoration: "none", marginBottom: 20, fontSize: 14 }}>
+    <div
+      className="ltr-field"
+      style={{
+        minHeight: "100dvh",
+        background: "var(--color-primary)",
+        padding: "24px 16px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 440,
+          background: "var(--color-panel)",
+          borderRadius: 24,
+          padding: "32px 28px",
+          boxShadow: "0 24px 80px var(--color-shadow-strong)",
+        }}
+      >
+        <Link
+          href="/"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            color: "var(--color-muted)",
+            textDecoration: "none",
+            marginBottom: 20,
+            fontSize: 14,
+          }}
+        >
           <ArrowLeft size={16} /> Back to home
         </Link>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 14, background: "var(--color-secondary-tint)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <ShieldCheck size={24} style={{ color: "var(--color-secondary)" }} />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 18,
+          }}
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 14,
+              background: "var(--color-secondary-tint)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <ShieldCheck
+              size={24}
+              style={{ color: "var(--color-secondary)" }}
+            />
           </div>
           <div>
-            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--color-secondary)" }}>Admin sign in</p>
-            <h1 style={{ margin: "4px 0 0", fontSize: 28, fontWeight: 800, color: "var(--color-primary)" }}>Welcome back</h1>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+                color: "var(--color-secondary)",
+              }}
+            >
+              Admin sign in
+            </p>
+            <h1
+              style={{
+                margin: "4px 0 0",
+                fontSize: 28,
+                fontWeight: 800,
+                color: "var(--color-primary)",
+              }}
+            >
+              Welcome back
+            </h1>
           </div>
         </div>
-        <p style={{ margin: "0 0 24px", color: "var(--color-muted)", lineHeight: 1.7 }}>Use your administrator phone number and password to access the admin dashboard.</p>
-        <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label htmlFor="admin-phone" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>Phone</label>
-            <div style={{ ...fieldStyle, padding: 0, overflow: "hidden" }}>
-              <span
+        {mustChangePassword ? (
+          <form
+            onSubmit={handleForcedPasswordChange}
+            noValidate
+            style={{ display: "flex", flexDirection: "column", gap: 14 }}
+          >
+            <h2
+              style={{ margin: 0, color: "var(--color-primary)", fontSize: 22 }}
+            >
+              Change your password
+            </h2>
+            <p
+              style={{
+                margin: 0,
+                color: "var(--color-muted)",
+                lineHeight: 1.7,
+              }}
+            >
+              Admin reset your password. Choose new password before continuing.
+            </p>
+            <PasswordInput
+              label="New password"
+              autoComplete="new-password"
+              value={replacementPassword}
+              onChange={(event) => setReplacementPassword(event.target.value)}
+            />
+            <PasswordStrengthMeter password={replacementPassword} />
+            <PasswordInput
+              label="Confirm new password"
+              autoComplete="new-password"
+              value={replacementConfirmation}
+              onChange={(event) =>
+                setReplacementConfirmation(event.target.value)
+              }
+            />
+            {verificationMethod === "security_question" ? (
+              <>
+                <label
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    color: "var(--color-primary)",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  Security question
+                  <select
+                    value={resetQuestionId}
+                    onChange={(event) => setResetQuestionId(event.target.value)}
+                    required
+                    style={{
+                      height: 48,
+                      borderRadius: 10,
+                      border: "1.5px solid var(--color-border)",
+                      padding: "0 12px",
+                      fontSize: 14,
+                    }}
+                  >
+                    <option value="">Choose a question</option>
+                    {securityQuestions.map((question) => (
+                      <option key={question.id} value={question.id}>
+                        {question.question}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    color: "var(--color-primary)",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  Answer
+                  <input
+                    value={resetAnswer}
+                    onChange={(event) =>
+                      setResetAnswer(event.target.value.slice(0, 120))
+                    }
+                    required
+                    style={{
+                      height: 48,
+                      borderRadius: 10,
+                      border: "1.5px solid var(--color-border)",
+                      padding: "0 12px",
+                      fontSize: 14,
+                    }}
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={sendResetCode}
+                  disabled={loading}
+                  style={{
+                    height: 46,
+                    borderRadius: 10,
+                    border: "1px solid var(--color-secondary)",
+                    background: "transparent",
+                    color: "var(--color-secondary)",
+                    fontWeight: 700,
+                  }}
+                >
+                  {resetCodeSent
+                    ? "Resend verification code"
+                    : "Send verification code"}
+                </button>
+                {resetCodeSent && (
+                  <input
+                    value={resetOtp}
+                    onChange={(event) =>
+                      setResetOtp(
+                        event.target.value.replace(/\D/g, "").slice(0, 6),
+                      )
+                    }
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="6-digit verification code"
+                    required
+                    style={{
+                      height: 48,
+                      borderRadius: 10,
+                      border: "1.5px solid var(--color-border)",
+                      padding: "0 12px",
+                      fontSize: 14,
+                      letterSpacing: 3,
+                    }}
+                  />
+                )}
+              </>
+            )}
+            {error ? (
+              <p
+                role="alert"
+                style={{ margin: 0, color: "var(--color-danger)" }}
+              >
+                {error}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                height: 52,
+                borderRadius: 12,
+                background: "var(--color-secondary)",
+                color: "var(--color-on-secondary)",
+                fontWeight: 700,
+                border: "none",
+                cursor: loading ? "not-allowed" : "pointer",
+              }}
+            >
+              {loading ? "Updating..." : "Update password"}
+            </button>
+          </form>
+        ) : (
+          <>
+            <p
+              style={{
+                margin: "0 0 24px",
+                color: "var(--color-muted)",
+                lineHeight: 1.7,
+              }}
+            >
+              Use your administrator phone number and password to access the
+              admin dashboard.
+            </p>
+            <form
+              onSubmit={handleSubmit}
+              noValidate
+              style={{ display: "flex", flexDirection: "column", gap: 14 }}
+            >
+              <div>
+                <label
+                  htmlFor="admin-phone"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--color-primary)",
+                    display: "block",
+                    marginBottom: 6,
+                  }}
+                >
+                  Phone
+                </label>
+                <div style={{ ...fieldStyle, padding: 0, overflow: "hidden" }}>
+                  <span
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      height: "100%",
+                      padding: "0 12px",
+                      background: "var(--color-surface)",
+                      borderRight: "1.5px solid var(--color-border)",
+                      fontWeight: 600,
+                      color: "var(--color-primary)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Phone
+                      size={17}
+                      style={{ color: "var(--color-muted)" }}
+                      aria-hidden="true"
+                    />
+                    <span>+20</span>
+                  </span>
+                  <input
+                    id="admin-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder="1XXXXXXXXX"
+                    maxLength={13}
+                    value={phone.replace(/^\+?20/, "")}
+                    onChange={(e) => {
+                      const digits = toNationalDigits(e.target.value);
+                      setPhone(digits ? `+20${digits}` : "");
+                    }}
+                    style={{
+                      flex: 1,
+                      border: "none",
+                      outline: "none",
+                      fontSize: 15,
+                      fontFamily: "inherit",
+                      color: "var(--color-primary)",
+                      padding: "0 14px",
+                    }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label
+                  htmlFor="admin-password"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--color-primary)",
+                    display: "block",
+                    marginBottom: 6,
+                  }}
+                >
+                  Password
+                </label>
+                <div style={fieldStyle}>
+                  <Lock size={17} style={{ color: "var(--color-muted)" }} />
+                  <input
+                    id="admin-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    style={{
+                      flex: 1,
+                      border: "none",
+                      outline: "none",
+                      fontSize: 15,
+                      fontFamily: "inherit",
+                      color: "var(--color-primary)",
+                    }}
+                  />
+                </div>
+              </div>
+              {error ? (
+                <p
+                  role="alert"
+                  style={{
+                    margin: 0,
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    background: "var(--color-danger-tint)",
+                    color: "var(--color-danger)",
+                    border: "1px solid var(--color-danger)",
+                  }}
+                >
+                  {error}
+                </p>
+              ) : null}
+              <button
+                type="submit"
+                disabled={loading}
                 style={{
+                  height: 52,
+                  borderRadius: 12,
+                  background: loading
+                    ? "var(--color-disabled)"
+                    : "var(--color-primary)",
+                  color: "var(--color-on-primary)",
+                  fontWeight: 700,
+                  fontSize: 15,
+                  border: "none",
+                  cursor: loading ? "not-allowed" : "pointer",
                   display: "flex",
                   alignItems: "center",
-                  gap: 6,
-                  height: "100%",
-                  padding: "0 12px",
-                  background: "var(--color-surface)",
-                  borderRight: "1.5px solid var(--color-border)",
-                  fontWeight: 600,
-                  color: "var(--color-primary)",
-                  flexShrink: 0,
+                  justifyContent: "center",
+                  gap: 8,
                 }}
               >
-                <Phone size={17} style={{ color: "var(--color-muted)" }} aria-hidden="true" />
-                <span>+20</span>
-              </span>
-              <input
-                id="admin-phone"
-                type="tel"
-                inputMode="numeric"
-                autoComplete="tel"
-                placeholder="1XXXXXXXXX"
-                maxLength={13}
-                value={phone.replace(/^\+?20/, "")}
-                onChange={(e) => {
-                  const digits = toNationalDigits(e.target.value);
-                  setPhone(digits ? `+20${digits}` : "");
-                }}
-                style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)", padding: "0 14px" }}
-              />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="admin-password" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", display: "block", marginBottom: 6 }}>Password</label>
-            <div style={fieldStyle}>
-              <Lock size={17} style={{ color: "var(--color-muted)" }} />
-              <input id="admin-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "var(--color-primary)" }} />
-            </div>
-          </div>
-          {error ? <p role="alert" style={{ margin: 0, padding: "10px 12px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)" }}>{error}</p> : null}
-          <button type="submit" disabled={loading} style={{ height: 52, borderRadius: 12, background: loading ? "var(--color-disabled)" : "var(--color-primary)", color: "var(--color-on-primary)", fontWeight: 700, fontSize: 15, border: "none", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            {loading ? <><Loader2 size={18} className="spin" /> Signing in...</> : "Sign in"}
-          </button>
-        </form>
-        <p style={{ marginTop: 18, textAlign: "center", color: "var(--color-muted)", fontSize: 14 }}>
-          Need an admin account? <Link href="/admin/signup" style={{ color: "var(--color-secondary)", fontWeight: 700, textDecoration: "none" }}>Create one</Link>
+                {loading ? (
+                  <>
+                    <Loader2 size={18} className="spin" /> Signing in...
+                  </>
+                ) : (
+                  "Sign in"
+                )}
+              </button>
+            </form>
+          </>
+        )}
+        <p
+          style={{
+            marginTop: 18,
+            textAlign: "center",
+            color: "var(--color-muted)",
+            fontSize: 14,
+          }}
+        >
+          Need an admin account?{" "}
+          <Link
+            href="/admin/signup"
+            style={{
+              color: "var(--color-secondary)",
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            Create one
+          </Link>
         </p>
       </div>
     </div>

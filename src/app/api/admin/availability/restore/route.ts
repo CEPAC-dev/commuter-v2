@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
+import { DAYS_OF_WEEK } from "@/lib/services/availability";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -60,34 +61,35 @@ export async function POST(req: NextRequest) {
     const startTime =
       typeof record.startTime === "string" ? record.startTime : null;
     const endTime = typeof record.endTime === "string" ? record.endTime : null;
+    const dayOfWeek = date
+      ? DAYS_OF_WEEK[new Date(`${date}T00:00:00Z`).getUTCDay()]
+      : null;
+    const origin = record.origin ?? record.startLocation;
+    const destination = record.destination ?? record.endLocation;
 
     if (
       !Number.isFinite(availabilityNumber) ||
       !driverId ||
       !date ||
+      !dayOfWeek ||
       !startTime ||
-      !endTime
+      !endTime ||
+      !isPlainObject(origin) ||
+      !isPlainObject(destination)
     ) {
       continue;
     }
 
     const payload = {
-      availabilityNumber,
       driverId,
-      date,
-      startLocation: record.startLocation ?? {
-        address: "Unknown",
-        lat: 0,
-        lng: 0,
-      },
-      endLocation: record.endLocation ?? { address: "Unknown", lat: 0, lng: 0 },
+      dayOfWeek,
+      origin,
+      destination,
       startNearestStation: record.startNearestStation ?? undefined,
-      endNearestStation: record.endNearestStation ?? undefined,
+      destinationNearestStation: record.destinationNearestStation ?? record.endNearestStation ?? undefined,
       startTime,
       endTime,
-      status: typeof record.status === "string" ? record.status : "open",
-      matched: Boolean(record.matched),
-      rideId: typeof record.rideId === "string" ? record.rideId : null,
+      active: record.active !== false,
     };
 
     const existing = await Availability.findOne({ availabilityNumber }).lean();
