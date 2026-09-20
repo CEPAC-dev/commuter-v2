@@ -2203,7 +2203,8 @@ export default function CreateClient({
             bottom: 0 !important;
             z-index: 20 !important;
             width: auto !important;
-            max-height: min(100dvh, calc(var(--drawer-height-vh, 74) * 1dvh)) !important;
+            height: min(100dvh, calc(var(--drawer-height-vh, 74) * 1dvh)) !important;
+            max-height: 100dvh !important;
             margin: 0 !important; 
             border: 1px solid #dfe5eb !important;
             border-bottom: none !important;
@@ -2217,6 +2218,7 @@ export default function CreateClient({
             margin: 0 !important;
             border-radius: 0 !important;
             height: 100% !important;
+            min-height: 0 !important;
           }
           .mobile-drawer-handle-wrap {
             position: sticky;

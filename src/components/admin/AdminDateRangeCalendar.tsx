@@ -19,6 +19,7 @@ type Props = {
   dateFrom: string;
   dateTo: string;
   onApply: (range: { dateFrom: string; dateTo: string }) => void;
+  align?: "start" | "end";
 };
 
 function parseDate(value: string): Date | null {
@@ -35,6 +36,7 @@ export default function AdminDateRangeCalendar({
   dateFrom,
   dateTo,
   onApply,
+  align = "start",
 }: Props) {
   const from = parseDate(dateFrom);
   const to = parseDate(dateTo);
@@ -143,7 +145,8 @@ export default function AdminDateRangeCalendar({
           style={{
             position: "absolute",
             top: "calc(100% + 8px)",
-            insetInlineStart: 0,
+            insetInlineStart: align === "start" ? 0 : "auto",
+            insetInlineEnd: align === "end" ? 0 : "auto",
             zIndex: 60,
             background: "var(--color-panel)",
             borderRadius: 14,

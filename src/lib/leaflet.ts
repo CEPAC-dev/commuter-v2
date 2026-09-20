@@ -18,15 +18,23 @@ let leafletPromise: Promise<typeof import("leaflet")> | null = null;
 
 export function loadLeaflet(): Promise<typeof import("leaflet")> {
   if (typeof window === "undefined") {
-    return Promise.reject(new Error("Leaflet can only be loaded in the browser"));
+    return Promise.reject(
+      new Error("Leaflet can only be loaded in the browser"),
+    );
   }
 
   if (!leafletPromise) {
-    leafletPromise = import("leaflet").then((module) => {
-      const Leaflet = module.default;
-      delete (Leaflet.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl;
-      return Leaflet;
-    });
+    leafletPromise = import("leaflet")
+      .then((module) => {
+        const Leaflet = module.default;
+        delete (Leaflet.Icon.Default.prototype as { _getIconUrl?: unknown })
+          ._getIconUrl;
+        return Leaflet;
+      })
+      .catch((error) => {
+        leafletPromise = null;
+        throw error;
+      });
   }
 
   return leafletPromise;

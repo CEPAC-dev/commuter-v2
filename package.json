@@ -9,8 +9,8 @@
     "lint": "eslint",
     "seed:stations": "node scripts/seed-stations.cjs",
     "seed:prod-data": "node scripts/seed-prod-data.cjs",
-    "migrate:public-numbers": "node scripts/backfill-public-numbers.cjs"
-    ,"audit:station-regions": "node scripts/audit-station-region-migration.cjs"
+    "migrate:public-numbers": "node scripts/backfill-public-numbers.cjs",
+    "audit:station-regions": "node scripts/audit-station-region-migration.cjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -26,6 +26,7 @@
     "next-intl": "^4.13.1",
     "node-fetch": "^2.7.0",
     "nodemailer": "^9.0.3",
+    "qrcode.react": "^4.2.0",
     "rc-time-picker": "^3.7.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",

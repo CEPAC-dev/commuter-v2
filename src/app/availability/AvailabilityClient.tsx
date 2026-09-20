@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import {
   CalendarDays,
@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import AppHeader from "@/components/layout/AppHeader";
+import { useClientLocale } from "@/lib/i18n/client";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import type { SavedAddress } from "@/components/map/LocationPickerMapOsm";
 
@@ -35,25 +36,15 @@ type AvailabilityRecord = {
   active: boolean;
 };
 
-const DAYS: { id: Day; label: string; short: string }[] = [
-  { id: "sun", label: "Sunday", short: "Sun" },
-  { id: "mon", label: "Monday", short: "Mon" },
-  { id: "tue", label: "Tuesday", short: "Tue" },
-  { id: "wed", label: "Wednesday", short: "Wed" },
-  { id: "thu", label: "Thursday", short: "Thu" },
-  { id: "fri", label: "Friday", short: "Fri" },
-  { id: "sat", label: "Saturday", short: "Sat" },
+const DAYS: { id: Day }[] = [
+  { id: "sun" },
+  { id: "mon" },
+  { id: "tue" },
+  { id: "wed" },
+  { id: "thu" },
+  { id: "fri" },
+  { id: "sat" },
 ];
-
-const DAY_LABELS: Record<Day, string> = {
-  sun: "Sunday",
-  mon: "Monday",
-  tue: "Tuesday",
-  wed: "Wednesday",
-  thu: "Thursday",
-  fri: "Friday",
-  sat: "Saturday",
-};
 
 type EditingShift = {
   id: string | null; // null = new shift
@@ -81,6 +72,15 @@ function checkOverlap(
   );
 }
 
+function formatAvailabilityTime(locale: "en" | "ar", value: string): string {
+  const [hours, minutes] = value.split(":").map(Number);
+  const hour = hours % 12 || 12;
+  const period = hours >= 12
+    ? locale === "ar" ? "مساء" : "PM"
+    : locale === "ar" ? "صباحا" : "AM";
+  return `${hour}:${String(minutes).padStart(2, "0")} ${period}`;
+}
+
 export default function AvailabilityClient({
   email,
   initialRecords,
@@ -91,6 +91,23 @@ export default function AvailabilityClient({
   verificationStatus: string;
   savedAddresses?: SavedAddress[];
 }) {
+  const { t, locale, dir } = useClientLocale();
+  const displayTime = (value: string) => formatAvailabilityTime(locale, value);
+  function localizedText(
+    key: string,
+    params: Record<string, string | number> = {},
+  ): string {
+    const markers = Object.fromEntries(
+      Object.keys(params).map((name) => [name, `__${name}__`]),
+    );
+    let result = t(key, markers);
+    for (const [name, value] of Object.entries(params)) {
+      result = result.replaceAll(`__${name}__`, String(value));
+    }
+    return result;
+  }
+  const dayLabel = (day: Day) => t(`availability.days.${day}`);
+  const dayShortLabel = (day: Day) => t(`availability.days.${day}_short`);
   const [records, setRecords] = useState<AvailabilityRecord[]>(initialRecords);
   const [editing, setEditing] = useState<EditingShift | null>(null);
   const [activeFilterDay, setActiveFilterDay] = useState<Day | "all">("all");
@@ -101,6 +118,12 @@ export default function AvailabilityClient({
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [error, setError] = useState("");
   const [availableSavedAddresses, setAvailableSavedAddresses] = useState(savedAddresses);
+
+  useEffect(() => {
+    if (!error) return;
+    const timeout = window.setTimeout(() => setError(""), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [error]);
 
   function handleAddressSaved(saved: SavedAddress) {
     setAvailableSavedAddresses((current) =>
@@ -135,15 +158,15 @@ export default function AvailabilityClient({
   async function saveShift() {
     if (!editing) return;
     if (!editing.origin) {
-      setError("Choose your starting location.");
+      setError(t("availability.error.origin_required"));
       return;
     }
     if (!editing.destination) {
-      setError("Choose your destination.");
+      setError(t("availability.error.destination_required"));
       return;
     }
     if (editing.days.length === 0) {
-      setError("Select at least one day for your working hours.");
+      setError(t("availability.error.days_required"));
       return;
     }
 
@@ -154,7 +177,11 @@ export default function AvailabilityClient({
       );
       if (checkOverlap(editing.startTime, editing.endTime, existingShifts)) {
         setError(
-          `Overlaps with existing availability on ${DAY_LABELS[day]} (${editing.startTime}–${editing.endTime}).`,
+          localizedText("availability.error.overlap", {
+            day: dayLabel(day),
+            start: displayTime(editing.startTime),
+            end: displayTime(editing.endTime),
+          }),
         );
         return;
       }
@@ -177,7 +204,7 @@ export default function AvailabilityClient({
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Could not save shift.");
+      if (!response.ok) throw new Error(data.error ?? t("availability.error.save_failed"));
 
       const updatedOrCreated: AvailabilityRecord[] = data.records ?? [data.record];
       const updatedIds = new Set(updatedOrCreated.map((r) => r._id));
@@ -188,7 +215,7 @@ export default function AvailabilityClient({
       ]);
       setEditing(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save shift.");
+      setError(cause instanceof Error ? cause.message : t("availability.error.save_failed"));
     } finally {
       setSaving(false);
     }
@@ -204,13 +231,13 @@ export default function AvailabilityClient({
       });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error ?? "Could not remove shift.");
+        throw new Error(data.error ?? t("availability.error.delete_failed"));
       }
       setRecords((current) => current.filter((item) => item._id !== record._id));
       setSelectedIds((current) => current.filter((id) => id !== record._id));
       if (editing?.id === record._id) setEditing(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not remove shift.");
+      setError(cause instanceof Error ? cause.message : t("availability.error.delete_failed"));
     } finally {
       setDeleting(null);
     }
@@ -260,7 +287,7 @@ export default function AvailabilityClient({
 
   async function removeSelectedShifts() {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(`Delete ${selectedIds.length} selected availability shift${selectedIds.length === 1 ? "" : "s"}?`)) return;
+    if (!window.confirm(t("availability.bulk_delete_confirm", { count: selectedIds.length }))) return;
 
     setBulkDeleting(true);
     setError("");
@@ -271,13 +298,13 @@ export default function AvailabilityClient({
         body: JSON.stringify({ ids: selectedIds }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Could not remove selected shifts.");
+      if (!response.ok) throw new Error(data.error ?? t("availability.error.bulk_delete_failed"));
       const removed = new Set(selectedIds);
       setRecords((current) => current.filter((record) => !removed.has(record._id)));
       setSelectedIds([]);
       if (editing?.id && removed.has(editing.id)) setEditing(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not remove selected shifts.");
+      setError(cause instanceof Error ? cause.message : t("availability.error.bulk_delete_failed"));
     } finally {
       setBulkDeleting(false);
     }
@@ -286,16 +313,23 @@ export default function AvailabilityClient({
   return (
     <>
       <AppHeader email={email} authed role="driver" />
-      <main className="min-h-screen bg-[#f7faf9] px-4 pb-28 pt-8 text-[#0B1E3D] sm:px-6">
+      <main
+        dir={dir}
+        style={{ fontFamily: locale === "ar" ? "var(--font-ar)" : "var(--font-en)" }}
+        className="min-h-screen bg-[#f7faf9] px-4 pb-28 pt-8 text-[#0B1E3D] sm:px-6"
+      >
         <div className="mx-auto max-w-4xl">
           {/* Hero Header Banner */}
-          <div className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-r from-[#0B1E3D] to-[#163666] p-6 text-white shadow-xl sm:p-8">
-            <div>
+          <div
+            dir={dir}
+            className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-r from-[#0B1E3D] to-[#163666] p-6 text-white shadow-xl sm:p-8"
+          >
+            <div className="text-right">
               <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
-                My Availability
+                {t("availability.title")}
               </h1>
               <p className="mt-2 max-w-xl text-sm font-medium text-[#a0b4d0]">
-                Choose working hours across multiple days. Drivers cannot set overlapping hours on the same day.
+                {t("availability.description")}
               </p>
             </div>
             {!editing && (
@@ -304,14 +338,25 @@ export default function AvailabilityClient({
                 onClick={() => beginAdd()}
                 className="inline-flex items-center gap-2 rounded-2xl bg-[#00c2a8] px-5 py-3 text-sm font-extrabold text-[#0B1E3D] shadow-lg transition-all hover:bg-[#00ab94] hover:scale-105 active:scale-95"
               >
-                <Plus size={18} /> Add Availability
+                <Plus size={18} /> {t("availability.add_button")}
               </button>
             )}
           </div>
 
           {error && (
-            <div className="mb-6 rounded-2xl border border-[#e74c3c] bg-[#ffebee] p-4 text-sm font-semibold text-[#c0392b] shadow-sm">
-              {error}
+            <div
+              role="alert"
+              className="fixed inset-x-4 top-24 z-[70] mx-auto flex max-w-lg items-start gap-3 rounded-2xl border border-[#e74c3c]/30 bg-white p-4 text-sm font-semibold text-[#c0392b] shadow-[0_16px_40px_rgba(231,76,60,0.2)] sm:inset-x-auto sm:right-6 sm:w-[min(28rem,calc(100vw-3rem))]"
+            >
+              <span className="mt-0.5 flex-1">{error}</span>
+              <button
+                type="button"
+                onClick={() => setError("")}
+                aria-label={t("availability.close")}
+                className="shrink-0 rounded-lg p-1 text-[#c0392b] hover:bg-[#fff0ee]"
+              >
+                <X size={16} />
+              </button>
             </div>
           )}
 
@@ -335,19 +380,19 @@ export default function AvailabilityClient({
                       <Trash2 size={21} />
                     </div>
                     <h2 id="delete-availability-title" className="text-xl font-black text-[#0B1E3D]">
-                      Delete availability?
+                      {t("availability.delete_title")}
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-[#5A6A7A]">
-                      This will remove the {DAY_LABELS[confirmingDelete.dayOfWeek]} shift from{" "}
-                      <strong className="text-[#0B1E3D]">
-                        {confirmingDelete.startTime} to {confirmingDelete.endTime}
-                      </strong>
-                      . This action cannot be undone.
+                      {localizedText("availability.delete_description", {
+                        day: dayLabel(confirmingDelete.dayOfWeek),
+                        start: displayTime(confirmingDelete.startTime),
+                        end: displayTime(confirmingDelete.endTime),
+                      })} {t("availability.delete_irreversible")}
                     </p>
                   </div>
                   <button
                     type="button"
-                    aria-label="Close delete confirmation"
+                    aria-label={t("availability.close")}
                     onClick={() => setConfirmingDelete(null)}
                     className="rounded-xl p-2 text-[#5A6A7A] hover:bg-[#f0f4f8] hover:text-[#0B1E3D]"
                   >
@@ -360,7 +405,7 @@ export default function AvailabilityClient({
                     onClick={() => setConfirmingDelete(null)}
                     className="rounded-xl px-4 py-2.5 text-sm font-extrabold text-[#5A6A7A] hover:bg-[#f0f4f8]"
                   >
-                    Cancel
+                    {t("availability.cancel")}
                   </button>
                   <button
                     type="button"
@@ -369,7 +414,7 @@ export default function AvailabilityClient({
                     className="inline-flex items-center gap-2 rounded-xl bg-[#e74c3c] px-4 py-2.5 text-sm font-extrabold text-white hover:bg-[#c0392b] disabled:opacity-50"
                   >
                     {deleting === confirmingDelete._id ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />}
-                    Delete shift
+                    {t("availability.delete_shift")}
                   </button>
                 </div>
               </div>
@@ -382,17 +427,17 @@ export default function AvailabilityClient({
               <div className="flex items-center justify-between border-b border-[#edf1f4] pb-4 mb-5">
                 <h2 className="text-lg font-extrabold text-[#0B1E3D] flex items-center gap-2">
                   <CalendarDays size={20} className="text-[#00c2a8]" />
-                  {editing.id ? "Edit Availability Schedule" : "Create New Availability"}
+                  {editing.id ? t("availability.edit_title") : t("availability.create_title")}
                 </h2>
                 <span className="text-xs font-semibold text-[#5A6A7A]">
-                  {editing.id ? "Editing single shift" : "Select target days"}
+                  {editing.id ? t("availability.editing_single") : t("availability.select_target_days")}
                 </span>
               </div>
 
               {/* Multi-Day Selection Chips */}
               <div className="mb-6">
                 <label className="mb-2 block text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
-                  Select Days of Week {editing.id !== null && "(Fixed)"}
+                  {t("availability.days_label")} {editing.id !== null && `(${t("availability.fixed")})`}
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {DAYS.map((d) => {
@@ -415,7 +460,7 @@ export default function AvailabilityClient({
                             : "bg-[#f0f4f8] text-[#5A6A7A] hover:bg-[#e2e8f0]"
                         } ${editing.id !== null ? "opacity-75 cursor-not-allowed" : ""}`}
                       >
-                        {d.label}
+                        {dayLabel(d.id)}
                       </button>
                     );
                   })}
@@ -425,7 +470,7 @@ export default function AvailabilityClient({
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
-                    Starting Location
+                    {t("availability.start_location")}
                   </label>
                   <LocationPickerMap
                     lat={editing.origin ? String(editing.origin.lat) : ""}
@@ -450,7 +495,7 @@ export default function AvailabilityClient({
                 </div>
                 <div>
                   <label className="mb-2 block text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
-                    Destination
+                    {t("availability.end_location")}
                   </label>
                   <LocationPickerMap
                     lat={editing.destination ? String(editing.destination.lat) : ""}
@@ -474,28 +519,32 @@ export default function AvailabilityClient({
                   />
                 </div>
                 <label className="text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
-                  From (Start)
+                  {t("availability.from_start")}
                   <input
                     type="time"
+                    lang={locale}
                     value={editing.startTime}
                     onChange={(event) =>
                       setEditing((current) =>
                         current ? { ...current, startTime: event.target.value } : current,
                       )
                     }
+                    style={{ direction: "ltr", textAlign: "left" }}
                     className="mt-2 h-12 w-full rounded-2xl border border-[#e2e8f0] px-3.5 font-mono text-sm font-bold text-[#0B1E3D] focus:border-[#00c2a8] focus:outline-none"
                   />
                 </label>
                 <label className="text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
-                  To (End)
+                  {t("availability.to_end")}
                   <input
                     type="time"
+                    lang={locale}
                     value={editing.endTime}
                     onChange={(event) =>
                       setEditing((current) =>
                         current ? { ...current, endTime: event.target.value } : current,
                       )
                     }
+                    style={{ direction: "ltr", textAlign: "left" }}
                     className="mt-2 h-12 w-full rounded-2xl border border-[#e2e8f0] px-3.5 font-mono text-sm font-bold text-[#0B1E3D] focus:border-[#00c2a8] focus:outline-none"
                   />
                 </label>
@@ -507,7 +556,7 @@ export default function AvailabilityClient({
                   onClick={() => setEditing(null)}
                   className="rounded-2xl px-5 py-3 text-sm font-extrabold text-[#5A6A7A] hover:bg-[#edf1f4]"
                 >
-                  Cancel
+                  {t("availability.cancel")}
                 </button>
                 <button
                   type="button"
@@ -515,7 +564,7 @@ export default function AvailabilityClient({
                   disabled={saving}
                   className="inline-flex items-center gap-2 rounded-2xl bg-[#00c2a8] px-6 py-3 text-sm font-black text-[#0B1E3D] shadow-lg hover:bg-[#00ab94] disabled:opacity-50"
                 >
-                  <Save size={16} /> {saving ? "Saving..." : "Save Availability"}
+                  <Save size={16} /> {saving ? t("availability.saving") : t("availability.save")}
                 </button>
               </div>
             </section>
@@ -533,7 +582,7 @@ export default function AvailabilityClient({
                     : "text-[#5A6A7A] hover:text-[#0B1E3D]"
                 }`}
               >
-                All Days ({records.length})
+                {t("availability.all_days")} ({records.length})
               </button>
               {DAYS.map((d) => {
                 const count = records.filter((r) => r.dayOfWeek === d.id).length;
@@ -548,7 +597,7 @@ export default function AvailabilityClient({
                         : "text-[#5A6A7A] hover:text-[#0B1E3D]"
                     }`}
                   >
-                    {d.short} ({count})
+                    {dayShortLabel(d.id)} ({count})
                   </button>
                 );
               })}
@@ -557,17 +606,22 @@ export default function AvailabilityClient({
             <div className="flex flex-wrap items-center justify-end gap-2">
               {sortedRecords.length > 0 ? (
                 <button type="button" onClick={toggleSelectAll} className="rounded-xl border border-[#cbd5e1] bg-white px-3 py-1.5 text-xs font-extrabold text-[#0B1E3D] hover:bg-[#f0f4f8]">
-                  {allFilteredSelected ? "Clear selection" : "Select all"}
+                  {allFilteredSelected ? t("availability.clear_selection") : t("availability.select_all")}
                 </button>
               ) : null}
               {selectedIds.length > 0 ? (
                 <button type="button" onClick={() => void removeSelectedShifts()} disabled={bulkDeleting} className="inline-flex items-center gap-1.5 rounded-xl bg-[#e74c3c] px-3 py-1.5 text-xs font-extrabold text-white hover:bg-[#c0392b] disabled:opacity-50">
                   {bulkDeleting ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
-                  Delete selected ({selectedIds.length})
+                  {t("availability.delete_selected")} ({selectedIds.length})
                 </button>
               ) : null}
               <span className="text-xs font-bold text-[#5A6A7A]">
-                {sortedRecords.length} active schedule{sortedRecords.length === 1 ? "" : "s"}
+                {localizedText(
+                  sortedRecords.length === 1
+                    ? "availability.schedule_count_one"
+                    : "availability.schedule_count_many",
+                  { count: sortedRecords.length },
+                )}
               </span>
             </div>
           </div>
@@ -579,12 +633,12 @@ export default function AvailabilityClient({
                 <Clock size={32} />
               </div>
               <h3 className="text-lg font-black text-[#0B1E3D]">
-                No Availability Schedules Found
+                {t("availability.empty_title")}
               </h3>
               <p className="mx-auto mt-1 max-w-sm text-sm text-[#5A6A7A]">
                 {activeFilterDay === "all"
-                  ? "You haven't set any working hours yet. Add your availability to start accepting ride requests."
-                  : `No availability set for ${DAY_LABELS[activeFilterDay]}.`}
+                  ? t("availability.empty_description")
+                  : localizedText("availability.no_day_schedule", { day: dayLabel(activeFilterDay) })}
               </p>
               {!editing && (
                 <button
@@ -592,7 +646,9 @@ export default function AvailabilityClient({
                   onClick={() => beginAdd(activeFilterDay === "all" ? undefined : activeFilterDay)}
                   className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-[#00c2a8] px-5 py-3 text-sm font-extrabold text-[#0B1E3D] shadow-md hover:bg-[#00ab94]"
                 >
-                  <Plus size={16} /> Add Schedule for {activeFilterDay === "all" ? "Week" : DAY_LABELS[activeFilterDay]}
+                  <Plus size={16} /> {localizedText("availability.add_schedule_for", {
+                    day: activeFilterDay === "all" ? t("availability.week") : dayLabel(activeFilterDay),
+                  })}
                 </button>
               )}
             </div>
@@ -614,14 +670,17 @@ export default function AvailabilityClient({
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleShiftSelection(shift._id)}
-                          aria-label={`Select ${DAY_LABELS[shift.dayOfWeek]} ${shift.startTime} shift`}
+                          aria-label={localizedText("availability.select_shift", {
+                            day: dayLabel(shift.dayOfWeek),
+                            start: displayTime(shift.startTime),
+                          })}
                           className="h-4 w-4 accent-[#00c2a8]"
                         />
                         <span className="rounded-xl bg-[#0B1E3D] px-3 py-1.5 text-xs font-black uppercase text-white tracking-wider">
-                          {DAY_LABELS[shift.dayOfWeek]}
+                          {dayLabel(shift.dayOfWeek)}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-                          <CheckCircle2 size={12} /> Active
+                          <CheckCircle2 size={12} /> {t("availability.active")}
                         </span>
                       </div>
 
@@ -632,7 +691,7 @@ export default function AvailabilityClient({
                             onClick={() => beginEdit(shift)}
                             className="rounded-xl px-3 py-1.5 text-xs font-extrabold text-[#00a990] hover:bg-[#effaf8] transition-colors"
                           >
-                            Edit
+                            {t("availability.edit")}
                           </button>
                           <button
                             type="button"
@@ -653,8 +712,14 @@ export default function AvailabilityClient({
                     <div className="mt-4 space-y-2">
                       <div className="flex items-center gap-2 text-sm font-extrabold text-[#0B1E3D]">
                         <Clock size={16} className="text-[#00c2a8] shrink-0" />
-                        <span className="font-mono bg-[#f0f4f8] px-2.5 py-1 rounded-lg">
-                          from: {shift.startTime} to: {shift.endTime}
+                        <span
+                          className="font-mono bg-[#f0f4f8] px-2.5 py-1 rounded-lg"
+                          style={{ direction: "ltr", unicodeBidi: "isolate" }}
+                        >
+                          {localizedText("availability.time_range", {
+                            start: displayTime(shift.startTime),
+                            end: displayTime(shift.endTime),
+                          })}
                         </span>
                       </div>
 

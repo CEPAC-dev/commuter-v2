@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClientLocale } from "@/lib/locale.client";
 import L from "leaflet";
 import { Bookmark, Crosshair, Loader2, MapPin, Search, X } from "lucide-react";
@@ -63,6 +63,7 @@ export default function LocationPickerMapOsm({
   error,
   savedAddresses,
 }: Props) {
+  const { t } = useClientLocale();
   const [map, setMap] = useState<L.Map | null>(null);
   const [query, setQuery] = useState(name);
   const [results, setResults] = useState<
@@ -74,7 +75,10 @@ export default function LocationPickerMapOsm({
   const [saveError, setSaveError] = useState("");
   const [outOfBounds, setOutOfBounds] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const marker = lat && lng ? { lat: Number(lat), lng: Number(lng) } : null;
+  const marker = useMemo(
+    () => (lat && lng ? { lat: Number(lat), lng: Number(lng) } : null),
+    [lat, lng],
+  );
   const isSaved = savedAddresses?.some(
     (place) => place.lat === Number(lat) && place.lng === Number(lng),
   );
@@ -95,10 +99,10 @@ export default function LocationPickerMapOsm({
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Could not save location.");
+      if (!response.ok) throw new Error(data.error ?? t("addresses.save_location_failed"));
       onSaved?.(data.savedAddress);
     } catch (cause) {
-      setSaveError(cause instanceof Error ? cause.message : "Could not save location.");
+      setSaveError(cause instanceof Error ? cause.message : t("addresses.save_location_failed"));
     } finally {
       setSaving(false);
     }
@@ -165,7 +169,7 @@ export default function LocationPickerMapOsm({
     return () => {
       layer.remove();
     };
-  }, [map, marker, savedAddresses, setPoint]);
+  }, [map, marker, onChange, savedAddresses, setPoint]);
 
   const handleSearch = (value: string) => {
     setQuery(value);
@@ -204,7 +208,7 @@ export default function LocationPickerMapOsm({
     <div>
       {savedAddresses && savedAddresses.length > 0 && (
         <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-bold text-[#5A6A7A] mr-0.5">Saved places:</span>
+          <span className="text-xs font-bold text-[#5A6A7A] mr-0.5">{t("addresses.saved_places")}:</span>
           {savedAddresses.map((place, idx) => (
             <button
               key={place._id ?? idx}
@@ -247,7 +251,7 @@ export default function LocationPickerMapOsm({
           {query && (
             <button
               type="button"
-              aria-label="Clear"
+              aria-label={t("common.clear")}
               onClick={() => {
                 setQuery("");
                 setResults([]);
@@ -326,8 +330,8 @@ export default function LocationPickerMapOsm({
         />
         <button
           type="button"
-          title="Use my location"
-          aria-label="Use my location"
+          title={t("addresses.use_my_location")}
+          aria-label={t("addresses.use_my_location")}
           disabled={locating}
           onClick={useCurrentLocation}
           style={{
@@ -361,7 +365,7 @@ export default function LocationPickerMapOsm({
               fontSize: 12,
             }}
           >
-            Choose a Greater Cairo location.
+            {t("addresses.cairo_bounds")}
           </div>
         )}
       </div>
@@ -373,7 +377,7 @@ export default function LocationPickerMapOsm({
           className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#5A6A7A] hover:text-[#008a76] disabled:opacity-50"
         >
           <Bookmark size={13} />
-          {saving ? "Saving..." : "Save this location"}
+          {saving ? t("addresses.saving_location") : t("addresses.save_location")}
         </button>
       )}
       {saveError && <p className="mt-1 text-xs font-semibold text-[#c0392b]">{saveError}</p>}

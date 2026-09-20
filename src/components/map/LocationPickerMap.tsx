@@ -1,7 +1,11 @@
 ﻿"use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { LayerGroup, Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
+import type {
+  LayerGroup,
+  Map as LeafletMap,
+  Marker as LeafletMarker,
+} from "leaflet";
 import {
   searchAddress,
   getPlaceDetails,
@@ -40,6 +44,7 @@ interface LocationPickerMapProps {
   name: string;
   onChange: (lat: string, lng: string, name: string) => void;
   error?: string;
+  showCurrentLocationText?: boolean;
 }
 
 export default function LocationPickerMap({
@@ -48,6 +53,7 @@ export default function LocationPickerMap({
   name,
   onChange,
   error,
+  showCurrentLocationText = false,
 }: LocationPickerMapProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -63,6 +69,7 @@ export default function LocationPickerMap({
   const [locating, setLocating] = useState(false);
   const [showDrop, setShowDrop] = useState(false);
   const [leafletReady, setLeafletReady] = useState(false);
+  const [mapError, setMapError] = useState("");
   const [outOfBounds, setOutOfBounds] = useState(false);
 
   const markerPos =
@@ -153,30 +160,43 @@ export default function LocationPickerMap({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     let disposed = false;
+    setMapError("");
 
-    loadLeaflet().then((L) => {
-      if (disposed || !mapContainerRef.current) return;
-      const map = L.map(mapContainerRef.current, {
-        zoomControl: true,
-        attributionControl: true,
-        minZoom: 9,
-      }).setView([markerPos?.lat ?? CAIRO.lat, markerPos?.lng ?? CAIRO.lng], markerPos ? 15 : 11);
+    loadLeaflet()
+      .then((L) => {
+        if (disposed || !mapContainerRef.current) return;
+        const map = L.map(mapContainerRef.current, {
+          zoomControl: true,
+          attributionControl: true,
+          minZoom: 9,
+        }).setView(
+          [markerPos?.lat ?? CAIRO.lat, markerPos?.lng ?? CAIRO.lng],
+          markerPos ? 15 : 11,
+        );
 
-      L.tileLayer(MAP_COLORS.tileUrl, {
-        attribution: MAP_COLORS.tileAttribution,
-        maxZoom: 19,
-      }).addTo(map);
+        L.tileLayer(MAP_COLORS.tileUrl, {
+          attribution: MAP_COLORS.tileAttribution,
+          maxZoom: 19,
+        }).addTo(map);
 
-      map.setMaxBounds([
-        [CAIRO_BOUNDS.south, CAIRO_BOUNDS.west],
-        [CAIRO_BOUNDS.north, CAIRO_BOUNDS.east],
-      ]);
+        map.setMaxBounds([
+          [CAIRO_BOUNDS.south, CAIRO_BOUNDS.west],
+          [CAIRO_BOUNDS.north, CAIRO_BOUNDS.east],
+        ]);
 
-      mapRef.current = map;
-      layersRef.current = L.layerGroup().addTo(map);
-      setLeafletReady(true);
-      onMapLoad();
-    });
+        mapRef.current = map;
+        layersRef.current = L.layerGroup().addTo(map);
+        setLeafletReady(true);
+        onMapLoad();
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setMapError(
+            error instanceof Error ? error.message : "Could not load the map.",
+          );
+          setLeafletReady(false);
+        }
+      });
 
     return () => {
       disposed = true;
@@ -187,12 +207,14 @@ export default function LocationPickerMap({
       mapRef.current = null;
       setLeafletReady(false);
     };
-  }, [markerPos, onMapLoad]);
+  }, [onMapLoad]);
 
   useEffect(() => {
     if (!mapRef.current) return;
 
-    const handleMapClick = (event: { latlng: { lat: number; lng: number } }) => {
+    const handleMapClick = (event: {
+      latlng: { lat: number; lng: number };
+    }) => {
       void commitLocation(event.latlng.lat, event.latlng.lng);
     };
 
@@ -416,12 +438,18 @@ export default function LocationPickerMap({
               gap: 8,
             }}
           >
-            <Loader2
-              size={18}
-              className="animate-spin"
-              style={{ color: "#00C2A8" }}
-            />
-            Loading map...
+            {mapError ? (
+              <span style={{ color: "#E74C3C" }}>{mapError}</span>
+            ) : (
+              <>
+                <Loader2
+                  size={18}
+                  className="animate-spin"
+                  style={{ color: "#00C2A8" }}
+                />
+                Loading map...
+              </>
+            )}
           </div>
         ) : (
           <div ref={mapContainerRef} style={{ width: "100%", height: 280 }} />
@@ -439,7 +467,8 @@ export default function LocationPickerMap({
               bottom: 12,
               left: 12,
               zIndex: 10,
-              width: 40,
+              width: showCurrentLocationText ? "auto" : 40,
+              padding: showCurrentLocationText ? "0 12px" : 2,
               height: 40,
               borderRadius: 10,
               background: "#fff",
@@ -468,7 +497,12 @@ export default function LocationPickerMap({
             {locating ? (
               <Loader2 size={18} className="animate-spin" />
             ) : (
-              <Crosshair size={18} />
+              <>
+                <Crosshair size={18} />
+                {showCurrentLocationText && (
+                  <span style={{ marginLeft: 7 }}>Use my current location</span>
+                )}
+              </>
             )}
           </button>
         )}
