@@ -12,6 +12,7 @@ import { useClientLocale } from "@/lib/locale.client";
 interface Props {
   authed?: boolean;
   referralCode?: string;
+  referralRole?: "passenger" | "driver";
 }
 
 const InputSkeleton = () => (
@@ -25,7 +26,11 @@ const InputSkeleton = () => (
   />
 );
 
-export default function Hero({ authed = false, referralCode }: Props) {
+export default function Hero({
+  authed = false,
+  referralCode,
+  referralRole = "passenger",
+}: Props) {
   const router = useRouter();
   const { t, locale } = useClientLocale();
   const isArabic = locale === "ar";
@@ -33,7 +38,7 @@ export default function Hero({ authed = false, referralCode }: Props) {
   const { pickup, dropoff, setPickup, setDropoff } = useTripStore();
   const [error, setError] = useState("");
   const loginHref = referralCode
-    ? `/login?redirect=%2Fcreate&ref=${encodeURIComponent(referralCode)}`
+    ? `/login?redirect=%2Fcreate&ref=${encodeURIComponent(referralCode)}&refRole=${referralRole}`
     : "/login?redirect=/create";
 
   // Prevent sessionStorage hydration mismatch
