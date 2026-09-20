@@ -5,6 +5,7 @@ import { Driver } from "@/models/Driver";
 import { ReferralUsage } from "@/models/ReferralUsage";
 import { connectDB } from "@/lib/db/mongoose";
 import UserManagementClient from "@/components/admin/UserManagementClient";
+import UnlimitedReferralCards from "@/components/admin/UnlimitedReferralCards";
 import { AdminPageContainer, AdminPageHeader } from "@/components/admin/layout";
 import { isRegionCode, REGION_CODES } from "@/lib/config/regions";
 
@@ -31,12 +32,16 @@ export default async function AdminUsersPage() {
   if (session.role !== "admin") redirect("/admin/signup");
 
   await connectDB();
-  const [users, driverProfiles, referralUsageCounts] = await Promise.all([
+  const [users, driverProfiles, referralUsageCounts, referralUsages] = await Promise.all([
     User.find().sort({ createdAt: -1 }).select("-passwordHash").lean(),
     Driver.find({}).lean(),
     ReferralUsage.aggregate<{ _id: unknown; count: number }>([
       { $group: { _id: "$referrer", count: { $sum: 1 } } },
     ]),
+    ReferralUsage.find({})
+      .sort({ createdAt: -1 })
+      .populate("referredUser", "name userNumber phone")
+      .lean(),
   ]);
   const driverMap = new Map(
     driverProfiles.map((driver) => [String(driver.userId), driver]),
@@ -44,6 +49,25 @@ export default async function AdminUsersPage() {
   const referralUsageMap = new Map(
     referralUsageCounts.map((item) => [String(item._id), item.count]),
   );
+  const referralAdditionsMap = new Map<
+    string,
+    { name: string; userNumber: number | null; phone: string }[]
+  >();
+  for (const usage of referralUsages) {
+    const referredUser = usage.referredUser as unknown as {
+      name?: string;
+      userNumber?: number;
+      phone?: string;
+    } | null;
+    if (!referredUser) continue;
+    const additions = referralAdditionsMap.get(String(usage.referrer)) ?? [];
+    additions.push({
+      name: referredUser.name ?? "Unnamed user",
+      userNumber: referredUser.userNumber ?? null,
+      phone: referredUser.phone ?? "—",
+    });
+    referralAdditionsMap.set(String(usage.referrer), additions);
+  }
 
   const rows = users.map((user) => {
     const plainUser = toPlainValue(user) as Record<string, unknown> & {
@@ -77,6 +101,7 @@ export default async function AdminUsersPage() {
           ? plainUser.referralCode
           : undefined,
       referralUsageCount: referralUsageMap.get(String(plainUser._id)) ?? 0,
+      referralAdditions: referralAdditionsMap.get(String(plainUser._id)) ?? [],
       driver: plainDriver
         ? {
             _id: String(plainDriver._id),
@@ -117,6 +142,7 @@ export default async function AdminUsersPage() {
         description="Open any row to inspect documents and update driver approval."
         emptyMessage="No users found."
       />
+      <UnlimitedReferralCards />
     </AdminPageContainer>
   );
 }

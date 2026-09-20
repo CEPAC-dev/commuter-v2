@@ -82,7 +82,13 @@ export default function ReferralUserOverrides() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ unlimited: nextState }),
       });
-      const json = await res.json();
+      const responseText = await res.text();
+      let json: { error?: string; data?: { referralUnlimited?: boolean } } = {};
+      try {
+        json = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        throw new Error(`Failed to update user (HTTP ${res.status}).`);
+      }
       if (!res.ok) throw new Error(json.error ?? "Failed to update user.");
 
       setUsers((prev) =>
@@ -99,6 +105,7 @@ export default function ReferralUserOverrides() {
         }
         return prev.filter((u) => u.id !== user.id);
       });
+      window.dispatchEvent(new Event("referral-audit-changed"));
     } catch (err) {
       alert(err instanceof Error ? err.message : "Update failed.");
     } finally {

@@ -76,6 +76,11 @@ type UserRow = {
   createdAt?: string;
   referralCode?: string;
   referralUsageCount?: number;
+  referralAdditions?: {
+    name: string;
+    userNumber: number | null;
+    phone: string;
+  }[];
   driver?: DriverProfile;
 };
 
@@ -563,6 +568,9 @@ export default function UserManagementClient({
                         {user.referralCode || "No referral code"} · Used by{" "}
                         {user.referralUsageCount ?? 0}
                       </div>
+                      <div className="mt-1 truncate text-xs font-semibold text-[#00877A]">
+                        Referral additions: {user.referralAdditions?.length ?? 0}
+                      </div>
                       <div className="mt-1 truncate text-xs text-[var(--color-muted)]">
                         Joined:{" "}
                         {user.createdAt
@@ -823,6 +831,30 @@ export default function UserManagementClient({
                             </span>
                           </div>
                         </InfoCard>
+
+                      <InfoCard title="Referral additions">
+                        {user.referralAdditions?.length ? (
+                          <div className="grid gap-2">
+                            {user.referralAdditions.map((addition, index) => (
+                              <div
+                                key={`${user._id}-referral-${index}`}
+                                className="rounded-lg border border-[#c9eee8] bg-[#f1fbf9] px-3 py-2"
+                              >
+                                <div className="text-sm font-bold text-[var(--color-primary)]">
+                                  {addition.name}
+                                </div>
+                                <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+                                  User #{addition.userNumber ?? "N/A"} · {addition.phone}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="m-0 text-sm text-[var(--color-muted)]">
+                            No referral additions yet.
+                          </p>
+                        )}
+                      </InfoCard>
 
                         <InfoCard title="Uploaded documents">
                           {user.driver.documents &&
