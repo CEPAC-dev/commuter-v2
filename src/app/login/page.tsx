@@ -37,7 +37,10 @@ function LoginForm() {
   const { t, locale } = useClientLocale();
   const [isPending, startTransition] = useTransition();
 
-  const [role, setRole] = useState<Role>("passenger");
+  const referralRoleFromUrl = params.get("refRole");
+  const [role, setRole] = useState<Role>(
+    referralRoleFromUrl === "driver" ? "driver" : "passenger",
+  );
   const referralCodeFromUrl = params.get("ref")?.trim().toUpperCase() ?? "";
   const [mode, setMode] = useState<Mode>(
     referralCodeFromUrl ? "register" : "login",

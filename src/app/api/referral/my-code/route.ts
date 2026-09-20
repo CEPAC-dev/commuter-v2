@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import {
@@ -9,7 +9,7 @@ import { ReferralUsage } from "@/models/ReferralUsage";
 import { User } from "@/models/User";
 import { Wallet } from "@/models/Wallet";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getSession();
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -36,14 +36,18 @@ export async function GET(req: NextRequest) {
     ),
   ]);
 
-  // Build the invitation from the active request origin so local and deployed
-  // links always point to the site the user is currently using.
-  const shareUrl = new URL("/", req.nextUrl.origin);
+  const shareUrl = new URL("https://www.commuter.site/login");
+  shareUrl.searchParams.set("redirect", "/create");
   shareUrl.searchParams.set("ref", user.referralCode);
+  shareUrl.searchParams.set(
+    "refRole",
+    session.role === "driver" ? "driver" : "passenger",
+  );
 
   return NextResponse.json({
     data: {
       referralCode: user.referralCode,
+      referrerRole: session.role === "driver" ? "driver" : "passenger",
       shareUrl: shareUrl.toString(),
       balanceEgp: wallet?.balanceEgp ?? 0,
       referrerBonusAmount: settings.referrerBonusAmount,
