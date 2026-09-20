@@ -12,6 +12,7 @@ import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { Wallet } from "@/models/Wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
+import { ReferralAuditLog } from "@/models/ReferralAuditLog";
 
 const REFERRAL_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_CODE_ATTEMPTS = 10;
@@ -88,7 +89,7 @@ export async function applyReferralOnSignup(
 
   const normalizedCode = referralCode.trim().toUpperCase();
   const referrer = await User.findOne({ referralCode: normalizedCode })
-    .select("_id")
+    .select("_id name userNumber phone")
     .lean();
   if (!referrer) {
     return { success: false, message: "Referral code is invalid." };
@@ -99,7 +100,9 @@ export async function applyReferralOnSignup(
     return { success: false, message: "You cannot use your own referral code." };
   }
 
-  const referredUser = await User.findById(referredUserId).select("referredBy").lean();
+  const referredUser = await User.findById(referredUserId)
+    .select("referredBy name userNumber phone")
+    .lean();
   if (!referredUser || referredUser.referredBy) {
     return { success: false, message: "This account cannot use a referral code." };
   }
@@ -245,6 +248,27 @@ export async function applyReferralOnSignup(
               amount: settings.refereeBonusAmount,
               newBalanceEgp: refereeNewBalance,
               referralUsageId: usage._id,
+            },
+          },
+        ],
+        { session, ordered: true },
+      );
+
+      await ReferralAuditLog.create(
+        [
+          {
+            eventType: "referral_added",
+            actorId: referrer._id,
+            targetUserId: referredUserId,
+            actorSnapshot: {
+              name: referrer.name ?? "Unknown user",
+              userNumber: referrer.userNumber ?? null,
+              phone: referrer.phone ?? "",
+            },
+            targetSnapshot: {
+              name: referredUser.name ?? "Unknown user",
+              userNumber: referredUser.userNumber ?? null,
+              phone: referredUser.phone ?? "",
             },
           },
         ],
