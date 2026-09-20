@@ -3,7 +3,8 @@ import { Settings } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getOrCreateReferralSettings } from "@/lib/referral";
 import ReferralSettingsForm from "@/components/admin/ReferralSettingsForm";
-import ReferralUserOverrides from "@/components/admin/ReferralUserOverrides";
+import UnlimitedReferralCards from "@/components/admin/UnlimitedReferralCards";
+import ReferralAuditHistory from "@/components/admin/ReferralAuditHistory";
 import {
   AdminCard,
   AdminPageContainer,
@@ -49,7 +50,8 @@ export default async function AdminReferralSettingsPage() {
         </div>
       </AdminCard>
       <ReferralSettingsForm initialValues={initialValues} />
-      <ReferralUserOverrides />
+      <UnlimitedReferralCards />
+      <ReferralAuditHistory />
     </AdminPageContainer>
   );
 }
