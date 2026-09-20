@@ -8,6 +8,7 @@ import { useClientLocale } from "@/lib/i18n/client";
 interface ReferralData {
   referralCode: string;
   shareUrl: string;
+  referrerRole: "passenger" | "driver";
   balanceEgp: number;
   referrerBonusAmount: number;
   maxUsersPerCode: number;
@@ -34,8 +35,13 @@ export default function ReferralCard() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error ?? t("referral.load_failed"));
         if (!cancelled) {
-          const shareUrl = new URL("/", window.location.origin);
+          const shareUrl = new URL("https://www.commuter.site/login");
+          shareUrl.searchParams.set("redirect", "/create");
           shareUrl.searchParams.set("ref", result.data.referralCode);
+          shareUrl.searchParams.set(
+            "refRole",
+            result.data.referrerRole === "driver" ? "driver" : "passenger",
+          );
           setData({ ...result.data, shareUrl: shareUrl.toString() });
         }
       })
