@@ -72,7 +72,7 @@ export default function Footer() {
               }}
             >
               <Image
-                src="/assets/images/commuterLogo.png"
+                src="/assets/images/commuterLogo3.png"
                 alt="Commuter logo"
                 width={36}
                 height={36}

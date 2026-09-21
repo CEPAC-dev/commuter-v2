@@ -4,6 +4,13 @@ import ContactForm from "@/components/contact/ContactForm";
 import ContactHeader from "@/components/contact/ContactHeader";
 import { getSession } from "@/lib/auth/session";
 
+export const metadata = {
+  title: "Contact us",
+  description:
+    "Contact Commuter for help with private and shared ride bookings across Greater Cairo.",
+  alternates: { canonical: "/contact" },
+};
+
 export default async function ContactPage() {
   const session = await getSession();
 

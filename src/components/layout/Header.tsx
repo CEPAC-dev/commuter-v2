@@ -83,7 +83,7 @@ export default function Header() {
             </svg>
           </div> */}
           <Image
-            src="/assets/images/commuterLogo.png"
+            src="/assets/images/commuterLogo3.png"
             alt="Commuter logo"
             width={36}
             height={36}

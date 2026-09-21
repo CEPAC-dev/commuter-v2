@@ -368,7 +368,7 @@ function LoginForm() {
             }}
           >
             <Image
-              src="/assets/images/commuterLogo.png"
+              src="/assets/images/commuterLogo3.png"
               alt="Commuter logo"
               width={50}
               height={50}
