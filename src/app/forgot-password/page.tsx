@@ -341,7 +341,7 @@ export default function ForgotPasswordPage() {
             }}
           >
             <Image
-              src="/assets/images/commuterLogo3.png"
+              src="/assets/images/commuterLogo.png"
               alt="Commuter logo"
               width={46}
               height={46}

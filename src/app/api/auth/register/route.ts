@@ -23,6 +23,7 @@ import {
   isPlausibleSecurityAnswer,
 } from "@/lib/auth/securityQuestion";
 import { isValidSecurityQuestionId } from "@/lib/config/verification";
+import { isRegionCode, type RegionCode } from "@/lib/config/regions";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -36,6 +37,8 @@ export async function POST(req: NextRequest) {
       referralCodeUsed,
       securityQuestionId,
       securityAnswer,
+      regionCode,
+      gender,
     } = await req.json();
     const safeName = normalizePlainText(name, { maxLength: 100 });
 
@@ -44,6 +47,18 @@ export async function POST(req: NextRequest) {
         { error: "Name, phone and password are required." },
         { status: 400 },
       );
+    if (!isRegionCode(regionCode)) {
+      return NextResponse.json(
+        { error: "Choose a valid city before creating your account." },
+        { status: 400 },
+      );
+    }
+    if (gender !== "male" && gender !== "female") {
+      return NextResponse.json(
+        { error: "Gender is required." },
+        { status: 400 },
+      );
+    }
     if (!isSafePassword(password))
       return NextResponse.json(
         { error: PASSWORD_RULES_MESSAGE },
@@ -94,6 +109,7 @@ export async function POST(req: NextRequest) {
     const existing = await User.findOne({
       phone: normalizedPhone,
       role: "passenger",
+      gender,
     }).lean();
     if (existing)
       return NextResponse.json(
@@ -123,6 +139,14 @@ export async function POST(req: NextRequest) {
       passwordHash,
       email: normalizedEmail,
       role: "passenger",
+      region:
+        regionCode === "SA"
+          ? "KSA"
+          : regionCode === "EG-CAIRO"
+            ? "EG"
+            : regionCode,
+      defaultRegionCode: regionCode as RegionCode,
+      allowedRegionCodes: [regionCode as RegionCode],
       referralCode,
       ...(normalizedQuestionId && { securityQuestionId: normalizedQuestionId }),
       ...(securityAnswerHash && { securityAnswerHash }),

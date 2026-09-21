@@ -10,6 +10,7 @@ import {
   Clock,
   CircleAlert,
   CircleCheck,
+  CircleX,
   Phone,
   Mail,
   CalendarDays,
@@ -70,6 +71,9 @@ type UserRow = {
   name?: string;
   phone?: string;
   email?: string;
+  gender?: "male" | "female" | null;
+  securityQuestionVerified?: boolean;
+  otpVerified?: boolean;
   role?: string;
   defaultRegionCode?: RegionCode;
   allowedRegionCodes?: RegionCode[];
@@ -569,7 +573,8 @@ export default function UserManagementClient({
                         {user.referralUsageCount ?? 0}
                       </div>
                       <div className="mt-1 truncate text-xs font-semibold text-[#00877A]">
-                        Referral additions: {user.referralAdditions?.length ?? 0}
+                        Referral additions:{" "}
+                        {user.referralAdditions?.length ?? 0}
                       </div>
                       <div className="mt-1 truncate text-xs text-[var(--color-muted)]">
                         Joined:{" "}
@@ -579,6 +584,19 @@ export default function UserManagementClient({
                               timeStyle: "short",
                             })
                           : "—"}
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full bg-[var(--color-primary-tint)] px-2 py-1 text-[11px] font-semibold capitalize text-[var(--color-primary)]">
+                          Gender: {user.gender || "—"}
+                        </span>
+                        <VerificationMethodBadge
+                          label="Security Question"
+                          verified={Boolean(user.securityQuestionVerified)}
+                        />
+                        <VerificationMethodBadge
+                          label="OTP Verified"
+                          verified={Boolean(user.otpVerified)}
+                        />
                       </div>
                     </div>
                   </div>
@@ -619,6 +637,11 @@ export default function UserManagementClient({
                         />
                         <InfoRow icon={Mail} label="Email" value={user.email} />
                         <InfoRow
+                          icon={Users}
+                          label="Gender"
+                          value={user.gender || "—"}
+                        />
+                        <InfoRow
                           icon={CalendarDays}
                           label="Joined"
                           value={
@@ -640,6 +663,19 @@ export default function UserManagementClient({
                           label="Referral uses"
                           value={user.referralUsageCount ?? 0}
                         />
+                        <div className="mt-1 grid gap-2 border-t border-[var(--color-border)] pt-3">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                            Verification methods
+                          </span>
+                          <VerificationMethodRow
+                            label="Security Question"
+                            verified={Boolean(user.securityQuestionVerified)}
+                          />
+                          <VerificationMethodRow
+                            label="OTP Verified"
+                            verified={Boolean(user.otpVerified)}
+                          />
+                        </div>
                       </InfoCard>
 
                       <InfoCard title="Admin controls">
@@ -832,29 +868,30 @@ export default function UserManagementClient({
                           </div>
                         </InfoCard>
 
-                      <InfoCard title="Referral additions">
-                        {user.referralAdditions?.length ? (
-                          <div className="grid gap-2">
-                            {user.referralAdditions.map((addition, index) => (
-                              <div
-                                key={`${user._id}-referral-${index}`}
-                                className="rounded-lg border border-[#c9eee8] bg-[#f1fbf9] px-3 py-2"
-                              >
-                                <div className="text-sm font-bold text-[var(--color-primary)]">
-                                  {addition.name}
+                        <InfoCard title="Referral additions">
+                          {user.referralAdditions?.length ? (
+                            <div className="grid gap-2">
+                              {user.referralAdditions.map((addition, index) => (
+                                <div
+                                  key={`${user._id}-referral-${index}`}
+                                  className="rounded-lg border border-[#c9eee8] bg-[#f1fbf9] px-3 py-2"
+                                >
+                                  <div className="text-sm font-bold text-[var(--color-primary)]">
+                                    {addition.name}
+                                  </div>
+                                  <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+                                    User #{addition.userNumber ?? "N/A"} ·{" "}
+                                    {addition.phone}
+                                  </div>
                                 </div>
-                                <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                                  User #{addition.userNumber ?? "N/A"} · {addition.phone}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="m-0 text-sm text-[var(--color-muted)]">
-                            No referral additions yet.
-                          </p>
-                        )}
-                      </InfoCard>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="m-0 text-sm text-[var(--color-muted)]">
+                              No referral additions yet.
+                            </p>
+                          )}
+                        </InfoCard>
 
                         <InfoCard title="Uploaded documents">
                           {user.driver.documents &&
@@ -974,6 +1011,54 @@ function RoleBadge({ role }: { role?: string }) {
       status={role || "passenger"}
       tone={role === "driver" ? "success" : role === "admin" ? "info" : "muted"}
     />
+  );
+}
+
+function VerificationMethodBadge({
+  label,
+  verified,
+}: {
+  label: string;
+  verified: boolean;
+}) {
+  const Icon = verified ? CircleCheck : CircleX;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${
+        verified
+          ? "bg-[var(--color-success-tint)] text-[var(--color-success)]"
+          : "bg-[var(--color-background)] text-[var(--color-muted)]"
+      }`}
+      title={`${label}: ${verified ? "Verified" : "Not verified"}`}
+    >
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+function VerificationMethodRow({
+  label,
+  verified,
+}: {
+  label: string;
+  verified: boolean;
+}) {
+  const Icon = verified ? CircleCheck : CircleX;
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="text-[var(--color-primary)]">{label}</span>
+      <span
+        className={`inline-flex items-center gap-1 text-xs font-semibold ${
+          verified
+            ? "text-[var(--color-success)]"
+            : "text-[var(--color-danger)]"
+        }`}
+      >
+        <Icon className="h-4 w-4" aria-hidden="true" />
+        {verified ? "Verified" : "Not verified"}
+      </span>
+    </div>
   );
 }
 

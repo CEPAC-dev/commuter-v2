@@ -16,6 +16,9 @@ import { useClientLocale } from "@/lib/i18n/client";
 const POLL_INTERVAL_MS = 30_000;
 
 function notificationHref(notification: NotificationItem): string {
+  const linkUrl = notification.data.linkUrl;
+  if (typeof linkUrl === "string" && linkUrl.length > 0) return linkUrl;
+
   if (notification.type === "referral_bonus") return "/wallet";
   if (notification.type === "ride_offer") return "/ride-requests";
 
@@ -29,6 +32,13 @@ function notificationHref(notification: NotificationItem): string {
   if (typeof rideId === "string") return "/my-trips";
 
   return "/user/notifications";
+}
+
+function notificationLinkLabel(notification: NotificationItem): string {
+  const linkLabel = notification.data.linkLabel;
+  return typeof linkLabel === "string" && linkLabel.length > 0
+    ? linkLabel
+    : "Open notification";
 }
 
 function formatRelativeTime(
@@ -312,6 +322,9 @@ export default function NotificationCenter({
                       <small>
                         {formatRelativeTime(notification.createdAt, t)}
                       </small>
+                      {typeof notification.data.linkUrl === "string" && (
+                        <em>{notificationLinkLabel(notification)}</em>
+                      )}
                     </span>
                     <ChevronRight size={16} aria-hidden="true" />
                   </button>
@@ -368,6 +381,7 @@ export default function NotificationCenter({
         .notification-popover-copy strong { font-size: 13px; line-height: 1.3; }
         .notification-popover-copy > span { color: #5A6A7A; font-size: 12px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .notification-popover-copy small { color: #8896A5; font-size: 11px; }
+        .notification-popover-copy em { color: #00806E; font-size: 11px; font-style: normal; font-weight: 800; }
         .notification-popover-content > svg { color: #9AA7B4; margin-top: 8px; }
         .notification-mark-read { position: absolute; top: 10px; right: 9px; width: 27px; height: 27px; border: 0; border-radius: 50%; background: #fff; color: #00806E; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 5px rgba(11,30,61,.12); }
         .notification-see-all { width: 100%; border: 0; background: #fff; color: #0B1E3D; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 13px; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }

@@ -32,17 +32,21 @@ export default async function AdminUsersPage() {
   if (session.role !== "admin") redirect("/admin/signup");
 
   await connectDB();
-  const [users, driverProfiles, referralUsageCounts, referralUsages] = await Promise.all([
-    User.find().sort({ createdAt: -1 }).select("-passwordHash").lean(),
-    Driver.find({}).lean(),
-    ReferralUsage.aggregate<{ _id: unknown; count: number }>([
-      { $group: { _id: "$referrer", count: { $sum: 1 } } },
-    ]),
-    ReferralUsage.find({})
-      .sort({ createdAt: -1 })
-      .populate("referredUser", "name userNumber phone")
-      .lean(),
-  ]);
+  const [users, driverProfiles, referralUsageCounts, referralUsages] =
+    await Promise.all([
+      User.find()
+        .sort({ createdAt: -1 })
+        .select("-passwordHash +securityAnswerHash")
+        .lean(),
+      Driver.find({}).lean(),
+      ReferralUsage.aggregate<{ _id: unknown; count: number }>([
+        { $group: { _id: "$referrer", count: { $sum: 1 } } },
+      ]),
+      ReferralUsage.find({})
+        .sort({ createdAt: -1 })
+        .populate("referredUser", "name userNumber phone")
+        .lean(),
+    ]);
   const driverMap = new Map(
     driverProfiles.map((driver) => [String(driver.userId), driver]),
   );
@@ -78,9 +82,22 @@ export default async function AdminUsersPage() {
       ? (toPlainValue(driverProfile) as Record<string, unknown>)
       : undefined;
 
+    const securityQuestionVerified =
+      typeof plainUser.securityAnswerHash === "string" &&
+      plainUser.securityAnswerHash.length > 0;
+    const { securityAnswerHash: _securityAnswerHash, ...safeUser } = plainUser;
+
     return {
-      ...(plainUser as Record<string, unknown>),
+      ...safeUser,
       _id: String(plainUser._id),
+      gender:
+        plainUser.gender === "male" || plainUser.gender === "female"
+          ? plainUser.gender
+          : (null as "male" | "female" | null),
+      securityQuestionVerified,
+      otpVerified:
+        typeof plainUser.phoneVerifiedAt === "string" &&
+        plainUser.phoneVerifiedAt.length > 0,
       userNumber:
         typeof plainUser.userNumber === "number"
           ? plainUser.userNumber

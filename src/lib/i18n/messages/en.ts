@@ -288,7 +288,8 @@ export const en = {
     "Delete {count} selected availability shifts?",
   "availability.error.origin_required": "Choose your starting location.",
   "availability.error.destination_required": "Choose your destination.",
-  "availability.error.days_required": "Select at least one day for your working hours.",
+  "availability.error.days_required":
+    "Select at least one day for your working hours.",
   "availability.error.overlap":
     "Overlaps with existing availability on {day} ({start}–{end}).",
   "availability.error.save_failed": "Could not save shift.",
@@ -764,7 +765,21 @@ export const en = {
   "auth.email": "Email address",
   "auth.email_optional": "(optional)",
   "auth.email_placeholder": "you@example.com",
+  "auth.city": "City",
+  "auth.change_city": "Change city",
+  "auth.choose_city": "Choose your city",
+  "auth.city_region_hint":
+    "We will use this region for your account and available rides.",
+  "auth.close_city_picker": "Close city picker",
+  "regions.cairo": "Cairo",
+  "regions.saudi_arabia": "Saudi Arabia",
+  "regions.abu_dhabi": "Abu Dhabi",
+  "regions.egypt_greater_cairo": "Egypt - Greater Cairo",
+  "regions.uae_abu_dhabi": "UAE - Abu Dhabi",
   "auth.referral_code": "Referral code",
+  "auth.referral_code_info_label": "Referral code information",
+  "auth.referral_code_info_text":
+    "A referral code connects your account to the person who invited you and may apply referral rewards or benefits.",
   "auth.dont_have_account": "Don't have an account?",
   "auth.already_have_account": "Already have an account?",
   "auth.log_in_button": "Log in",
@@ -869,6 +884,9 @@ export const en = {
   "phone_verification.verify_button": "Verify phone",
   "phone_verification.verified_notice": "Your phone number is verified.",
   "security_question.title": "Security question",
+  "security_question.info_label": "Security question information",
+  "security_question.info_text":
+    "Your security question helps verify your identity if you need to recover or change your password.",
   "security_question.setup_status_done": "Set up",
   "security_question.setup_hint":
     "Set this up to reset or change your password.",

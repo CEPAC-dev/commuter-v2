@@ -33,12 +33,18 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { name, phone, profilePic, region } = body;
+    const { name, phone, profilePic, region, gender: passengerGender } = body;
     const safeName = normalizePlainText(name, { maxLength: 100 });
     if (!safeName)
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
 
     const userUpdate: Record<string, unknown> = { name: safeName };
+    if (session.role !== "driver" && passengerGender !== undefined) {
+      if (passengerGender !== "male" && passengerGender !== "female") {
+        return NextResponse.json({ error: "Invalid gender." }, { status: 400 });
+      }
+      userUpdate.gender = passengerGender;
+    }
     if (region !== undefined) {
       if (!isRegionKey(region)) {
         return NextResponse.json({ error: "Invalid region." }, { status: 400 });

@@ -52,6 +52,7 @@ export default async function ProfilePage() {
       initialPhoneVerified={Boolean(profile.phoneVerifiedAt)}
       initialHasSecurityQuestion={profile.hasSecurityQuestion}
       initialRegion={profile.region}
+      initialGender={profile.gender}
       initialProfilePic={profile.profilePic}
       initialSavedAddresses={profile.savedAddresses}
     />

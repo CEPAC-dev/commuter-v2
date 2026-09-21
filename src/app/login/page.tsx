@@ -12,6 +12,7 @@ import {
   Loader2,
   ArrowLeft,
   Globe,
+  Info,
   TicketPercent,
 } from "lucide-react";
 import Image from "next/image";
@@ -26,9 +27,72 @@ import {
 import { useClientLocale, setLocaleCookie } from "@/lib/i18n/client";
 import { localeDirection } from "@/lib/i18n/config";
 import { useVerificationConfig } from "@/lib/auth/useVerificationConfig";
+import { REGION_LIST, REGIONS, type RegionCode } from "@/lib/config/regions";
 
 type Mode = "login" | "register";
 type Role = "passenger" | "driver";
+
+function InfoHint({ label, text }: { label: string; text: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        marginInlineStart: 5,
+        verticalAlign: "middle",
+      }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        style={{
+          width: 18,
+          height: 18,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          border: 0,
+          borderRadius: "50%",
+          background: "#e8f7f5",
+          color: "#008f80",
+          cursor: "help",
+        }}
+      >
+        <Info size={12} aria-hidden="true" />
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          style={{
+            position: "absolute",
+            zIndex: 20,
+            top: "calc(100% + 8px)",
+            insetInlineStart: 0,
+            width: 260,
+            padding: "10px 12px",
+            borderRadius: 10,
+            background: "#0B1E3D",
+            color: "#ffffff",
+            fontSize: 12,
+            fontWeight: 400,
+            lineHeight: 1.5,
+            boxShadow: "0 8px 24px rgba(11,30,61,0.2)",
+          }}
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
 
 function LoginForm() {
   const router = useRouter();
@@ -48,6 +112,20 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
+  const [region, setRegion] = useState<RegionCode>("EG-CAIRO");
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const regionCityName = (code: RegionCode) =>
+    code === "EG-CAIRO"
+      ? t("regions.cairo")
+      : code === "SA"
+        ? t("regions.saudi_arabia")
+        : t("regions.abu_dhabi");
+  const regionLabel = (code: RegionCode) =>
+    code === "EG-CAIRO"
+      ? t("regions.egypt_greater_cairo")
+      : code === "SA"
+        ? t("regions.saudi_arabia")
+        : t("regions.uae_abu_dhabi");
 
   // Language toggle
   function toggleLanguage() {
@@ -112,6 +190,8 @@ function LoginForm() {
               password,
               email: email.trim(),
               referralCodeUsed: referralCode.trim() || undefined,
+              regionCode: region,
+              gender,
               ...(verificationMethod === "security_question" && {
                 securityQuestionId,
                 securityAnswer: securityAnswer.trim(),
@@ -368,7 +448,7 @@ function LoginForm() {
             }}
           >
             <Image
-              src="/assets/images/commuterLogo3.png"
+              src="/assets/images/commuterLogo.png"
               alt="Commuter logo"
               width={50}
               height={50}
@@ -659,6 +739,7 @@ function LoginForm() {
                 gender={gender}
                 setGender={setGender}
                 referralCode={referralCode}
+                region={region}
                 onSuccess={() => router.replace("/profile")}
               />
             ) : (
@@ -727,6 +808,117 @@ function LoginForm() {
                           style={inputStyle}
                         />
                       </div>
+                    </div>
+                  )}
+
+                  {mode === "register" && (
+                    <div>
+                      <label
+                        htmlFor="registration-gender"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#0B1E3D",
+                          display: "block",
+                          marginBottom: 6,
+                        }}
+                      >
+                        {t("profile.gender")}{" "}
+                        <span aria-hidden="true" style={{ color: "#e74c3c" }}>
+                          *
+                        </span>
+                      </label>
+                      <select
+                        id="registration-gender"
+                        value={gender}
+                        onChange={(event) =>
+                          setGender(
+                            event.target.value as "male" | "female" | "",
+                          )
+                        }
+                        required
+                        style={{
+                          width: "100%",
+                          height: 52,
+                          padding: "0 14px",
+                          background: "#f8f9fa",
+                          border: "1.5px solid #e8edf0",
+                          borderRadius: 12,
+                          fontSize: 15,
+                          fontFamily: "inherit",
+                          color: "#0B1E3D",
+                        }}
+                      >
+                        <option value="">{t("profile.gender")}</option>
+                        <option value="male">{t("gender.male")}</option>
+                        <option value="female">{t("gender.female")}</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {mode === "register" && (
+                    <div>
+                      <label
+                        htmlFor="registration-region"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#0B1E3D",
+                          display: "block",
+                          marginBottom: 6,
+                        }}
+                      >
+                        {t("auth.city")}{" "}
+                        <span aria-hidden="true" style={{ color: "#e74c3c" }}>
+                          *
+                        </span>
+                      </label>
+                      <button
+                        id="registration-region"
+                        type="button"
+                        onClick={() => setCityPickerOpen(true)}
+                        style={{
+                          width: "100%",
+                          minHeight: 58,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                          padding: "10px 14px",
+                          background: "#f8f9fa",
+                          border: "1.5px solid #e8edf0",
+                          borderRadius: 12,
+                          color: "#0B1E3D",
+                          fontFamily: "inherit",
+                          fontSize: 15,
+                          textAlign: "left",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <span aria-hidden="true" style={{ fontSize: 22 }}>
+                          {REGIONS[region].countryCode === "EG"
+                            ? "🇪🇬"
+                            : REGIONS[region].countryCode === "SA"
+                              ? "🇸🇦"
+                              : "🇦🇪"}
+                        </span>
+                        <span style={{ flex: 1 }}>
+                          <strong style={{ display: "block" }}>
+                            {regionCityName(region)}
+                          </strong>
+                          <span style={{ color: "#5A6A7A", fontSize: 12 }}>
+                            {regionLabel(region)}
+                          </span>
+                        </span>
+                        <span
+                          style={{
+                            color: "#00C2A8",
+                            fontWeight: 700,
+                            fontSize: 13,
+                          }}
+                        >
+                          {t("auth.change_city")}
+                        </span>
+                      </button>
                     </div>
                   )}
 
@@ -967,6 +1159,10 @@ function LoginForm() {
                             }}
                           >
                             {t("security_question.title")}
+                            <InfoHint
+                              label={t("security_question.info_label")}
+                              text={t("security_question.info_text")}
+                            />
                           </label>
                           <select
                             id="sec-question"
@@ -1069,6 +1265,10 @@ function LoginForm() {
                           <span style={{ fontWeight: 400, color: "#5A6A7A" }}>
                             {t("auth.email_optional")}
                           </span>
+                          <InfoHint
+                            label={t("auth.referral_code_info_label")}
+                            text={t("auth.referral_code_info_text")}
+                          />
                         </label>
                         {referralCodeFromUrl ? (
                           <span
@@ -1230,6 +1430,140 @@ function LoginForm() {
           </button>
         </p>
       </div>
+
+      {cityPickerOpen && mode === "register" && (
+        <div
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setCityPickerOpen(false);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            background: "rgba(11,30,61,0.45)",
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="city-picker-title"
+            style={{
+              width: "min(100%, 560px)",
+              maxHeight: "min(760px, 90vh)",
+              overflowY: "auto",
+              background: "#ffffff",
+              borderRadius: 20,
+              padding: 28,
+              boxShadow: "0 18px 60px rgba(11,30,61,0.22)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 16,
+              }}
+            >
+              <div>
+                <h2
+                  id="city-picker-title"
+                  style={{ margin: 0, color: "#0B1E3D", fontSize: 27 }}
+                >
+                  {t("auth.choose_city")}
+                </h2>
+                <p
+                  style={{
+                    margin: "8px 0 22px",
+                    color: "#5A6A7A",
+                    fontSize: 14,
+                  }}
+                >
+                  {t("auth.city_region_hint")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCityPickerOpen(false)}
+                aria-label={t("auth.close_city_picker")}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  fontSize: 28,
+                  lineHeight: 1,
+                  cursor: "pointer",
+                  color: "#0B1E3D",
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ display: "grid", gap: 10 }}>
+              {REGION_LIST.map((option) => {
+                const city = regionCityName(option.code);
+                const selected = option.code === region;
+                return (
+                  <button
+                    key={option.code}
+                    type="button"
+                    onClick={() => {
+                      setRegion(option.code);
+                      setCityPickerOpen(false);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      width: "100%",
+                      padding: "14px 16px",
+                      borderRadius: 12,
+                      border: `1.5px solid ${selected ? "#00C2A8" : "#e8edf0"}`,
+                      background: selected ? "rgba(0,194,168,0.08)" : "#ffffff",
+                      color: "#0B1E3D",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    <span aria-hidden="true" style={{ fontSize: 24 }}>
+                      {option.countryCode === "EG"
+                        ? "🇪🇬"
+                        : option.countryCode === "SA"
+                          ? "🇸🇦"
+                          : "🇦🇪"}
+                    </span>
+                    <span style={{ flex: 1 }}>
+                      <strong style={{ display: "block", fontSize: 16 }}>
+                        {city}
+                      </strong>
+                      <span
+                        style={{
+                          display: "block",
+                          marginTop: 3,
+                          color: "#5A6A7A",
+                          fontSize: 12,
+                        }}
+                      >
+                        {regionLabel(option.code)}
+                      </span>
+                    </span>
+                    {selected && (
+                      <span style={{ color: "#00C2A8", fontWeight: 800 }}>
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

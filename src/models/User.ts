@@ -40,6 +40,7 @@ const UserSchema = new Schema(
       match: /^\+20\d{10}$/,
     },
     phoneVerifiedAt: { type: Date, default: null },
+    gender: { type: String, default: null, enum: ["male", "female", null] },
     passwordHash: { type: String, required: true, select: false },
     resetPassword: { type: Boolean, required: true, default: false },
     // Security-question verification (used when AdminSettings.verificationMethod
@@ -63,7 +64,7 @@ const UserSchema = new Schema(
     region: {
       type: String,
       default: null,
-      enum: ["EG", "KSA", null],
+      enum: ["EG", "KSA", "AE-ABU-DHABI", null],
       index: true,
     },
     defaultRegionCode: {
@@ -96,7 +97,7 @@ if (existingUserModel) {
       region: {
         type: String,
         default: null,
-        enum: ["EG", "KSA", null],
+        enum: ["EG", "KSA", "AE-ABU-DHABI", null],
         index: true,
       },
     });
@@ -128,6 +129,11 @@ if (existingUserModel) {
   if (!existingUserModel.schema.path("phoneVerifiedAt")) {
     existingUserModel.schema.add({
       phoneVerifiedAt: { type: Date, default: null },
+    });
+  }
+  if (!existingUserModel.schema.path("gender")) {
+    existingUserModel.schema.add({
+      gender: { type: String, default: null, enum: ["male", "female", null] },
     });
   }
   if (!existingUserModel.schema.path("resetPassword")) {
