@@ -24,7 +24,11 @@ import {
   isPlausibleSecurityAnswer,
 } from "@/lib/auth/securityQuestion";
 import { isValidSecurityQuestionId } from "@/lib/config/verification";
-import { DEFAULT_REGION } from "@/lib/config/regions";
+import {
+  DEFAULT_REGION,
+  isRegionCode,
+  type RegionCode,
+} from "@/lib/config/regions";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -39,6 +43,7 @@ export async function POST(req: NextRequest) {
       referralCodeUsed,
       securityQuestionId,
       securityAnswer,
+      regionCode,
     } = await req.json();
     const safeName = normalizePlainText(name, { maxLength: 100 });
 
@@ -76,6 +81,9 @@ export async function POST(req: NextRequest) {
         { error: "Gender is required." },
         { status: 400 },
       );
+    const selectedRegion: RegionCode = isRegionCode(regionCode)
+      ? regionCode
+      : DEFAULT_REGION;
 
     console.log(
       "Phase 1: Input validation passed. Proceeding to database operations.",
@@ -146,8 +154,14 @@ export async function POST(req: NextRequest) {
       passwordHash,
       email: normalizedEmail,
       role: "driver",
-      defaultRegionCode: DEFAULT_REGION,
-      allowedRegionCodes: [DEFAULT_REGION],
+      region:
+        selectedRegion === "SA"
+          ? "KSA"
+          : selectedRegion === "EG-CAIRO"
+            ? "EG"
+            : selectedRegion,
+      defaultRegionCode: selectedRegion,
+      allowedRegionCodes: [selectedRegion],
       referralCode,
       ...(normalizedQuestionId && { securityQuestionId: normalizedQuestionId }),
       ...(securityAnswerHash && { securityAnswerHash }),

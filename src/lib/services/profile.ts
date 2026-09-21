@@ -19,6 +19,7 @@ interface ProfileUser {
   hasSecurityQuestion: boolean;
   region: RegionCode | null;
   savedAddresses: SavedAddress[];
+  gender: "male" | "female" | null;
 }
 
 export interface PassengerProfile extends ProfileUser {
@@ -57,7 +58,7 @@ export async function getProfile(
 
   const user = await User.findById(userId)
     .select(
-      "userNumber name email phone phoneVerifiedAt securityQuestionId +securityAnswerHash profilePic region savedAddresses",
+      "userNumber name email phone phoneVerifiedAt securityQuestionId +securityAnswerHash profilePic region gender savedAddresses",
     )
     .lean<{
       userNumber: number;
@@ -70,6 +71,7 @@ export async function getProfile(
       profilePic?: string | null;
       region?: string;
       savedAddresses?: SavedAddress[];
+      gender?: "male" | "female" | null;
     }>();
   if (!user) return null;
 
@@ -86,6 +88,7 @@ export async function getProfile(
     ),
     region: isRegionKey(user.region) ? normalizeRegion(user.region) : null,
     savedAddresses: serializeAddresses(user.savedAddresses),
+    gender: user.gender ?? null,
   };
   if (role !== "driver")
     return {

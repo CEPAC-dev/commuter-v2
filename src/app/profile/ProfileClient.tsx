@@ -26,6 +26,7 @@ interface Props {
   initialPhoneVerified: boolean;
   initialHasSecurityQuestion: boolean;
   initialRegion: RegionCode | null;
+  initialGender: "male" | "female" | null;
   initialProfilePic?: string | null;
   initialSavedAddresses: SavedAddress[];
 }
@@ -38,6 +39,7 @@ export default function ProfileClient({
   initialPhoneVerified,
   initialHasSecurityQuestion,
   initialRegion,
+  initialGender,
   initialProfilePic,
   initialSavedAddresses,
 }: Props) {
@@ -47,6 +49,9 @@ export default function ProfileClient({
   const [phone, setPhone] = useState(initialPhone);
   const [region, setRegion] = useState<RegionCode>(
     initialRegion ?? DEFAULT_REGION,
+  );
+  const [gender, setGender] = useState<"male" | "female" | "">(
+    initialGender ?? "",
   );
   const [detectingRegion, setDetectingRegion] = useState(false);
   const [profilePic, setProfilePic] = useState(initialProfilePic ?? null);
@@ -148,6 +153,7 @@ export default function ProfileClient({
           name: name.trim(),
           phone: phone.trim(),
           region,
+          gender: gender || undefined,
         }),
       });
       const data = await res.json();
@@ -547,6 +553,44 @@ export default function ProfileClient({
                     }}
                   />
                 </div>
+              </div>
+
+              {/* Gender */}
+              <div>
+                <label
+                  htmlFor="p-gender"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#0B1E3D",
+                    display: "block",
+                    marginBottom: 6,
+                  }}
+                >
+                  {t("profile.gender")}
+                </label>
+                <select
+                  id="p-gender"
+                  value={gender}
+                  onChange={(event) =>
+                    setGender(event.target.value as "male" | "female" | "")
+                  }
+                  style={{
+                    width: "100%",
+                    height: 48,
+                    padding: "0 14px",
+                    border: "1.5px solid #d0d8e0",
+                    borderRadius: 10,
+                    fontSize: 15,
+                    color: "#0B1E3D",
+                    fontFamily: "inherit",
+                    background: "#fff",
+                  }}
+                >
+                  <option value="">{t("profile.gender")}</option>
+                  <option value="male">{t("gender.male")}</option>
+                  <option value="female">{t("gender.female")}</option>
+                </select>
               </div>
 
               {/* Region */}

@@ -15,6 +15,7 @@ import {
   ListChecks,
   MapPinned,
   Menu,
+  Bell,
   Route,
   Settings,
   SlidersHorizontal,
@@ -38,9 +39,20 @@ interface AdminShellProps {
 
 const sections = [
   { href: "/admin/dashboard", label: "Dashboard", icon: Gauge, statKey: null },
+  {
+    href: "/admin/notifications",
+    label: "Notification center",
+    icon: Bell,
+    statKey: null,
+  },
   { href: "/admin/users", label: "Users", icon: Users, statKey: "users" },
   { href: "/admin/trips", label: "Trips", icon: Route, statKey: "trips" },
-  { href: "/admin/stations", label: "Stations", icon: MapPinned, statKey: null },
+  {
+    href: "/admin/stations",
+    label: "Stations",
+    icon: MapPinned,
+    statKey: null,
+  },
   { href: "/admin/rides", label: "Rides", icon: Car, statKey: "rides" },
   { href: "/admin/vehicles", label: "Vehicles", icon: CarFront, statKey: null },
   {
@@ -93,10 +105,12 @@ const COLLAPSE_STORAGE_KEY = "admin-sidebar-collapsed";
 
 function currentTitle(pathname: string) {
   const normalizedPath = pathname.replace(/^\/(eg|sa|ae)(?=\/admin)/, "");
-  if (normalizedPath.startsWith("/admin/transactions/")) return "Transaction details";
+  if (normalizedPath.startsWith("/admin/transactions/"))
+    return "Transaction details";
   return (
     sections.find(
-      ({ href }) => normalizedPath === href || normalizedPath.startsWith(`${href}/`),
+      ({ href }) =>
+        normalizedPath === href || normalizedPath.startsWith(`${href}/`),
     )?.label ?? "Admin"
   );
 }
@@ -200,10 +214,14 @@ export default function AdminShell({
         <nav className="admin-sidebar-nav" aria-label="Admin sections">
           {sections.map(({ href, label, icon: Icon, statKey }) => {
             const destination = sidebarHref(href);
-            const normalizedPath = pathname.replace(/^\/(eg|sa|ae)(?=\/admin)/, "");
+            const normalizedPath = pathname.replace(
+              /^\/(eg|sa|ae)(?=\/admin)/,
+              "",
+            );
             const active =
               normalizedPath === href ||
-              (href !== "/admin/dashboard" && normalizedPath.startsWith(`${href}/`));
+              (href !== "/admin/dashboard" &&
+                normalizedPath.startsWith(`${href}/`));
             const count = statKey ? stats?.[statKey] : undefined;
             return (
               <Link

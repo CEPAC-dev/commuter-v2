@@ -7,7 +7,12 @@ import { Notification } from "@/models/Notification";
 import AppHeader from "@/components/layout/AppHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import { getServerLocale } from "@/lib/i18n/server";
-import { intlLocale, localeDirection, translate, type Locale } from "@/lib/i18n";
+import {
+  intlLocale,
+  localeDirection,
+  translate,
+  type Locale,
+} from "@/lib/i18n";
 
 export const metadata = { title: "Notifications — Commuter" };
 export const dynamic = "force-dynamic";
@@ -201,6 +206,23 @@ export default async function NotificationsPage() {
                       >
                         {formatTime(String(item.createdAt), locale)}
                       </div>
+                      {typeof item.data?.linkUrl === "string" &&
+                        typeof item.data?.linkLabel === "string" && (
+                          <a
+                            href={item.data.linkUrl}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              marginTop: 10,
+                              color: "#00806E",
+                              fontSize: 12,
+                              fontWeight: 800,
+                              textDecoration: "none",
+                            }}
+                          >
+                            {item.data.linkLabel}
+                          </a>
+                        )}
                     </div>
                   </div>
                   {!item.isRead ? (

@@ -25,8 +25,7 @@ export default async function Home({
   const referralRoleValue = Array.isArray(params.refRole)
     ? params.refRole[0]
     : params.refRole;
-  const referralRole =
-    referralRoleValue === "driver" ? "driver" : "passenger";
+  const referralRole = referralRoleValue === "driver" ? "driver" : "passenger";
 
   if (!session && referralCode?.trim()) {
     const loginParams = new URLSearchParams({
@@ -47,7 +46,7 @@ export default async function Home({
             "@type": "Organization",
             name: "Commuter",
             url: siteUrl,
-            logo: `${siteUrl}/assets/images/commuterLogo3.png`,
+            logo: `${siteUrl}/assets/images/commuterLogo.png`,
             description:
               "Affordable private and shared ride booking across Greater Cairo, Egypt.",
             areaServed: {

@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/validation";
 import { useClientLocale } from "@/lib/i18n/client";
 import { useVerificationConfig } from "@/lib/auth/useVerificationConfig";
+import type { RegionCode } from "@/lib/config/regions";
 
 const labelStyle: React.CSSProperties = {
   fontSize: 13,
@@ -49,6 +50,7 @@ interface Props {
   gender: "male" | "female" | "";
   setGender: (v: "male" | "female" | "") => void;
   referralCode: string;
+  region?: RegionCode;
   onSuccess: () => void;
 }
 
@@ -66,6 +68,7 @@ export default function DriverRegisterForm({
   gender,
   setGender,
   referralCode,
+  region = "EG-CAIRO",
   onSuccess,
 }: Props) {
   const { t, locale } = useClientLocale();
@@ -113,6 +116,7 @@ export default function DriverRegisterForm({
           email,
           gender,
           referralCodeUsed: referralCode || undefined,
+          regionCode: region,
           ...(verificationMethod === "security_question" && {
             securityQuestionId,
             securityAnswer: securityAnswer.trim(),

@@ -282,7 +282,8 @@ export const ar: Record<MessageKey, string> = {
   "availability.bulk_delete_confirm": "حذف {count} من مواعيد التوافر المحددة؟",
   "availability.error.origin_required": "اختر موقع البداية.",
   "availability.error.destination_required": "اختر وجهتك.",
-  "availability.error.days_required": "اختر يومًا واحدًا على الأقل لساعات عملك.",
+  "availability.error.days_required":
+    "اختر يومًا واحدًا على الأقل لساعات عملك.",
   "availability.error.overlap":
     "يتداخل مع توافر آخر يوم {day} من {start} إلى {end}.",
   "availability.error.save_failed": "تعذر حفظ الموعد.",
@@ -755,7 +756,20 @@ export const ar: Record<MessageKey, string> = {
   "auth.email": "عنوان البريد الإلكتروني",
   "auth.email_optional": "(اختياري)",
   "auth.email_placeholder": "you@example.com",
+  "auth.city": "المدينة",
+  "auth.change_city": "تغيير المدينة",
+  "auth.choose_city": "اختر مدينتك",
+  "auth.city_region_hint": "سنستخدم هذه المنطقة لحسابك والرحلات المتاحة.",
+  "auth.close_city_picker": "إغلاق اختيار المدينة",
+  "regions.cairo": "القاهرة",
+  "regions.saudi_arabia": "السعودية",
+  "regions.abu_dhabi": "أبوظبي",
+  "regions.egypt_greater_cairo": "مصر - القاهرة الكبرى",
+  "regions.uae_abu_dhabi": "الإمارات - أبوظبي",
   "auth.referral_code": "كود الدعوة",
+  "auth.referral_code_info_label": "معلومات عن كود الدعوة",
+  "auth.referral_code_info_text":
+    "يربط كود الدعوة حسابك بالشخص الذي دعاك، وقد يتيح لكما مكافآت أو مزايا الإحالة.",
   "auth.dont_have_account": "ليس لديك حساب؟",
   "auth.already_have_account": "هل لديك حساب بالفعل؟",
   "auth.log_in_button": "تسجيل الدخول",
@@ -857,6 +871,9 @@ export const ar: Record<MessageKey, string> = {
   "phone_verification.verify_button": "توثيق الهاتف",
   "phone_verification.verified_notice": "تم توثيق رقم هاتفك.",
   "security_question.title": "سؤال الأمان",
+  "security_question.info_label": "معلومات عن سؤال الأمان",
+  "security_question.info_text":
+    "يساعد سؤال الأمان في التحقق من هويتك إذا احتجت إلى استعادة كلمة المرور أو تغييرها.",
   "security_question.setup_status_done": "تم الإعداد",
   "security_question.setup_hint":
     "أعِد إعداد هذا لاستعادة كلمة المرور أو تغييرها.",

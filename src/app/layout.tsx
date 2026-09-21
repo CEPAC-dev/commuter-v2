@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     url: "/",
     images: [
       {
-        url: "/assets/images/commuterLogo3.png",
+        url: "/assets/images/commuterLogo.png",
         alt: "Commuter ride booking",
       },
     ],
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     title: "Commuter | Book rides across Greater Cairo",
     description:
       "Book affordable private and shared rides across Greater Cairo, Egypt.",
-    images: ["/assets/images/commuterLogo3.png"],
+    images: ["/assets/images/commuterLogo.png"],
   },
   robots: { index: true, follow: true },
 };

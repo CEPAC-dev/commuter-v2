@@ -20,28 +20,30 @@ export default async function RegionalAdminLayout({
   if (session.role !== "admin") redirect("/");
 
   const { region: requestedRegion } = await params;
+  let activeRegion;
   try {
-    const activeRegion = await resolveActiveRegion({
+    activeRegion = await resolveActiveRegion({
       userId: session.userId,
       requested: requestedRegion,
     });
-    const allowedRegions = activeRegion.allowedRegionCodes.map(
-      (code: RegionCode) => ({
-        code,
-        slug: REGIONS[code].urlSlug,
-        label: REGIONS[code].label,
-      }),
-    );
-    return (
-      <AdminShell
-        activeRegionSlug={activeRegion.config.urlSlug}
-        allowedRegions={allowedRegions}
-      >
-        {children}
-      </AdminShell>
-    );
   } catch (error) {
     if (error instanceof RegionAccessError) notFound();
     throw error;
   }
+
+  const allowedRegions = activeRegion.allowedRegionCodes.map(
+    (code: RegionCode) => ({
+      code,
+      slug: REGIONS[code].urlSlug,
+      label: REGIONS[code].label,
+    }),
+  );
+  return (
+    <AdminShell
+      activeRegionSlug={activeRegion.config.urlSlug}
+      allowedRegions={allowedRegions}
+    >
+      {children}
+    </AdminShell>
+  );
 }

@@ -174,7 +174,7 @@ export default function AppHeader({
             }}
           >
             <Image
-              src="/assets/images/commuterLogo3.png"
+              src="/assets/images/commuterLogo.png"
               alt="Commuter logo"
               width={32}
               height={32}
