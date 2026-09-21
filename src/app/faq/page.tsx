@@ -3,6 +3,13 @@ import Footer from "@/components/layout/Footer";
 import FAQContent from "@/components/faq/FAQContent";
 import { getSession } from "@/lib/auth/session";
 
+export const metadata = {
+  title: "Frequently asked questions",
+  description:
+    "Find answers about booking private and shared Commuter rides across Greater Cairo.",
+  alternates: { canonical: "/faq" },
+};
+
 export default async function FAQPage() {
   const session = await getSession();
 

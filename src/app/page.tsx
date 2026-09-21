@@ -7,6 +7,8 @@ import CTA from "@/components/landing/CTA";
 import Footer from "@/components/layout/Footer";
 import { getSession } from "@/lib/auth/session";
 
+const siteUrl = process.env.APP_URL ?? "http://localhost:3000";
+
 export default async function Home({
   searchParams,
 }: {
@@ -37,6 +39,25 @@ export default async function Home({
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            name: "Commuter",
+            url: siteUrl,
+            logo: `${siteUrl}/assets/images/commuterLogo3.png`,
+            description:
+              "Affordable private and shared ride booking across Greater Cairo, Egypt.",
+            areaServed: {
+              "@type": "City",
+              name: "Cairo",
+              containedInPlace: { "@type": "Country", name: "Egypt" },
+            },
+          }),
+        }}
+      />
       <AppHeader authed={!!session} email={session?.email} variant="landing" />
       <main>
         <Hero
