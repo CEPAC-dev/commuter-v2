@@ -10,7 +10,6 @@ const AdminReferralCampaignSchema = new Schema(
       required: true,
       enum: ADMIN_REFERRAL_ROLES,
       unique: true,
-      index: true,
     },
     token: { type: String, required: true, unique: true, index: true },
     rewardAmount: { type: Number, required: true, min: 0.01, max: 1000000000 },

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
-import {
-  DEFAULT_NOTIFICATION_TEMPLATES,
-  NotificationTemplate,
-} from "@/models/NotificationTemplate";
+import { NotificationTemplate } from "@/models/NotificationTemplate";
+import { ensureDefaultNotificationTemplates } from "@/lib/notifications/ensureDefaultTemplates";
 
 function serialize(item: Record<string, unknown>) {
   return {
@@ -22,48 +20,11 @@ function serialize(item: Record<string, unknown>) {
   };
 }
 
-async function ensureDefaults(userId: string) {
-  await Promise.all(
-    DEFAULT_NOTIFICATION_TEMPLATES.map((template) =>
-      NotificationTemplate.updateOne(
-        {
-          createdBy: userId,
-          name: template.name,
-          $or: [
-            { titleAr: { $exists: false } },
-            { titleAr: "" },
-            { messageAr: { $exists: false } },
-            { messageAr: "" },
-          ],
-        },
-        {
-          $set: {
-            titleAr: template.titleAr,
-            messageAr: template.messageAr,
-            linkLabelAr: template.linkLabelAr,
-          },
-          $setOnInsert: {
-            name: template.name,
-            title: template.title,
-            message: template.message,
-            icon: template.icon,
-            style: template.style,
-            linkUrl: template.linkUrl,
-            linkLabel: template.linkLabel,
-            createdBy: userId,
-          },
-        },
-        { upsert: true },
-      ),
-    ),
-  );
-}
-
 export async function GET() {
   const auth = await adminAuth();
   if (!auth.authorized) return auth.response;
   await connectDB();
-  await ensureDefaults(auth.userId);
+  await ensureDefaultNotificationTemplates(auth.userId);
   const templates = await NotificationTemplate.find({ createdBy: auth.userId })
     .sort({ createdAt: 1 })
     .lean();

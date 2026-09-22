@@ -505,7 +505,7 @@ export default function AppHeader({
       )}
 
       <style>{`
-        @media (max-width: 767px) {
+        @media (max-width: 1023px) {
           .appheader-desktop { display: none !important; }
           .appheader-mobile-toggle { display: flex !important; }
           .appheader-actions { min-width: 0 !important; }
