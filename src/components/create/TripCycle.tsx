@@ -8,6 +8,7 @@ import {
   Navigation,
   Info,
   RotateCcw,
+  ChevronDown,
 } from "lucide-react";
 import { useClientLocale } from "@/lib/locale.client";
 import {
@@ -133,6 +134,12 @@ interface Props {
   vehicleList?: VehicleConfig[]; // DB-hydrated vehicle list for the select options
   disabledVehicleKeys?: VehicleKey[];
   onStopErrorChange?: (error: string | null) => void;
+  stage?: "vehicle" | "locations" | "timing" | "passengers";
+  showHeader?: boolean;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+  beforeFields?: React.ReactNode;
+  afterFields?: React.ReactNode;
 }
 
 function pickBtnStyle(active: boolean): React.CSSProperties {
@@ -431,6 +438,12 @@ export default function TripCycle({
   vehicleList,
   disabledVehicleKeys = [],
   onStopErrorChange,
+  stage = "locations",
+  showHeader = true,
+  collapsed = false,
+  onToggleCollapsed,
+  beforeFields,
+  afterFields,
 }: Props) {
   const [routeLoading, setRouteLoading] = useState(false);
   const [stopError, setStopError] = useState("");
@@ -515,6 +528,42 @@ export default function TripCycle({
   useEffect(() => {
     if (!isSharedVehicle(data.vehicleType)) return;
     if (!data.pickup || !data.dropoff) {
+      // Show station choices as soon as either endpoint is chosen. Routing still
+      // waits for both endpoints, exactly as before.
+      const pickupStationOptions = data.pickup
+        ? findNearestStations(
+            data.pickup.lat,
+            data.pickup.lng,
+            stations,
+            data.vehicleType,
+          )
+        : [];
+      const dropoffStationOptions = data.dropoff
+        ? findNearestStations(
+            data.dropoff.lat,
+            data.dropoff.lng,
+            stations,
+            data.vehicleType,
+          )
+        : [];
+      const toStation = pickupStationOptions.find(
+        (option) => option.id === data.pickupStation?.id,
+      ) ?? pickupStationOptions[0];
+      const fromStation = dropoffStationOptions.find(
+        (option) => option.id === data.dropoffStation?.id,
+      ) ?? dropoffStationOptions[0];
+      const stationValue = (option: StationOption | undefined) =>
+        option
+          ? {
+              id: option.id,
+              regionCode: option.regionCode,
+              lat: option.lat,
+              lng: option.lng,
+              name: option.name,
+              direction: option.direction,
+              stationType: option.stationType,
+            }
+          : null;
       onChange({
         ...data,
         distanceKm: null,
@@ -523,12 +572,12 @@ export default function TripCycle({
         pickupTime: "",
         routeCoordinates: null,
         routeLegs: [],
-        pickupStation: null,
-        dropoffStation: null,
-        pickupStationOptions: [],
-        dropoffStationOptions: [],
-        walkingMinToStation: null,
-        walkingMinFromStation: null,
+        pickupStation: stationValue(toStation),
+        dropoffStation: stationValue(fromStation),
+        pickupStationOptions,
+        dropoffStationOptions,
+        walkingMinToStation: toStation?.walkingMin ?? null,
+        walkingMinFromStation: fromStation?.walkingMin ?? null,
         baseDistanceKm: null,
         passengerDetourKm: null,
       });
@@ -1143,7 +1192,7 @@ export default function TripCycle({
       }}
     >
       {/* Card header */}
-      <div
+      {showHeader && <div
         style={{
           display: "flex",
           alignItems: "center",
@@ -1248,19 +1297,66 @@ export default function TripCycle({
             <X size={14} /> {t("create.remove_trip")}
           </button>
         )}
-      </div>
+        {onToggleCollapsed && (
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-label={(collapsed
+              ? t("create.expand_trip_aria")
+              : t("create.collapse_trip_aria")
+            ).replace("{n}", String(index + 1))}
+            style={{
+              minHeight: 36,
+              padding: "6px 8px",
+              border: "none",
+              borderRadius: 5,
+              background: "transparent",
+              color: "#0B1E3D",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: "inherit",
+            }}
+          >
+            <span
+              className="create-trip-collapse-icon"
+              style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+            >
+              <ChevronDown size={16} />
+            </span>
+            {collapsed ? t("create.expand") : t("create.collapse")}
+          </button>
+        )}
+      </div>}
 
       {/* Form fields */}
       <div
         style={{
+          display: "grid",
+          gridTemplateRows: collapsed ? "0fr" : "1fr",
+          transition: "grid-template-rows 240ms ease, opacity 180ms ease",
+          opacity: collapsed ? 0 : 1,
+          pointerEvents: collapsed ? "none" : "auto",
+        }}
+        aria-hidden={collapsed}
+        inert={collapsed}
+      >
+        <div style={{ minHeight: 0, overflow: "hidden" }}>
+          <div
+            style={{
           padding: "18px 18px 20px",
           display: "flex",
           flexDirection: "column",
           gap: 14,
-        }}
-      >
+            }}
+          >
+        {beforeFields}
         {/* Vehicle type */}
-        <div style={floatingFieldStyle}>
+        <div style={floatingFieldStyle} hidden={stage !== "vehicle"}>
           <label htmlFor={`vehicle-${data.id}`} style={floatingLabelStyle}>
             {t("create.vehicle_type")} *
           </label>
@@ -1377,8 +1473,9 @@ export default function TripCycle({
 
         {/* Everything below is exclusive to shared rides for now — private ride
             form structure lands in a follow-up phase. */}
-        {isSharedVehicle(data.vehicleType) && (
+        {isSharedVehicle(data.vehicleType) && stage !== "vehicle" && (
           <>
+            <div hidden={stage !== "locations"} style={{ display: "contents" }}>
             {/* Pickup */}
             <div>
               <AddressInput
@@ -1610,6 +1707,9 @@ export default function TripCycle({
               </div>
             )}
 
+            </div>
+
+            <div hidden={stage !== "timing"} style={{ display: "contents" }}>
             {/* Arrival time */}
             <div style={floatingFieldStyle}>
               <label htmlFor={`arrival-${data.id}`} style={floatingLabelStyle}>
@@ -1842,6 +1942,9 @@ export default function TripCycle({
                 )} */}
             </div>
 
+            </div>
+
+            <div hidden={stage !== "passengers"} style={{ display: "contents" }}>
             {/* Extra passengers */}
             <div>
               <label style={labelStyle}>{t("create.extra_passengers")}</label>
@@ -2095,11 +2198,13 @@ export default function TripCycle({
                 </div>
               )}
             </div>
+            </div>
           </>
         )}
 
-        {isPrivate && (
+        {isPrivate && stage !== "vehicle" && (
           <>
+            <div hidden={stage !== "locations"} style={{ display: "contents" }}>
             <div>
               <AddressInput
                 id={`pickup-${data.id}`}
@@ -2372,6 +2477,9 @@ export default function TripCycle({
               </div>
             )}
 
+            </div>
+
+            <div hidden={stage !== "timing"} style={{ display: "contents" }}>
             <div style={floatingFieldStyle}>
               <label
                 htmlFor={`pickup-time-${data.id}`}
@@ -2438,6 +2546,9 @@ export default function TripCycle({
               )}
             </div>
 
+            </div>
+
+            <div hidden={stage !== "passengers"} style={{ display: "contents" }}>
             <div>
               <label style={labelStyle}>
                 {t("create.number_of_passengers")}
@@ -2497,8 +2608,12 @@ export default function TripCycle({
                 </span>
               </div>
             </div>
+            </div>
           </>
         )}
+        {afterFields}
+          </div>
+        </div>
       </div>
     </div>
   );
