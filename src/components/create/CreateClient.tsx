@@ -1391,7 +1391,14 @@ export default function CreateClient({
             </div>
 
             {/* Scrollable middle */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px" }}>
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: "auto",
+                padding: "16px 24px",
+              }}
+            >
               <p style={{ fontSize: 13, color: "#5A6A7A", margin: "0 0 16px" }}>
                 {selectedDates.length > 1
                   ? t("create.dates_label")

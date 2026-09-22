@@ -374,7 +374,7 @@ export default function Hero({
       </div>
 
       <style>{`
-        @media (max-width: 767px) {
+        @media (max-width: 1023px) {
           .hero-grid {
             grid-template-columns: 1fr !important;
             gap: 36px !important;
