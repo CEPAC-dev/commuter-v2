@@ -157,7 +157,7 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
             border: "1px solid var(--color-border)",
             boxShadow: "0 8px 24px var(--color-shadow)",
             padding: 16,
-            width: 300,
+            width: "min(300px, calc(100vw - 32px))",
           }}
         >
           <div

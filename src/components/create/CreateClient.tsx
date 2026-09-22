@@ -1147,7 +1147,14 @@ export default function CreateClient({
             </div>
 
             {/* Scrollable middle */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px" }}>
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: "auto",
+                padding: "16px 24px",
+              }}
+            >
               <p style={{ fontSize: 13, color: "#5A6A7A", margin: "0 0 16px" }}>
                 {selectedDates.length > 1
                   ? t("create.dates_label")
@@ -2189,6 +2196,17 @@ export default function CreateClient({
 
       <style>{`
         .email-desktop { display: block; }
+        @media (min-width: 768px) and (max-width: 1023px) {
+          .create-left {
+            width: min(520px, 44vw) !important;
+            margin-left: 20px !important;
+            margin-top: 20px !important;
+            margin-bottom: 20px !important;
+          }
+          .create-right {
+            margin: 20px !important;
+          }
+        }
         @media (max-width: 767px) {
           .create-layout {
             position: relative !important;
