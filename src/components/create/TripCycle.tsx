@@ -1343,7 +1343,7 @@ export default function TripCycle({
           pointerEvents: collapsed ? "none" : "auto",
         }}
         aria-hidden={collapsed}
-        inert={collapsed ? "" : undefined}
+        inert={collapsed}
       >
         <div style={{ minHeight: 0, overflow: "hidden" }}>
           <div
