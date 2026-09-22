@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Types } from "mongoose";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import {
@@ -10,6 +9,7 @@ import {
 import { AdminReferralUsage } from "@/models/AdminReferralUsage";
 import { AdminReferralAuditLog } from "@/models/AdminReferralAuditLog";
 import { User } from "@/models/User";
+import { generateAdminReferralToken } from "@/lib/referral";
 
 function parseRole(value: unknown): AdminReferralRole | null {
   return ADMIN_REFERRAL_ROLES.includes(value as AdminReferralRole)
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
       if (existing) return existing.toObject();
       return AdminReferralCampaign.create({
         role,
-        token: `ADMIN-${role.toUpperCase()}-${new Types.ObjectId().toString().slice(-10).toUpperCase()}`,
+        token: generateAdminReferralToken(),
         rewardAmount: 100,
         maxUses: 5,
         usedCount: 0,

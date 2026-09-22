@@ -19,10 +19,10 @@ import { AdminReferralAuditLog } from "@/models/AdminReferralAuditLog";
 const REFERRAL_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_CODE_ATTEMPTS = 10;
 
-function generateAdminReferralToken(role: AdminReferralRole): string {
-  const bytes = randomBytes(8);
+export function generateAdminReferralToken(): string {
+  const bytes = randomBytes(6);
   const suffix = Array.from(bytes, (byte) => REFERRAL_ALPHABET[byte % REFERRAL_ALPHABET.length]).join("");
-  return `ADMIN-${role.toUpperCase()}-${suffix}`;
+  return `INVITATION-${suffix}`;
 }
 
 export async function getOrCreateAdminReferralCampaign(
@@ -34,7 +34,7 @@ export async function getOrCreateAdminReferralCampaign(
   if (existing) return existing;
   return AdminReferralCampaign.create({
     role,
-    token: generateAdminReferralToken(role),
+    token: generateAdminReferralToken(),
     rewardAmount: 100,
     maxUses: 5,
     isActive: false,

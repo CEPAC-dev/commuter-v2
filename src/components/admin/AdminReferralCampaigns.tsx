@@ -5,6 +5,7 @@ import { Copy, Download, Infinity, Loader2, Save } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 
 type Role = "passenger" | "driver";
+const QR_RENDER_SIZE = 384;
 type Campaign = {
   id: string;
   role: Role;
@@ -75,7 +76,8 @@ export default function AdminReferralCampaigns({ selectedRole }: { selectedRole?
     setMessage("Referral link copied.");
   }
 
-  function downloadQr(campaign: Campaign) {
+  async function downloadQr(campaign: Campaign) {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const canvas = qrRefs.current[campaign.role];
     if (!canvas) return;
     const link = document.createElement("a");
@@ -151,7 +153,17 @@ function CampaignCard({
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 160px", gap: 16, alignItems: "center" }}>
         <input readOnly value={campaign.shareUrl} onFocus={(event) => event.currentTarget.select()} style={{ ...inputStyle, direction: "ltr", fontSize: 12 }} />
         <div style={{ display: "flex", justifyContent: "center", padding: 10, background: "rgba(0,194,168,0.08)", borderRadius: 12 }}>
-          <QRCodeCanvas value={campaign.shareUrl} size={128} bgColor="#fff" fgColor="#00877A" level="Q" ref={qrRef} />
+          <QRCodeCanvas
+            key={campaign.shareUrl}
+            value={campaign.shareUrl}
+            size={QR_RENDER_SIZE}
+            style={{ width: 128, height: 128, display: "block" }}
+            bgColor="#FFFFFF"
+            fgColor="#00877A"
+            level="Q"
+            marginSize={4}
+            ref={qrRef}
+          />
         </div>
       </div>
 
