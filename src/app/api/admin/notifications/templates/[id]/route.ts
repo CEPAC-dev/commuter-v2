@@ -19,10 +19,13 @@ export async function PATCH(
     "name",
     "title",
     "message",
+    "titleAr",
+    "messageAr",
     "icon",
     "style",
     "linkUrl",
     "linkLabel",
+    "linkLabelAr",
   ]) {
     if (typeof body[key] === "string") update[key] = body[key].trim();
   }

@@ -11,7 +11,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const pageParam = Number.parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10);
+  const pageParam = Number.parseInt(
+    req.nextUrl.searchParams.get("page") ?? "1",
+    10,
+  );
   const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
   await connectDB();
@@ -32,6 +35,8 @@ export async function GET(req: NextRequest) {
       type: item.type,
       title: item.title,
       body: item.body,
+      titleAr: item.titleAr ?? "",
+      bodyAr: item.bodyAr ?? "",
       data: item.data ?? {},
       isRead: Boolean(item.isRead),
       readAt: item.readAt?.toISOString?.() ?? null,
