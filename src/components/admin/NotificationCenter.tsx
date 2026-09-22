@@ -28,10 +28,13 @@ interface NotificationTemplate {
   name: string;
   title: string;
   message: string;
+  titleAr: string;
+  messageAr: string;
   icon: string;
   style: string;
   linkUrl: string;
   linkLabel: string;
+  linkLabelAr: string;
 }
 
 const ICON_OPTIONS = [
@@ -81,10 +84,13 @@ export default function NotificationCenter({
   );
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [titleAr, setTitleAr] = useState("");
+  const [messageAr, setMessageAr] = useState("");
   const [icon, setIcon] = useState("bell");
   const [style, setStyle] = useState("info");
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
+  const [linkLabelAr, setLinkLabelAr] = useState("");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
   const [sending, setSending] = useState(false);
@@ -117,14 +123,23 @@ export default function NotificationCenter({
     setTemplateName(template.name);
     setTitle(template.title);
     setMessage(template.message);
+    setTitleAr(template.titleAr);
+    setMessageAr(template.messageAr);
     setIcon(template.icon);
     setStyle(template.style);
     setLinkUrl(template.linkUrl);
     setLinkLabel(template.linkLabel);
+    setLinkLabelAr(template.linkLabelAr);
   }
 
   async function saveTemplate() {
-    if (!templateName.trim() || !title.trim() || !message.trim()) {
+    if (
+      !templateName.trim() ||
+      !title.trim() ||
+      !message.trim() ||
+      !titleAr.trim() ||
+      !messageAr.trim()
+    ) {
       setFeedback({
         type: "error",
         text: "Template name, title, and message are required.",
@@ -135,10 +150,13 @@ export default function NotificationCenter({
       name: templateName,
       title,
       message,
+      titleAr,
+      messageAr,
       icon,
       style,
       linkUrl,
       linkLabel,
+      linkLabelAr,
     };
     const response = await fetch(
       templateId
@@ -223,12 +241,15 @@ export default function NotificationCenter({
         body: JSON.stringify({
           title,
           message,
+          titleAr,
+          messageAr,
           audience,
           userIds: audience === "selected" ? selectedIds : undefined,
           icon,
           style,
           linkUrl,
           linkLabel,
+          linkLabelAr,
           createdFrom: audience === "created" ? createdFrom : undefined,
           createdTo: audience === "created" ? createdTo : undefined,
         }),
@@ -399,6 +420,27 @@ export default function NotificationCenter({
                 placeholder="Write the notification message..."
               />
             </label>
+            <label className="admin-notification-label" dir="rtl">
+              العنوان بالعربية
+              <input
+                required
+                maxLength={120}
+                value={titleAr}
+                onChange={(event) => setTitleAr(event.target.value)}
+                placeholder="عنوان الإشعار"
+              />
+            </label>
+            <label className="admin-notification-label" dir="rtl">
+              الرسالة بالعربية
+              <textarea
+                required
+                maxLength={1000}
+                rows={5}
+                value={messageAr}
+                onChange={(event) => setMessageAr(event.target.value)}
+                placeholder="اكتب رسالة الإشعار بالعربية..."
+              />
+            </label>
             <div
               style={{
                 display: "grid",
@@ -459,6 +501,15 @@ export default function NotificationCenter({
                 />
               </label>
             </div>
+            <label className="admin-notification-label" dir="rtl">
+              نص الزر بالعربية
+              <input
+                maxLength={40}
+                value={linkLabelAr}
+                onChange={(event) => setLinkLabelAr(event.target.value)}
+                placeholder="عرض التفاصيل"
+              />
+            </label>
           </div>
 
           <div

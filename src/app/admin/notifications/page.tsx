@@ -18,8 +18,33 @@ async function ensureDefaultTemplates(userId: string) {
   await Promise.all(
     DEFAULT_NOTIFICATION_TEMPLATES.map((template) =>
       NotificationTemplate.updateOne(
-        { createdBy: userId, name: template.name },
-        { $setOnInsert: { ...template, createdBy: userId } },
+        {
+          createdBy: userId,
+          name: template.name,
+          $or: [
+            { titleAr: { $exists: false } },
+            { titleAr: "" },
+            { messageAr: { $exists: false } },
+            { messageAr: "" },
+          ],
+        },
+        {
+          $set: {
+            titleAr: template.titleAr,
+            messageAr: template.messageAr,
+            linkLabelAr: template.linkLabelAr,
+          },
+          $setOnInsert: {
+            name: template.name,
+            title: template.title,
+            message: template.message,
+            icon: template.icon,
+            style: template.style,
+            linkUrl: template.linkUrl,
+            linkLabel: template.linkLabel,
+            createdBy: userId,
+          },
+        },
         { upsert: true },
       ),
     ),
@@ -65,10 +90,13 @@ export default async function AdminNotificationsPage() {
           name: template.name,
           title: template.title,
           message: template.message,
+          titleAr: template.titleAr ?? "",
+          messageAr: template.messageAr ?? "",
           icon: template.icon,
           style: template.style,
           linkUrl: template.linkUrl ?? "",
           linkLabel: template.linkLabel ?? "",
+          linkLabelAr: template.linkLabelAr ?? "",
         }))}
       />
     </AdminPageContainer>

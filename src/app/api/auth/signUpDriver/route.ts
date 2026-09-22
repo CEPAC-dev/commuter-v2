@@ -29,6 +29,7 @@ import {
   isRegionCode,
   type RegionCode,
 } from "@/lib/config/regions";
+import { createWelcomeNotification } from "@/lib/notifications/welcomeNotification";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -163,9 +164,12 @@ export async function POST(req: NextRequest) {
       defaultRegionCode: selectedRegion,
       allowedRegionCodes: [selectedRegion],
       referralCode,
+      gender,
       ...(normalizedQuestionId && { securityQuestionId: normalizedQuestionId }),
       ...(securityAnswerHash && { securityAnswerHash }),
     });
+
+    await createWelcomeNotification(String(user._id));
 
     await Driver.create({
       userId: user._id,

@@ -24,6 +24,7 @@ import {
 } from "@/lib/auth/securityQuestion";
 import { isValidSecurityQuestionId } from "@/lib/config/verification";
 import { isRegionCode, type RegionCode } from "@/lib/config/regions";
+import { createWelcomeNotification } from "@/lib/notifications/welcomeNotification";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -148,9 +149,12 @@ export async function POST(req: NextRequest) {
       defaultRegionCode: regionCode as RegionCode,
       allowedRegionCodes: [regionCode as RegionCode],
       referralCode,
+      gender,
       ...(normalizedQuestionId && { securityQuestionId: normalizedQuestionId }),
       ...(securityAnswerHash && { securityAnswerHash }),
     });
+
+    await createWelcomeNotification(String(user._id));
 
     let referralWarning: string | undefined;
     const safeReferralCode = normalizePlainText(referralCodeUsed, {

@@ -26,6 +26,8 @@ const NotificationSchema = new Schema(
     },
     title: { type: String, required: true, trim: true, maxlength: 120 },
     body: { type: String, required: true, trim: true, maxlength: 500 },
+    titleAr: { type: String, default: "", trim: true, maxlength: 120 },
+    bodyAr: { type: String, default: "", trim: true, maxlength: 500 },
     data: { type: Schema.Types.Mixed, default: {} },
     isRead: { type: Boolean, required: true, default: false, index: true },
     readAt: { type: Date, default: null },
@@ -39,6 +41,14 @@ export type NotificationDoc = InferSchemaType<typeof NotificationSchema>;
 
 const existingNotificationModel = models.Notification;
 if (existingNotificationModel) {
+  for (const [path, definition] of [
+    ["titleAr", { type: String, default: "", trim: true, maxlength: 120 }],
+    ["bodyAr", { type: String, default: "", trim: true, maxlength: 500 }],
+  ] as const) {
+    if (!existingNotificationModel.schema.path(path)) {
+      existingNotificationModel.schema.add({ [path]: definition });
+    }
+  }
   const typePath = existingNotificationModel.schema.path("type");
   if (typePath && "enumValues" in typePath) {
     typePath.validators = typePath.validators.filter(

@@ -186,7 +186,10 @@ export default async function NotificationsPage() {
                         color={item.isRead ? "#5A6A7A" : "#00C2A8"}
                       />
                     </div>
-                    <div dir="auto" style={{ textAlign: "left" }}>
+                    <div
+                      dir={localeDirection(locale)}
+                      style={{ textAlign: locale === "ar" ? "right" : "left" }}
+                    >
                       <div
                         style={{
                           fontSize: 15,
@@ -194,12 +197,16 @@ export default async function NotificationsPage() {
                           color: "#0B1E3D",
                         }}
                       >
-                        {item.title}
+                        {locale === "ar" && item.titleAr
+                          ? item.titleAr
+                          : item.title}
                       </div>
                       <div
                         style={{ fontSize: 13, color: "#5A6A7A", marginTop: 4 }}
                       >
-                        {item.body}
+                        {locale === "ar" && item.bodyAr
+                          ? item.bodyAr
+                          : item.body}
                       </div>
                       <div
                         style={{ fontSize: 12, color: "#9aa7b4", marginTop: 8 }}
@@ -220,7 +227,11 @@ export default async function NotificationsPage() {
                               textDecoration: "none",
                             }}
                           >
-                            {item.data.linkLabel}
+                            {locale === "ar" &&
+                            typeof item.data?.linkLabelAr === "string" &&
+                            item.data.linkLabelAr
+                              ? item.data.linkLabelAr
+                              : item.data.linkLabel}
                           </a>
                         )}
                     </div>

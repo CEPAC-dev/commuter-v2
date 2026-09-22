@@ -41,6 +41,8 @@ export async function POST(req: NextRequest) {
   let body: {
     title?: string;
     message?: string;
+    titleAr?: string;
+    messageAr?: string;
     audience?: Audience;
     userIds?: string[];
     createdFrom?: string;
@@ -49,6 +51,7 @@ export async function POST(req: NextRequest) {
     style?: string;
     linkUrl?: string;
     linkLabel?: string;
+    linkLabelAr?: string;
   };
 
   try {
@@ -59,6 +62,12 @@ export async function POST(req: NextRequest) {
 
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const message = typeof body.message === "string" ? body.message.trim() : "";
+  const titleAr =
+    typeof body.titleAr === "string" ? body.titleAr.trim().slice(0, 120) : "";
+  const messageAr =
+    typeof body.messageAr === "string"
+      ? body.messageAr.trim().slice(0, 1000)
+      : "";
   const audience = body.audience ?? "all";
   const icon = body.icon ?? "bell";
   const style = body.style ?? "info";
@@ -66,6 +75,10 @@ export async function POST(req: NextRequest) {
   const linkLabel =
     typeof body.linkLabel === "string"
       ? body.linkLabel.trim().slice(0, 40)
+      : "";
+  const linkLabelAr =
+    typeof body.linkLabelAr === "string"
+      ? body.linkLabelAr.trim().slice(0, 40)
       : "";
 
   if (!title || title.length > 120) {
@@ -175,7 +188,7 @@ export async function POST(req: NextRequest) {
   const data = {
     icon,
     style,
-    ...(linkUrl ? { linkUrl, linkLabel } : {}),
+    ...(linkUrl ? { linkUrl, linkLabel, linkLabelAr } : {}),
     deliveredBy: auth.userId,
   };
   const docs = recipients.map((recipient) => ({
@@ -183,6 +196,8 @@ export async function POST(req: NextRequest) {
     type: "admin_broadcast",
     title,
     body: message,
+    titleAr,
+    bodyAr: messageAr,
     data,
   }));
 

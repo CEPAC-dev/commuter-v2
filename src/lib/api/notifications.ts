@@ -3,6 +3,8 @@ export interface NotificationItem {
   type: string;
   title: string;
   body: string;
+  titleAr?: string;
+  bodyAr?: string;
   data: Record<string, unknown>;
   isRead: boolean;
   readAt: string | null;

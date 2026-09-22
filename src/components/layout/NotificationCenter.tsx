@@ -78,6 +78,19 @@ export default function NotificationCenter({
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const arabic = dir === "rtl";
+
+  function displayTitle(notification: NotificationItem) {
+    return arabic && notification.titleAr
+      ? notification.titleAr
+      : notification.title;
+  }
+
+  function displayBody(notification: NotificationItem) {
+    return arabic && notification.bodyAr
+      ? notification.bodyAr
+      : notification.body;
+  }
 
   async function loadNotifications(announceNew: boolean) {
     try {
@@ -94,7 +107,7 @@ export default function NotificationCenter({
           .reverse();
 
         for (const item of newItems.slice(-3)) {
-          toast(item.title, {
+          toast(displayTitle(item), {
             icon: "🔔",
             duration: 5000,
             style: {
@@ -113,7 +126,7 @@ export default function NotificationCenter({
           window.Notification.permission === "granted"
         ) {
           const browserNotification = new window.Notification(latest.title, {
-            body: latest.body,
+            body: displayBody(latest),
             icon: "/assets/images/commuterLogo.png",
             tag: latest.id,
           });
@@ -317,8 +330,8 @@ export default function NotificationCenter({
                       dir="auto"
                       style={{ direction: "ltr", textAlign: "left" }}
                     >
-                      <strong>{notification.title}</strong>
-                      <span>{notification.body}</span>
+                      <strong>{displayTitle(notification)}</strong>
+                      <span>{displayBody(notification)}</span>
                       <small>
                         {formatRelativeTime(notification.createdAt, t)}
                       </small>
