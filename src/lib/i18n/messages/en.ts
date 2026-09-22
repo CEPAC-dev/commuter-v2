@@ -312,6 +312,8 @@ export const en = {
   "availability.days_label": "Available days",
   "availability.start_location": "Start location",
   "availability.end_location": "End location",
+  "availability.add_destination": "Add a destination (optional)",
+  "availability.remove_destination": "Remove destination",
   "availability.start_time": "Start time",
   "availability.end_time": "End time",
   "availability.use_current_location": "Use my current location",

@@ -10,6 +10,7 @@ import {
   AlertCircle,
   UserX,
   ShieldCheck,
+  SlidersHorizontal,
 } from "lucide-react";
 import { DEFAULT_PASSENGER_CANCELLATION_TIERS } from "@/lib/config/cancellationDefaults";
 import {
@@ -49,6 +50,7 @@ type SettingsTabId =
   | "wallet"
   | "availability"
   | "nomatch"
+  | "broadcast"
   | "driver";
 
 const SETTINGS_TABS: {
@@ -63,6 +65,7 @@ const SETTINGS_TABS: {
   { id: "wallet", label: "Wallet & Withdrawals", icon: DollarSign, accent: "var(--color-warning)", activeText: "var(--color-primary)" },
   { id: "availability", label: "Availability Lock", icon: Clock, accent: "var(--color-success)", activeText: "var(--color-on-primary)" },
   { id: "nomatch", label: "No-Match Cutoff", icon: Clock, accent: "var(--color-danger)", activeText: "var(--color-on-primary)" },
+  { id: "broadcast", label: "Broadcast Filter", icon: SlidersHorizontal, accent: "var(--color-secondary)", activeText: "var(--color-primary)" },
   { id: "driver", label: "Driver Penalties", icon: ShieldAlert, accent: "var(--color-primary)", activeText: "var(--color-on-primary)" },
 ];
 
@@ -75,6 +78,10 @@ export default function CancellationSettingsForm() {
     useState<string>("17:00");
   const [nomatchCutoffTime, setNomatchCutoffTime] =
     useState<string>("23:00");
+  const [broadcastOriginEnabled, setBroadcastOriginEnabled] = useState(true);
+  const [broadcastOriginRadiusKm, setBroadcastOriginRadiusKm] = useState("7");
+  const [broadcastDestinationEnabled, setBroadcastDestinationEnabled] = useState(true);
+  const [broadcastDestinationRadiusKm, setBroadcastDestinationRadiusKm] = useState("7");
   const [cancellationTiers, setCancellationTiers] = useState<
     DriverCancellationTier[]
   >([]);
@@ -106,6 +113,10 @@ export default function CancellationSettingsForm() {
         );
         setAvailabilityLockTime(json.data.availabilityLockTime ?? "17:00");
         setNomatchCutoffTime(json.data.nomatchCutoffTime ?? "23:00");
+        setBroadcastOriginEnabled(json.data.broadcastOriginFilter?.enabled ?? true);
+        setBroadcastOriginRadiusKm(String(json.data.broadcastOriginFilter?.radiusKm ?? 7));
+        setBroadcastDestinationEnabled(json.data.broadcastDestinationFilter?.enabled ?? true);
+        setBroadcastDestinationRadiusKm(String(json.data.broadcastDestinationFilter?.radiusKm ?? 7));
         setCancellationTiers(json.data.cancellationTiers ?? []);
         if (
           json.data.passengerCancellationTiers &&
@@ -179,6 +190,14 @@ export default function CancellationSettingsForm() {
               : Number(defaultWithdrawalLimit),
           availabilityLockTime,
           nomatchCutoffTime,
+          broadcastOriginFilter: {
+            enabled: broadcastOriginEnabled,
+            radiusKm: Number(broadcastOriginRadiusKm),
+          },
+          broadcastDestinationFilter: {
+            enabled: broadcastDestinationEnabled,
+            radiusKm: Number(broadcastDestinationRadiusKm),
+          },
           cancellationTiers,
           passengerCancellationTiers,
           verificationMethod,
@@ -503,6 +522,42 @@ export default function CancellationSettingsForm() {
         </AdminCard>
       )}
 
+      {activeTab === "broadcast" && (
+        <AdminCard padding={24}>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2.5 bg-[var(--color-secondary-tint)] rounded-xl text-[var(--color-secondary)]">
+              <SlidersHorizontal className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-[var(--color-primary)]">
+                Broadcast Filter
+              </h3>
+              <p className="text-sm text-[var(--color-muted)]">
+                Add a station-to-station distance limit when broadcasting a ride to eligible drivers.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <BroadcastFilterField
+              label="Origin radius"
+              enabled={broadcastOriginEnabled}
+              radiusKm={broadcastOriginRadiusKm}
+              onEnabledChange={setBroadcastOriginEnabled}
+              onRadiusChange={setBroadcastOriginRadiusKm}
+            />
+            <BroadcastFilterField
+              label="Destination radius"
+              enabled={broadcastDestinationEnabled}
+              radiusKm={broadcastDestinationRadiusKm}
+              onEnabledChange={setBroadcastDestinationEnabled}
+              onRadiusChange={setBroadcastDestinationRadiusKm}
+            />
+          </div>
+          <SectionSaveButton saving={saving} />
+        </AdminCard>
+      )}
+
       {/* Time-Tiered Driver Cancellation Penalty Rules */}
       {activeTab === "driver" && (
       <AdminCard padding={24}>
@@ -576,6 +631,45 @@ function SectionSaveButton({ saving }: { saving: boolean }) {
         <Save className="w-4 h-4" />
         <span>{saving ? "Saving..." : "Save Section"}</span>
       </button>
+    </div>
+  );
+}
+
+function BroadcastFilterField({
+  label,
+  enabled,
+  radiusKm,
+  onEnabledChange,
+  onRadiusChange,
+}: {
+  label: string;
+  enabled: boolean;
+  radiusKm: string;
+  onEnabledChange: (value: boolean) => void;
+  onRadiusChange: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--color-border)] p-4">
+      <label className="flex items-center gap-3 text-sm font-semibold text-[var(--color-primary)]">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(event) => onEnabledChange(event.target.checked)}
+          className="h-4 w-4 accent-[var(--color-secondary)]"
+        />
+        Enable {label.toLowerCase()} filter
+      </label>
+      <AdminFormField label="Radius (km)">
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          required
+          value={radiusKm}
+          onChange={(event) => onRadiusChange(event.target.value)}
+          className="w-full bg-[var(--color-panel)] border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-[var(--color-primary)] focus:outline-none focus:border-[var(--color-secondary)]"
+        />
+      </AdminFormField>
     </div>
   );
 }

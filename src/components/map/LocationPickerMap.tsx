@@ -425,10 +425,12 @@ export default function LocationPickerMap({
           )}") 16 44, crosshair`,
         }}
       >
-        {!leafletReady ? (
+        <div ref={mapContainerRef} style={{ width: "100%", height: 280 }} />
+        {!leafletReady && (
           <div
             style={{
-              height: 280,
+              position: "absolute",
+              inset: 0,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -451,8 +453,6 @@ export default function LocationPickerMap({
               </>
             )}
           </div>
-        ) : (
-          <div ref={mapContainerRef} style={{ width: "100%", height: 280 }} />
         )}
 
         {/* Locate-me button — floating on map bottom-left */}
