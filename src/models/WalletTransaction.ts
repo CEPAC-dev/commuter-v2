@@ -64,6 +64,11 @@ const WalletTransactionSchema = new Schema(
       ref: "ReferralUsage",
       index: true,
     },
+    adminReferralUsageId: {
+      type: Types.ObjectId,
+      ref: "AdminReferralUsage",
+      index: true,
+    },
 
     // ── Kashier (topup + withdrawal) ──
     kashierSessionId: { type: String },
