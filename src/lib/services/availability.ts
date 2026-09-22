@@ -57,14 +57,7 @@ export async function listDriverAvailability(
     const startTime = record.startTime;
     const endTime = record.endTime;
 
-    if (
-      !origin ||
-      !destination ||
-      !dayOfWeek ||
-      !DAYS_OF_WEEK.includes(dayOfWeek) ||
-      !startTime ||
-      !endTime
-    ) {
+    if (!origin || !dayOfWeek || !DAYS_OF_WEEK.includes(dayOfWeek) || !startTime || !endTime) {
       console.warn("Skipping malformed driver availability record", {
         id: String(record._id),
         driverId,

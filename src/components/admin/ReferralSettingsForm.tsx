@@ -18,6 +18,7 @@ import {
   AdminFormLayout,
   AdminStatusBadge,
 } from "@/components/admin/layout";
+import AdminReferralCampaigns from "@/components/admin/AdminReferralCampaigns";
 
 export interface ReferralSettingsValues {
   referrerBonusAmount: number;
@@ -27,9 +28,17 @@ export interface ReferralSettingsValues {
 }
 
 type ReferralOwnerRole = "passenger" | "driver";
+type ReferralTab = ReferralOwnerRole | "admin-passenger" | "admin-driver";
 type SettingsByRole = Record<ReferralOwnerRole, ReferralSettingsValues>;
 
-const ROLE_OPTIONS: Array<{ key: ReferralOwnerRole; label: string; icon: typeof UserRound }> = [
+const TAB_OPTIONS: Array<{ key: ReferralTab; label: string; icon: typeof UserRound }> = [
+  { key: "passenger", label: "Passenger", icon: UserRound },
+  { key: "driver", label: "Driver", icon: Car },
+  { key: "admin-passenger", label: "Admin Passenger", icon: UserRound },
+  { key: "admin-driver", label: "Admin Driver", icon: Car },
+];
+
+const OWNER_OPTIONS: Array<{ key: ReferralOwnerRole; label: string; icon: typeof UserRound }> = [
   { key: "passenger", label: "Passenger", icon: UserRound },
   { key: "driver", label: "Driver", icon: Car },
 ];
@@ -48,21 +57,23 @@ export default function ReferralSettingsForm({
 }: {
   initialValues: SettingsByRole;
 }) {
-  const [role, setRole] = useState<ReferralOwnerRole>("passenger");
+  const [role, setRole] = useState<ReferralTab>("passenger");
   const [savedByRole, setSavedByRole] = useState(initialValues);
   const [draftByRole, setDraftByRole] = useState(initialValues);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const values = draftByRole[role];
-  const roleLabel = role === "driver" ? "Driver" : "Passenger";
-  const isDirty = !fieldsEqual(values, savedByRole[role]);
+  const settingsRole: ReferralOwnerRole = role === "driver" || role === "admin-driver" ? "driver" : "passenger";
+  const values = draftByRole[settingsRole];
+  const roleLabel = settingsRole === "driver" ? "Driver" : "Passenger";
+  const isAdminCampaign = role === "admin-passenger" || role === "admin-driver";
+  const isDirty = !isAdminCampaign && !fieldsEqual(values, savedByRole[settingsRole]);
 
   function updateValues(updater: (current: ReferralSettingsValues) => ReferralSettingsValues) {
-    setDraftByRole((current) => ({ ...current, [role]: updater(current[role]) }));
+    setDraftByRole((current) => ({ ...current, [settingsRole]: updater(current[settingsRole]) }));
   }
 
-  function selectRole(next: ReferralOwnerRole) {
+  function selectRole(next: ReferralTab) {
     setRole(next);
     setMessage(null);
   }
@@ -76,12 +87,12 @@ export default function ReferralSettingsForm({
       const response = await fetch("/api/admin/referral-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, role }),
+        body: JSON.stringify({ ...values, role: settingsRole }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Unable to save settings.");
-      setSavedByRole((current) => ({ ...current, [role]: result.data }));
-      setDraftByRole((current) => ({ ...current, [role]: result.data }));
+      setSavedByRole((current) => ({ ...current, [settingsRole]: result.data }));
+      setDraftByRole((current) => ({ ...current, [settingsRole]: result.data }));
       setMessage({ ok: true, text: `${roleLabel} referral settings saved.` });
     } catch (error) {
       setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to save settings." });
@@ -91,7 +102,7 @@ export default function ReferralSettingsForm({
   }
 
   function discardChanges() {
-    setDraftByRole((current) => ({ ...current, [role]: savedByRole[role] }));
+    setDraftByRole((current) => ({ ...current, [settingsRole]: savedByRole[settingsRole] }));
     setMessage(null);
   }
 
@@ -110,12 +121,13 @@ export default function ReferralSettingsForm({
           <div
             role="tablist"
             aria-label="Referral code owner"
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, padding: 4, marginTop: 10, background: "var(--color-background)", borderRadius: 8 }}
+            style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(120px, 1fr))", gap: 4, padding: 4, marginTop: 10, background: "var(--color-background)", borderRadius: 8, overflowX: "auto" }}
           >
-            {ROLE_OPTIONS.map((option) => {
+            {TAB_OPTIONS.map((option) => {
               const active = role === option.key;
               const Icon = option.icon;
-              const dirty = !fieldsEqual(draftByRole[option.key], savedByRole[option.key]);
+              const optionRole: ReferralOwnerRole = option.key === "driver" || option.key === "admin-driver" ? "driver" : "passenger";
+              const dirty = !option.key.startsWith("admin-") && !fieldsEqual(draftByRole[optionRole], savedByRole[optionRole]);
               return (
                 <button
                   key={option.key}
@@ -155,6 +167,11 @@ export default function ReferralSettingsForm({
           </div>
         </div>
 
+        {isAdminCampaign ? (
+          <div style={{ padding: 20 }}>
+            <AdminReferralCampaigns selectedRole={role === "admin-driver" ? "driver" : "passenger"} />
+          </div>
+        ) : <>
         {/* Bonus amounts */}
         <fieldset style={fieldsetStyle}>
           <legend style={legendStyle}>
@@ -267,6 +284,7 @@ export default function ReferralSettingsForm({
             </button>
           </div>
         </div>
+        </>}
       </AdminFormLayout>
       </AdminCard>
 
@@ -365,7 +383,7 @@ function ToggleSwitch({ id, checked, onChange }: { id: string; checked: boolean;
 function SummarySidebar({ draftByRole }: { draftByRole: SettingsByRole }) {
   const rows = useMemo(
     () =>
-      ROLE_OPTIONS.map((option) => ({
+      OWNER_OPTIONS.map((option) => ({
         ...option,
         values: draftByRole[option.key],
       })),

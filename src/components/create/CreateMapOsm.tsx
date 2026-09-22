@@ -166,11 +166,24 @@ export default function CreateMapOsm({
   onCancelPick,
 }: Props) {
   const [map, setMap] = useState<L.Map | null>(null);
+  const lastFittedPointLayoutRef = useRef<string | null>(null);
   const zoneFeaturesRef = useRef<ZoneFeature[]>([]);
   const zoneLabelLocationsRef = useRef<
     Array<{ lat: number; lng: number; name: string }>
   >([]);
   const zoneLabelMarkersRef = useRef<L.Marker[]>([]);
+  const pointLayoutKey = trips
+    .filter((trip) => trip.pickup || trip.dropoff || trip.stops.some((stop) => stop.point))
+    .map((trip) =>
+      [
+        trip.pickup && `${trip.pickup.lat},${trip.pickup.lng}`,
+        trip.dropoff && `${trip.dropoff.lat},${trip.dropoff.lng}`,
+        ...trip.stops.map((stop) =>
+          stop.point ? `${stop.point.lat},${stop.point.lng}` : "",
+        ),
+      ].join(";"),
+    )
+    .join("|");
 
   useEffect(() => {
     if (!isLeafletMapReady(map)) return;
@@ -425,11 +438,16 @@ export default function CreateMapOsm({
           ).addTo(layers);
       }
     });
-    fitPoints(map, allPoints, 40);
+    // Keep the rider's map position intact when a station or route updates.
+    // Refit only when the actual pickup, dropoff, or stop coordinates change.
+    if (pointLayoutKey !== lastFittedPointLayoutRef.current) {
+      fitPoints(map, allPoints, 40);
+      lastFittedPointLayoutRef.current = pointLayoutKey;
+    }
     return () => {
       layers.remove();
     };
-  }, [map, onStationSelect, trips]);
+  }, [map, onStationSelect, pointLayoutKey, trips]);
 
   const handleClick = useCallback(
     async ({ lat, lng }: OsmPoint) => {

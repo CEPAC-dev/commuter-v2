@@ -93,9 +93,10 @@ export async function PUT(req: NextRequest) {
     const normalizedOrigin = normalizeAvailabilityOrigin(origin);
     if (!normalizedOrigin)
       return NextResponse.json({ error: "Origin is required." }, { status: 400 });
-    const normalizedDestination = normalizeAvailabilityDestination(destination);
-    if (!normalizedDestination)
-      return NextResponse.json({ error: "Destination is required." }, { status: 400 });
+    const normalizedDestination =
+      destination == null ? null : normalizeAvailabilityDestination(destination);
+    if (destination != null && !normalizedDestination)
+      return NextResponse.json({ error: "Destination must be a valid location." }, { status: 400 });
 
     const region = await resolveActiveRegion({ userId: session.userId });
     const stationDocs = await Station.find({ active: true, regionCode: region.code }).lean();
@@ -123,22 +124,24 @@ export async function PUT(req: NextRequest) {
           name: nearestStation.name,
         }
       : null;
-    const destinationNearest = findNearestStation(
-      normalizedDestination.lat,
-      normalizedDestination.lng,
-      stationDocs.map((station) => ({
-        id: station.objectId,
-        name: station.name,
-        direction: station.direction,
-        stationType: station.stationType,
-        zones: station.zones,
-        description: station.description,
-        landmark: station.landmark,
-        lat: station.lat,
-        lng: station.lng,
-        popupInfo: "",
-      })),
-    );
+    const destinationNearest = normalizedDestination
+      ? findNearestStation(
+          normalizedDestination.lat,
+          normalizedDestination.lng,
+          stationDocs.map((station) => ({
+            id: station.objectId,
+            name: station.name,
+            direction: station.direction,
+            stationType: station.stationType,
+            zones: station.zones,
+            description: station.description,
+            landmark: station.landmark,
+            lat: station.lat,
+            lng: station.lng,
+            popupInfo: "",
+          })),
+        )
+      : null;
     const destinationNearestStation = destinationNearest
       ? {
           id: destinationNearest.id,

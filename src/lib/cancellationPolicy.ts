@@ -14,6 +14,8 @@ export interface SettingsResult {
   availabilityLockTime: string;
   nomatchCutoffTime: string;
   cancellationTiers: CancellationTier[];
+  broadcastOriginFilter: { enabled: boolean; radiusKm: number };
+  broadcastDestinationFilter: { enabled: boolean; radiusKm: number };
 }
 
 export const DEFAULT_ADMIN_SETTINGS: SettingsResult = {
@@ -28,6 +30,8 @@ export const DEFAULT_ADMIN_SETTINGS: SettingsResult = {
     { startTime: "21:00", endTime: "23:00", action: "ride_only", penaltyPercent: 50 },
     { startTime: "23:00", endTime: "23:59", action: "ride_only", penaltyPercent: 110 },
   ],
+  broadcastOriginFilter: { enabled: true, radiusKm: 7 },
+  broadcastDestinationFilter: { enabled: true, radiusKm: 7 },
 };
 
 export async function getAdminSettings(): Promise<SettingsResult> {
@@ -46,6 +50,14 @@ export async function getAdminSettings(): Promise<SettingsResult> {
         doc.cancellationTiers && doc.cancellationTiers.length > 0
           ? doc.cancellationTiers
           : DEFAULT_ADMIN_SETTINGS.cancellationTiers,
+      broadcastOriginFilter: {
+        enabled: doc.broadcastOriginFilter?.enabled ?? true,
+        radiusKm: doc.broadcastOriginFilter?.radiusKm ?? 7,
+      },
+      broadcastDestinationFilter: {
+        enabled: doc.broadcastDestinationFilter?.enabled ?? true,
+        radiusKm: doc.broadcastDestinationFilter?.radiusKm ?? 7,
+      },
     };
   } catch {
     return DEFAULT_ADMIN_SETTINGS;

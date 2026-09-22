@@ -133,6 +133,7 @@ export default function AdminAvailabilityTable({
   const driversPerPage = 8;
   const filteredDrivers = useMemo(() => {
     const query = driverSearch.trim().toLowerCase();
+    const userNumberQuery = query.match(/^#(\d+)$/)?.[1] ?? null;
     return [...drivers]
       .filter((driver) => {
         if (
@@ -141,6 +142,8 @@ export default function AdminAvailabilityTable({
         )
           return false;
         if (!query) return true;
+        if (userNumberQuery !== null)
+          return String(driver.userNumber ?? "") === userNumberQuery;
         return [
           driver.name,
           driver.phone,
@@ -198,6 +201,11 @@ export default function AdminAvailabilityTable({
     const originLng = Number(addForm.origin.lng);
     const destinationLat = Number(addForm.destination.lat);
     const destinationLng = Number(addForm.destination.lng);
+    const hasDestination = Boolean(
+      addForm.destination.address.trim() ||
+        addForm.destination.lat ||
+        addForm.destination.lng,
+    );
     if (
       !addForm.origin.address.trim() ||
       !Number.isFinite(originLat) ||
@@ -206,12 +214,11 @@ export default function AdminAvailabilityTable({
       setAddError("Select a valid origin address.");
       return;
     }
-    if (
-      !addForm.destination.address.trim() ||
-      !Number.isFinite(destinationLat) ||
-      !Number.isFinite(destinationLng)
-    ) {
-      setAddError("Select a valid destination address.");
+    if (hasDestination &&
+      (!addForm.destination.address.trim() ||
+        !Number.isFinite(destinationLat) ||
+        !Number.isFinite(destinationLng))) {
+      setAddError("Select a valid destination address or leave it empty.");
       return;
     }
     setIsSaving(true);
@@ -227,11 +234,13 @@ export default function AdminAvailabilityTable({
             lat: originLat,
             lng: originLng,
           },
-          destination: {
-            address: addForm.destination.address.trim(),
-            lat: destinationLat,
-            lng: destinationLng,
-          },
+          destination: hasDestination
+            ? {
+                address: addForm.destination.address.trim(),
+                lat: destinationLat,
+                lng: destinationLng,
+              }
+            : null,
           startTime: addForm.startTime,
           endTime: addForm.endTime,
           active: true,
@@ -818,7 +827,7 @@ export default function AdminAvailabilityTable({
                       key={field}
                       className="text-xs font-bold text-[var(--color-primary)]"
                     >
-                      {label}
+                      {label}{field === "destination" ? " (optional)" : ""}
                       <button
                         type="button"
                         onClick={() => {

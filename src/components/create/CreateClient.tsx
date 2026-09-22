@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
   Plus,
   Eye,
+  ArrowLeft,
+  ArrowRight,
   Car,
   MapPin,
   Flag,
@@ -87,6 +89,13 @@ function defaultTrip(
 const MOBILE_DRAWER_MIN_VH = 42;
 const MOBILE_DRAWER_MAX_VH = 100;
 const MOBILE_DRAWER_DEFAULT_VH = 74;
+type BookingStep = "vehicle" | "locations" | "timing" | "passengers";
+const BOOKING_STEPS: BookingStep[] = [
+  "vehicle",
+  "locations",
+  "timing",
+  "passengers",
+];
 
 function clampDrawerHeight(vh: number): number {
   return Math.max(MOBILE_DRAWER_MIN_VH, Math.min(MOBILE_DRAWER_MAX_VH, vh));
@@ -103,6 +112,9 @@ export default function CreateClient({
     earliestBookingDate(),
   ]);
   const [trips, setTrips] = useState<TripData[]>([]);
+  const [tripSteps, setTripSteps] = useState<Record<string, BookingStep>>({});
+  const [collapsedTrips, setCollapsedTrips] = useState<Record<string, boolean>>({});
+  const [requestDatesCollapsed, setRequestDatesCollapsed] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [createdBooking, setCreatedBooking] = useState<{
@@ -157,7 +169,10 @@ export default function CreateClient({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-    setTrips([defaultTrip(pickup, dropoff)]);
+    const firstTrip = defaultTrip(pickup, dropoff);
+    setTrips([firstTrip]);
+    setTripSteps({ [firstTrip.id]: "vehicle" });
+    setCollapsedTrips({ [firstTrip.id]: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -566,10 +581,89 @@ export default function CreateClient({
 
   const removeTrip = useCallback((id: string) => {
     setTrips((prev) => prev.filter((t) => t.id !== id));
+    setTripSteps((prev) => {
+      const remaining = { ...prev };
+      delete remaining[id];
+      return remaining;
+    });
+    setCollapsedTrips((prev) => {
+      const remaining = { ...prev };
+      delete remaining[id];
+      return remaining;
+    });
   }, []);
 
   function addTrip() {
-    setTrips((prev) => [...prev, defaultTrip(null, null)]);
+    const nextTrip = defaultTrip(null, null);
+    setTrips((prev) => [...prev, nextTrip]);
+    setTripSteps((prev) => ({ ...prev, [nextTrip.id]: "vehicle" }));
+    setCollapsedTrips((prev) => ({ ...prev, [nextTrip.id]: false }));
+  }
+
+  const stepLabels: Record<BookingStep, string> = {
+    vehicle: t("create.vehicle_type"),
+    locations: t("create.step_pickup_dropoff_locations"),
+    timing: t("create.step_pickup_dropoff_time"),
+    passengers: t("create.number_of_passengers"),
+  };
+
+  function getTripStep(tripId: string): BookingStep {
+    return tripSteps[tripId] ?? "vehicle";
+  }
+
+  function isStepComplete(trip: TripData, step: BookingStep) {
+    if (step === "vehicle")
+      return Boolean(trip.vehicleType);
+    if (step === "locations") return Boolean(trip.pickup && trip.dropoff);
+    if (step === "timing") return Boolean(trip.arrivalTime && trip.pickupTime);
+    return true;
+  }
+
+  function canOpenStep(trip: TripData, index: number, target: number) {
+    if (index === 0 && target > 0 && selectedDates.length === 0) return false;
+    return BOOKING_STEPS.slice(0, target).every((step) =>
+      isStepComplete(trip, step),
+    );
+  }
+
+  function setTripStep(trip: TripData, step: BookingStep) {
+    setValidationError("");
+    setTripSteps((prev) => ({ ...prev, [trip.id]: step }));
+    setCollapsedTrips((prev) => ({ ...prev, [trip.id]: false }));
+  }
+
+  function goToNextStep(trip: TripData, index: number) {
+    const bookingStep = getTripStep(trip.id);
+    if (
+      bookingStep === "vehicle" &&
+      (!isStepComplete(trip, bookingStep) ||
+        (index === 0 && selectedDates.length === 0))
+    ) {
+      setValidationError(
+        index === 0
+          ? t("create.step_vehicle_date_required")
+          : t("create.step_vehicle_required"),
+      );
+      return;
+    }
+    if (bookingStep === "locations" && !isStepComplete(trip, bookingStep)) {
+      setValidationError(t("create.step_locations_required"));
+      return;
+    }
+    if (bookingStep === "timing" && !isStepComplete(trip, bookingStep)) {
+      setValidationError(t("create.step_time_required"));
+      return;
+    }
+    setValidationError("");
+    const nextIndex = BOOKING_STEPS.indexOf(bookingStep) + 1;
+    if (nextIndex < BOOKING_STEPS.length) setTripStep(trip, BOOKING_STEPS[nextIndex]);
+  }
+
+  function goToPreviousStep(trip: TripData) {
+    const bookingStep = getTripStep(trip.id);
+    setValidationError("");
+    const previousIndex = BOOKING_STEPS.indexOf(bookingStep) - 1;
+    if (previousIndex >= 0) setTripStep(trip, BOOKING_STEPS[previousIndex]);
   }
 
   function handleDrawerPointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -721,6 +815,9 @@ export default function CreateClient({
   });
   const previewDisabled =
     !!validationWarning || hasStopErrors || hasInvalidLocations;
+  const allTripsAtFinalStep =
+    trips.length > 0 &&
+    trips.every((trip) => getTripStep(trip.id) === "passengers");
 
   const totalEgp = trips.reduce(
     (sum, t) => sum + getTripPriceForSubmission(t),
@@ -837,11 +934,73 @@ export default function CreateClient({
               </h1>
             </div>
 
-            <DatePicker value={selectedDates} onChange={setSelectedDates} />
+            {/* Request-level dates: shared by every trip in this booking. */}
+            <section
+              aria-label={t("create.request_dates")}
+              style={{
+                background: "#ffffff",
+                border: "1.5px solid rgb(200, 232, 228)",
+                borderRadius: 12,
+                boxShadow: "0 2px 8px rgba(11,30,61,0.04)",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setRequestDatesCollapsed((collapsed) => !collapsed)}
+                aria-expanded={!requestDatesCollapsed}
+                style={{
+                  width: "100%",
+                  minHeight: 48,
+                  padding: "10px 14px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  border: "none",
+                  background: "transparent",
+                  color: "#0B1E3D",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 14,
+                  fontWeight: 750,
+                  textAlign: "start",
+                }}
+              >
+                <span>{t("create.request_dates")}</span>
+                <span
+                  aria-hidden="true"
+                  className="create-request-dates-toggle"
+                  style={{
+                    fontSize: 18,
+                    lineHeight: 1,
+                    transform: requestDatesCollapsed ? "rotate(0deg)" : "rotate(45deg)",
+                  }}
+                >
+                  +
+                </span>
+              </button>
+              <div
+                className="create-request-dates-content"
+                aria-hidden={requestDatesCollapsed}
+                style={{
+                  maxHeight: requestDatesCollapsed ? 0 : 360,
+                  opacity: requestDatesCollapsed ? 0 : 1,
+                  overflow: "hidden",
+                  padding: requestDatesCollapsed ? "0 14px" : "0 14px 14px",
+                  pointerEvents: requestDatesCollapsed ? "none" : "auto",
+                }}
+              >
+                <div style={{ minHeight: 0 }}>
+                  <DatePicker value={selectedDates} onChange={setSelectedDates} />
+                </div>
+              </div>
+            </section>
 
             {/* Trip cycles */}
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {trips.map((trip, i) => {
+                const bookingStep = getTripStep(trip.id);
+                const currentStepIndex = BOOKING_STEPS.indexOf(bookingStep);
                 const allVehicles = vehiclesMap
                   ? Object.values(vehiclesMap)
                   : VEHICLE_LIST;
@@ -894,13 +1053,98 @@ export default function CreateClient({
                     onStopErrorChange={(error) =>
                       handleTripStopErrorChange(trip.id, error)
                     }
+                    stage={bookingStep}
+                    collapsed={Boolean(collapsedTrips[trip.id])}
+                    onToggleCollapsed={() =>
+                      setCollapsedTrips((prev) => ({
+                        ...prev,
+                        [trip.id]: !prev[trip.id],
+                      }))
+                    }
+                    beforeFields={
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 12,
+                          }}
+                          aria-label={t("create.trip_step_progress")
+                            .replace("{trip}", String(i + 1))
+                            .replace("{current}", String(currentStepIndex + 1))
+                            .replace("{total}", String(BOOKING_STEPS.length))}
+                        >
+                          <div>
+                            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#00C2A8", textTransform: "uppercase", letterSpacing: ".06em" }}>
+                              {t("create.step_progress")
+                                .replace("{current}", String(currentStepIndex + 1))
+                                .replace("{total}", String(BOOKING_STEPS.length))}
+                            </p>
+                            <h2 style={{ margin: "3px 0 0", fontSize: 16, color: "#0B1E3D" }}>
+                              {stepLabels[bookingStep]}
+                            </h2>
+                          </div>
+                          <div style={{ display: "flex", gap: 2 }}>
+                            {BOOKING_STEPS.map((step, stepIndex) => {
+                              const canOpen = canOpenStep(trip, i, stepIndex);
+                              const active = stepIndex === currentStepIndex;
+                              return (
+                                <button
+                                  key={step}
+                                  type="button"
+                                  aria-label={t("create.go_to_step").replace(
+                                    "{step}",
+                                    stepLabels[step],
+                                  )}
+                                  aria-current={active ? "step" : undefined}
+                                  disabled={!canOpen}
+                                  onClick={() => canOpen && setTripStep(trip, step)}
+                                  style={{
+                                    width: 32,
+                                    height: 36,
+                                    padding: 0,
+                                    border: "none",
+                                    background: "transparent",
+                                    cursor: canOpen ? "pointer" : "not-allowed",
+                                    opacity: canOpen ? 1 : 0.45,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <span
+                                    className={`create-step-dash${active ? " is-active" : canOpen ? " is-ready" : ""}`}
+                                    style={{ width: 22, height: 4, borderRadius: 99, background: active || canOpen ? "#00C2A8" : "#dce4ea" }}
+                                  />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    }
+                    afterFields={
+                      <div style={{ display: "grid", gridTemplateColumns: bookingStep === "vehicle" ? "1fr" : "1fr 1fr", gap: 10 }}>
+                        {bookingStep !== "vehicle" && (
+                          <button type="button" onClick={() => goToPreviousStep(trip)} style={{ height: 48, border: "1.5px solid #d0d8e0", borderRadius: 12, background: "#fff", color: "#0B1E3D", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "inherit" }}>
+                            <ArrowLeft size={16} aria-hidden="true" /> {t("create.back")}
+                          </button>
+                        )}
+                        {bookingStep !== "passengers" && (
+                          <button type="button" onClick={() => goToNextStep(trip, i)} style={{ height: 48, border: "none", borderRadius: 12, background: "#0B1E3D", color: "#fff", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "inherit" }}>
+                            {t("create.next")} <ArrowRight size={16} aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                    }
                   />
                 );
               })}
             </div>
 
             {/* Add trip */}
-            {trips.length < 3 && (
+            {trips.length < 3 && trips.at(-1) && getTripStep(trips.at(-1)!.id) === "passengers" && (
               <button
                 type="button"
                 onClick={addTrip}
@@ -955,7 +1199,7 @@ export default function CreateClient({
             )}
 
             {/* Preview CTA */}
-            <div
+            {allTripsAtFinalStep && <div
               style={{
                 background: "#ffffff",
                 borderTop: "1px solid #eef0f3",
@@ -1047,7 +1291,7 @@ export default function CreateClient({
                 <Eye size={17} aria-hidden="true" />
                 {t("create.preview_booking")}
               </button>
-            </div>
+            </div>}
           </div>
         </aside>
 
@@ -2189,6 +2433,44 @@ export default function CreateClient({
 
       <style>{`
         .email-desktop { display: block; }
+        .create-request-dates-content {
+          transition: max-height 240ms ease, opacity 180ms ease, padding 240ms ease;
+        }
+        .create-request-dates-toggle,
+        .create-trip-collapse-icon {
+          display: inline-flex;
+          transition: transform 220ms ease;
+        }
+        .create-step-dash {
+          display: block;
+          transition: box-shadow 180ms ease, opacity 180ms ease, transform 180ms ease;
+        }
+        .create-step-dash.is-ready {
+          box-shadow: 0 0 0 3px rgba(0, 194, 168, 0.1);
+        }
+        .create-step-dash.is-active {
+          animation: create-step-dash-glow 1.6s ease-in-out infinite;
+          box-shadow: 0 0 0 4px rgba(0, 194, 168, 0.16), 0 0 12px rgba(0, 194, 168, 0.62);
+        }
+        @keyframes create-step-dash-glow {
+          0%, 100% {
+            transform: scaleX(1);
+            box-shadow: 0 0 0 4px rgba(0, 194, 168, 0.16), 0 0 9px rgba(0, 194, 168, 0.48);
+          }
+          50% {
+            transform: scaleX(1.12);
+            box-shadow: 0 0 0 5px rgba(0, 194, 168, 0.2), 0 0 17px rgba(0, 194, 168, 0.76);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .create-request-dates-content,
+          .create-request-dates-toggle,
+          .create-trip-collapse-icon,
+          .create-step-dash {
+            animation: none !important;
+            transition: none !important;
+          }
+        }
         @media (max-width: 767px) {
           .create-layout {
             position: relative !important;
