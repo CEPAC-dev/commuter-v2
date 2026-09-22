@@ -562,6 +562,23 @@ export const en = {
   "create.decrease_field_aria": "Decrease {label}",
   "create.increase_field_aria": "Increase {label}",
   "create.request_dates": "Request date(s)",
+  "create.step_pickup_dropoff_locations": "Pickup & dropoff locations",
+  "create.step_pickup_dropoff_time": "Pickup & dropoff time",
+  "create.step_progress": "Step {current} of {total}",
+  "create.trip_step_progress": "Trip {trip}, step {current} of {total}",
+  "create.go_to_step": "Go to {step}",
+  "create.back": "Back",
+  "create.next": "Next",
+  "create.expand": "Expand",
+  "create.collapse": "Collapse",
+  "create.expand_trip_aria": "Expand trip {n}",
+  "create.collapse_trip_aria": "Collapse trip {n}",
+  "create.step_vehicle_date_required":
+    "Choose request date(s) and a vehicle type to continue.",
+  "create.step_vehicle_required": "Choose a vehicle type to continue.",
+  "create.step_locations_required":
+    "Set both pickup and dropoff locations to continue.",
+  "create.step_time_required": "Set the trip time to continue.",
   "create.select_dates_aria": "Select one or more booking dates",
   "create.pick_days_note":
     "Pick one or more days — trips repeat on each selected date.",
