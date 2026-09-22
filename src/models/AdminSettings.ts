@@ -32,6 +32,14 @@ const PassengerCancellationTierSchema = new Schema(
   { _id: false },
 );
 
+const BroadcastFilterSchema = new Schema(
+  {
+    enabled: { type: Boolean, required: true, default: true },
+    radiusKm: { type: Number, required: true, default: 7, min: 0 },
+  },
+  { _id: false },
+);
+
 import {
   DEFAULT_PASSENGER_CANCELLATION_TIERS,
   type PassengerCancellationTierConfig,
@@ -92,6 +100,16 @@ const AdminSettingsSchema = new Schema(
     passengerCancellationTiers: {
       type: [PassengerCancellationTierSchema],
       default: DEFAULT_PASSENGER_CANCELLATION_TIERS,
+    },
+    broadcastOriginFilter: {
+      type: BroadcastFilterSchema,
+      required: true,
+      default: () => ({ enabled: true, radiusKm: 7 }),
+    },
+    broadcastDestinationFilter: {
+      type: BroadcastFilterSchema,
+      required: true,
+      default: () => ({ enabled: true, radiusKm: 7 }),
     },
   },
   { timestamps: true, collection: "admin_settings" },

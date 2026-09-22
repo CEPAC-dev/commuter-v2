@@ -84,6 +84,12 @@ const UserSchema = new Schema(
     permissions: { type: [String], default: [] },
     referralCode: { type: String, unique: true, sparse: true, index: true },
     referredBy: { type: Types.ObjectId, ref: "User", default: null },
+    referralClaimedAt: { type: Date, default: null },
+    referralClaimType: {
+      type: String,
+      enum: ["user", "admin_campaign", null],
+      default: null,
+    },
     referralUnlimited: { type: Boolean, default: false },
     referralLockVersion: { type: Number, default: 0, select: false },
   },
@@ -124,6 +130,18 @@ if (existingUserModel) {
   if (!existingUserModel.schema.path("referralUnlimited")) {
     existingUserModel.schema.add({
       referralUnlimited: { type: Boolean, default: false },
+    });
+  }
+  if (!existingUserModel.schema.path("referralClaimedAt")) {
+    existingUserModel.schema.add({ referralClaimedAt: { type: Date, default: null } });
+  }
+  if (!existingUserModel.schema.path("referralClaimType")) {
+    existingUserModel.schema.add({
+      referralClaimType: {
+        type: String,
+        enum: ["user", "admin_campaign", null],
+        default: null,
+      },
     });
   }
   if (!existingUserModel.schema.path("phoneVerifiedAt")) {

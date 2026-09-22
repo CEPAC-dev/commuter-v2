@@ -74,15 +74,16 @@ export async function POST(req: NextRequest) {
         { error: "Origin is required." },
         { status: 400 },
       );
-    if (!validPoint(destination))
+    if (destination != null && !validPoint(destination))
       return NextResponse.json(
-        { error: "Destination is required." },
+        { error: "Destination must be a valid location." },
         { status: 400 },
       );
     const regionCode = regionFromCoordinates(origin.lat, origin.lng);
     if (
       !regionCode ||
-      regionFromCoordinates(destination.lat, destination.lng) !== regionCode
+      (destination &&
+        regionFromCoordinates(destination.lat, destination.lng) !== regionCode)
     ) {
       return NextResponse.json(
         {
@@ -129,14 +130,12 @@ export async function POST(req: NextRequest) {
       origin.lng,
       stations,
     );
-    const destinationNearestStation = findNearestStation(
-      destination.lat,
-      destination.lng,
-      stations,
-    );
-    if (!startNearestStation || !destinationNearestStation) {
+    const destinationNearestStation = destination
+      ? findNearestStation(destination.lat, destination.lng, stations)
+      : null;
+    if (!startNearestStation) {
       return NextResponse.json(
-        { error: "No nearby stations were found for this region." },
+        { error: "No nearby origin station was found for this region." },
         { status: 400 },
       );
     }
@@ -153,7 +152,9 @@ export async function POST(req: NextRequest) {
       origin,
       destination,
       startNearestStation: stationData(startNearestStation),
-      destinationNearestStation: stationData(destinationNearestStation),
+      destinationNearestStation: destinationNearestStation
+        ? stationData(destinationNearestStation)
+        : null,
       startTime,
       endTime,
       active: active ?? true,

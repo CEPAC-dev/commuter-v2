@@ -8,18 +8,76 @@ import {
 } from "@/models/ReferralSettings";
 import { ReferralUsage } from "@/models/ReferralUsage";
 import { Notification } from "@/models/Notification";
-import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { Wallet } from "@/models/Wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { ReferralAuditLog } from "@/models/ReferralAuditLog";
+import { AdminReferralCampaign, type AdminReferralRole } from "@/models/AdminReferralCampaign";
+import { AdminReferralUsage } from "@/models/AdminReferralUsage";
+import { AdminReferralAuditLog } from "@/models/AdminReferralAuditLog";
 
 const REFERRAL_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_CODE_ATTEMPTS = 10;
 
+function generateAdminReferralToken(role: AdminReferralRole): string {
+  const bytes = randomBytes(8);
+  const suffix = Array.from(bytes, (byte) => REFERRAL_ALPHABET[byte % REFERRAL_ALPHABET.length]).join("");
+  return `ADMIN-${role.toUpperCase()}-${suffix}`;
+}
+
+export async function getOrCreateAdminReferralCampaign(
+  role: AdminReferralRole,
+  actorId: string | Types.ObjectId,
+) {
+  await connectDB();
+  const existing = await AdminReferralCampaign.findOne({ role });
+  if (existing) return existing;
+  return AdminReferralCampaign.create({
+    role,
+    token: generateAdminReferralToken(role),
+    rewardAmount: 100,
+    maxUses: 5,
+    isActive: false,
+    createdBy: actorId,
+  });
+}
+
 export interface ReferralResult {
   success: boolean;
   message: string;
+}
+
+async function creditReferralWallet(
+  session: mongoose.ClientSession,
+  userId: Types.ObjectId,
+  amountEgp: number,
+  description: string,
+  reference: { referralUsageId?: Types.ObjectId; adminReferralUsageId?: Types.ObjectId },
+) {
+  const wallet = await Wallet.findOneAndUpdate(
+    { userId },
+    {
+      $inc: { balanceEgp: amountEgp, totalCreditedEgp: amountEgp },
+      $set: { lastTransactionAt: new Date() },
+    },
+    { returnDocument: "after", upsert: true, session },
+  ).lean();
+  const balance = wallet?.balanceEgp ?? amountEgp;
+
+  await WalletTransaction.create(
+    [{
+      userId,
+      type: "referral_bonus",
+      amountEgp,
+      status: "completed",
+      description,
+      balanceAfterEgp: balance,
+      ...reference,
+    }],
+    { session, ordered: true },
+  );
+
+  return balance;
 }
 
 export async function getOrCreateReferralSettings(
@@ -87,7 +145,13 @@ export async function applyReferralOnSignup(
     return { success: false, message: "Invalid new user." };
   }
 
+  const referredUserId = new Types.ObjectId(String(newUserId));
   const normalizedCode = referralCode.trim().toUpperCase();
+  const adminCampaign = await AdminReferralCampaign.findOne({ token: normalizedCode }).lean();
+  if (adminCampaign) {
+    return applyAdminReferralOnSignup(adminCampaign._id, referredUserId);
+  }
+
   const referrer = await User.findOne({ referralCode: normalizedCode })
     .select("_id name userNumber phone")
     .lean();
@@ -95,15 +159,14 @@ export async function applyReferralOnSignup(
     return { success: false, message: "Referral code is invalid." };
   }
 
-  const referredUserId = new Types.ObjectId(String(newUserId));
   if (String(referrer._id) === String(referredUserId)) {
     return { success: false, message: "You cannot use your own referral code." };
   }
 
   const referredUser = await User.findById(referredUserId)
-    .select("referredBy name userNumber phone")
+    .select("referredBy referralClaimedAt name userNumber phone")
     .lean();
-  if (!referredUser || referredUser.referredBy) {
+  if (!referredUser || referredUser.referredBy || referredUser.referralClaimedAt) {
     return { success: false, message: "This account cannot use a referral code." };
   }
 
@@ -164,65 +227,28 @@ export async function applyReferralOnSignup(
 
       // 2. Link referredBy on the referred user
       const updated = await User.updateOne(
-        { _id: referredUserId, referredBy: null },
-        { $set: { referredBy: referrer._id } },
+        { _id: referredUserId, referredBy: null, referralClaimedAt: null },
+        { $set: { referredBy: referrer._id, referralClaimedAt: new Date(), referralClaimType: "user" } },
         { session },
       );
       if (updated.modifiedCount !== 1) {
         throw new Error("ALREADY_REFERRED");
       }
 
-      // 3. Atomically increment Wallets
-      const referrerWallet = await Wallet.findOneAndUpdate(
-        { userId: referrer._id },
-        {
-          $inc: {
-            balanceEgp: settings.referrerBonusAmount,
-            totalCreditedEgp: settings.referrerBonusAmount,
-          },
-          $set: { lastTransactionAt: new Date() },
-        },
-        { returnDocument: "after", upsert: true, session },
-      ).lean();
-
-      const refereeWallet = await Wallet.findOneAndUpdate(
-        { userId: referredUserId },
-        {
-          $inc: {
-            balanceEgp: settings.refereeBonusAmount,
-            totalCreditedEgp: settings.refereeBonusAmount,
-          },
-          $set: { lastTransactionAt: new Date() },
-        },
-        { returnDocument: "after", upsert: true, session },
-      ).lean();
-
-      const referrerNewBalance = referrerWallet?.balanceEgp ?? settings.referrerBonusAmount;
-      const refereeNewBalance = refereeWallet?.balanceEgp ?? settings.refereeBonusAmount;
-
-      // 4. Create WalletTransactions
-      await WalletTransaction.create(
-        [
-          {
-            userId: referrer._id,
-            type: "referral_bonus",
-            amountEgp: settings.referrerBonusAmount,
-            status: "completed",
-            description: "Referral bonus",
-            balanceAfterEgp: referrerNewBalance,
-            referralUsageId: usage._id,
-          },
-          {
-            userId: referredUserId,
-            type: "referral_bonus",
-            amountEgp: settings.refereeBonusAmount,
-            status: "completed",
-            description: "Welcome referral bonus",
-            balanceAfterEgp: refereeNewBalance,
-            referralUsageId: usage._id,
-          },
-        ],
-        { session, ordered: true },
+      // 3. Credit both wallets and write the completed ledger entries.
+      const referrerNewBalance = await creditReferralWallet(
+        session,
+        referrer._id,
+        settings.referrerBonusAmount,
+        "Referral bonus",
+        { referralUsageId: usage._id },
+      );
+      const refereeNewBalance = await creditReferralWallet(
+        session,
+        referredUserId,
+        settings.refereeBonusAmount,
+        "Welcome referral bonus",
+        { referralUsageId: usage._id },
       );
 
       // 5. Create Notifications for both users
@@ -296,6 +322,69 @@ export async function applyReferralOnSignup(
       return { success: false, message: "This account already used a referral code." };
     }
     console.error("Referral instant crediting failed:", error);
+    return { success: false, message: "Failed to apply referral code." };
+  } finally {
+    await session.endSession();
+  }
+}
+
+async function applyAdminReferralOnSignup(
+  campaignId: Types.ObjectId,
+  referredUserId: Types.ObjectId,
+): Promise<ReferralResult> {
+  const session = await mongoose.startSession();
+  try {
+    let result: ReferralResult = { success: false, message: "Referral failed." };
+    await session.withTransaction(async () => {
+      const recipient = await User.findOneAndUpdate(
+        { _id: referredUserId, referredBy: null, referralClaimedAt: null },
+        { $set: { referralClaimedAt: new Date(), referralClaimType: "admin_campaign" } },
+        { returnDocument: "after", session },
+      ).select("_id name userNumber phone").lean();
+      if (!recipient) throw new Error("ALREADY_REFERRED");
+
+      const campaign = await AdminReferralCampaign.findOneAndUpdate(
+        {
+          _id: campaignId,
+          isActive: true,
+          $or: [{ maxUses: null }, { $expr: { $lt: ["$usedCount", "$maxUses"] } }],
+        },
+        { $inc: { usedCount: 1 } },
+        { returnDocument: "after", session },
+      ).lean();
+      if (!campaign) throw new Error("ADMIN_REFERRAL_UNAVAILABLE");
+
+      const usage = await AdminReferralUsage.create(
+        [{ campaignId, recipientUserId: referredUserId, rewardAmount: campaign.rewardAmount, status: "credited" }],
+        { session, ordered: true },
+      );
+      const balance = await creditReferralWallet(
+        session,
+        referredUserId,
+        campaign.rewardAmount,
+        "Admin referral welcome bonus",
+        { adminReferralUsageId: usage[0]._id },
+      );
+      await Notification.create(
+        [{ userId: referredUserId, type: "referral_bonus", title: "Welcome bonus credited", body: `Your welcome bonus has been credited — your wallet is now ${balance} EGP (+${campaign.rewardAmount}).`, data: { amount: campaign.rewardAmount, newBalanceEgp: balance, adminReferralUsageId: usage[0]._id } }],
+        { session, ordered: true },
+      );
+
+      const creator = await User.findById(campaign.createdBy).select("name userNumber phone").session(session).lean();
+      if (creator) {
+        await AdminReferralAuditLog.create(
+          [{ campaignId, eventType: "redeemed", actorId: creator._id, recipientUserId: recipient._id, actorSnapshot: { name: creator.name, userNumber: creator.userNumber ?? null, phone: creator.phone }, recipientSnapshot: { name: recipient.name, userNumber: recipient.userNumber ?? null, phone: recipient.phone }, metadata: { rewardAmount: campaign.rewardAmount } }],
+          { session, ordered: true },
+        );
+      }
+      result = { success: true, message: "Referral applied successfully." };
+    });
+    return result;
+  } catch (error) {
+    const message = (error as { message?: string }).message;
+    if (message === "ALREADY_REFERRED") return { success: false, message: "This account already used a referral code." };
+    if (message === "ADMIN_REFERRAL_UNAVAILABLE") return { success: false, message: "This admin referral link is inactive or has reached its usage limit." };
+    console.error("Admin referral application failed:", error);
     return { success: false, message: "Failed to apply referral code." };
   } finally {
     await session.endSession();
@@ -458,8 +547,9 @@ export async function reconcileReferralUsage(
     });
 
     return result;
-  } catch (error: any) {
-    if (error?.message === "ALREADY_CREDITED") {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    if (message === "ALREADY_CREDITED") {
       return {
         success: true,
         message: "Referral has already been credited.",
@@ -472,7 +562,7 @@ export async function reconcileReferralUsage(
     );
     return {
       success: false,
-      message: `Reconciliation failed: ${error?.message || "Unknown error"}`,
+      message: `Reconciliation failed: ${message}`,
     };
   } finally {
     await session.endSession();

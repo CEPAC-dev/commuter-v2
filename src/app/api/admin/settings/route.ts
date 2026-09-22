@@ -36,6 +36,8 @@ export async function PUT(req: NextRequest) {
       cancellationTiers,
       passengerCancellationTiers,
       verificationMethod,
+      broadcastOriginFilter,
+      broadcastDestinationFilter,
     } = body;
 
     if (
@@ -111,6 +113,33 @@ export async function PUT(req: NextRequest) {
       );
     }
 
+    const defaultBroadcastFilter = { enabled: true, radiusKm: 7 };
+    const originFilter = broadcastOriginFilter ?? defaultBroadcastFilter;
+    const destinationFilter =
+      broadcastDestinationFilter ?? defaultBroadcastFilter;
+    const validBroadcastFilter = (value: unknown) => {
+      if (!value || typeof value !== "object") return false;
+      const filter = value as { enabled?: unknown; radiusKm?: unknown };
+      return (
+        typeof filter.enabled === "boolean" &&
+        typeof filter.radiusKm === "number" &&
+        Number.isFinite(filter.radiusKm) &&
+        filter.radiusKm >= 0
+      );
+    };
+    if (!validBroadcastFilter(originFilter)) {
+      return NextResponse.json(
+        { error: "broadcastOriginFilter must include enabled and a non-negative radiusKm." },
+        { status: 400 },
+      );
+    }
+    if (!validBroadcastFilter(destinationFilter)) {
+      return NextResponse.json(
+        { error: "broadcastDestinationFilter must include enabled and a non-negative radiusKm." },
+        { status: 400 },
+      );
+    }
+
     await connectDB();
 
     const updated = await AdminSettings.findOneAndUpdate(
@@ -124,15 +153,20 @@ export async function PUT(req: NextRequest) {
           ...(cancellationTiers && { cancellationTiers }),
           ...(passengerCancellationTiers && { passengerCancellationTiers }),
           ...(verificationMethod && { verificationMethod }),
+          broadcastOriginFilter: originFilter,
+          broadcastDestinationFilter: destinationFilter,
         },
       },
       { upsert: true, returnDocument: "after", runValidators: true },
     ).lean();
 
     return NextResponse.json({ ok: true, data: updated });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: err.message || "Failed to update admin settings" },
+      {
+        error:
+          err instanceof Error ? err.message : "Failed to update admin settings",
+      },
       { status: 500 },
     );
   }

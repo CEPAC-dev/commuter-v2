@@ -118,6 +118,7 @@ export default function AvailabilityClient({
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [error, setError] = useState("");
   const [availableSavedAddresses, setAvailableSavedAddresses] = useState(savedAddresses);
+  const [wantsDestination, setWantsDestination] = useState(false);
 
   useEffect(() => {
     if (!error) return;
@@ -132,6 +133,7 @@ export default function AvailabilityClient({
   }
 
   function beginAdd(initialDay?: Day) {
+    setWantsDestination(false);
     setEditing({
       id: null,
       days: initialDay ? [initialDay] : ["sun", "mon", "tue", "wed", "thu"],
@@ -144,6 +146,7 @@ export default function AvailabilityClient({
   }
 
   function beginEdit(record: AvailabilityRecord) {
+    setWantsDestination(Boolean(record.destination));
     setEditing({
       id: record._id,
       days: [record.dayOfWeek],
@@ -159,10 +162,6 @@ export default function AvailabilityClient({
     if (!editing) return;
     if (!editing.origin) {
       setError(t("availability.error.origin_required"));
-      return;
-    }
-    if (!editing.destination) {
-      setError(t("availability.error.destination_required"));
       return;
     }
     if (editing.days.length === 0) {
@@ -467,7 +466,7 @@ export default function AvailabilityClient({
                 </div>
               </div>
 
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5">
                 <div>
                   <label className="mb-2 block text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
                     {t("availability.start_location")}
@@ -494,29 +493,61 @@ export default function AvailabilityClient({
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
-                    {t("availability.end_location")}
-                  </label>
-                  <LocationPickerMap
-                    lat={editing.destination ? String(editing.destination.lat) : ""}
-                    lng={editing.destination ? String(editing.destination.lng) : ""}
-                    name={editing.destination?.address ?? ""}
-                    savedAddresses={availableSavedAddresses}
-                    onSaved={handleAddressSaved}
-                    onChange={(lat, lng, name) =>
-                      setEditing((current) =>
-                        current
-                          ? {
-                              ...current,
-                              destination:
-                                lat && lng
-                                  ? { address: name, lat: Number(lat), lng: Number(lng) }
-                                  : null,
-                            }
-                          : current,
-                      )
-                    }
-                  />
+                  {!wantsDestination && (
+                    <button
+                      type="button"
+                      onClick={() => setWantsDestination(true)}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-dashed border-[#00C2A8] px-4 py-2.5 text-sm font-extrabold text-[#008a76] transition-colors hover:bg-[#effaf8]"
+                    >
+                      <span className="text-lg leading-none">+</span>
+                      {t("availability.add_destination")}
+                    </button>
+                  )}
+
+                  <div
+                    className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${
+                      wantsDestination ? "max-h-[900px] opacity-100" : "max-h-0 opacity-0"
+                    }`}
+                    aria-hidden={!wantsDestination}
+                  >
+                    <div className="relative rounded-2xl border border-[#e2e8f0] bg-[#fbfdfd] p-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWantsDestination(false);
+                          setEditing((current) =>
+                            current ? { ...current, destination: null } : current,
+                          );
+                        }}
+                        className="absolute right-3 top-3 text-xs font-bold text-[#5A6A7A] hover:text-[#0B1E3D]"
+                      >
+                        ✕ {t("availability.remove_destination")}
+                      </button>
+                      <label className="mb-2 block pr-36 text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
+                        {t("availability.end_location")}
+                      </label>
+                      <LocationPickerMap
+                        lat={editing.destination ? String(editing.destination.lat) : ""}
+                        lng={editing.destination ? String(editing.destination.lng) : ""}
+                        name={editing.destination?.address ?? ""}
+                        savedAddresses={availableSavedAddresses}
+                        onSaved={handleAddressSaved}
+                        onChange={(lat, lng, name) =>
+                          setEditing((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  destination:
+                                    lat && lng
+                                      ? { address: name, lat: Number(lat), lng: Number(lng) }
+                                      : null,
+                                }
+                              : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
                 <label className="text-xs font-extrabold uppercase tracking-wider text-[#5A6A7A]">
                   {t("availability.from_start")}
