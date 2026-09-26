@@ -968,7 +968,7 @@ export const en = {
   "hero.stats.fully_covered": "fully covered",
   "hero.stats.coverage_value": "Greater Cairo",
   "hero.stats.from": "from",
-  "hero.stats.price_value": "4 EGP",
+  "hero.stats.price_value": "4 EGP per km",
   // How it works section
   "howitworks.section_label": "How it works",
   "howitworks.heading": "Four steps to your ride",

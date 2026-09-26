@@ -568,7 +568,8 @@ export const ar: Record<MessageKey, string> = {
   "create.collapse": "طي",
   "create.expand_trip_aria": "توسيع الرحلة {n}",
   "create.collapse_trip_aria": "طي الرحلة {n}",
-  "create.step_vehicle_date_required": "اختر تاريخ الطلب ونوع المركبة للمتابعة.",
+  "create.step_vehicle_date_required":
+    "اختر تاريخ الطلب ونوع المركبة للمتابعة.",
   "create.step_vehicle_required": "اختر نوع المركبة للمتابعة.",
   "create.step_locations_required": "حدد موقعي الركوب والنزول للمتابعة.",
   "create.step_time_required": "حدد وقت الرحلة للمتابعة.",
@@ -950,7 +951,7 @@ export const ar: Record<MessageKey, string> = {
   "hero.stats.fully_covered": "تغطية كاملة",
   "hero.stats.coverage_value": "للقاهرة الكبرى",
   "hero.stats.from": "سعر يبدأ من ",
-  "hero.stats.price_value": "4 جنيهات",
+  "hero.stats.price_value": "4 جنيهات لكل كيلومتر",
   // How it works section
   "howitworks.section_label": "كيف تعمل الخدمة",
   "howitworks.heading": "أربع خطوات فقط لرحلتك",
