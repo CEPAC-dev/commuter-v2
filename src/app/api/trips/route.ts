@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
+import { User } from "@/models/User";
 import { nextSequence } from "@/models/Counter";
 import { Station } from "@/models/Station";
 import {
@@ -29,7 +30,11 @@ import {
 import type { StopInput, TripInput } from "@/types/forms";
 import type { PaymentStatus } from "@/types/booking";
 import { listUserTrips } from "@/lib/services/trips";
-import { createNotification } from "@/lib/notifications/createNotification";
+import {
+  createNotification,
+  createNotifications,
+} from "@/lib/notifications/createNotification";
+import { buildWaitingListCreatedAdminNotifications } from "@/lib/admin/waitingList";
 import { Types } from "mongoose";
 import {
   applyPromoCodeToTrip,
@@ -661,7 +666,25 @@ export async function POST(req: NextRequest) {
     );
     await Trip.insertMany(tripDocuments);
 
-    if (!hasSharedRide) {
+    if (hasSharedRide) {
+      try {
+        const admins = await User.find({ role: "admin" }).select("_id").lean();
+        const firstTrip = serverTrips[0];
+        await createNotifications(
+          buildWaitingListCreatedAdminNotifications({
+            adminIds: admins.map((admin) => String(admin._id)),
+            bookingId: String(request._id),
+            routeSummary: `${firstTrip.pickup.address} → ${firstTrip.dropoff.address}`,
+            date: tripInstances[0].date,
+          }),
+        );
+      } catch (error) {
+        console.error(
+          `[Waiting list] Admin notification failed for request ${String(request._id)}:`,
+          error,
+        );
+      }
+    } else {
       await createNotification({
         userId,
         type: "request_created",

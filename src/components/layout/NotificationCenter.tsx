@@ -66,9 +66,11 @@ function formatRelativeTime(
 export default function NotificationCenter({
   color,
   buttonBackground,
+  seeAllHref = "/user/notifications",
 }: {
   color: string;
   buttonBackground: string;
+  seeAllHref?: string;
 }) {
   const router = useRouter();
   const { t, dir } = useClientLocale();
@@ -364,7 +366,7 @@ export default function NotificationCenter({
             className="notification-see-all"
             onClick={() => {
               setOpen(false);
-              router.push("/user/notifications");
+              router.push(seeAllHref);
             }}
           >
             {t("notifications.see_all")}

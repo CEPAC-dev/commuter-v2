@@ -18,6 +18,7 @@ import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import type { VehicleKey } from "@/lib/config/vehicles";
 import type { PaymentStatus, BookingStatus } from "@/types/booking";
 import type { Locale } from "@/lib/i18n";
+import { getRequestPaymentState } from "@/lib/requestPaymentState";
 
 export const metadata = { title: "My requests — Commuter" };
 export const dynamic = "force-dynamic";
@@ -46,8 +47,11 @@ const PAY_PILL_COLORS: Record<PaymentStatus, { bg: string; color: string }> = {
   expired: { bg: "#F5F5F5", color: "#9aa7b4" },
 };
 
-const STATUS_PILL_KEYS: Record<string, string> = {
+const STATUS_PILL_KEYS: Record<BookingStatus, string> = {
   pending_payment: "status.pending_payment",
+  waiting_list: "request_status.waiting_for_approval",
+  approved: "request_status.approved_pay_now",
+  rejected: "request_status.rejected",
   submitted: "filters.status_submitted",
   matched: "filters.status_matched",
   confirmed: "filters.status_confirmed",
@@ -58,9 +62,11 @@ const STATUS_PILL_KEYS: Record<string, string> = {
   nomatch: "status.nomatch",
 };
 
-const STATUS_PILL_COLORS: Record<string, { bg: string; color: string }> =
-  {
+const STATUS_PILL_COLORS: Record<BookingStatus, { bg: string; color: string }> = {
     pending_payment: { bg: "#FFF3E0", color: "#E65100" },
+    waiting_list: { bg: "#FFF8E1", color: "#8A5A00" },
+    approved: { bg: "#E8F5E9", color: "#20834A" },
+    rejected: { bg: "#FFEBEE", color: "#C0392B" },
     submitted: { bg: "#E2E8F0", color: "#5A6A7A" },
     matched: { bg: "#00C2A8", color: "#fff" },
     confirmed: { bg: "#E8F5E9", color: "#27AE60" },
@@ -120,6 +126,9 @@ function filterOptions(locale: Locale): {
       key: "status",
       label: translate(locale, "my_trips.status_filter_label"),
       options: [
+        { value: "waiting_list", label: translate(locale, "request_status.waiting_for_approval") },
+        { value: "approved", label: translate(locale, "request_status.approved_pay_now") },
+        { value: "rejected", label: translate(locale, "request_status.rejected") },
         {
           value: "pending_payment",
           label: translate(locale, "status.pending_payment"),
@@ -254,9 +263,8 @@ export default async function MyTripsPage({
           />
         ) : (
           bookings.map((booking) => {
-            const needsPayment =
-              booking.paymentStatus === "pending" ||
-              booking.paymentStatus === "failed";
+            const paymentState = getRequestPaymentState(booking);
+            const needsPayment = paymentState.showPayButton;
             const timedOut = booking.status === "time_out";
             return (
               <div
@@ -328,23 +336,22 @@ export default async function MyTripsPage({
                       <div
                         style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
                       >
-                        <Pill
-                          label={translate(
-                            locale,
-                            PAY_PILL_KEYS[booking.paymentStatus] ??
-                              PAY_PILL_KEYS.pending,
+                        {paymentState.kind !== "waiting_list" &&
+                          paymentState.kind !== "rejected" &&
+                          paymentState.kind !== "approved_past" && (
+                            <Pill
+                              label={translate(
+                                locale,
+                                PAY_PILL_KEYS[booking.paymentStatus] ??
+                                  PAY_PILL_KEYS.pending,
+                              )}
+                              {...(PAY_PILL_COLORS[booking.paymentStatus] ??
+                                PAY_PILL_COLORS.pending)}
+                            />
                           )}
-                          {...(PAY_PILL_COLORS[booking.paymentStatus] ??
-                            PAY_PILL_COLORS.pending)}
-                        />
                         <Pill
-                          label={translate(
-                            locale,
-                            STATUS_PILL_KEYS[booking.status] ??
-                              STATUS_PILL_KEYS.pending_payment,
-                          )}
-                          {...(STATUS_PILL_COLORS[booking.status] ??
-                            STATUS_PILL_COLORS.pending_payment)}
+                          label={translate(locale, paymentState.statusLabelKey ?? STATUS_PILL_KEYS[booking.status])}
+                          {...STATUS_PILL_COLORS[booking.status]}
                         />
                       </div>
                       <span
@@ -358,6 +365,13 @@ export default async function MyTripsPage({
                         {booking.amountEgp} EGP
                       </span>
                     </div>
+                    {(paymentState.explanationKey || paymentState.rejectionReason) && (
+                      <p style={{ margin: "10px 0 0", fontSize: 13, lineHeight: 1.5, color: "#5A6A7A" }}>
+                        {paymentState.explanationKey
+                          ? translate(locale, paymentState.explanationKey)
+                          : paymentState.rejectionReason}
+                      </p>
+                    )}
                   </div>
 
                   {/* Trip rows */}

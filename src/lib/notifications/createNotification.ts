@@ -6,6 +6,8 @@ export interface CreateNotificationPayload {
   type: string;
   title: string;
   body: string;
+  titleAr?: string;
+  bodyAr?: string;
   data?: Record<string, unknown>;
 }
 
@@ -18,6 +20,8 @@ export async function createNotification(payload: CreateNotificationPayload) {
     type: payload.type,
     title: payload.title,
     body: payload.body,
+    titleAr: payload.titleAr ?? "",
+    bodyAr: payload.bodyAr ?? "",
     data: payload.data ?? {},
   });
 
@@ -30,4 +34,22 @@ export async function createNotification(payload: CreateNotificationPayload) {
     isRead: Boolean(doc.isRead),
     createdAt: doc.createdAt?.toISOString?.() ?? new Date().toISOString(),
   };
+}
+
+export async function createNotifications(payloads: CreateNotificationPayload[]) {
+  if (payloads.length === 0) return [];
+
+  await connectDB();
+  const docs = await Notification.insertMany(
+    payloads.map((payload) => ({
+      userId: payload.userId,
+      type: payload.type,
+      title: payload.title,
+      body: payload.body,
+      titleAr: payload.titleAr ?? "",
+      bodyAr: payload.bodyAr ?? "",
+      data: payload.data ?? {},
+    })),
+  );
+  return docs;
 }

@@ -2,10 +2,39 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
+import { Request } from "@/models/Request";
 import { RefundRequest } from "@/models/RefundRequest";
 import { Ride } from "@/models/Ride";
 import { Log } from "@/models/Log";
 import { evaluateTripCancellation } from "@/lib/passengerCancellationPolicy";
+import { wasMoneyTaken } from "@/lib/requestPaymentState";
+
+const REQUEST_NOT_CANCELLABLE = "REQUEST_NOT_CANCELLABLE";
+
+async function getParentCancellationConflict(requestId: unknown) {
+  const request = await Request.findById(requestId)
+    .select("status paymentStatus")
+    .lean<{ status?: string; paymentStatus?: string }>();
+  if (request?.status === "waiting_list" || request?.status === "rejected") {
+    return NextResponse.json(
+      {
+        errorCode: REQUEST_NOT_CANCELLABLE,
+        error: "Trips in waiting or rejected requests cannot be cancelled individually.",
+      },
+      { status: 409 },
+    );
+  }
+  if (!wasMoneyTaken(request?.paymentStatus)) {
+    return NextResponse.json(
+      {
+        errorCode: "TRIP_NOT_PAID",
+        error: "This trip has not been paid for, so it cannot be cancelled.",
+      },
+      { status: 409 },
+    );
+  }
+  return null;
+}
 
 export async function GET(
   _req: Request,
@@ -28,6 +57,9 @@ export async function GET(
     if (!trip) {
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
     }
+
+    const parentConflict = await getParentCancellationConflict(trip.requestId);
+    if (parentConflict) return parentConflict;
 
     const evaluation = await evaluateTripCancellation(
       trip.date,
@@ -75,6 +107,9 @@ export async function POST(
     if (!trip) {
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
     }
+
+    const parentConflict = await getParentCancellationConflict(trip.requestId);
+    if (parentConflict) return parentConflict;
 
     if (trip.status === "cancelled") {
       return NextResponse.json(

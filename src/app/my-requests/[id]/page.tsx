@@ -12,13 +12,14 @@ import {
 import { getSession } from "@/lib/auth/session";
 import { expireStaleRequest, getUserRequest } from "@/lib/services/requests";
 import { VEHICLES } from "@/lib/config/vehicles";
-import { translate } from "@/lib/locale";
+import { translate, localeDirection } from "@/lib/locale";
 import type { VehicleKey } from "@/lib/config/vehicles";
 import AppHeader from "@/components/layout/AppHeader";
 import RouteMap from "@/components/shared/RouteMapOsmLoader";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import type { GeoPoint as Pt, StationSelection } from "@/types/geo";
 import type { PaymentStatus, BookingStatus } from "@/types/booking";
+import { getRequestPaymentState } from "@/lib/requestPaymentState";
 
 export const metadata = { title: "Request details — Commuter" };
 export const dynamic = "force-dynamic";
@@ -52,12 +53,15 @@ const PAY_PILL: Record<
   expired: { label: "Expired", bg: "#F5F5F5", color: "#9aa7b4" },
 };
 
-const STATUS_PILL: Record<string, { label: string; bg: string; color: string }> = {
+const STATUS_PILL: Record<BookingStatus, { label: string; bg: string; color: string }> = {
   pending_payment: {
     label: "Pending payment",
     bg: "#FFF3E0",
     color: "#E65100",
   },
+  waiting_list: { label: "Waiting for approval", bg: "#FFF8E1", color: "#8A5A00" },
+  approved: { label: "Approved", bg: "#E8F5E9", color: "#20834A" },
+  rejected: { label: "Rejected", bg: "#FFEBEE", color: "#C0392B" },
   submitted: { label: "Submitted", bg: "#E2E8F0", color: "#5A6A7A" },
   matched: { label: "Matched", bg: "#00C2A8", color: "#fff" },
   confirmed: { label: "Confirmed", bg: "#E8F5E9", color: "#27AE60" },
@@ -113,6 +117,7 @@ export default async function RequestDetailPage({
   const locale = await getServerLocale();
   const { request, trips: rawTrips, walletBalance } = detail;
   const { dates, amountEgp, paymentStatus, status, createdAt } = request;
+  const paymentState = getRequestPaymentState(request);
   // Group materialized trips by date for detail display
   const tripsByDate = new Map<
     string,
@@ -146,6 +151,7 @@ export default async function RequestDetailPage({
       <AppHeader authed email={session.email} variant="app" backHref="/" />
 
       <main
+        dir={localeDirection(locale)}
         style={{ maxWidth: 640, margin: "0 auto", padding: "24px 20px 56px" }}
       >
         {/* Summary header */}
@@ -175,8 +181,17 @@ export default async function RequestDetailPage({
             }}
           >
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Pill {...(PAY_PILL[paymentStatus] ?? PAY_PILL.pending)} />
-              <Pill {...(STATUS_PILL[status] ?? STATUS_PILL.pending_payment)} />
+              {paymentState.kind !== "waiting_list" &&
+                paymentState.kind !== "rejected" &&
+                paymentState.kind !== "approved_past" && (
+                  <Pill {...(PAY_PILL[paymentStatus] ?? PAY_PILL.pending)} />
+                )}
+              <Pill
+                {...(STATUS_PILL[status] ?? STATUS_PILL.pending_payment)}
+                label={paymentState.statusLabelKey
+                  ? translate(locale, paymentState.statusLabelKey)
+                  : STATUS_PILL[status].label}
+              />
             </div>
             <span
               style={{
@@ -189,6 +204,13 @@ export default async function RequestDetailPage({
               {amountEgp} EGP
             </span>
           </div>
+          {(paymentState.explanationKey || paymentState.rejectionReason) && (
+            <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.5, color: "#5A6A7A" }}>
+              {paymentState.explanationKey
+                ? translate(locale, paymentState.explanationKey)
+                : paymentState.rejectionReason}
+            </p>
+          )}
         </div>
 
         {/* Trips — grouped by date */}
@@ -436,7 +458,7 @@ export default async function RequestDetailPage({
         </div>
 
         {/* Pay CTA for unpaid bookings */}
-        {(paymentStatus === "pending" || paymentStatus === "failed") && (
+        {paymentState.showPayButton && (
           <div style={{ marginTop: 20, borderRadius: 14, overflow: "hidden" }}>
             <ContinueCheckoutButton
               bookingId={id}

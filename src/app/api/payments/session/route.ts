@@ -14,6 +14,8 @@ import { createNotification } from "@/lib/notifications/createNotification";
 import { Types } from "mongoose";
 import { validateMutationRequest } from "@/lib/security/request";
 import { buildSettlementRequestFilter } from "@/lib/pendingRequestHardening";
+import { getCairoNowParts } from "@/lib/cancellationPolicy";
+import { hasPastTrip } from "@/lib/admin/waitingList";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
@@ -72,6 +74,21 @@ export async function POST(req: NextRequest) {
       { error: "This shared-ride request was rejected and cannot be paid." },
       { status: 409 },
     );
+  }
+
+  if (booking.status === "approved") {
+    const trips = await Trip.find({ requestId: booking._id })
+      .select("date pickupTime")
+      .lean<{ date: string; pickupTime: string }[]>();
+    if (hasPastTrip(trips, getCairoNowParts())) {
+      return NextResponse.json(
+        {
+          errorCode: "APPROVED_TRIP_IN_PAST",
+          error: "This request has a trip whose pickup time has passed. Please book again.",
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const totalEgp = Number(booking.amountEgp);

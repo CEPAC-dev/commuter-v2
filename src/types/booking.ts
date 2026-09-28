@@ -115,6 +115,10 @@ export interface TripListRow {
   distanceKm: number;
   durationMinutes: number;
   bookingAmountEgp: number;
+  parentRequestStatus?: BookingStatus;
+  parentPaymentStatus?: PaymentStatus;
+  rejectionReason?: string | null;
+  hasPastTrip?: boolean;
   createdAt: string;
   assignedDriver?: {
     name?: string;
@@ -158,5 +162,8 @@ export interface BookingRow {
   amountEgp: number;
   paymentStatus: PaymentStatus;
   status: BookingStatus;
+  rejectionReason: string | null;
+  reviewedAt: string | null;
+  hasPastTrip?: boolean;
   createdAt: string;
 }

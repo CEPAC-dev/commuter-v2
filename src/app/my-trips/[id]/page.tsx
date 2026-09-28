@@ -14,8 +14,12 @@ import PrivateRideDetails from "@/components/trips/PrivateRideDetails";
 import SharedRideDetails from "@/components/trips/SharedRideDetails";
 import RateTripModal from "@/components/trips/RateTripModal";
 import CancelTripModal from "@/components/trips/CancelTripModal";
+import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
+import { getOrCreateWallet } from "@/lib/wallet/wallet";
+import { getRequestPaymentState } from "@/lib/requestPaymentState";
 import type {
+  BookingStatus,
   PaymentStatus,
   RideDetailView,
   TripStatus,
@@ -38,12 +42,15 @@ const PAY_PILL: Record<
   expired: { label: "Expired", bg: "#F5F5F5", color: "#9aa7b4" },
 };
 
-const STATUS_PILL: Record<string, { label: string; bg: string; color: string }> = {
+const STATUS_PILL: Record<BookingStatus, { label: string; bg: string; color: string }> = {
   pending_payment: {
     label: "Pending payment",
     bg: "#FFF3E0",
     color: "#E65100",
   },
+  waiting_list: { label: "Waiting for approval", bg: "#FFF8E1", color: "#8A5A00" },
+  approved: { label: "Approved", bg: "#E8F5E9", color: "#20834A" },
+  rejected: { label: "Rejected", bg: "#FFEBEE", color: "#C0392B" },
   submitted: { label: "Upcoming", bg: "#E2E8F0", color: "#5A6A7A" },
   matched: { label: "Ongoing", bg: "#00C2A8", color: "#fff" },
   confirmed: { label: "Upcoming", bg: "#E2E8F0", color: "#5A6A7A" },
@@ -127,6 +134,18 @@ export default async function TripDetailPage({
   const vLabel = translate(locale, `vehicles.${trip.vehicleType}`);
   const paymentStatus = (trip.paymentStatus as PaymentStatus) ?? "pending";
   const status = (trip.status as TripStatus) ?? "pending_payment";
+  const requestPaymentState = getRequestPaymentState({
+    status: trip.parentRequestStatus ?? status,
+    paymentStatus: trip.parentPaymentStatus ?? paymentStatus,
+    hasPastTrip: trip.hasPastTrip,
+    rejectionReason: trip.rejectionReason,
+  });
+  const checkoutWallet =
+    !isDriver &&
+    trip.parentRequestStatus === "approved" &&
+    requestPaymentState.showPayButton
+      ? await getOrCreateWallet(session.userId)
+      : null;
   const isOngoing = status === "active" || status === "matched";
   const distinctPassengers = (trip.passengers ?? []).filter(
     (p) => !p.sameAsMain && p.pickup && p.dropoff,
@@ -239,25 +258,54 @@ export default async function TripDetailPage({
               {translate(locale, "my_trips.ride_number", { rideNumber: trip.tripNumber })} · {formatDate(locale, trip.date)}
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <Pill {...({ ...(PAY_PILL[paymentStatus] ?? PAY_PILL.pending), label: translate(locale, `payments.${paymentStatus}`) })} />
-              <Pill {...({ ...(STATUS_PILL[status] ?? STATUS_PILL.pending_payment), label: translate(locale, ((): string => {
-                const map: Record<string, string> = {
-                  pending_payment: "pending_payment",
-                  submitted: "upcoming",
-                  matched: "ongoing",
-                  confirmed: "upcoming",
-                  active: "ongoing",
-                  completed: "previous",
-                  cancelled: "previous",
-                  time_out: "previous",
-                };
-                return `status.${map[status] ?? "previous"}`;
-              })()) })} />
+              {requestPaymentState.kind !== "waiting_list" &&
+                requestPaymentState.kind !== "rejected" &&
+                requestPaymentState.kind !== "approved_past" && (
+                  <Pill {...({ ...(PAY_PILL[paymentStatus] ?? PAY_PILL.pending), label: translate(locale, `payments.${paymentStatus}`) })} />
+                )}
+              <Pill {...({
+                ...(STATUS_PILL[status] ?? STATUS_PILL.pending_payment),
+                label: requestPaymentState.statusLabelKey
+                  ? translate(locale, requestPaymentState.statusLabelKey)
+                  : translate(locale, ((): string => {
+                      const map: Record<BookingStatus, string> = {
+                        pending_payment: "pending_payment",
+                        waiting_list: "pending_payment",
+                        approved: "pending_payment",
+                        rejected: "previous",
+                        submitted: "upcoming",
+                        matched: "ongoing",
+                        confirmed: "upcoming",
+                        active: "ongoing",
+                        completed: "previous",
+                        cancelled: "previous",
+                        time_out: "previous",
+                        nomatch: "nomatch",
+                      };
+                      return `status.${map[status]}`;
+                    })()),
+              })} />
               <span aria-hidden="true" style={{ color: "#d0d8e0" }}>·</span>
               <strong style={{ fontSize: 14, color: "#0B1E3D", fontVariantNumeric: "tabular-nums" }}>
                 {formatEgp(locale, trip.priceEgp)}
               </strong>
             </div>
+            {(requestPaymentState.explanationKey || requestPaymentState.rejectionReason) && (
+              <p style={{ margin: "8px 0 0", fontSize: 13, lineHeight: 1.5, color: "#5A6A7A" }}>
+                {requestPaymentState.explanationKey
+                  ? translate(locale, requestPaymentState.explanationKey)
+                  : requestPaymentState.rejectionReason}
+              </p>
+            )}
+            {checkoutWallet && trip.parentRequestStatus === "approved" && (
+              <div style={{ marginTop: 12, maxWidth: 360 }}>
+                <ContinueCheckoutButton
+                  bookingId={trip.requestId}
+                  amountEgp={trip.requestAmountEgp ?? trip.priceEgp}
+                  walletBalance={checkoutWallet.balanceEgp ?? 0}
+                />
+              </div>
+            )}
             {showActionCard && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                 {status === "cancelled" && cancellation && (

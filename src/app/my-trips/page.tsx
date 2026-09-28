@@ -34,6 +34,7 @@ import RateTripModal from "@/components/trips/RateTripModal";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 import CancelTripModal from "@/components/trips/CancelTripModal";
 import StickySidebar from "@/components/shared/StickySidebar";
+import { getRequestPaymentState } from "@/lib/requestPaymentState";
 
 export const metadata = { title: "My trips — Commuter" };
 export const dynamic = "force-dynamic";
@@ -71,6 +72,21 @@ function getStatusPill(locale: "en" | "ar") {
       bg: "#FFF3E0",
       color: "#E65100",
     },
+    waiting_list: {
+      label: translate(locale, "request_status.waiting_for_approval"),
+      bg: "#FFF8E1",
+      color: "#8A5A00",
+    },
+    approved: {
+      label: translate(locale, "request_status.approved_pay_now"),
+      bg: "#E8F5E9",
+      color: "#20834A",
+    },
+    rejected: {
+      label: translate(locale, "request_status.rejected"),
+      bg: "#FFEBEE",
+      color: "#C0392B",
+    },
     submitted: { label: translate(locale, "status.upcoming"), bg: "#E2E8F0", color: "#5A6A7A" },
     matched: { label: translate(locale, "status.ongoing"), bg: "#00C2A8", color: "#fff" },
     confirmed: { label: translate(locale, "status.upcoming"), bg: "#E2E8F0", color: "#5A6A7A" },
@@ -79,7 +95,7 @@ function getStatusPill(locale: "en" | "ar") {
     cancelled: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
     time_out: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
     nomatch: { label: translate(locale, "status.nomatch"), bg: "#FFEBEE", color: "#E74C3C" },
-  } as Record<BookingStatus, { label: string; bg: string; color: string }>;
+  } satisfies Record<BookingStatus, { label: string; bg: string; color: string }>;
 }
 function descriptionForVehicle(locale: "en" | "ar", vehicleType: string) {
   const key = `vehicles.${vehicleType}`;
@@ -1353,6 +1369,12 @@ export default async function MyTripsPage({
 
                     const trip = item.data;
                     const vLabel = descriptionForVehicle(locale, trip.vehicleType);
+                    const requestPaymentState = getRequestPaymentState({
+                      status: trip.parentRequestStatus ?? trip.status,
+                      paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
+                      hasPastTrip: trip.hasPastTrip,
+                      rejectionReason: trip.rejectionReason,
+                    });
                     const timedOut = trip.status === "time_out";
                     const hasAssignedDriver = Boolean(trip.assignedDriver);
                     const sharedDetail = !isDriver ? sharedTripDetailsById.get(trip.id) : null;
@@ -1361,8 +1383,7 @@ export default async function MyTripsPage({
                       isSharedVehicle(trip.vehicleType) &&
                       Boolean(sharedDetail?.rideDetails);
                     const needsPayment =
-                      trip.paymentStatus === "pending" ||
-                      trip.paymentStatus === "failed";
+                      !isDriver && requestPaymentState.showPayButton;
                     return (
                       <div
                         key={trip.id}
@@ -1438,7 +1459,14 @@ export default async function MyTripsPage({
                             </div>
 
                             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                              <Pill {...(getStatusPill(locale)[trip.status] ?? getStatusPill(locale).pending_payment)} />
+                              <Pill
+                                {...(requestPaymentState.statusLabelKey
+                                  ? {
+                                      ...getStatusPill(locale)[trip.parentRequestStatus ?? trip.status],
+                                      label: translate(locale, requestPaymentState.statusLabelKey),
+                                    }
+                                  : getStatusPill(locale)[trip.status])}
+                              />
                               {trip.status === "matched" && (
                                 <MatchedTripCountdown
                                   date={trip.date}
@@ -1485,6 +1513,13 @@ export default async function MyTripsPage({
                                 </span>
                               )}
                             </div>
+                            {(requestPaymentState.explanationKey || requestPaymentState.rejectionReason) && (
+                              <p style={{ margin: "-4px 0 12px", fontSize: 13, lineHeight: 1.5, color: "#5A6A7A" }}>
+                                {requestPaymentState.explanationKey
+                                  ? translate(locale, requestPaymentState.explanationKey)
+                                  : requestPaymentState.rejectionReason}
+                              </p>
+                            )}
 
                             {showSharedSummary ? (
                               <div style={{ marginBottom: 12 }}>

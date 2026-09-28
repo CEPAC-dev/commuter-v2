@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CreditCard, Wallet as WalletIcon, X } from "lucide-react";
+import { useClientLocale } from "@/lib/locale.client";
 
 interface Props {
   bookingId: string;
@@ -16,6 +17,7 @@ export default function ContinueCheckoutButton({
   walletBalance,
 }: Props) {
   const router = useRouter();
+  const { t } = useClientLocale();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState<"card" | "wallet" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,13 @@ export default function ContinueCheckoutButton({
         body: JSON.stringify({ bookingId, useWallet }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Payment failed");
+      if (!res.ok) {
+        const message =
+          data.errorCode === "APPROVED_TRIP_IN_PAST"
+            ? t("errors.APPROVED_TRIP_IN_PAST")
+            : data.error ?? "Payment failed";
+        throw new Error(message);
+      }
       if (data.walletOnly && data.redirect) {
         router.push(data.redirect);
         return;

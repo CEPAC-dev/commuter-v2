@@ -2185,7 +2185,7 @@ export default function CreateClient({
               {t("create.request_sent_heading")}
             </h2>
             <p style={{ margin: "10px 0 20px", fontSize: 14, color: "#5A6A7A", lineHeight: 1.5 }}>
-              {t("create.request_sent_description")}
+              {t("request_status.waiting_payment_explanation")}
             </p>
             <Link
               href={`/my-requests/${requestSentBookingId}`}

@@ -13,6 +13,8 @@ import type {
   TripListRow,
 } from "@/types/booking";
 import type { GeoPoint, StationSelection } from "@/types/geo";
+import { getCairoNowParts } from "@/lib/cancellationPolicy";
+import { hasPastTrip as hasPastPickupTime } from "@/lib/admin/waitingList";
 
 export interface StationOption extends StationSelection {
   distanceKm: number;
@@ -173,19 +175,21 @@ export interface StationOption extends StationSelection {
   walkingMin: number;
 }
 
-const STATUS_GROUPS: Record<string, BookingStatus[]> = {
+type StatusGroup = "pending_payment" | "upcoming" | "ongoing" | "previous";
+
+const STATUS_GROUPS = {
   pending_payment: ["pending_payment"],
   upcoming: ["submitted", "confirmed"],
   ongoing: ["active", "matched"],
   previous: ["completed", "cancelled", "time_out", "nomatch"],
-};
+} satisfies Record<StatusGroup, BookingStatus[]>;
 
 export interface ListUserTripsOptions {
   page: number;
   pageSize?: number;
   paymentStatus?: PaymentStatus;
   vehicleType?: string;
-  statusGroup?: "previous" | "ongoing" | "upcoming" | "pending_payment";
+  statusGroup?: StatusGroup;
   dateFrom?: string;
   dateTo?: string;
 }
@@ -400,11 +404,36 @@ export async function listUserTrips(
     new Set(rawTrips.map((t) => String(t.requestId))),
   );
   const requests = await RequestModel.find({ _id: { $in: requestIds } })
-    .select("amountEgp")
-    .lean<{ _id: unknown; amountEgp: number }[]>();
+    .select("amountEgp status paymentStatus rejectionReason")
+    .lean<
+      {
+        _id: unknown;
+        amountEgp: number;
+        status: BookingStatus;
+        paymentStatus: PaymentStatus;
+        rejectionReason?: string | null;
+      }[]
+    >();
   const amountByRequestId = new Map(
     requests.map((r) => [String(r._id), r.amountEgp]),
   );
+  const requestById = new Map(requests.map((request) => [String(request._id), request]));
+  const requestTrips = await Trip.find({ requestId: { $in: requestIds } })
+    .select("requestId date pickupTime")
+    .lean<{ requestId: unknown; date: string; pickupTime: string }[]>();
+  const nowCairo = getCairoNowParts();
+  const hasPastTripByRequestId = new Map<string, boolean>();
+  for (const trip of requestTrips) {
+    const requestId = String(trip.requestId);
+    if (
+      hasPastPickupTime(
+        [{ date: trip.date, pickupTime: trip.pickupTime }],
+        nowCairo,
+      )
+    ) {
+      hasPastTripByRequestId.set(requestId, true);
+    }
+  }
 
   const completedTripIds = rawTrips
     .filter((trip) => trip.status === "completed")
@@ -424,10 +453,13 @@ export async function listUserTrips(
   return {
     total,
     page,
-    rows: rawTrips.map((trip) => ({
+    rows: rawTrips.map((trip) => {
+      const requestId = String(trip.requestId);
+      const parentRequest = requestById.get(requestId);
+      return {
       id: String(trip._id),
       tripNumber: trip.tripNumber,
-      requestId: String(trip.requestId),
+      requestId,
       date: trip.date,
       paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
       status: (trip.status as BookingStatus) ?? "pending_payment",
@@ -448,7 +480,13 @@ export async function listUserTrips(
       distanceKm: trip.distanceKm,
       durationMinutes: trip.durationMinutes,
       bookingAmountEgp:
-        amountByRequestId.get(String(trip.requestId)) ?? trip.priceEgp,
+        amountByRequestId.get(requestId) ?? trip.priceEgp,
+      parentRequestStatus: parentRequest?.status,
+      parentPaymentStatus: parentRequest?.paymentStatus,
+      rejectionReason: parentRequest?.rejectionReason ?? null,
+      ...(parentRequest?.status === "approved"
+        ? { hasPastTrip: hasPastTripByRequestId.get(requestId) ?? false }
+        : {}),
       createdAt:
         trip.createdAt instanceof Date
           ? trip.createdAt.toISOString()
@@ -457,7 +495,8 @@ export async function listUserTrips(
         ? (assignedDriverById.get(String(trip.driverId)) ?? null)
         : null,
       rating: ratingByTripId.get(String(trip._id)) ?? null,
-    })),
+      };
+    }),
   };
 }
 
@@ -465,6 +504,11 @@ export interface UserTripDetail {
   id: string;
   tripNumber: number;
   requestId: string;
+  requestAmountEgp?: number;
+  parentRequestStatus?: BookingStatus;
+  parentPaymentStatus?: PaymentStatus;
+  rejectionReason?: string | null;
+  hasPastTrip?: boolean;
   date: string;
   cycleIndex: number;
   pickup: GeoPoint;
@@ -557,6 +601,23 @@ export async function getDriverTrip(
 
   if (!trip) return null;
 
+  const parentRequest = await RequestModel.findById(trip.requestId)
+    .select("amountEgp status paymentStatus rejectionReason")
+    .lean<{
+      amountEgp: number;
+      status: BookingStatus;
+      paymentStatus: PaymentStatus;
+      rejectionReason?: string | null;
+    } | null>();
+  const hasPastTrip =
+    parentRequest?.status === "approved" &&
+    hasPastPickupTime(
+      await Trip.find({ requestId: trip.requestId })
+        .select("date pickupTime")
+        .lean<{ date: string; pickupTime: string }[]>(),
+      getCairoNowParts(),
+    );
+
   const assignedDriver = trip.driverId
     ? await buildAssignedDriver(trip.driverId)
     : null;
@@ -565,6 +626,11 @@ export async function getDriverTrip(
     ...trip,
     id: String(trip._id),
     requestId: String(trip.requestId),
+    requestAmountEgp: parentRequest?.amountEgp,
+    parentRequestStatus: parentRequest?.status,
+    parentPaymentStatus: parentRequest?.paymentStatus,
+    rejectionReason: parentRequest?.rejectionReason ?? null,
+    ...(parentRequest?.status === "approved" ? { hasPastTrip } : {}),
     paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
     pickupStationOptions: trip.pickupStationOptions ?? [],
     dropoffStationOptions: trip.dropoffStationOptions ?? [],
