@@ -46,7 +46,7 @@ const PAY_PILL_COLORS: Record<PaymentStatus, { bg: string; color: string }> = {
   expired: { bg: "#F5F5F5", color: "#9aa7b4" },
 };
 
-const STATUS_PILL_KEYS: Record<BookingStatus, string> = {
+const STATUS_PILL_KEYS: Record<string, string> = {
   pending_payment: "status.pending_payment",
   submitted: "filters.status_submitted",
   matched: "filters.status_matched",
@@ -58,7 +58,7 @@ const STATUS_PILL_KEYS: Record<BookingStatus, string> = {
   nomatch: "status.nomatch",
 };
 
-const STATUS_PILL_COLORS: Record<BookingStatus, { bg: string; color: string }> =
+const STATUS_PILL_COLORS: Record<string, { bg: string; color: string }> =
   {
     pending_payment: { bg: "#FFF3E0", color: "#E65100" },
     submitted: { bg: "#E2E8F0", color: "#5A6A7A" },

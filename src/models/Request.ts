@@ -42,6 +42,9 @@ const RequestSchema = new Schema(
       default: "pending_payment",
       enum: [
         "pending_payment",
+        "waiting_list",
+        "approved",
+        "rejected",
         "submitted",
         "matched",
         "confirmed",

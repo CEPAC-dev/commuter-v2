@@ -621,6 +621,7 @@ export async function POST(req: NextRequest) {
     (sum, instance) => sum + instance.priceEgp,
     0,
   );
+  const hasSharedRide = serverTrips.some((trip) => trip.rideType === "shared");
   let createdRequestId: Types.ObjectId | null = null;
 
   try {
@@ -632,7 +633,7 @@ export async function POST(req: NextRequest) {
       amountEgp,
       note,
       paymentStatus: "pending",
-      status: "pending_payment",
+      status: hasSharedRide ? "waiting_list" : "pending_payment",
     });
     createdRequestId = request._id;
 
@@ -660,18 +661,27 @@ export async function POST(req: NextRequest) {
     );
     await Trip.insertMany(tripDocuments);
 
-    await createNotification({
-      userId,
-      type: "request_created",
-      title: "Trip request received",
-      body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
-      data: { bookingId: String(request._id), amountEgp },
-    });
+    if (!hasSharedRide) {
+      await createNotification({
+        userId,
+        type: "request_created",
+        title: "Trip request received",
+        body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
+        data: { bookingId: String(request._id), amountEgp },
+      });
+    }
 
     return NextResponse.json(
       {
         bookingId: String(request._id),
         amountEgp,
+        ...(hasSharedRide
+          ? {
+              waitingList: true,
+              status: "waiting_list",
+              requiresPayment: false,
+            }
+          : {}),
         promoCode,
         promoCodeApplied,
         promoCodeAppliedTrips,

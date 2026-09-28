@@ -13,6 +13,7 @@ import {
 import { createNotification } from "@/lib/notifications/createNotification";
 import { Types } from "mongoose";
 import { validateMutationRequest } from "@/lib/security/request";
+import { buildSettlementRequestFilter } from "@/lib/pendingRequestHardening";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
@@ -58,6 +59,20 @@ export async function POST(req: NextRequest) {
       { error: "Request not found or already paid." },
       { status: 404 },
     );
+
+  if (booking.status === "waiting_list") {
+    return NextResponse.json(
+      { error: "This shared-ride request is waiting for admin approval." },
+      { status: 409 },
+    );
+  }
+
+  if (booking.status === "rejected") {
+    return NextResponse.json(
+      { error: "This shared-ride request was rejected and cannot be paid." },
+      { status: 409 },
+    );
+  }
 
   const totalEgp = Number(booking.amountEgp);
   if (!Number.isFinite(totalEgp) || totalEgp < 0)
@@ -188,7 +203,7 @@ export async function POST(req: NextRequest) {
 
     // Settle booking — race-safe conditional update.
     const settled = await Request.findOneAndUpdate(
-      { _id: booking._id, paymentStatus: { $in: ["pending", "failed"] } },
+      buildSettlementRequestFilter(booking._id),
       { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
     );
     if (!settled) {

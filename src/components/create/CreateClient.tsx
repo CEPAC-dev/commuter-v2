@@ -120,6 +120,7 @@ export default function CreateClient({
   const [createdBooking, setCreatedBooking] = useState<{
     id: string;
     amountEgp: number;
+    waitingList?: boolean;
   } | null>(null);
   const [submitError, setSubmitError] = useState("");
   const [useWallet, setUseWallet] = useState(false);
@@ -129,6 +130,8 @@ export default function CreateClient({
   const [stations, setStations] = useState<Station[]>([]);
   const [bookingNote, setBookingNote] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestSentBookingId, setRequestSentBookingId] = useState<string | null>(null);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [promoFieldOpen, setPromoFieldOpen] = useState(false);
   const [noteFieldOpen, setNoteFieldOpen] = useState(false);
@@ -412,7 +415,11 @@ export default function CreateClient({
         setSubmitError(t("create.booking_create_failed"));
         return null;
       }
-      const booking = { id: data.bookingId, amountEgp: data.amountEgp };
+      const booking = {
+        id: data.bookingId,
+        amountEgp: data.amountEgp,
+        waitingList: data.waitingList === true,
+      };
       setCreatedBooking(booking);
       return booking;
     } catch {
@@ -425,13 +432,34 @@ export default function CreateClient({
 
   async function handleConfirmRequest() {
     setShowPreview(false);
+    const hasSharedRide = trips.some((trip) => {
+      const vehicle =
+        vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType];
+      return vehicle?.ride === "shared";
+    });
+    if (hasSharedRide) {
+      setShowRequestModal(true);
+      return;
+    }
     if (grandTotalEgp === 0) setUseWallet(true);
     setShowPaymentModal(true);
+  }
+
+  async function handleSendRequest() {
+    const booking = createdBooking ?? (await createBooking());
+    if (!booking) return;
+    setShowRequestModal(false);
+    if (booking.waitingList) setRequestSentBookingId(booking.id);
   }
 
   async function handleSubmit() {
     const booking = createdBooking ?? (await createBooking());
     if (!booking) return;
+    if (booking.waitingList) {
+      setShowPaymentModal(false);
+      setRequestSentBookingId(booking.id);
+      return;
+    }
     setSubmitting(true);
     setSubmitError("");
     let navigating = false;
@@ -2042,6 +2070,150 @@ export default function CreateClient({
                   : t("create.confirm_request")}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showRequestModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("create.request_modal_aria")}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            background: "rgba(11,30,61,0.55)",
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submitting) {
+              setShowRequestModal(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "20px 20px 0 0",
+              width: "100%",
+              maxWidth: 520,
+              padding: "20px 24px 32px",
+            }}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: "#0B1E3D", margin: 0 }}>
+              {t("create.request_modal_heading")}
+            </h2>
+            <p style={{ margin: "10px 0 16px", fontSize: 14, color: "#5A6A7A", lineHeight: 1.5 }}>
+              {t("create.request_modal_description")}
+            </p>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "12px 14px",
+                borderRadius: 12,
+                background: "#f8f9fa",
+                border: "1.5px solid #eef0f3",
+                color: "#0B1E3D",
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              <span>{t("create.total_amount_label")}</span>
+              <strong>{formatEgp(locale, grandTotalEgp)}</strong>
+            </div>
+            <p style={{ margin: "14px 0 18px", fontSize: 13, color: "#00877A", lineHeight: 1.5, fontWeight: 700 }}>
+              {t("create.request_modal_no_payment")}
+            </p>
+            {submitError && (
+              <p role="alert" style={{ fontSize: 13, color: "#e74c3c", margin: "0 0 12px" }}>
+                {submitError}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => void handleSendRequest()}
+              disabled={submitting}
+              style={{
+                width: "100%",
+                height: 52,
+                background: submitting ? "#5A6A7A" : "#0B1E3D",
+                color: "#ffffff",
+                fontWeight: 700,
+                fontSize: 15,
+                border: "none",
+                borderRadius: 12,
+                cursor: submitting ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {submitting ? t("create.processing") : t("create.send_request")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {requestSentBookingId && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("create.request_sent_aria")}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 210,
+            background: "rgba(11,30,61,0.55)",
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "20px 20px 0 0",
+              width: "100%",
+              maxWidth: 520,
+              padding: "24px 24px 32px",
+            }}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: "#0B1E3D", margin: 0 }}>
+              {t("create.request_sent_heading")}
+            </h2>
+            <p style={{ margin: "10px 0 20px", fontSize: 14, color: "#5A6A7A", lineHeight: 1.5 }}>
+              {t("create.request_sent_description")}
+            </p>
+            <Link
+              href={`/my-requests/${requestSentBookingId}`}
+              onClick={() => setRequestSentBookingId(null)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                height: 52,
+                boxSizing: "border-box",
+                background: "#0B1E3D",
+                color: "#ffffff",
+                fontWeight: 700,
+                fontSize: 15,
+                borderRadius: 12,
+                textDecoration: "none",
+              }}
+            >
+              {t("create.view_request")}
+            </Link>
+            <button
+              type="button"
+              onClick={() => setRequestSentBookingId(null)}
+              style={{ width: "100%", marginTop: 10, height: 44, background: "transparent", color: "#5A6A7A", border: "none", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}
+            >
+              {t("create.close_request_sent")}
+            </button>
           </div>
         </div>
       )}

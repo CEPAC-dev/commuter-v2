@@ -38,10 +38,7 @@ const PAY_PILL: Record<
   expired: { label: "Expired", bg: "#F5F5F5", color: "#9aa7b4" },
 };
 
-const STATUS_PILL: Record<
-  TripStatus,
-  { label: string; bg: string; color: string }
-> = {
+const STATUS_PILL: Record<string, { label: string; bg: string; color: string }> = {
   pending_payment: {
     label: "Pending payment",
     bg: "#FFF3E0",

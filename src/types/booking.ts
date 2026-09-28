@@ -11,6 +11,9 @@ export type PaymentStatus =
 
 export type BookingStatus =
   | "pending_payment"
+  | "waiting_list"
+  | "approved"
+  | "rejected"
   | "submitted"
   | "matched"
   | "nomatch"

@@ -11,24 +11,30 @@ import type {
   PaymentStatus,
 } from "@/types/booking";
 import type { GeoPoint, StationSelection } from "@/types/geo";
+import {
+  buildPendingRequestExpiryFilter,
+  buildPendingTripExpiryFilter,
+} from "@/lib/pendingRequestHardening";
 
-const STALE_PENDING_FILTER = {
-  status: "pending_payment",
-  paymentStatus: { $in: ["pending", "failed"] },
-  $expr: {
-    $lte: ["$createdAt", { $subtract: ["$$NOW", 2 * 60 * 60 * 1000] }],
-  },
-};
+const EXPIRY_MS = 2 * 60 * 60 * 1000;
 
 export async function expireStaleForUser(userId: string): Promise<void> {
   await connectDB();
 
+  const cutoff = new Date(Date.now() - EXPIRY_MS);
+  const expireFilter = buildPendingRequestExpiryFilter(cutoff, userId);
+  const expiringRequests = await Request.find(expireFilter)
+    .select("_id")
+    .lean<{ _id: Types.ObjectId }[]>();
+  const requestIds = expiringRequests.map((request) => request._id);
+  if (requestIds.length === 0) return;
+
   await Request.updateMany(
-    { userId, ...STALE_PENDING_FILTER },
+    { _id: { $in: requestIds }, ...expireFilter },
     { $set: { status: "time_out", paymentStatus: "expired" } },
   );
   await Trip.updateMany(
-    { userId, ...STALE_PENDING_FILTER },
+    buildPendingTripExpiryFilter(requestIds),
     { $set: { status: "time_out", paymentStatus: "expired" } },
   );
 }
@@ -39,12 +45,22 @@ export async function expireStaleRequest(
 ): Promise<void> {
   await connectDB();
 
+  const cutoff = new Date(Date.now() - EXPIRY_MS);
+  const expireFilter = buildPendingRequestExpiryFilter(cutoff, userId);
+  const expiringRequest = await Request.findOne({
+    _id: requestId,
+    ...expireFilter,
+  })
+    .select("_id")
+    .lean<{ _id: Types.ObjectId }>();
+  if (!expiringRequest) return;
+
   await Request.updateOne(
-    { _id: requestId, userId, ...STALE_PENDING_FILTER },
+    { _id: expiringRequest._id, ...expireFilter },
     { $set: { status: "time_out", paymentStatus: "expired" } },
   );
   await Trip.updateMany(
-    { requestId, ...STALE_PENDING_FILTER },
+    buildPendingTripExpiryFilter([expiringRequest._id]),
     { $set: { status: "time_out", paymentStatus: "expired" } },
   );
 }

@@ -14,6 +14,10 @@ import {
 } from "@/lib/wallet/wallet";
 import { queryKashierPayoutStatus } from "@/lib/payments/kashierPayout";
 import { createNotification } from "@/lib/notifications/createNotification";
+import {
+  buildSettlementRequestFilter,
+  isSettlementBlockedStatus,
+} from "@/lib/pendingRequestHardening";
 import { Types } from "mongoose";
 
 function verifyLegacySignature(
@@ -246,19 +250,41 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+      const mixedBooking = await Request.findById(payment.bookingId)
+        .select("status")
+        .lean<{ status?: string }>();
+      if (mixedBooking && isSettlementBlockedStatus(mixedBooking.status)) {
+        console.warn(
+          `[Payment] Refusing webhook settlement for blocked booking ${String(payment.bookingId)} (${mixedBooking.status})`,
+        );
+        return NextResponse.json(
+          { error: "Transaction already processed" },
+          { status: 400 },
+        );
+      }
       await settleMixedPayment(String(payment._id), paid, transactionId);
       return NextResponse.json({ received: true });
     }
 
     // 4) Legacy: orderId == Request._id (pre-Payment bookings)
     const legacyBooking = await Request.findById(orderId)
-      .select("amountEgp userId")
+      .select("amountEgp userId status")
       .lean<{
         _id: Types.ObjectId;
         amountEgp: number;
         userId: Types.ObjectId;
+        status?: string;
       }>();
     if (legacyBooking) {
+      if (isSettlementBlockedStatus(legacyBooking.status)) {
+        console.warn(
+          `[Payment] Refusing legacy webhook settlement for blocked booking ${String(orderId)} (${legacyBooking.status})`,
+        );
+        return NextResponse.json(
+          { error: "Transaction already processed" },
+          { status: 400 },
+        );
+      }
       if (receivedAmount !== legacyBooking.amountEgp) {
         return NextResponse.json(
           { error: "Invalid payment details" },
@@ -267,8 +293,7 @@ export async function POST(req: NextRequest) {
       }
       const settled = await Request.findOneAndUpdate(
         {
-          _id: orderId,
-          paymentStatus: { $in: ["pending", "failed"] },
+          ...buildSettlementRequestFilter(orderId),
           kashierTransactionIds: { $ne: transactionId },
         },
         paid
@@ -343,8 +368,7 @@ async function settleMixedPayment(
     // of silently capturing funds for nothing.
     const settled = await Request.findOneAndUpdate(
       {
-        _id: payment.bookingId,
-        paymentStatus: { $in: ["pending", "failed"] },
+        ...buildSettlementRequestFilter(payment.bookingId),
       },
       {
         $set: {
