@@ -1,0 +1,142 @@
+import { Types } from "mongoose";
+import { AdminActivityNotification } from "@/models/AdminActivityNotification";
+import { Trip } from "@/models/Trip";
+import { User } from "@/models/User";
+import { AdminReferralUsage } from "@/models/AdminReferralUsage";
+
+function isDuplicateKeyError(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === 11000,
+  );
+}
+
+async function notifyAdmins(input: {
+  eventType: "completed_paid_trip" | "admin_campaign_claim";
+  dedupeKey: string;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+}) {
+  const admins = await User.find({ role: "admin" }).select("_id").lean();
+  await Promise.all(
+    admins.map(async (admin) => {
+      try {
+        await AdminActivityNotification.updateOne(
+          { adminId: admin._id, dedupeKey: input.dedupeKey },
+          {
+            $setOnInsert: {
+              adminId: admin._id,
+              ...input,
+            },
+          },
+          { upsert: true },
+        );
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) throw error;
+      }
+    }),
+  );
+}
+
+export async function notifyAdminsOfCompletedPaidTrip(tripId: string) {
+  try {
+    if (!Types.ObjectId.isValid(tripId)) return;
+    const trip = await Trip.findOne({
+      _id: tripId,
+      status: "completed",
+      paymentStatus: "paid",
+    })
+      .select("_id tripNumber userId date pickup dropoff priceEgp vehicleType")
+      .lean();
+    if (!trip) return;
+
+    const user = await User.findById(trip.userId)
+      .select("name userNumber phone email")
+      .lean();
+    const userName = user?.name ?? "Unknown user";
+    await notifyAdmins({
+      eventType: "completed_paid_trip",
+      dedupeKey: `trip:${String(trip._id)}:completed_paid`,
+      title: `Completed paid trip #${trip.tripNumber}`,
+      body: `${userName} completed a paid trip (${trip.priceEgp} EGP).`,
+      data: {
+        tripId: String(trip._id),
+        tripNumber: trip.tripNumber,
+        userId: String(trip.userId),
+        userName,
+        userNumber: user?.userNumber ?? null,
+        phone: user?.phone ?? "",
+        email: user?.email ?? "",
+        date: trip.date,
+        priceEgp: trip.priceEgp,
+        vehicleType: trip.vehicleType,
+        pickup: trip.pickup?.address ?? "",
+        dropoff: trip.dropoff?.address ?? "",
+        href: "/admin/trips",
+      },
+    });
+  } catch (error) {
+    console.error("Admin completed-trip alert creation failed:", error);
+  }
+}
+
+export async function syncPaidTripsForRequest(requestId: string) {
+  await Trip.updateMany({ requestId }, { $set: { paymentStatus: "paid" } });
+  await Trip.updateMany(
+    { requestId, status: "pending_payment" },
+    { $set: { status: "submitted" } },
+  );
+
+  try {
+    const completedTrips = await Trip.find({
+      requestId,
+      status: "completed",
+      paymentStatus: "paid",
+    })
+      .select("_id")
+      .lean();
+    await Promise.all(
+      completedTrips.map((trip) =>
+        notifyAdminsOfCompletedPaidTrip(String(trip._id)),
+      ),
+    );
+  } catch (error) {
+    console.error("Admin paid-trip alert lookup failed:", error);
+  }
+}
+
+export async function notifyAdminsOfAdminCampaignClaim(userId: string) {
+  if (!Types.ObjectId.isValid(userId)) return;
+  const user = await User.findOne({
+    _id: userId,
+    referralClaimType: "admin_campaign",
+  })
+    .select("_id name userNumber phone email referralClaimedAt")
+    .lean();
+  if (!user) return;
+
+  const usage = await AdminReferralUsage.findOne({ recipientUserId: user._id })
+    .select("campaignId rewardAmount")
+    .lean();
+
+  await notifyAdmins({
+    eventType: "admin_campaign_claim",
+    dedupeKey: `campaign-claim:user:${String(user._id)}`,
+    title: `Campaign reward claimed by ${user.name}`,
+    body: `User #${user.userNumber ?? "—"} claimed an admin campaign reward${usage ? ` (${usage.rewardAmount} EGP)` : ""}.`,
+    data: {
+      userId: String(user._id),
+      userName: user.name,
+      userNumber: user.userNumber ?? null,
+      phone: user.phone,
+      email: user.email ?? "",
+      claimedAt: user.referralClaimedAt?.toISOString?.() ?? null,
+      rewardAmount: usage?.rewardAmount ?? null,
+      campaignId: usage ? String(usage.campaignId) : null,
+      href: "/admin/users",
+    },
+  });
+}

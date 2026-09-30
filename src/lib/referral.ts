@@ -8,11 +8,15 @@ import {
 } from "@/models/ReferralSettings";
 import { ReferralUsage } from "@/models/ReferralUsage";
 import { Notification } from "@/models/Notification";
+import { notifyAdminsOfAdminCampaignClaim } from "@/lib/notifications/adminActivity";
 import { User } from "@/models/User";
 import { Wallet } from "@/models/Wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { ReferralAuditLog } from "@/models/ReferralAuditLog";
-import { AdminReferralCampaign, type AdminReferralRole } from "@/models/AdminReferralCampaign";
+import {
+  AdminReferralCampaign,
+  type AdminReferralRole,
+} from "@/models/AdminReferralCampaign";
 import { AdminReferralUsage } from "@/models/AdminReferralUsage";
 import { AdminReferralAuditLog } from "@/models/AdminReferralAuditLog";
 
@@ -21,7 +25,10 @@ const MAX_CODE_ATTEMPTS = 10;
 
 export function generateAdminReferralToken(): string {
   const bytes = randomBytes(6);
-  const suffix = Array.from(bytes, (byte) => REFERRAL_ALPHABET[byte % REFERRAL_ALPHABET.length]).join("");
+  const suffix = Array.from(
+    bytes,
+    (byte) => REFERRAL_ALPHABET[byte % REFERRAL_ALPHABET.length],
+  ).join("");
   return `INVITATION-${suffix}`;
 }
 
@@ -52,7 +59,10 @@ async function creditReferralWallet(
   userId: Types.ObjectId,
   amountEgp: number,
   description: string,
-  reference: { referralUsageId?: Types.ObjectId; adminReferralUsageId?: Types.ObjectId },
+  reference: {
+    referralUsageId?: Types.ObjectId;
+    adminReferralUsageId?: Types.ObjectId;
+  },
 ) {
   const wallet = await Wallet.findOneAndUpdate(
     { userId },
@@ -65,15 +75,17 @@ async function creditReferralWallet(
   const balance = wallet?.balanceEgp ?? amountEgp;
 
   await WalletTransaction.create(
-    [{
-      userId,
-      type: "referral_bonus",
-      amountEgp,
-      status: "completed",
-      description,
-      balanceAfterEgp: balance,
-      ...reference,
-    }],
+    [
+      {
+        userId,
+        type: "referral_bonus",
+        amountEgp,
+        status: "completed",
+        description,
+        balanceAfterEgp: balance,
+        ...reference,
+      },
+    ],
     { session, ordered: true },
   );
 
@@ -86,13 +98,15 @@ export async function getOrCreateReferralSettings(
 ) {
   await connectDB();
 
-  const existing = await ReferralSettings.findOne({ singletonKey: role }).session(
-    session ?? null,
-  );
+  const existing = await ReferralSettings.findOne({
+    singletonKey: role,
+  }).session(session ?? null);
   if (existing) return existing;
 
   // Preserve the original global configuration as the passenger baseline.
-  const legacySettings = await ReferralSettings.findOne({ singletonKey: "global" })
+  const legacySettings = await ReferralSettings.findOne({
+    singletonKey: "global",
+  })
     .select("referrerBonusAmount refereeBonusAmount maxUsersPerCode isActive")
     .session(session ?? null)
     .lean();
@@ -126,7 +140,10 @@ export async function generateReferralCode(): Promise<string> {
 
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
     const bytes = randomBytes(6);
-    const suffix = Array.from(bytes, (byte) => REFERRAL_ALPHABET[byte % REFERRAL_ALPHABET.length]).join("");
+    const suffix = Array.from(
+      bytes,
+      (byte) => REFERRAL_ALPHABET[byte % REFERRAL_ALPHABET.length],
+    ).join("");
     const referralCode = `REF-${suffix}`;
     const exists = await User.exists({ referralCode });
     if (!exists) return referralCode;
@@ -147,7 +164,9 @@ export async function applyReferralOnSignup(
 
   const referredUserId = new Types.ObjectId(String(newUserId));
   const normalizedCode = referralCode.trim().toUpperCase();
-  const adminCampaign = await AdminReferralCampaign.findOne({ token: normalizedCode }).lean();
+  const adminCampaign = await AdminReferralCampaign.findOne({
+    token: normalizedCode,
+  }).lean();
   if (adminCampaign) {
     return applyAdminReferralOnSignup(adminCampaign._id, referredUserId);
   }
@@ -160,19 +179,32 @@ export async function applyReferralOnSignup(
   }
 
   if (String(referrer._id) === String(referredUserId)) {
-    return { success: false, message: "You cannot use your own referral code." };
+    return {
+      success: false,
+      message: "You cannot use your own referral code.",
+    };
   }
 
   const referredUser = await User.findById(referredUserId)
     .select("referredBy referralClaimedAt name userNumber phone")
     .lean();
-  if (!referredUser || referredUser.referredBy || referredUser.referralClaimedAt) {
-    return { success: false, message: "This account cannot use a referral code." };
+  if (
+    !referredUser ||
+    referredUser.referredBy ||
+    referredUser.referralClaimedAt
+  ) {
+    return {
+      success: false,
+      message: "This account cannot use a referral code.",
+    };
   }
 
   const session = await mongoose.startSession();
   try {
-    let result: ReferralResult = { success: false, message: "Referral failed." };
+    let result: ReferralResult = {
+      success: false,
+      message: "Referral failed.",
+    };
     await session.withTransaction(async () => {
       // Serialize referrals for this code so concurrent transactions cannot share a stale count.
       const lockedReferrer = await User.findOneAndUpdate(
@@ -185,7 +217,8 @@ export async function applyReferralOnSignup(
 
       if (
         !lockedReferrer ||
-        (lockedReferrer.role !== "passenger" && lockedReferrer.role !== "driver")
+        (lockedReferrer.role !== "passenger" &&
+          lockedReferrer.role !== "driver")
       ) {
         throw new Error("INVALID_REFERRER");
       }
@@ -228,7 +261,13 @@ export async function applyReferralOnSignup(
       // 2. Link referredBy on the referred user
       const updated = await User.updateOne(
         { _id: referredUserId, referredBy: null, referralClaimedAt: null },
-        { $set: { referredBy: referrer._id, referralClaimedAt: new Date(), referralClaimType: "user" } },
+        {
+          $set: {
+            referredBy: referrer._id,
+            referralClaimedAt: new Date(),
+            referralClaimType: "user",
+          },
+        },
         { session },
       );
       if (updated.modifiedCount !== 1) {
@@ -313,13 +352,19 @@ export async function applyReferralOnSignup(
       return { success: false, message: "Referrals are not currently active." };
     }
     if (message === "REFERRAL_LIMIT_REACHED") {
-      return { success: false, message: "This referral code has reached its usage limit." };
+      return {
+        success: false,
+        message: "This referral code has reached its usage limit.",
+      };
     }
     if (
       (error as { code?: number }).code === 11000 ||
       message === "ALREADY_REFERRED"
     ) {
-      return { success: false, message: "This account already used a referral code." };
+      return {
+        success: false,
+        message: "This account already used a referral code.",
+      };
     }
     console.error("Referral instant crediting failed:", error);
     return { success: false, message: "Failed to apply referral code." };
@@ -334,20 +379,33 @@ async function applyAdminReferralOnSignup(
 ): Promise<ReferralResult> {
   const session = await mongoose.startSession();
   try {
-    let result: ReferralResult = { success: false, message: "Referral failed." };
+    let result: ReferralResult = {
+      success: false,
+      message: "Referral failed.",
+    };
     await session.withTransaction(async () => {
       const recipient = await User.findOneAndUpdate(
         { _id: referredUserId, referredBy: null, referralClaimedAt: null },
-        { $set: { referralClaimedAt: new Date(), referralClaimType: "admin_campaign" } },
+        {
+          $set: {
+            referralClaimedAt: new Date(),
+            referralClaimType: "admin_campaign",
+          },
+        },
         { returnDocument: "after", session },
-      ).select("_id name userNumber phone").lean();
+      )
+        .select("_id name userNumber phone")
+        .lean();
       if (!recipient) throw new Error("ALREADY_REFERRED");
 
       const campaign = await AdminReferralCampaign.findOneAndUpdate(
         {
           _id: campaignId,
           isActive: true,
-          $or: [{ maxUses: null }, { $expr: { $lt: ["$usedCount", "$maxUses"] } }],
+          $or: [
+            { maxUses: null },
+            { $expr: { $lt: ["$usedCount", "$maxUses"] } },
+          ],
         },
         { $inc: { usedCount: 1 } },
         { returnDocument: "after", session },
@@ -355,7 +413,14 @@ async function applyAdminReferralOnSignup(
       if (!campaign) throw new Error("ADMIN_REFERRAL_UNAVAILABLE");
 
       const usage = await AdminReferralUsage.create(
-        [{ campaignId, recipientUserId: referredUserId, rewardAmount: campaign.rewardAmount, status: "credited" }],
+        [
+          {
+            campaignId,
+            recipientUserId: referredUserId,
+            rewardAmount: campaign.rewardAmount,
+            status: "credited",
+          },
+        ],
         { session, ordered: true },
       );
       const balance = await creditReferralWallet(
@@ -366,24 +431,76 @@ async function applyAdminReferralOnSignup(
         { adminReferralUsageId: usage[0]._id },
       );
       await Notification.create(
-        [{ userId: referredUserId, type: "referral_bonus", title: "Welcome bonus credited", body: `Your welcome bonus has been credited — your wallet is now ${balance} EGP (+${campaign.rewardAmount}).`, data: { amount: campaign.rewardAmount, newBalanceEgp: balance, adminReferralUsageId: usage[0]._id } }],
+        [
+          {
+            userId: referredUserId,
+            type: "referral_bonus",
+            title: "Welcome bonus credited",
+            body: `Your welcome bonus has been credited — your wallet is now ${balance} EGP (+${campaign.rewardAmount}).`,
+            data: {
+              amount: campaign.rewardAmount,
+              newBalanceEgp: balance,
+              adminReferralUsageId: usage[0]._id,
+            },
+          },
+        ],
         { session, ordered: true },
       );
 
-      const creator = await User.findById(campaign.createdBy).select("name userNumber phone").session(session).lean();
+      const creator = await User.findById(campaign.createdBy)
+        .select("name userNumber phone")
+        .session(session)
+        .lean();
       if (creator) {
         await AdminReferralAuditLog.create(
-          [{ campaignId, eventType: "redeemed", actorId: creator._id, recipientUserId: recipient._id, actorSnapshot: { name: creator.name, userNumber: creator.userNumber ?? null, phone: creator.phone }, recipientSnapshot: { name: recipient.name, userNumber: recipient.userNumber ?? null, phone: recipient.phone }, metadata: { rewardAmount: campaign.rewardAmount } }],
+          [
+            {
+              campaignId,
+              eventType: "redeemed",
+              actorId: creator._id,
+              recipientUserId: recipient._id,
+              actorSnapshot: {
+                name: creator.name,
+                userNumber: creator.userNumber ?? null,
+                phone: creator.phone,
+              },
+              recipientSnapshot: {
+                name: recipient.name,
+                userNumber: recipient.userNumber ?? null,
+                phone: recipient.phone,
+              },
+              metadata: { rewardAmount: campaign.rewardAmount },
+            },
+          ],
           { session, ordered: true },
         );
       }
       result = { success: true, message: "Referral applied successfully." };
     });
+    if (result.success) {
+      try {
+        await notifyAdminsOfAdminCampaignClaim(String(referredUserId));
+      } catch (notificationError) {
+        console.error(
+          "Admin campaign alert creation failed:",
+          notificationError,
+        );
+      }
+    }
     return result;
   } catch (error) {
     const message = (error as { message?: string }).message;
-    if (message === "ALREADY_REFERRED") return { success: false, message: "This account already used a referral code." };
-    if (message === "ADMIN_REFERRAL_UNAVAILABLE") return { success: false, message: "This admin referral link is inactive or has reached its usage limit." };
+    if (message === "ALREADY_REFERRED")
+      return {
+        success: false,
+        message: "This account already used a referral code.",
+      };
+    if (message === "ADMIN_REFERRAL_UNAVAILABLE")
+      return {
+        success: false,
+        message:
+          "This admin referral link is inactive or has reached its usage limit.",
+      };
     console.error("Admin referral application failed:", error);
     return { success: false, message: "Failed to apply referral code." };
   } finally {
@@ -398,7 +515,9 @@ export async function creditReferralBonusIfEligible(
   referredUserId: string,
   tripId: string,
 ): Promise<boolean> {
-  console.log(`[ReferralCheck] Trip completion check for referee [${referredUserId}], trip [${tripId}] — instant crediting active, skipped.`);
+  console.log(
+    `[ReferralCheck] Trip completion check for referee [${referredUserId}], trip [${tripId}] — instant crediting active, skipped.`,
+  );
   return false;
 }
 

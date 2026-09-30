@@ -8,6 +8,7 @@ import { getSession } from "@/lib/auth/session";
 import * as rideActions from "@/lib/services/rideActionHelpers";
 import { creditReferralBonusIfEligible } from "@/lib/referral";
 import { normalizeSharedRidePassengers } from "@/lib/services/sharedRideManifest";
+import { notifyAdminsOfCompletedPaidTrip } from "@/lib/notifications/adminActivity";
 
 interface RideRouteStop {
   address?: string;
@@ -23,8 +24,16 @@ interface RidePassengerLike {
   status?: string | null;
   pickupOrder?: number | null;
   dropoffOrder?: number | null;
-  pickupStation?: { id?: number | null; name?: string | null; address?: string | null } | null;
-  dropoffStation?: { id?: number | null; name?: string | null; address?: string | null } | null;
+  pickupStation?: {
+    id?: number | null;
+    name?: string | null;
+    address?: string | null;
+  } | null;
+  dropoffStation?: {
+    id?: number | null;
+    name?: string | null;
+    address?: string | null;
+  } | null;
   seatNumbers?: number[] | null;
 }
 
@@ -70,12 +79,16 @@ interface RideLogLike {
   createdAt?: Date;
 }
 
-function getPassengerStatus(passenger: RidePassengerLike | null | undefined): string {
+function getPassengerStatus(
+  passenger: RidePassengerLike | null | undefined,
+): string {
   return String(passenger?.status ?? "waiting").toLowerCase();
 }
 
 function normalizeStationValue(value: unknown): string {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 function getPassengerStationKey(
@@ -92,9 +105,15 @@ function getPassengerStationKey(
   }
 
   const station =
-    direction === "pickup" ? passenger?.pickupStation : passenger?.dropoffStation;
+    direction === "pickup"
+      ? passenger?.pickupStation
+      : passenger?.dropoffStation;
 
-  if (typeof station?.id === "number" && Number.isFinite(station.id) && station.id > 0) {
+  if (
+    typeof station?.id === "number" &&
+    Number.isFinite(station.id) &&
+    station.id > 0
+  ) {
     return { type: "id" as const, value: station.id };
   }
 
@@ -126,9 +145,14 @@ function stationMatchesPassenger(
   }
 
   const normalizedStationName = normalizeStationValue(stationName);
-  const normalizedPassengerStation = normalizeStationValue(stationReference.value);
+  const normalizedPassengerStation = normalizeStationValue(
+    stationReference.value,
+  );
 
-  return Boolean(normalizedStationName) && normalizedStationName === normalizedPassengerStation;
+  return (
+    Boolean(normalizedStationName) &&
+    normalizedStationName === normalizedPassengerStation
+  );
 }
 
 function getRemainingStations(ride: RideDocLike | null | undefined) {
@@ -151,7 +175,8 @@ function getRemainingStations(ride: RideDocLike | null | undefined) {
         if (
           (pickupKey.type === "order" && stationIndex === pickupKey.value) ||
           (pickupKey.type === "name" &&
-            normalizeStationValue(stationName) === normalizeStationValue(pickupKey.value))
+            normalizeStationValue(stationName) ===
+              normalizeStationValue(pickupKey.value))
         ) {
           remainingStationKeys.add(stationIndex);
         }
@@ -171,7 +196,8 @@ function getRemainingStations(ride: RideDocLike | null | undefined) {
         if (
           (dropoffKey.type === "order" && stationIndex === dropoffKey.value) ||
           (dropoffKey.type === "name" &&
-            normalizeStationValue(stationName) === normalizeStationValue(dropoffKey.value))
+            normalizeStationValue(stationName) ===
+              normalizeStationValue(dropoffKey.value))
         ) {
           remainingStationKeys.add(stationIndex);
         }
@@ -197,7 +223,11 @@ function assignSeat(ride: RideDocLike | null | undefined): number {
   const occupied = new Set<number>();
 
   for (const passenger of ride?.passengers ?? []) {
-    if (!["picked_up", "boarding", "on_board"].includes(getPassengerStatus(passenger))) {
+    if (
+      !["picked_up", "boarding", "on_board"].includes(
+        getPassengerStatus(passenger),
+      )
+    ) {
       continue;
     }
 
@@ -524,7 +554,9 @@ export async function POST(
     ) as unknown as RidePassengerLike[];
     const tripIds = actionPassengers
       .map((passenger: RidePassengerLike) =>
-        typeof passenger.tripId === "object" && passenger.tripId !== null && "_id" in (passenger.tripId as object)
+        typeof passenger.tripId === "object" &&
+        passenger.tripId !== null &&
+        "_id" in (passenger.tripId as object)
           ? (passenger.tripId as { _id: unknown })._id
           : passenger.tripId,
       )
@@ -586,7 +618,10 @@ export async function POST(
         );
 
         const currentRideDoc = await Ride.findById(rideId);
-        let remainingStations: Array<{ stationIndex: number; stationName: string }> = [];
+        let remainingStations: Array<{
+          stationIndex: number;
+          stationName: string;
+        }> = [];
         if (currentRideDoc) {
           materializeSharedRidePassengers(currentRideDoc);
           const routeLength = Array.isArray(currentRideDoc.route)
@@ -599,7 +634,8 @@ export async function POST(
           const confirmations = Array.isArray(metadata?.confirmations)
             ? metadata.confirmations.filter(
                 (entry: { tripId?: unknown; status?: string }) =>
-                  Boolean(entry?.tripId) && (entry.status === "arrived" || entry.status === "no_show"),
+                  Boolean(entry?.tripId) &&
+                  (entry.status === "arrived" || entry.status === "no_show"),
               )
             : [];
           const confirmationMap = new Map<string, string>();
@@ -630,7 +666,8 @@ export async function POST(
             );
 
             if (
-              (passenger.status === "boarding" || passenger.status === "picked_up") &&
+              (passenger.status === "boarding" ||
+                passenger.status === "picked_up") &&
               !isPickup
             ) {
               passenger.status = "on_board";
@@ -684,11 +721,16 @@ export async function POST(
               try {
                 seat = assignSeat(currentRideDoc);
               } catch (seatErr) {
-                console.warn("[station_arrived] Seat assignment fallback:", seatErr);
+                console.warn(
+                  "[station_arrived] Seat assignment fallback:",
+                  seatErr,
+                );
               }
               passenger.seatNumbers = [seat];
               updatedPassengers = true;
-              await Trip.findByIdAndUpdate(passenger.tripId, { status: "active" });
+              await Trip.findByIdAndUpdate(passenger.tripId, {
+                status: "active",
+              });
               pushRideLog(currentRideDoc, {
                 action: "boarding",
                 tripId: passenger.tripId,
@@ -713,7 +755,8 @@ export async function POST(
 
             if (
               (isDropoff || isLastStation) &&
-              (passenger.status === "on_board" || passenger.status === "picked_up")
+              (passenger.status === "on_board" ||
+                passenger.status === "picked_up")
             ) {
               const previousStatus = passenger.status;
               passenger.status = "dropped_off";
@@ -727,7 +770,10 @@ export async function POST(
                 previousStatus,
                 newStatus: "dropped_off",
               });
-              await Trip.findByIdAndUpdate(passenger.tripId, { status: "completed" });
+              await Trip.findByIdAndUpdate(passenger.tripId, {
+                status: "completed",
+              });
+              await notifyAdminsOfCompletedPaidTrip(String(passenger.tripId));
               const completedTrip = await Trip.findById(passenger.tripId)
                 .select("userId")
                 .lean<{ userId: string } | null>();
@@ -743,8 +789,13 @@ export async function POST(
           // 4b. A rider's duplicate trip record should alight alongside the one that just matched.
           const droppedOffUserIds = new Set(
             currentRideDoc.passengers
-              .filter((passenger: RidePassengerLike) => passenger.status === "dropped_off")
-              .map((passenger: RidePassengerLike) => passenger.userId?.toString?.())
+              .filter(
+                (passenger: RidePassengerLike) =>
+                  passenger.status === "dropped_off",
+              )
+              .map((passenger: RidePassengerLike) =>
+                passenger.userId?.toString?.(),
+              )
               .filter((id: string | undefined): id is string => Boolean(id)),
           );
           for (const passenger of currentRideDoc.passengers) {
@@ -752,7 +803,9 @@ export async function POST(
             if (
               userId &&
               droppedOffUserIds.has(userId) &&
-              ["on_board", "picked_up", "boarding"].includes(passenger.status ?? "")
+              ["on_board", "picked_up", "boarding"].includes(
+                passenger.status ?? "",
+              )
             ) {
               const previousStatus = passenger.status;
               passenger.status = "dropped_off";
@@ -766,7 +819,10 @@ export async function POST(
                 previousStatus,
                 newStatus: "dropped_off",
               });
-              await Trip.findByIdAndUpdate(passenger.tripId, { status: "completed" });
+              await Trip.findByIdAndUpdate(passenger.tripId, {
+                status: "completed",
+              });
+              await notifyAdminsOfCompletedPaidTrip(String(passenger.tripId));
             }
           }
 
@@ -908,7 +964,8 @@ export async function POST(
         const currentRideDocNoShow = await Ride.findById(rideId);
         if (currentRideDocNoShow) {
           const passenger = currentRideDocNoShow.passengers.find(
-            (p: RidePassengerLike) => p.tripId?.toString?.() === tripId.toString(),
+            (p: RidePassengerLike) =>
+              p.tripId?.toString?.() === tripId.toString(),
           );
           if (passenger) {
             const previousStatus = passenger.status;
@@ -990,6 +1047,11 @@ export async function POST(
         // Update all trip statuses to completed
         await Trip.updateMany({ rideId }, { status: "completed" });
         await Promise.all(
+          tripIds.map((completedTripId: unknown) =>
+            notifyAdminsOfCompletedPaidTrip(String(completedTripId)),
+          ),
+        );
+        await Promise.all(
           tripIds.map(async (completedTripId: unknown) => {
             const completedTrip = await Trip.findById(completedTripId)
               .select("userId")
@@ -1026,7 +1088,8 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to process action",
+        error:
+          error instanceof Error ? error.message : "Failed to process action",
       },
       { status: 500 },
     );
