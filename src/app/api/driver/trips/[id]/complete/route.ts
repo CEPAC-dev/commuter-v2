@@ -6,6 +6,7 @@ import { Trip } from "@/models/Trip";
 import { settleTripEarning } from "@/lib/services/tripEarnings";
 import { creditReferralBonusIfEligible } from "@/lib/referral";
 import { createNotification } from "@/lib/notifications/createNotification";
+import { notifyAdminsOfCompletedPaidTrip } from "@/lib/notifications/adminActivity";
 
 export async function POST(
   _req: NextRequest,
@@ -51,6 +52,7 @@ export async function POST(
 
   trip.status = "completed";
   await trip.save();
+  await notifyAdminsOfCompletedPaidTrip(tripId);
 
   await createNotification({
     userId: String(trip.userId),

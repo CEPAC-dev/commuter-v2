@@ -11,6 +11,7 @@ import {
   releaseReservation,
 } from "@/lib/wallet/wallet";
 import { createNotification } from "@/lib/notifications/createNotification";
+import { syncPaidTripsForRequest } from "@/lib/notifications/adminActivity";
 import { Types } from "mongoose";
 import { validateMutationRequest } from "@/lib/security/request";
 
@@ -216,10 +217,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await Trip.updateMany(
-      { requestId: booking._id },
-      { paymentStatus: "paid", status: "submitted" },
-    );
+    await syncPaidTripsForRequest(String(booking._id));
 
     await Payment.updateOne(
       { _id: payment._id },

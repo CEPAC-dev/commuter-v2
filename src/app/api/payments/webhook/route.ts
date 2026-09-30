@@ -14,6 +14,7 @@ import {
 } from "@/lib/wallet/wallet";
 import { queryKashierPayoutStatus } from "@/lib/payments/kashierPayout";
 import { createNotification } from "@/lib/notifications/createNotification";
+import { syncPaidTripsForRequest } from "@/lib/notifications/adminActivity";
 import { Types } from "mongoose";
 
 function verifyLegacySignature(
@@ -71,7 +72,10 @@ export async function POST(req: NextRequest) {
   }
 
   const payload = body.payload as Record<string, unknown> | undefined;
-  const eventData = (payload?.data ?? body.data ?? body) as Record<string, unknown>;
+  const eventData = (payload?.data ?? body.data ?? body) as Record<
+    string,
+    unknown
+  >;
   const event = String(payload?.event ?? body.event ?? "pay").toLowerCase();
   const orderId = String(eventData.merchantOrderId ?? eventData.orderId ?? "");
   const amount = eventData.amount;
@@ -83,7 +87,9 @@ export async function POST(req: NextRequest) {
     body.merchantId ?? eventData.merchantId ?? merchantDetails?.merchantId;
   const merchantId = typeof merchantIdValue === "string" ? merchantIdValue : "";
   const transactionId = String(eventData.transactionId ?? "");
-  const paymentStatus = String(eventData.paymentStatus ?? eventData.status ?? "");
+  const paymentStatus = String(
+    eventData.paymentStatus ?? eventData.status ?? "",
+  );
   const signatureValue = body.signature;
   const sig =
     (typeof signatureValue === "string" ? signatureValue : "") ||
@@ -292,10 +298,7 @@ export async function POST(req: NextRequest) {
         );
       }
       if (paid) {
-        await Trip.updateMany(
-          { requestId: settled._id },
-          { paymentStatus: "paid", status: "submitted" },
-        );
+        await syncPaidTripsForRequest(String(settled._id));
         await createNotification({
           userId: String(settled.userId),
           type: "payment_paid",
@@ -358,7 +361,10 @@ async function settleMixedPayment(
     if (!settled) {
       // Booking already settled elsewhere — refund whatever this Payment
       // took instead of capturing/keeping it.
-      if (payment.walletReservationTxId && payment.walletStatus === "reserved") {
+      if (
+        payment.walletReservationTxId &&
+        payment.walletStatus === "reserved"
+      ) {
         await releaseReservation(String(payment.walletReservationTxId), {
           description: `Released — booking already settled (duplicate payment ${payment._id})`,
           paymentId: String(payment._id),
@@ -405,7 +411,10 @@ async function settleMixedPayment(
         type: "payment_failed",
         title: "Payment issue",
         body: "This booking was already paid by another request. Any charge has been reversed.",
-        data: { bookingId: String(payment.bookingId), paymentId: String(payment._id) },
+        data: {
+          bookingId: String(payment.bookingId),
+          paymentId: String(payment._id),
+        },
       });
       return;
     }
@@ -452,10 +461,7 @@ async function settleMixedPayment(
     }
 
     if (settled) {
-      await Trip.updateMany(
-        { requestId: payment.bookingId },
-        { paymentStatus: "paid", status: "submitted" },
-      );
+      await syncPaidTripsForRequest(String(payment.bookingId));
       await createNotification({
         userId: String(payment.userId),
         type: "payment_paid",
