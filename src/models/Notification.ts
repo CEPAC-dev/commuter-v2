@@ -8,6 +8,7 @@ const NOTIFICATION_TYPES = [
   "trip_submitted",
   "driver_assigned",
   "trip_completed",
+  "trip_refund_update",
   "request_cancelled",
   "withdrawal_approved",
   "withdrawal_rejected",

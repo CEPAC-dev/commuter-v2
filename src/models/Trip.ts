@@ -257,6 +257,7 @@ const TripSchema = new Schema(
           totalReturnEgp: { type: Number, required: true, min: 0 },
           reason: { type: String, required: false, maxlength: 300 },
           failureReason: { type: String, required: false, maxlength: 300 },
+          retryAllowed: { type: Boolean, required: true, default: false },
         },
         { _id: false },
       ),
