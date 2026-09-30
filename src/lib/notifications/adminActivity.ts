@@ -14,7 +14,10 @@ function isDuplicateKeyError(error: unknown) {
 }
 
 async function notifyAdmins(input: {
-  eventType: "completed_paid_trip" | "admin_campaign_claim";
+  eventType:
+    | "paid_trip_created"
+    | "completed_paid_trip"
+    | "admin_campaign_claim";
   dedupeKey: string;
   title: string;
   body: string;
@@ -83,6 +86,47 @@ export async function notifyAdminsOfCompletedPaidTrip(tripId: string) {
   }
 }
 
+export async function notifyAdminsOfPaidTrip(tripId: string) {
+  try {
+    if (!Types.ObjectId.isValid(tripId)) return;
+    const trip = await Trip.findOne({ _id: tripId, paymentStatus: "paid" })
+      .select(
+        "_id tripNumber userId date pickup dropoff priceEgp vehicleType status",
+      )
+      .lean();
+    if (!trip) return;
+
+    const user = await User.findById(trip.userId)
+      .select("name userNumber phone email")
+      .lean();
+    const userName = user?.name ?? "Unknown user";
+    await notifyAdmins({
+      eventType: "paid_trip_created",
+      dedupeKey: `trip:${String(trip._id)}:paid`,
+      title: `New paid trip #${trip.tripNumber}`,
+      body: `${userName} paid ${trip.priceEgp} EGP for a trip.`,
+      data: {
+        tripId: String(trip._id),
+        tripNumber: trip.tripNumber,
+        tripStatus: trip.status,
+        userId: String(trip.userId),
+        userName,
+        userNumber: user?.userNumber ?? null,
+        phone: user?.phone ?? "",
+        email: user?.email ?? "",
+        date: trip.date,
+        priceEgp: trip.priceEgp,
+        vehicleType: trip.vehicleType,
+        pickup: trip.pickup?.address ?? "",
+        dropoff: trip.dropoff?.address ?? "",
+        href: "/admin/trips",
+      },
+    });
+  } catch (error) {
+    console.error("Admin paid-trip alert creation failed:", error);
+  }
+}
+
 export async function syncPaidTripsForRequest(requestId: string) {
   await Trip.updateMany({ requestId }, { $set: { paymentStatus: "paid" } });
   await Trip.updateMany(
@@ -91,6 +135,13 @@ export async function syncPaidTripsForRequest(requestId: string) {
   );
 
   try {
+    const paidTrips = await Trip.find({ requestId, paymentStatus: "paid" })
+      .select("_id")
+      .lean();
+    await Promise.all(
+      paidTrips.map((trip) => notifyAdminsOfPaidTrip(String(trip._id))),
+    );
+
     const completedTrips = await Trip.find({
       requestId,
       status: "completed",

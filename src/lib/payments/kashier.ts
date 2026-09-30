@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
-import { Trip } from "@/models/Trip";
+import { syncPaidTripsForRequest } from "@/lib/notifications/adminActivity";
 import { Payment } from "@/models/Payment";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import {
@@ -121,10 +121,7 @@ export async function verifyAndSettleBooking(
         );
         if (captured === null) return "pending";
       }
-      await Trip.updateMany(
-        { requestId: booking._id },
-        { paymentStatus: "paid", status: "submitted" },
-      );
+      await syncPaidTripsForRequest(String(booking._id));
       await Payment.updateOne(
         { _id: payment._id },
         {
@@ -212,10 +209,7 @@ export async function verifyAndSettleBooking(
         );
         if (captured === null) return "pending";
       }
-      await Trip.updateMany(
-        { requestId: settled._id },
-        { paymentStatus: "paid", status: "submitted" },
-      );
+      await syncPaidTripsForRequest(String(settled._id));
       await Payment.updateOne(
         { _id: payment._id },
         {
@@ -293,10 +287,7 @@ export async function verifyAndSettleBooking(
       { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
     );
     if (settled) {
-      await Trip.updateMany(
-        { requestId: settled._id },
-        { paymentStatus: "paid", status: "submitted" },
-      );
+      await syncPaidTripsForRequest(String(settled._id));
     }
     return "paid";
   }

@@ -12,7 +12,10 @@ import {
 
 type Item = {
   id: string;
-  eventType: "completed_paid_trip" | "admin_campaign_claim";
+  eventType:
+    | "paid_trip_created"
+    | "completed_paid_trip"
+    | "admin_campaign_claim";
   title: string;
   body: string;
   data: Record<string, unknown>;
@@ -82,7 +85,7 @@ export default function AdminActivityFeed() {
     <AdminPageContainer maxWidth={1180}>
       <AdminPageHeader
         title="Admin alerts"
-        description="Completed paid trips and admin campaign referral claims."
+        description="Newly paid trips, completed trips, and admin campaign referral claims."
         icon={CircleDollarSign}
       />
       <div className="admin-activity-feed-layout">

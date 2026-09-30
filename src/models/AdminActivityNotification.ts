@@ -6,7 +6,11 @@ const AdminActivityNotificationSchema = new Schema(
     eventType: {
       type: String,
       required: true,
-      enum: ["completed_paid_trip", "admin_campaign_claim"],
+      enum: [
+        "paid_trip_created",
+        "completed_paid_trip",
+        "admin_campaign_claim",
+      ],
       index: true,
     },
     dedupeKey: { type: String, required: true },
