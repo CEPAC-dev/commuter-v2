@@ -4,6 +4,7 @@ import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Notification } from "@/models/Notification";
 import { User } from "@/models/User";
+import { sendPushToUserNotification } from "@/lib/notifications/webPush";
 
 const RECIPIENT_ROLES = new Set(["passenger", "driver"]);
 const ICONS = new Set(["bell", "info", "megaphone", "check", "alert"]);
@@ -201,7 +202,16 @@ export async function POST(req: NextRequest) {
     data,
   }));
 
-  await Notification.insertMany(docs);
+  const inserted = await Notification.insertMany(docs);
+  for (let offset = 0; offset < inserted.length; offset += 50) {
+    await Promise.all(
+      inserted
+        .slice(offset, offset + 50)
+        .map((notification) =>
+          sendPushToUserNotification(String(notification._id)),
+        ),
+    );
+  }
   return NextResponse.json(
     { success: true, sent: docs.length },
     { status: 201 },

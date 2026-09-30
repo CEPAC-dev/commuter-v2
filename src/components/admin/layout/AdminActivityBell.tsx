@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Route,
+  Smartphone,
   UserRound,
   X,
 } from "lucide-react";
@@ -25,6 +26,20 @@ type AdminActivityItem = {
   createdAt: string;
 };
 
+type PushState = "checking" | "enabled" | "disabled" | "unsupported" | "denied";
+
+function decodeVapidKey(value: string): ArrayBuffer {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const raw = window.atob(
+    (value + padding).replace(/-/g, "+").replace(/_/g, "/"),
+  );
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) {
+    bytes[index] = raw.charCodeAt(index);
+  }
+  return bytes.buffer;
+}
+
 function eventIcon(eventType: AdminActivityItem["eventType"]) {
   return eventType === "completed_paid_trip" ? Route : CircleDollarSign;
 }
@@ -35,6 +50,8 @@ export default function AdminActivityBell() {
   const [items, setItems] = useState<AdminActivityItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selected, setSelected] = useState<AdminActivityItem | null>(null);
+  const [pushState, setPushState] = useState<PushState>("checking");
+  const [pushError, setPushError] = useState("");
 
   async function refresh() {
     try {
@@ -55,6 +72,99 @@ export default function AdminActivityBell() {
     const interval = window.setInterval(refresh, 20000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkPush() {
+      if (
+        !("serviceWorker" in navigator) ||
+        !("PushManager" in window) ||
+        !("Notification" in window)
+      ) {
+        if (!cancelled) setPushState("unsupported");
+        return;
+      }
+      if (window.Notification.permission === "denied") {
+        if (!cancelled) setPushState("denied");
+        return;
+      }
+      try {
+        const registration = await navigator.serviceWorker.getRegistration("/");
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription) {
+          await fetch("/api/push/subscriptions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subscription: subscription.toJSON() }),
+          });
+        }
+        if (!cancelled) setPushState(subscription ? "enabled" : "disabled");
+      } catch {
+        if (!cancelled) setPushState("unsupported");
+      }
+    }
+    void checkPush();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function togglePush() {
+    setPushError("");
+    try {
+      const registration =
+        (await navigator.serviceWorker.getRegistration("/")) ??
+        (await navigator.serviceWorker.register("/service-worker.js", {
+          scope: "/",
+        }));
+      let subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        const response = await fetch("/api/push/subscriptions", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
+        });
+        if (!response.ok)
+          throw new Error("Could not disable device notifications.");
+        await subscription.unsubscribe();
+        setPushState("disabled");
+        return;
+      }
+
+      const keyResponse = await fetch("/api/push/vapid-public-key", {
+        cache: "no-store",
+      });
+      const keyResult = await keyResponse.json();
+      if (!keyResponse.ok || typeof keyResult.publicKey !== "string") {
+        throw new Error(
+          keyResult.error ?? "Push notifications are not configured.",
+        );
+      }
+      const permission = await window.Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushState(permission === "denied" ? "denied" : "disabled");
+        return;
+      }
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: decodeVapidKey(keyResult.publicKey),
+      });
+      const saveResponse = await fetch("/api/push/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
+      });
+      if (!saveResponse.ok)
+        throw new Error("Could not save this device subscription.");
+      setPushState("enabled");
+    } catch (error) {
+      setPushError(
+        error instanceof Error
+          ? error.message
+          : "Could not configure push notifications.",
+      );
+    }
+  }
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -231,6 +341,30 @@ export default function AdminActivityBell() {
                   <X size={17} />
                 </button>
               </div>
+              <button
+                type="button"
+                className="admin-activity-push-toggle"
+                onClick={() => void togglePush()}
+                disabled={
+                  pushState === "checking" ||
+                  pushState === "unsupported" ||
+                  pushState === "denied"
+                }
+              >
+                <Smartphone size={15} />
+                {pushState === "checking"
+                  ? "Checking device alerts..."
+                  : pushState === "enabled"
+                    ? "Disable device alerts"
+                    : pushState === "denied"
+                      ? "Notifications blocked in browser settings"
+                      : pushState === "unsupported"
+                        ? "Device alerts are not supported here"
+                        : "Enable device alerts"}
+              </button>
+              {pushError && (
+                <p className="admin-activity-push-error">{pushError}</p>
+              )}
               <div className="admin-activity-list">
                 {items.length ? (
                   items.slice(0, 6).map((item) => {
@@ -290,6 +424,10 @@ export default function AdminActivityBell() {
         .admin-activity-close,.admin-activity-back { border: 0; background: transparent; color: var(--color-muted); cursor: pointer; }
         .admin-activity-back { color: var(--color-secondary); font-weight: 700; }
         .admin-activity-list { display: grid; }
+        .admin-activity-push-toggle { width:100%; min-height:40px; padding:8px 14px; display:flex; align-items:center; gap:8px; border:0; border-bottom:1px solid var(--color-border); background:var(--color-background); color:var(--color-primary); font:inherit; font-size:12px; font-weight:700; text-align:left; cursor:pointer; }
+        .admin-activity-push-toggle:hover:not(:disabled) { color:var(--color-secondary-deep); }
+        .admin-activity-push-toggle:disabled { color:var(--color-muted); cursor:not-allowed; }
+        .admin-activity-push-error { margin:0; padding:8px 14px; color:var(--color-danger); font-size:11px; }
         .admin-activity-item { position: relative; width: 100%; padding: 12px 32px 12px 14px; display: flex; gap: 10px; text-align: left; border: 0; border-bottom: 1px solid var(--color-border); background: transparent; color: inherit; cursor: pointer; }
         .admin-activity-item:hover,.admin-activity-item.unread { background: var(--color-secondary-tint); }
         .admin-activity-item-icon,.admin-activity-detail-icon { flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center; color: var(--color-secondary-deep); background: var(--color-secondary-tint); border-radius: 50%; }

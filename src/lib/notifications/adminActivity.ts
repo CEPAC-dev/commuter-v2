@@ -3,6 +3,7 @@ import { AdminActivityNotification } from "@/models/AdminActivityNotification";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { AdminReferralUsage } from "@/models/AdminReferralUsage";
+import { sendPushPayloadToUser } from "@/lib/notifications/webPush";
 
 function isDuplicateKeyError(error: unknown) {
   return Boolean(
@@ -27,7 +28,7 @@ async function notifyAdmins(input: {
   await Promise.all(
     admins.map(async (admin) => {
       try {
-        await AdminActivityNotification.updateOne(
+        const result = await AdminActivityNotification.updateOne(
           { adminId: admin._id, dedupeKey: input.dedupeKey },
           {
             $setOnInsert: {
@@ -37,6 +38,18 @@ async function notifyAdmins(input: {
           },
           { upsert: true },
         );
+        if (result.upsertedCount > 0) {
+          await sendPushPayloadToUser(String(admin._id), {
+            id: input.dedupeKey,
+            title: input.title,
+            body: input.body,
+            data: input.data,
+            url:
+              typeof input.data.href === "string"
+                ? input.data.href
+                : "/admin/alerts",
+          });
+        }
       } catch (error) {
         if (!isDuplicateKeyError(error)) throw error;
       }

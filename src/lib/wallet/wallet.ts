@@ -2,7 +2,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Wallet } from "@/models/Wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { WithdrawalRequest } from "@/models/WithdrawalRequest";
-import { Notification } from "@/models/Notification";
+import { createNotification } from "@/lib/notifications/createNotification";
 import { getAdminSettings } from "@/lib/cancellationPolicy";
 import mongoose, { Types } from "mongoose";
 
@@ -913,7 +913,7 @@ export async function approveWithdrawalRequest(
   request.resolvedBy = adminOid;
   await request.save();
 
-  await Notification.create({
+  await createNotification({
     userId: request.driverId,
     type: "withdrawal_approved",
     title: "Withdrawal Approved",
@@ -959,7 +959,7 @@ export async function rejectWithdrawalRequest(
   request.rejectionReason = reason || null;
   await request.save();
 
-  await Notification.create({
+  await createNotification({
     userId: request.driverId,
     type: "withdrawal_rejected",
     title: "Withdrawal Rejected",

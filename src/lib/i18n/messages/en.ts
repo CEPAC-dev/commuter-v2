@@ -62,6 +62,17 @@ export const en = {
   "notifications.mark_read_error": "Could not mark notification as read",
   "notifications.mark_all_error": "Could not mark notifications as read",
   "notifications.see_all": "See all notifications",
+  "notifications.push_enable": "Enable device notifications",
+  "notifications.push_disable": "Disable device notifications",
+  "notifications.push_enabled": "Device notifications enabled",
+  "notifications.push_disabled": "Device notifications disabled",
+  "notifications.push_checking": "Checking device notifications...",
+  "notifications.push_denied": "Notifications are blocked in browser settings",
+  "notifications.push_unsupported":
+    "Device notifications are not supported here",
+  "notifications.push_permission_required":
+    "Allow notifications to enable device alerts",
+  "notifications.push_setup_error": "Could not enable device notifications",
   "nav.book": "Book",
   "nav.my_trips": "My trips",
   "my_trips.title": "My trips",
