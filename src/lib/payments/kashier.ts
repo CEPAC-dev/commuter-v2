@@ -159,13 +159,15 @@ export async function verifyAndSettleBooking(
           });
         }
         let gatewayRefunded = false;
+        let gatewayRefundPending = false;
         if (payment.gatewayAmountEgp > 0 && payment.kashierOrderId) {
           const refund = await refundKashierPayment(
             payment.kashierOrderId,
             payment.gatewayAmountEgp,
             "Duplicate payment — booking already settled",
           );
-          gatewayRefunded = refund !== null;
+          gatewayRefunded = refund.status === "succeeded";
+          gatewayRefundPending = refund.status === "unknown";
         }
         await Payment.updateOne(
           { _id: payment._id },
@@ -185,9 +187,11 @@ export async function verifyAndSettleBooking(
                 event: "duplicate_settlement_prevented",
                 detail: gatewayRefunded
                   ? "wallet released, gateway refunded"
-                  : payment.gatewayAmountEgp > 0
-                    ? "wallet released, gateway refund FAILED — manual action required"
-                    : "wallet released",
+                  : gatewayRefundPending
+                    ? "wallet released, gateway refund outcome unconfirmed — verify before retrying"
+                    : payment.gatewayAmountEgp > 0
+                      ? "wallet released, gateway refund FAILED — manual action required"
+                      : "wallet released",
               },
             },
           },
@@ -353,8 +357,12 @@ export async function refundKashierPayment(
   orderId: string,
   amountEgp: number,
   reason?: string,
-): Promise<{ refundId: string } | null> {
-  if (!process.env.KASHIER_SECRET_KEY) return null;
+): Promise<
+  | { status: "succeeded"; refundId: string | null }
+  | { status: "failed" }
+  | { status: "unknown" }
+> {
+  if (!process.env.KASHIER_SECRET_KEY) return { status: "failed" };
   const url = `${REFUND_BASE}/v3/orders/${encodeURIComponent(orderId)}`;
   try {
     const res = await fetch(url, {
@@ -381,22 +389,43 @@ export async function refundKashierPayment(
         amountEgp,
         message: data?.message,
       });
-      return null;
+      return res.status < 500 ? { status: "failed" } : { status: "unknown" };
     }
-    const response = (data?.response ?? data) as
-      | Record<string, unknown>
-      | undefined;
-    const status = String(response?.status ?? data?.status ?? "").toUpperCase();
-    if (status !== "SUCCESS") return null;
-    const refundId =
-      (response?.transactionId as string) ||
-      (data?.refundId as string) ||
-      (data?._id as string) ||
-      ((data?.data as Record<string, unknown> | undefined)?._id as string);
-    if (!refundId) return null;
-    return { refundId };
+    const response = data?.response as Record<string, unknown> | undefined;
+    const nestedData = data?.data as Record<string, unknown> | undefined;
+    const responseData = response?.data as Record<string, unknown> | undefined;
+    const statuses = [
+      data?.status,
+      response?.status,
+      nestedData?.status,
+      responseData?.status,
+    ].map((value) => String(value ?? "").toUpperCase());
+    const status =
+      statuses
+        .filter(Boolean)
+        .find((value) => ["SUCCESS", "REFUNDED"].includes(value)) ??
+      statuses
+        .map((value) => String(value ?? "").toUpperCase())
+        .find((value) =>
+          ["FAILED", "DECLINED", "ERROR", "REJECTED"].includes(value),
+        );
+    if (["FAILED", "DECLINED", "ERROR", "REJECTED"].includes(status ?? ""))
+      return { status: "failed" };
+    if (status !== "SUCCESS" && status !== "REFUNDED")
+      return { status: "unknown" };
+
+    const records = [data, response, nestedData, responseData].filter(
+      (value): value is Record<string, unknown> => Boolean(value),
+    );
+    const id = records
+      .map(
+        (record) =>
+          record.transactionId ?? record.refundId ?? record._id ?? record.id,
+      )
+      .find((value) => typeof value === "string" || typeof value === "number");
+    return { status: "succeeded", refundId: id ? String(id) : null };
   } catch {
-    return null;
+    return { status: "unknown" };
   }
 }
 

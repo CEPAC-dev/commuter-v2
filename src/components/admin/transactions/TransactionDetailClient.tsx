@@ -58,6 +58,7 @@ interface DetailData {
       compensationPercent: number;
       compensationAmountEgp: number;
       totalReturnEgp: number;
+      retryAllowed?: boolean;
       reason?: string;
       failureReason?: string;
     } | null;
@@ -182,7 +183,9 @@ export default function TransactionDetailClient({
       (trip.status === "submitted" ||
         trip.status === "matched" ||
         trip.status === "nomatch") &&
-      (!trip.adminRefund || trip.adminRefund.status === "failed"),
+      (!trip.adminRefund ||
+        (trip.adminRefund.status === "failed" &&
+          trip.adminRefund.retryAllowed === true)),
   );
 
   return (
@@ -334,6 +337,10 @@ export default function TransactionDetailClient({
                   : ""}
                 {trip.adminRefund
                   ? ` · admin return ${trip.adminRefund.totalReturnEgp} EGP (${trip.adminRefund.status}; refund ${trip.adminRefund.refundAmountEgp} + compensation ${trip.adminRefund.compensationAmountEgp})`
+                  : ""}
+                {trip.adminRefund?.status === "failed" &&
+                !trip.adminRefund.retryAllowed
+                  ? " · reconciliation required before retry"
                   : ""}
               </div>
             </div>
