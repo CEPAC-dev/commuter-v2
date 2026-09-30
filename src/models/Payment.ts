@@ -20,6 +20,14 @@ const PaymentTimelineEventSchema = new Schema(
   { _id: false },
 );
 
+const RefundLockSchema = new Schema(
+  {
+    token: { type: String, required: true },
+    acquiredAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
 const PaymentSchema = new Schema(
   {
     userId: { type: Types.ObjectId, ref: "User", required: true, index: true },
@@ -81,6 +89,8 @@ const PaymentSchema = new Schema(
     refundedAt: { type: Date },
     refundedAmountEgp: { type: Number, default: 0, min: 0 },
     compensatedAmountEgp: { type: Number, default: 0, min: 0 },
+    lastRefundAttemptAt: { type: Date },
+    refundLock: { type: RefundLockSchema, default: null },
 
     timeline: { type: [PaymentTimelineEventSchema], default: [] },
   },
@@ -102,4 +112,15 @@ PaymentSchema.index(
 );
 
 export type PaymentDoc = InferSchemaType<typeof PaymentSchema>;
-export const Payment = models.Payment || model("Payment", PaymentSchema);
+const existingPaymentModel = models.Payment;
+if (existingPaymentModel) {
+  if (!existingPaymentModel.schema.path("lastRefundAttemptAt")) {
+    existingPaymentModel.schema.add({ lastRefundAttemptAt: { type: Date } });
+  }
+  if (!existingPaymentModel.schema.path("refundLock")) {
+    existingPaymentModel.schema.add({
+      refundLock: { type: RefundLockSchema, default: null },
+    });
+  }
+}
+export const Payment = existingPaymentModel || model("Payment", PaymentSchema);
