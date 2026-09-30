@@ -130,6 +130,7 @@ const TripSchema = new Schema(
         "mini_bus",
       ],
     },
+    retryAllowed: { type: Boolean, required: true, default: false },
     rideType: { type: String, required: true, enum: ["private", "shared"] },
     arrivalTime: { type: String, required: true },
     pickupTime: { type: String, required: true },

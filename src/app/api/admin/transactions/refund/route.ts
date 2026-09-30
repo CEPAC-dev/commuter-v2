@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
         status?: string;
         refundAmountEgp?: number;
         compensationAmountEgp?: number;
+        retryAllowed?: boolean;
       }
     | null
     | undefined;
@@ -80,7 +81,10 @@ export async function POST(req: NextRequest) {
       _id: tripId,
       requestId: payment.bookingId,
       status: { $in: eligibleStatuses },
-      $or: [{ adminRefund: null }, { "adminRefund.status": "failed" }],
+      $or: [
+        { adminRefund: null },
+        { "adminRefund.status": "failed", "adminRefund.retryAllowed": true },
+      ],
       "cancellation.refundStatus": { $nin: ["pending", "approved"] },
     },
     {
@@ -94,6 +98,7 @@ export async function POST(req: NextRequest) {
           compensationAmountEgp: 0,
           totalReturnEgp: 0,
           reason,
+          retryAllowed: false,
         },
       },
     },
@@ -196,6 +201,8 @@ export async function POST(req: NextRequest) {
   // ── 2. Kashier portion ──
   let kashierRefundId: string | null = null;
   let gatewayRefundFailed = false;
+  let gatewayRefundPending = false;
+  let gatewayRefundRetrySafe = false;
   if (gatewayRefundEgp > 0) {
     const kashierOrderId = await resolveKashierRefundOrderId(
       payment.kashierSessionId,
@@ -210,7 +217,7 @@ export async function POST(req: NextRequest) {
         gatewayRefundEgp,
         reason,
       );
-      if (result) {
+      if (result.status === "succeeded") {
         kashierRefundId = result.refundId;
         await WalletTransaction.create({
           userId: payment.userId,
@@ -222,17 +229,24 @@ export async function POST(req: NextRequest) {
           bookingId: payment.bookingId,
           tripId: trip._id,
           kashierOrderId,
-          kashierTransactionIds: [result.refundId],
+          kashierTransactionIds: result.refundId ? [result.refundId] : [],
         });
         timelineEvents.push({
           event: "kashier_refunded",
-          detail: `${gatewayRefundEgp} EGP ref ${result.refundId}`,
+          detail: `${gatewayRefundEgp} EGP${result.refundId ? ` ref ${result.refundId}` : ""}`,
         });
-      } else {
+      } else if (result.status === "failed") {
         gatewayRefundFailed = true;
+        gatewayRefundRetrySafe = true;
         timelineEvents.push({
           event: "kashier_refund_failed",
           detail: `${gatewayRefundEgp} EGP — manual accountant action required`,
+        });
+      } else {
+        gatewayRefundPending = true;
+        timelineEvents.push({
+          event: "kashier_refund_unconfirmed",
+          detail: `${gatewayRefundEgp} EGP — verify with Kashier before retrying`,
         });
       }
     }
@@ -262,7 +276,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!gatewayRefundFailed && compensationAmountEgp > 0) {
+  if (
+    !gatewayRefundFailed &&
+    !gatewayRefundPending &&
+    compensationAmountEgp > 0
+  ) {
     await creditWallet(String(payment.userId), compensationAmountEgp, {
       description: `Compensation (${compensationPercent}%) for trip ${trip._id}${reason ? ` — ${reason}` : ""}`,
       type: "compensation",
@@ -296,8 +314,14 @@ export async function POST(req: NextRequest) {
     { _id: trip._id, "adminRefund.status": "processing" },
     {
       $set: {
-        "adminRefund.status": gatewayRefundFailed ? "failed" : "completed",
-        ...(gatewayRefundFailed ? {} : { status: "refunded" }),
+        "adminRefund.status": gatewayRefundPending
+          ? "processing"
+          : gatewayRefundFailed
+            ? "failed"
+            : "completed",
+        ...(!gatewayRefundFailed && !gatewayRefundPending
+          ? { status: "refunded" }
+          : {}),
         "adminRefund.refundedAt": new Date(),
         "adminRefund.refundAmountEgp":
           previousRefundEgp +
@@ -316,7 +340,13 @@ export async function POST(req: NextRequest) {
               "adminRefund.failureReason":
                 "Kashier refund failed; manual accountant action required",
             }
-          : { paymentStatus: "refunded" }),
+          : gatewayRefundPending
+            ? {
+                "adminRefund.failureReason":
+                  "Kashier refund outcome is unconfirmed; verify before retrying",
+              }
+            : { paymentStatus: "refunded" }),
+        "adminRefund.retryAllowed": gatewayRefundRetrySafe,
       },
     },
   );
@@ -329,6 +359,7 @@ export async function POST(req: NextRequest) {
     gatewayRefundEgp: gatewayRefundFailed ? 0 : gatewayRefundEgp,
     compensationAmountEgp,
     gatewayRefundFailed,
+    gatewayRefundPending,
     kashierRefundId,
     overallStatus: update.overallStatus,
   });
