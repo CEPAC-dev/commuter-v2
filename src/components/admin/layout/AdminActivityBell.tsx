@@ -14,7 +14,10 @@ import {
 
 type AdminActivityItem = {
   id: string;
-  eventType: "completed_paid_trip" | "admin_campaign_claim";
+  eventType:
+    | "paid_trip_created"
+    | "completed_paid_trip"
+    | "admin_campaign_claim";
   title: string;
   body: string;
   data: Record<string, unknown>;
