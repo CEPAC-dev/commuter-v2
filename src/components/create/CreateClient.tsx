@@ -30,6 +30,9 @@ import AppHeader from "@/components/layout/AppHeader";
 import DatePicker from "./DatePicker";
 import TripCycle, { type TripData } from "./TripCycle";
 const CreateMap = dynamic(() => import("./CreateMapOsm"), { ssr: false });
+const CreateMapGoogle = dynamic(() => import("./CreateMapGoogle"), {
+  ssr: false,
+});
 import { earliestBookingDate } from "@/lib/time/bookingDates";
 import type { SavedAddress } from "@/types/shared";
 import { haversineKm } from "@/lib/geo/stations";
@@ -44,10 +47,13 @@ import {
   getMapConfig,
   type RegionCode,
 } from "@/lib/config/regions";
+import type { MapSettings } from "@/lib/config/mapSettings";
+import { MapSearchProvider } from "@/lib/MapSearchContext";
 
 interface Props {
   userEmail: string;
   region?: RegionCode;
+  mapSettings: MapSettings;
   onAddressSaved?: (saved: SavedAddress) => void;
 }
 
@@ -104,6 +110,7 @@ function clampDrawerHeight(vh: number): number {
 export default function CreateClient({
   userEmail,
   region = DEFAULT_REGION,
+  mapSettings,
 }: Props) {
   const mapConfig = getMapConfig(region);
   const { pickup, dropoff } = useTripStore();
@@ -113,7 +120,9 @@ export default function CreateClient({
   ]);
   const [trips, setTrips] = useState<TripData[]>([]);
   const [tripSteps, setTripSteps] = useState<Record<string, BookingStep>>({});
-  const [collapsedTrips, setCollapsedTrips] = useState<Record<string, boolean>>({});
+  const [collapsedTrips, setCollapsedTrips] = useState<Record<string, boolean>>(
+    {},
+  );
   const [requestDatesCollapsed, setRequestDatesCollapsed] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -221,11 +230,14 @@ export default function CreateClient({
 
   // Vehicles — DB-hydrated (mobile-parity source of truth); falls back to static config on failure
   useEffect(() => {
-    fetch(`/api/vehicles?region=${encodeURIComponent(region)}`, { cache: "no-store" })
+    fetch(`/api/vehicles?region=${encodeURIComponent(region)}`, {
+      cache: "no-store",
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!Array.isArray(d?.vehicles)) return;
-        const map: Record<string, (typeof VEHICLES)[keyof typeof VEHICLES]> = {};
+        const map: Record<string, (typeof VEHICLES)[keyof typeof VEHICLES]> =
+          {};
         for (const v of d.vehicles) map[v.key] = v;
         setVehiclesMap(map);
       })
@@ -612,8 +624,7 @@ export default function CreateClient({
   }
 
   function isStepComplete(trip: TripData, step: BookingStep) {
-    if (step === "vehicle")
-      return Boolean(trip.vehicleType);
+    if (step === "vehicle") return Boolean(trip.vehicleType);
     if (step === "locations") return Boolean(trip.pickup && trip.dropoff);
     if (step === "timing") return Boolean(trip.arrivalTime && trip.pickupTime);
     return true;
@@ -656,7 +667,8 @@ export default function CreateClient({
     }
     setValidationError("");
     const nextIndex = BOOKING_STEPS.indexOf(bookingStep) + 1;
-    if (nextIndex < BOOKING_STEPS.length) setTripStep(trip, BOOKING_STEPS[nextIndex]);
+    if (nextIndex < BOOKING_STEPS.length)
+      setTripStep(trip, BOOKING_STEPS[nextIndex]);
   }
 
   function goToPreviousStep(trip: TripData) {
@@ -869,840 +881,912 @@ export default function CreateClient({
   }
 
   return (
-    <div
-      style={{
-        height: "100dvh",
-        display: "flex",
-        flexDirection: "column",
-        background: "#f8f9fa",
-      }}
-    >
-      {/* Top nav bar */}
-      <AppHeader authed email={userEmail} variant="app" />
-
-      {/* Main split layout */}
+    <MapSearchProvider provider={mapSettings.provider}>
       <div
-        style={{ flex: 1, display: "flex", overflow: "hidden" }}
-        className="create-layout"
+        style={{
+          height: "100dvh",
+          display: "flex",
+          flexDirection: "column",
+          background: "#f8f9fa",
+        }}
       >
-        {/* ── Left: form panel ── */}
-        <aside
-          style={{
-            ...drawerStyleVars,
-            width: 520,
-            flexShrink: 0,
-            background: "#ffffff",
-            borderRight: "1px solid #eef0f3",
-            overflowY: draggingDrawer ? "hidden" : "auto",
-            display: "flex",
-            flexDirection: "column",
-            margin: "40px 0 40px 40px",
-            border: "1px solid #ccc",
-            borderRadius: 15,
-          }}
-          className="create-left"
-        >
-          <div
-            className="mobile-drawer-handle-wrap"
-            aria-hidden="true"
-            onPointerDown={handleDrawerPointerDown}
-            onPointerMove={handleDrawerPointerMove}
-            onPointerUp={handleDrawerPointerUp}
-            onPointerCancel={handleDrawerPointerUp}
-          >
-            <span className="mobile-drawer-handle" />
-          </div>
-          <div
-            style={{
-              padding: "32px 20px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 20,
-            }}
-          >
-            <div>
-              <h1
-                style={{
-                  fontSize: 20,
-                  fontWeight: 800,
-                  color: "#0B1E3D",
-                  margin: "0 0 4px",
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                {t("create.book_a_ride_heading")}
-              </h1>
-            </div>
+        {/* Top nav bar */}
+        <AppHeader authed email={userEmail} variant="app" />
 
-            {/* Request-level dates: shared by every trip in this booking. */}
-            <section
-              aria-label={t("create.request_dates")}
-              style={{
-                background: "#ffffff",
-                border: "1.5px solid rgb(200, 232, 228)",
-                borderRadius: 12,
-                boxShadow: "0 2px 8px rgba(11,30,61,0.04)",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setRequestDatesCollapsed((collapsed) => !collapsed)}
-                aria-expanded={!requestDatesCollapsed}
-                style={{
-                  width: "100%",
-                  minHeight: 48,
-                  padding: "10px 14px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  border: "none",
-                  background: "transparent",
-                  color: "#0B1E3D",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontSize: 14,
-                  fontWeight: 750,
-                  textAlign: "start",
-                }}
-              >
-                <span>{t("create.request_dates")}</span>
-                <span
-                  aria-hidden="true"
-                  className="create-request-dates-toggle"
-                  style={{
-                    fontSize: 18,
-                    lineHeight: 1,
-                    transform: requestDatesCollapsed ? "rotate(0deg)" : "rotate(45deg)",
-                  }}
-                >
-                  +
-                </span>
-              </button>
-              <div
-                className="create-request-dates-content"
-                aria-hidden={requestDatesCollapsed}
-                style={{
-                  maxHeight: requestDatesCollapsed ? 0 : 360,
-                  opacity: requestDatesCollapsed ? 0 : 1,
-                  overflow: "hidden",
-                  padding: requestDatesCollapsed ? "0 14px" : "0 14px 14px",
-                  pointerEvents: requestDatesCollapsed ? "none" : "auto",
-                }}
-              >
-                <div style={{ minHeight: 0 }}>
-                  <DatePicker value={selectedDates} onChange={setSelectedDates} />
-                </div>
-              </div>
-            </section>
-
-            {/* Trip cycles */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {trips.map((trip, i) => {
-                const bookingStep = getTripStep(trip.id);
-                const currentStepIndex = BOOKING_STEPS.indexOf(bookingStep);
-                const allVehicles = vehiclesMap
-                  ? Object.values(vehiclesMap)
-                  : VEHICLE_LIST;
-                const vehicleList = allVehicles;
-                // Minimum arrival time = prev trip's arrival + this trip's drive + buffer
-                let minArrivalTime: string | null = null;
-                if (i > 0) {
-                  const prev = trips[i - 1];
-                  if (prev.arrivalTime) {
-                    const prevMins = toMinutes(prev.arrivalTime);
-                    if (trip.durationMinutes && trip.vehicleType) {
-                      const vWindow = (vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType]).window;
-                      minArrivalTime = toHHMM(
-                        prevMins + trip.durationMinutes + vWindow,
-                      );
-                    } else {
-                      minArrivalTime = toHHMM(prevMins + 1);
-                    }
-                  }
-                }
-                // Return trip source = immediately preceding trip.
-                // Hide checkbox if prev trip is itself a return trip.
-                const prevTrip = i > 0 ? trips[i - 1] : null;
-                const canBeReturn =
-                  !!prevTrip &&
-                  !prevTrip.returnTrip &&
-                  !!(prevTrip.pickup && prevTrip.dropoff);
-                return (
-                  <TripCycle
-                    key={trip.id}
-                    data={trip}
-                    index={i}
-                    canRemove={trips.length > 1}
-                    onChange={(updated) => updateTrip(trip.id, updated)}
-                    onRemove={() => removeTrip(trip.id)}
-                    picking={picking?.tripId === trip.id ? picking : null}
-                    onPickFromMap={(field, stopId) =>
-                      setPicking({ tripId: trip.id, field, stopId })
-                    }
-                    sourceTripData={canBeReturn ? prevTrip : null}
-                    savedAddresses={savedAddresses}
-                    onAddressSaved={(s) =>
-                      setSavedAddresses((prev) => [...prev, s])
-                    }
-                    stations={stations}
-                    minArrivalTime={minArrivalTime}
-                    vehiclesMap={vehiclesMap ?? undefined}
-                    vehicleList={vehicleList}
-                    disabledVehicleKeys={[]}
-                    onStopErrorChange={(error) =>
-                      handleTripStopErrorChange(trip.id, error)
-                    }
-                    stage={bookingStep}
-                    collapsed={Boolean(collapsedTrips[trip.id])}
-                    onToggleCollapsed={() =>
-                      setCollapsedTrips((prev) => ({
-                        ...prev,
-                        [trip.id]: !prev[trip.id],
-                      }))
-                    }
-                    beforeFields={
-                      <>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 12,
-                          }}
-                          aria-label={t("create.trip_step_progress")
-                            .replace("{trip}", String(i + 1))
-                            .replace("{current}", String(currentStepIndex + 1))
-                            .replace("{total}", String(BOOKING_STEPS.length))}
-                        >
-                          <div>
-                            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#00C2A8", textTransform: "uppercase", letterSpacing: ".06em" }}>
-                              {t("create.step_progress")
-                                .replace("{current}", String(currentStepIndex + 1))
-                                .replace("{total}", String(BOOKING_STEPS.length))}
-                            </p>
-                            <h2 style={{ margin: "3px 0 0", fontSize: 16, color: "#0B1E3D" }}>
-                              {stepLabels[bookingStep]}
-                            </h2>
-                          </div>
-                          <div style={{ display: "flex", gap: 2 }}>
-                            {BOOKING_STEPS.map((step, stepIndex) => {
-                              const canOpen = canOpenStep(trip, i, stepIndex);
-                              const active = stepIndex === currentStepIndex;
-                              return (
-                                <button
-                                  key={step}
-                                  type="button"
-                                  aria-label={t("create.go_to_step").replace(
-                                    "{step}",
-                                    stepLabels[step],
-                                  )}
-                                  aria-current={active ? "step" : undefined}
-                                  disabled={!canOpen}
-                                  onClick={() => canOpen && setTripStep(trip, step)}
-                                  style={{
-                                    width: 32,
-                                    height: 36,
-                                    padding: 0,
-                                    border: "none",
-                                    background: "transparent",
-                                    cursor: canOpen ? "pointer" : "not-allowed",
-                                    opacity: canOpen ? 1 : 0.45,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  <span
-                                    className={`create-step-dash${active ? " is-active" : canOpen ? " is-ready" : ""}`}
-                                    style={{ width: 22, height: 4, borderRadius: 99, background: active || canOpen ? "#00C2A8" : "#dce4ea" }}
-                                  />
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </>
-                    }
-                    afterFields={
-                      <div style={{ display: "grid", gridTemplateColumns: bookingStep === "vehicle" ? "1fr" : "1fr 1fr", gap: 10 }}>
-                        {bookingStep !== "vehicle" && (
-                          <button type="button" onClick={() => goToPreviousStep(trip)} style={{ height: 48, border: "1.5px solid #d0d8e0", borderRadius: 12, background: "#fff", color: "#0B1E3D", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "inherit" }}>
-                            <ArrowLeft size={16} aria-hidden="true" /> {t("create.back")}
-                          </button>
-                        )}
-                        {bookingStep !== "passengers" && (
-                          <button type="button" onClick={() => goToNextStep(trip, i)} style={{ height: 48, border: "none", borderRadius: 12, background: "#0B1E3D", color: "#fff", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: "inherit" }}>
-                            {t("create.next")} <ArrowRight size={16} aria-hidden="true" />
-                          </button>
-                        )}
-                      </div>
-                    }
-                  />
-                );
-              })}
-            </div>
-
-            {/* Add trip */}
-            {trips.length < 3 && trips.at(-1) && getTripStep(trips.at(-1)!.id) === "passengers" && (
-              <button
-                type="button"
-                onClick={addTrip}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  width: "100%",
-                  height: 48,
-                  background: "transparent",
-                  border: "2px dashed #d0d8e0",
-                  borderRadius: 12,
-                  cursor: "pointer",
-                  color: "#5A6A7A",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  fontFamily: "inherit",
-                  transition: "border-color 0.15s, color 0.15s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#00C2A8";
-                  e.currentTarget.style.color = "#00C2A8";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#d0d8e0";
-                  e.currentTarget.style.color = "#5A6A7A";
-                }}
-              >
-                <Plus size={16} aria-hidden="true" />
-                {t("create.add_another_trip")}
-              </button>
-            )}
-
-            {/* Validation error */}
-            {validationError && (
-              <p
-                role="alert"
-                aria-live="assertive"
-                style={{
-                  fontSize: 13,
-                  color: "#e74c3c",
-                  background: "rgba(231,76,60,0.07)",
-                  border: "1px solid rgba(231,76,60,0.2)",
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  margin: 0,
-                }}
-              >
-                {validationError}
-              </p>
-            )}
-
-            {/* Preview CTA */}
-            {allTripsAtFinalStep && <div
-              style={{
-                background: "#ffffff",
-                borderTop: "1px solid #eef0f3",
-                borderRadius: 12,
-                position: "sticky",
-                bottom: 0,
-                paddingTop: 12,
-                paddingBottom: 8,
-                marginTop: -4,
-                zIndex: 99,
-              }}
-            >
-              {totalEgp > 0 && (
-                <p
-                  style={{
-                    textAlign: "center",
-                    fontSize: 13,
-                    color: "#5A6A7A",
-                    margin: "0 0 10px",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {locale === "ar" ? "السعر المتوقع :" : "Estimated total:"}{" "}
-                  <strong
-                    style={{ color: "#00C2A8", fontSize: 15, fontWeight: 800 }}
-                  >
-                    {formatEgp(locale, grandTotalEgp)}
-                  </strong>
-                  {
-                    selectedDates.length > 1
-                    // && ` × ${selectedDates.length} days`
-                  }
-                </p>
-              )}
-
-              {totalSavingsEgp > 0 && (
-                <p
-                  style={{
-                    textAlign: "center",
-                    fontSize: 12,
-                    color: "#00877A",
-                    margin: "0 0 10px",
-                    fontWeight: 700,
-                  }}
-                >
-                  {t("create.discount_savings_label").replace(
-                    "{amount}",
-                    String(totalSavingsEgp),
-                  )}
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={handlePreview}
-                disabled={previewDisabled}
-                style={{
-                  width: "100%",
-                  height: 52,
-                  background: previewDisabled ? "#7b8a9a" : "#0B1E3D",
-                  color: "#ffffff",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  border: "none",
-                  borderRadius: 12,
-                  cursor: previewDisabled ? "not-allowed" : "pointer",
-                  opacity: previewDisabled ? 0.55 : 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  fontFamily: "inherit",
-                  transition: "background 0.2s, opacity 0.2s",
-                }}
-                onMouseEnter={
-                  previewDisabled
-                    ? undefined
-                    : (e) => {
-                        e.currentTarget.style.background = "#00C2A8";
-                      }
-                }
-                onMouseLeave={
-                  previewDisabled
-                    ? undefined
-                    : (e) => {
-                        e.currentTarget.style.background = "#0B1E3D";
-                      }
-                }
-              >
-                <Eye size={17} aria-hidden="true" />
-                {t("create.preview_booking")}
-              </button>
-            </div>}
-          </div>
-        </aside>
-
-        {/* ── Right: map placeholder (Phase 4 will fill this) ── */}
-        <main
-          style={{
-            flex: 1,
-            position: "relative",
-            overflow: "hidden",
-            margin: 40,
-            borderRadius: 15,
-          }}
-          aria-label={t("create.map_area_aria")}
-          className="create-right"
-        >
-          <CreateMap
-            regionCode={region}
-            mapConfig={mapConfig}
-            trips={trips}
-            picking={picking}
-            onMapPick={handleMapPick}
-            onStationSelect={handleStationSelect}
-            onCancelPick={() => setPicking(null)}
-          />
-        </main>
-      </div>
-
-      {/* ── Preview modal ── */}
-      {showPreview && (
+        {/* Main split layout */}
         <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={t("create.booking_preview_aria")}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 200,
-            background: "rgba(11,30,61,0.55)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowPreview(false);
-          }}
+          style={{ flex: 1, display: "flex", overflow: "hidden" }}
+          className="create-layout"
         >
-          <div
+          {/* ── Left: form panel ── */}
+          <aside
             style={{
+              ...drawerStyleVars,
+              width: 520,
+              flexShrink: 0,
               background: "#ffffff",
-              borderRadius: "20px 20px 0 0",
-              width: "100%",
-              maxWidth: 520,
-              maxHeight: "85dvh",
+              borderRight: "1px solid #eef0f3",
+              overflowY: draggingDrawer ? "hidden" : "auto",
               display: "flex",
               flexDirection: "column",
+              margin: "40px 0 40px 40px",
+              border: "1px solid #ccc",
+              borderRadius: 15,
             }}
+            className="create-left"
           >
-            {/* Header — fixed */}
             <div
-              style={{
-                flexShrink: 0,
-                padding: "16px 24px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                borderBottom: "1px solid #eef0f3",
-              }}
+              className="mobile-drawer-handle-wrap"
+              aria-hidden="true"
+              onPointerDown={handleDrawerPointerDown}
+              onPointerMove={handleDrawerPointerMove}
+              onPointerUp={handleDrawerPointerUp}
+              onPointerCancel={handleDrawerPointerUp}
             >
-              <h2
-                style={{
-                  fontSize: 17,
-                  fontWeight: 800,
-                  color: "#0B1E3D",
-                  margin: 0,
-                }}
-              >
-                {t("create.booking_summary_heading")}
-              </h2>
-              <button
-                onClick={() => setShowPreview(false)}
-                aria-label={t("create.close_preview_aria")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#5A6A7A",
-                  padding: 4,
-                  minWidth: 36,
-                  minHeight: 36,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                ✕
-              </button>
+              <span className="mobile-drawer-handle" />
             </div>
-
-            {/* Scrollable middle */}
             <div
               style={{
-                flex: 1,
-                minHeight: 0,
-                overflowY: "auto",
-                padding: "16px 24px",
+                padding: "32px 20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 20,
               }}
             >
-              <p style={{ fontSize: 13, color: "#5A6A7A", margin: "0 0 16px" }}>
-                {selectedDates.length > 1
-                  ? t("create.dates_label")
-                  : t("create.date_label")}
-                :{" "}
-                <strong style={{ color: "#0B1E3D" }}>
-                  {selectedDates.join(", ")}
-                </strong>
-                {selectedDates.length > 1 &&
-                  ` ${t("create.days_suffix").replace("{n}", String(selectedDates.length))}`}
-              </p>
+              <div>
+                <h1
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 800,
+                    color: "#0B1E3D",
+                    margin: "0 0 4px",
+                    letterSpacing: "-0.02em",
+                  }}
+                >
+                  {t("create.book_a_ride_heading")}
+                </h1>
+              </div>
 
-              {trips.map((trip, i) => {
-                const isPrivate =
-                  trip.vehicleType !== "" &&
-                  (
-                    vehiclesMap?.[trip.vehicleType] ??
-                    VEHICLES[trip.vehicleType]
-                  ).ride === "private";
-                const routePoints = [
-                  {
-                    label: t("create.route_pickup_label"),
-                    point: trip.pickup,
-                    icon: Navigation,
-                  },
-                  ...trip.stops.map((stop, stopIndex) => ({
-                    label: t("create.stop_label").replace(
-                      "{n}",
-                      String(stopIndex + 1),
-                    ),
-                    point: stop.point,
-                    icon: MapPin,
-                  })),
-                  {
-                    label: t("create.route_dropoff_label"),
-                    point: trip.dropoff,
-                    icon: Flag,
-                  },
-                ];
-                const showTripHeader = trips.length > 1;
-                const vehicle = trip.vehicleType
-                  ? (vehiclesMap?.[trip.vehicleType] ??
-                    VEHICLES[trip.vehicleType])
-                  : null;
-                return (
-                  <div
-                    key={trip.id}
-                    style={
-                      showTripHeader
-                        ? {
-                            padding: "14px 16px",
-                            background: "#f8f9fa",
-                            borderRadius: 12,
-                            marginBottom: 12,
-                            border: "1px solid #eef0f3",
-                          }
-                        : { marginBottom: 16 }
-                    }
+              {/* Request-level dates: shared by every trip in this booking. */}
+              <section
+                aria-label={t("create.request_dates")}
+                style={{
+                  background: "#ffffff",
+                  border: "1.5px solid rgb(200, 232, 228)",
+                  borderRadius: 12,
+                  boxShadow: "0 2px 8px rgba(11,30,61,0.04)",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRequestDatesCollapsed((collapsed) => !collapsed)
+                  }
+                  aria-expanded={!requestDatesCollapsed}
+                  style={{
+                    width: "100%",
+                    minHeight: 48,
+                    padding: "10px 14px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    border: "none",
+                    background: "transparent",
+                    color: "#0B1E3D",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: 14,
+                    fontWeight: 750,
+                    textAlign: "start",
+                  }}
+                >
+                  <span>{t("create.request_dates")}</span>
+                  <span
+                    aria-hidden="true"
+                    className="create-request-dates-toggle"
+                    style={{
+                      fontSize: 18,
+                      lineHeight: 1,
+                      transform: requestDatesCollapsed
+                        ? "rotate(0deg)"
+                        : "rotate(45deg)",
+                    }}
                   >
-                    {showTripHeader && (
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
-                          marginBottom: 8,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            fontSize: 14,
-                            color: "#0B1E3D",
-                          }}
-                        >
-                          {t("create.trip_number").replace(
-                            "{n}",
-                            String(i + 1),
-                          )}
-                        </span>
-                        <span
-                          style={{
-                            fontWeight: 800,
-                            fontSize: 15,
-                            color: "#00C2A8",
-                            fontVariantNumeric: "tabular-nums",
-                          }}
-                        >
-                          {formatEgp(locale, getTripPriceForSubmission(trip))}
-                        </span>
-                      </div>
-                    )}
+                    +
+                  </span>
+                </button>
+                <div
+                  className="create-request-dates-content"
+                  aria-hidden={requestDatesCollapsed}
+                  style={{
+                    maxHeight: requestDatesCollapsed ? 0 : 360,
+                    opacity: requestDatesCollapsed ? 0 : 1,
+                    overflow: "hidden",
+                    padding: requestDatesCollapsed ? "0 14px" : "0 14px 14px",
+                    pointerEvents: requestDatesCollapsed ? "none" : "auto",
+                  }}
+                >
+                  <div style={{ minHeight: 0 }}>
+                    <DatePicker
+                      value={selectedDates}
+                      onChange={setSelectedDates}
+                    />
+                  </div>
+                </div>
+              </section>
 
-                    {/* Primary: route */}
-                    {isPrivate ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 10,
-                        }}
-                      >
-                        {routePoints.map((routePoint, pointIndex) => {
-                          const Icon = routePoint.icon;
-                          return (
-                            <div key={routePoint.label}>
-                              <span
+              {/* Trip cycles */}
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 16 }}
+              >
+                {trips.map((trip, i) => {
+                  const bookingStep = getTripStep(trip.id);
+                  const currentStepIndex = BOOKING_STEPS.indexOf(bookingStep);
+                  const allVehicles = vehiclesMap
+                    ? Object.values(vehiclesMap)
+                    : VEHICLE_LIST;
+                  const vehicleList = allVehicles;
+                  // Minimum arrival time = prev trip's arrival + this trip's drive + buffer
+                  let minArrivalTime: string | null = null;
+                  if (i > 0) {
+                    const prev = trips[i - 1];
+                    if (prev.arrivalTime) {
+                      const prevMins = toMinutes(prev.arrivalTime);
+                      if (trip.durationMinutes && trip.vehicleType) {
+                        const vWindow = (
+                          vehiclesMap?.[trip.vehicleType] ??
+                          VEHICLES[trip.vehicleType]
+                        ).window;
+                        minArrivalTime = toHHMM(
+                          prevMins + trip.durationMinutes + vWindow,
+                        );
+                      } else {
+                        minArrivalTime = toHHMM(prevMins + 1);
+                      }
+                    }
+                  }
+                  // Return trip source = immediately preceding trip.
+                  // Hide checkbox if prev trip is itself a return trip.
+                  const prevTrip = i > 0 ? trips[i - 1] : null;
+                  const canBeReturn =
+                    !!prevTrip &&
+                    !prevTrip.returnTrip &&
+                    !!(prevTrip.pickup && prevTrip.dropoff);
+                  return (
+                    <TripCycle
+                      key={trip.id}
+                      data={trip}
+                      index={i}
+                      canRemove={trips.length > 1}
+                      regionCode={region}
+                      mapSettings={mapSettings}
+                      onChange={(updated) => updateTrip(trip.id, updated)}
+                      onRemove={() => removeTrip(trip.id)}
+                      picking={picking?.tripId === trip.id ? picking : null}
+                      onPickFromMap={(field, stopId) =>
+                        setPicking({ tripId: trip.id, field, stopId })
+                      }
+                      sourceTripData={canBeReturn ? prevTrip : null}
+                      savedAddresses={savedAddresses}
+                      onAddressSaved={(s) =>
+                        setSavedAddresses((prev) => [...prev, s])
+                      }
+                      stations={stations}
+                      minArrivalTime={minArrivalTime}
+                      vehiclesMap={vehiclesMap ?? undefined}
+                      vehicleList={vehicleList}
+                      disabledVehicleKeys={vehicleList
+                        .filter((vehicle) => vehicle.active === false)
+                        .map((vehicle) => vehicle.key)}
+                      onStopErrorChange={(error) =>
+                        handleTripStopErrorChange(trip.id, error)
+                      }
+                      stage={bookingStep}
+                      collapsed={Boolean(collapsedTrips[trip.id])}
+                      onToggleCollapsed={() =>
+                        setCollapsedTrips((prev) => ({
+                          ...prev,
+                          [trip.id]: !prev[trip.id],
+                        }))
+                      }
+                      beforeFields={
+                        <>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 12,
+                            }}
+                            aria-label={t("create.trip_step_progress")
+                              .replace("{trip}", String(i + 1))
+                              .replace(
+                                "{current}",
+                                String(currentStepIndex + 1),
+                              )
+                              .replace("{total}", String(BOOKING_STEPS.length))}
+                          >
+                            <div>
+                              <p
                                 style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 8,
-                                  fontSize: 14,
+                                  margin: 0,
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  color: "#00C2A8",
+                                  textTransform: "uppercase",
+                                  letterSpacing: ".06em",
+                                }}
+                              >
+                                {t("create.step_progress")
+                                  .replace(
+                                    "{current}",
+                                    String(currentStepIndex + 1),
+                                  )
+                                  .replace(
+                                    "{total}",
+                                    String(BOOKING_STEPS.length),
+                                  )}
+                              </p>
+                              <h2
+                                style={{
+                                  margin: "3px 0 0",
+                                  fontSize: 16,
                                   color: "#0B1E3D",
                                 }}
                               >
-                                <Icon
-                                  size={15}
-                                  color={
-                                    pointIndex === routePoints.length - 1
-                                      ? "#F5A623"
-                                      : pointIndex === 0
-                                        ? "#0B1E3D"
-                                        : "#00C2A8"
-                                  }
-                                  aria-hidden="true"
-                                  style={{ flexShrink: 0 }}
-                                />
-                                <strong style={{ fontWeight: 700 }}>
-                                  {routePoint.label}
-                                </strong>
-                                <span style={{ color: "#5A6A7A" }}>
-                                  {routePoint.point?.address
-                                    ? formatDisplayName(
-                                        routePoint.point.address,
-                                      )
-                                    : "—"}
-                                </span>
-                              </span>
+                                {stepLabels[bookingStep]}
+                              </h2>
+                            </div>
+                            <div style={{ display: "flex", gap: 2 }}>
+                              {BOOKING_STEPS.map((step, stepIndex) => {
+                                const canOpen = canOpenStep(trip, i, stepIndex);
+                                const active = stepIndex === currentStepIndex;
+                                return (
+                                  <button
+                                    key={step}
+                                    type="button"
+                                    aria-label={t("create.go_to_step").replace(
+                                      "{step}",
+                                      stepLabels[step],
+                                    )}
+                                    aria-current={active ? "step" : undefined}
+                                    disabled={!canOpen}
+                                    onClick={() =>
+                                      canOpen && setTripStep(trip, step)
+                                    }
+                                    style={{
+                                      width: 32,
+                                      height: 36,
+                                      padding: 0,
+                                      border: "none",
+                                      background: "transparent",
+                                      cursor: canOpen
+                                        ? "pointer"
+                                        : "not-allowed",
+                                      opacity: canOpen ? 1 : 0.45,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <span
+                                      className={`create-step-dash${active ? " is-active" : canOpen ? " is-ready" : ""}`}
+                                      style={{
+                                        width: 22,
+                                        height: 4,
+                                        borderRadius: 99,
+                                        background:
+                                          active || canOpen
+                                            ? "#00C2A8"
+                                            : "#dce4ea",
+                                      }}
+                                    />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </>
+                      }
+                      afterFields={
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              bookingStep === "vehicle" ? "1fr" : "1fr 1fr",
+                            gap: 10,
+                          }}
+                        >
+                          {bookingStep !== "vehicle" && (
+                            <button
+                              type="button"
+                              onClick={() => goToPreviousStep(trip)}
+                              style={{
+                                height: 48,
+                                border: "1.5px solid #d0d8e0",
+                                borderRadius: 12,
+                                background: "#fff",
+                                color: "#0B1E3D",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 7,
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              <ArrowLeft size={16} aria-hidden="true" />{" "}
+                              {t("create.back")}
+                            </button>
+                          )}
+                          {bookingStep !== "passengers" && (
+                            <button
+                              type="button"
+                              onClick={() => goToNextStep(trip, i)}
+                              style={{
+                                height: 48,
+                                border: "none",
+                                borderRadius: 12,
+                                background: "#0B1E3D",
+                                color: "#fff",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 7,
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              {t("create.next")}{" "}
+                              <ArrowRight size={16} aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
+                      }
+                    />
+                  );
+                })}
+              </div>
 
-                              {trip.stops[pointIndex - 1] && (
+              {/* Add trip */}
+              {trips.length < 3 &&
+                trips.at(-1) &&
+                getTripStep(trips.at(-1)!.id) === "passengers" && (
+                  <button
+                    type="button"
+                    onClick={addTrip}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      width: "100%",
+                      height: 48,
+                      background: "transparent",
+                      border: "2px dashed #d0d8e0",
+                      borderRadius: 12,
+                      cursor: "pointer",
+                      color: "#5A6A7A",
+                      fontSize: 14,
+                      fontWeight: 600,
+                      fontFamily: "inherit",
+                      transition: "border-color 0.15s, color 0.15s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = "#00C2A8";
+                      e.currentTarget.style.color = "#00C2A8";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "#d0d8e0";
+                      e.currentTarget.style.color = "#5A6A7A";
+                    }}
+                  >
+                    <Plus size={16} aria-hidden="true" />
+                    {t("create.add_another_trip")}
+                  </button>
+                )}
+
+              {/* Validation error */}
+              {validationError && (
+                <p
+                  role="alert"
+                  aria-live="assertive"
+                  style={{
+                    fontSize: 13,
+                    color: "#e74c3c",
+                    background: "rgba(231,76,60,0.07)",
+                    border: "1px solid rgba(231,76,60,0.2)",
+                    borderRadius: 8,
+                    padding: "10px 14px",
+                    margin: 0,
+                  }}
+                >
+                  {validationError}
+                </p>
+              )}
+
+              {/* Preview CTA */}
+              {allTripsAtFinalStep && (
+                <div
+                  style={{
+                    background: "#ffffff",
+                    borderTop: "1px solid #eef0f3",
+                    borderRadius: 12,
+                    position: "sticky",
+                    bottom: 0,
+                    paddingTop: 12,
+                    paddingBottom: 8,
+                    marginTop: -4,
+                    zIndex: 99,
+                  }}
+                >
+                  {totalEgp > 0 && (
+                    <p
+                      style={{
+                        textAlign: "center",
+                        fontSize: 13,
+                        color: "#5A6A7A",
+                        margin: "0 0 10px",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {locale === "ar" ? "السعر المتوقع :" : "Estimated total:"}{" "}
+                      <strong
+                        style={{
+                          color: "#00C2A8",
+                          fontSize: 15,
+                          fontWeight: 800,
+                        }}
+                      >
+                        {formatEgp(locale, grandTotalEgp)}
+                      </strong>
+                      {
+                        selectedDates.length > 1
+                        // && ` × ${selectedDates.length} days`
+                      }
+                    </p>
+                  )}
+
+                  {totalSavingsEgp > 0 && (
+                    <p
+                      style={{
+                        textAlign: "center",
+                        fontSize: 12,
+                        color: "#00877A",
+                        margin: "0 0 10px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {t("create.discount_savings_label").replace(
+                        "{amount}",
+                        String(totalSavingsEgp),
+                      )}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handlePreview}
+                    disabled={previewDisabled}
+                    style={{
+                      width: "100%",
+                      height: 52,
+                      background: previewDisabled ? "#7b8a9a" : "#0B1E3D",
+                      color: "#ffffff",
+                      fontWeight: 700,
+                      fontSize: 15,
+                      border: "none",
+                      borderRadius: 12,
+                      cursor: previewDisabled ? "not-allowed" : "pointer",
+                      opacity: previewDisabled ? 0.55 : 1,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      fontFamily: "inherit",
+                      transition: "background 0.2s, opacity 0.2s",
+                    }}
+                    onMouseEnter={
+                      previewDisabled
+                        ? undefined
+                        : (e) => {
+                            e.currentTarget.style.background = "#00C2A8";
+                          }
+                    }
+                    onMouseLeave={
+                      previewDisabled
+                        ? undefined
+                        : (e) => {
+                            e.currentTarget.style.background = "#0B1E3D";
+                          }
+                    }
+                  >
+                    <Eye size={17} aria-hidden="true" />
+                    {t("create.preview_booking")}
+                  </button>
+                </div>
+              )}
+            </div>
+          </aside>
+
+          {/* ── Right: map placeholder (Phase 4 will fill this) ── */}
+          <main
+            style={{
+              flex: 1,
+              position: "relative",
+              overflow: "hidden",
+              margin: 40,
+              borderRadius: 15,
+            }}
+            aria-label={t("create.map_area_aria")}
+            className="create-right"
+          >
+            {mapSettings.provider === "google" ? (
+              <CreateMapGoogle
+                regionCode={region}
+                mapConfig={mapConfig}
+                mapSettings={mapSettings}
+                trips={trips}
+                picking={picking}
+                onMapPick={handleMapPick}
+                onStationSelect={handleStationSelect}
+                onCancelPick={() => setPicking(null)}
+              />
+            ) : (
+              <CreateMap
+                regionCode={region}
+                mapConfig={mapConfig}
+                mapSettings={mapSettings}
+                trips={trips}
+                picking={picking}
+                onMapPick={handleMapPick}
+                onStationSelect={handleStationSelect}
+                onCancelPick={() => setPicking(null)}
+              />
+            )}
+          </main>
+        </div>
+
+        {/* ── Preview modal ── */}
+        {showPreview && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("create.booking_preview_aria")}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 200,
+              background: "rgba(11,30,61,0.55)",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowPreview(false);
+            }}
+          >
+            <div
+              style={{
+                background: "#ffffff",
+                borderRadius: "20px 20px 0 0",
+                width: "100%",
+                maxWidth: 520,
+                maxHeight: "85dvh",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              {/* Header — fixed */}
+              <div
+                style={{
+                  flexShrink: 0,
+                  padding: "16px 24px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  borderBottom: "1px solid #eef0f3",
+                }}
+              >
+                <h2
+                  style={{
+                    fontSize: 17,
+                    fontWeight: 800,
+                    color: "#0B1E3D",
+                    margin: 0,
+                  }}
+                >
+                  {t("create.booking_summary_heading")}
+                </h2>
+                <button
+                  onClick={() => setShowPreview(false)}
+                  aria-label={t("create.close_preview_aria")}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#5A6A7A",
+                    padding: 4,
+                    minWidth: 36,
+                    minHeight: 36,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Scrollable middle */}
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflowY: "auto",
+                  padding: "16px 24px",
+                }}
+              >
+                <p
+                  style={{ fontSize: 13, color: "#5A6A7A", margin: "0 0 16px" }}
+                >
+                  {selectedDates.length > 1
+                    ? t("create.dates_label")
+                    : t("create.date_label")}
+                  :{" "}
+                  <strong style={{ color: "#0B1E3D" }}>
+                    {selectedDates.join(", ")}
+                  </strong>
+                  {selectedDates.length > 1 &&
+                    ` ${t("create.days_suffix").replace("{n}", String(selectedDates.length))}`}
+                </p>
+
+                {trips.map((trip, i) => {
+                  const isPrivate =
+                    trip.vehicleType !== "" &&
+                    (
+                      vehiclesMap?.[trip.vehicleType] ??
+                      VEHICLES[trip.vehicleType]
+                    ).ride === "private";
+                  const routePoints = [
+                    {
+                      label: t("create.route_pickup_label"),
+                      point: trip.pickup,
+                      icon: Navigation,
+                    },
+                    ...trip.stops.map((stop, stopIndex) => ({
+                      label: t("create.stop_label").replace(
+                        "{n}",
+                        String(stopIndex + 1),
+                      ),
+                      point: stop.point,
+                      icon: MapPin,
+                    })),
+                    {
+                      label: t("create.route_dropoff_label"),
+                      point: trip.dropoff,
+                      icon: Flag,
+                    },
+                  ];
+                  const showTripHeader = trips.length > 1;
+                  const vehicle = trip.vehicleType
+                    ? (vehiclesMap?.[trip.vehicleType] ??
+                      VEHICLES[trip.vehicleType])
+                    : null;
+                  return (
+                    <div
+                      key={trip.id}
+                      style={
+                        showTripHeader
+                          ? {
+                              padding: "14px 16px",
+                              background: "#f8f9fa",
+                              borderRadius: 12,
+                              marginBottom: 12,
+                              border: "1px solid #eef0f3",
+                            }
+                          : { marginBottom: 16 }
+                      }
+                    >
+                      {showTripHeader && (
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            marginBottom: 8,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              fontSize: 14,
+                              color: "#0B1E3D",
+                            }}
+                          >
+                            {t("create.trip_number").replace(
+                              "{n}",
+                              String(i + 1),
+                            )}
+                          </span>
+                          <span
+                            style={{
+                              fontWeight: 800,
+                              fontSize: 15,
+                              color: "#00C2A8",
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          >
+                            {formatEgp(locale, getTripPriceForSubmission(trip))}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Primary: route */}
+                      {isPrivate ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 10,
+                          }}
+                        >
+                          {routePoints.map((routePoint, pointIndex) => {
+                            const Icon = routePoint.icon;
+                            return (
+                              <div key={routePoint.label}>
                                 <span
                                   style={{
-                                    display: "block",
-                                    margin: "4px 0 0 23px",
-                                    fontSize: 12,
-                                    color: "#5A6A7A",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    fontSize: 14,
+                                    color: "#0B1E3D",
                                   }}
                                 >
-                                  Alighting:{" "}
-                                  {trip.stops[pointIndex - 1].alighting} ·
-                                  Boarding:{" "}
-                                  {trip.stops[pointIndex - 1].boarding}
-                                  {trip.stops[pointIndex - 1].waitingMinutes >
-                                    0 &&
-                                    ` · Wait: ${trip.stops[pointIndex - 1].waitingMinutes} min`}
+                                  <Icon
+                                    size={15}
+                                    color={
+                                      pointIndex === routePoints.length - 1
+                                        ? "#F5A623"
+                                        : pointIndex === 0
+                                          ? "#0B1E3D"
+                                          : "#00C2A8"
+                                    }
+                                    aria-hidden="true"
+                                    style={{ flexShrink: 0 }}
+                                  />
+                                  <strong style={{ fontWeight: 700 }}>
+                                    {routePoint.label}
+                                  </strong>
+                                  <span style={{ color: "#5A6A7A" }}>
+                                    {routePoint.point?.address
+                                      ? formatDisplayName(
+                                          routePoint.point.address,
+                                        )
+                                      : "—"}
+                                  </span>
                                 </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
+
+                                {trip.stops[pointIndex - 1] && (
+                                  <span
+                                    style={{
+                                      display: "block",
+                                      margin: "4px 0 0 23px",
+                                      fontSize: 12,
+                                      color: "#5A6A7A",
+                                    }}
+                                  >
+                                    Alighting:{" "}
+                                    {trip.stops[pointIndex - 1].alighting} ·
+                                    Boarding:{" "}
+                                    {trip.stops[pointIndex - 1].boarding}
+                                    {trip.stops[pointIndex - 1].waitingMinutes >
+                                      0 &&
+                                      ` · Wait: ${trip.stops[pointIndex - 1].waitingMinutes} min`}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 10,
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              fontSize: 14,
+                              fontWeight: 600,
+                              color: "#0B1E3D",
+                            }}
+                          >
+                            <MapPin
+                              size={15}
+                              color="#00C2A8"
+                              aria-hidden="true"
+                              style={{ flexShrink: 0 }}
+                            />
+                            {trip.pickup?.address
+                              ? formatDisplayName(trip.pickup.address)
+                              : "—"}
+                          </span>
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              fontSize: 14,
+                              fontWeight: 600,
+                              color: "#0B1E3D",
+                            }}
+                          >
+                            <Flag
+                              size={15}
+                              color="#F5A623"
+                              aria-hidden="true"
+                              style={{ flexShrink: 0 }}
+                            />
+                            {trip.dropoff?.address
+                              ? formatDisplayName(trip.dropoff.address)
+                              : "—"}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Subtle pickup-time-variance note */}
+                      {vehicle && (
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 6,
+                            marginTop: 8,
+                            fontSize: 11.5,
+                            color: "#5A6A7A",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          <Info
+                            size={13}
+                            aria-hidden="true"
+                            style={{ flexShrink: 0, marginTop: 1 }}
+                          />
+                          <span>
+                            {locale === "ar"
+                              ? "يختلف وقت الالتقاء بحوالي"
+                              : "Pickup time may vary by about"}{" "}
+                            ±{Math.max(5, Math.round(vehicle.window / 2))}
+                            {locale === "ar" ? " دقيقة" : " min"}
+                            {locale === "ar"
+                              ? " لنوع هذه المركبة."
+                              : " for this vehicle type."}
+                          </span>
+                        </span>
+                      )}
+
+                      {/* Secondary: compact meta row */}
                       <div
                         style={{
                           display: "flex",
-                          flexDirection: "column",
-                          gap: 10,
-                        }}
-                      >
-                        <span
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            fontSize: 14,
-                            fontWeight: 600,
-                            color: "#0B1E3D",
-                          }}
-                        >
-                          <MapPin
-                            size={15}
-                            color="#00C2A8"
-                            aria-hidden="true"
-                            style={{ flexShrink: 0 }}
-                          />
-                          {trip.pickup?.address
-                            ? formatDisplayName(trip.pickup.address)
-                            : "—"}
-                        </span>
-                        <span
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            fontSize: 14,
-                            fontWeight: 600,
-                            color: "#0B1E3D",
-                          }}
-                        >
-                          <Flag
-                            size={15}
-                            color="#F5A623"
-                            aria-hidden="true"
-                            style={{ flexShrink: 0 }}
-                          />
-                          {trip.dropoff?.address
-                            ? formatDisplayName(trip.dropoff.address)
-                            : "—"}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Subtle pickup-time-variance note */}
-                    {vehicle && (
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "flex-start",
-                          gap: 6,
-                          marginTop: 8,
-                          fontSize: 11.5,
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          rowGap: 6,
+                          columnGap: 16,
+                          marginTop: 12,
+                          fontSize: 12,
                           color: "#5A6A7A",
-                          lineHeight: 1.5,
                         }}
                       >
-                        <Info
-                          size={13}
-                          aria-hidden="true"
-                          style={{ flexShrink: 0, marginTop: 1 }}
-                        />
-                        <span>
-                          {locale === "ar"
-                            ? "يختلف وقت الالتقاء بحوالي"
-                            : "Pickup time may vary by about"}{" "}
-                          ±{Math.max(5, Math.round(vehicle.window / 2))}
-                          {locale === "ar" ? " دقيقة" : " min"}
-                          {locale === "ar"
-                            ? " لنوع هذه المركبة."
-                            : " for this vehicle type."}
-                        </span>
-                      </span>
-                    )}
-
-                    {/* Secondary: compact meta row */}
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                        rowGap: 6,
-                        columnGap: 16,
-                        marginTop: 12,
-                        fontSize: 12,
-                        color: "#5A6A7A",
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 5,
-                        }}
-                      >
-                        <Users size={14} aria-hidden="true" />
-                        {isPrivate
-                          ? `${trip.numberOfPassengers} ${
-                              trip.numberOfPassengers === 1
-                                ? t("create.passenger_count_suffix")
-                                : t("create.passengers_count_suffix")
-                            }`
-                          : `${trip.extraPassengers} ${
-                              trip.extraPassengers === 1
-                                ? t("create.extra_passenger_count_suffix")
-                                : t("create.extra_passengers_count_suffix")
-                            }`}
-                      </span>
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 5,
-                        }}
-                      >
-                        <Car size={14} aria-hidden="true" />
-                        {VEHICLE_LIST_LABEL(trip.vehicleType, t)}
-                      </span>
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 5,
-                        }}
-                      >
-                        <Clock size={14} aria-hidden="true" />
-                        {isPrivate
-                          ? formatTime(locale, trip.pickupTime)
-                          : formatTimeRange(
-                              locale,
-                              pickupWindowRange(trip.pickupTime),
-                            )}
-                        {" → "}
-                        {formatTime(locale, trip.arrivalTime)}
-                      </span>
-                      {trip.distanceKm && (
                         <span
                           style={{
                             display: "flex",
@@ -1710,467 +1794,561 @@ export default function CreateClient({
                             gap: 5,
                           }}
                         >
-                          <Route size={14} aria-hidden="true" />
-                          {formatDistanceKm(
-                            locale,
-                            trip.distanceKm ?? 0,
-                          )} ·{" "}
-                          {formatMinutes(locale, trip.durationMinutes ?? 0)}
+                          <Users size={14} aria-hidden="true" />
+                          {isPrivate
+                            ? `${trip.numberOfPassengers} ${
+                                trip.numberOfPassengers === 1
+                                  ? t("create.passenger_count_suffix")
+                                  : t("create.passengers_count_suffix")
+                              }`
+                            : `${trip.extraPassengers} ${
+                                trip.extraPassengers === 1
+                                  ? t("create.extra_passenger_count_suffix")
+                                  : t("create.extra_passengers_count_suffix")
+                              }`}
                         </span>
-                      )}
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 5,
+                          }}
+                        >
+                          <Car size={14} aria-hidden="true" />
+                          {VEHICLE_LIST_LABEL(trip.vehicleType, t)}
+                        </span>
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 5,
+                          }}
+                        >
+                          <Clock size={14} aria-hidden="true" />
+                          {isPrivate
+                            ? formatTime(locale, trip.pickupTime)
+                            : formatTimeRange(
+                                locale,
+                                pickupWindowRange(trip.pickupTime),
+                              )}
+                          {" → "}
+                          {formatTime(locale, trip.arrivalTime)}
+                        </span>
+                        {trip.distanceKm && (
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 5,
+                            }}
+                          >
+                            <Route size={14} aria-hidden="true" />
+                            {formatDistanceKm(
+                              locale,
+                              trip.distanceKm ?? 0,
+                            )} ·{" "}
+                            {formatMinutes(locale, trip.durationMinutes ?? 0)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
 
-              {/* Promo code — collapsed by default */}
-              <div
-                style={{
-                  marginTop: 8,
-                  paddingTop: 16,
-                  borderTop: "1px solid #eef0f3",
-                }}
-              >
-                {promoFieldOpen || promoCodeDraft ? (
-                  <>
-                    <label
-                      htmlFor="promo-code"
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: "#0B1E3D",
-                        display: "block",
-                        marginBottom: 8,
-                      }}
-                    >
-                      {t("create.promo_input_label")}
-                    </label>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input
-                        id="promo-code"
-                        type="text"
-                        autoFocus={promoFieldOpen}
-                        value={promoCodeDraft}
-                        onChange={(event) =>
-                          handlePromoCodeInputChange(event.target.value)
-                        }
-                        placeholder="PROMO-XXXXXX"
-                        style={{
-                          flex: 1,
-                          minWidth: 0,
-                          height: 38,
-                          borderRadius: 10,
-                          border: "1.5px solid #d0d8e0",
-                          padding: "0 10px",
-                          fontSize: 13,
-                          color: "#0B1E3D",
-                          fontFamily: "inherit",
-                          textTransform: "uppercase",
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => void handleValidatePromoCode()}
-                        disabled={promoCodeChecking || !promoCodeDraft.trim()}
-                        style={{
-                          height: 38,
-                          padding: "0 14px",
-                          border: 0,
-                          borderRadius: 10,
-                          background:
-                            promoCodeChecking || !promoCodeDraft.trim()
-                              ? "#9aa8b5"
-                              : "#0B1E3D",
-                          color: "#fff",
-                          fontWeight: 700,
-                          fontSize: 12,
-                          cursor:
-                            promoCodeChecking || !promoCodeDraft.trim()
-                              ? "not-allowed"
-                              : "pointer",
-                        }}
-                      >
-                        {promoCodeChecking
-                          ? t("create.promo_checking")
-                          : t("create.promo_apply_action")}
-                      </button>
-                    </div>
-                    {promoCodeMessage ? (
-                      <p
-                        style={{
-                          margin: "8px 0 0",
-                          fontSize: 12,
-                          color: promoCodeValid ? "#00877A" : "#e74c3c",
-                          fontWeight: promoCodeValid ? 700 : 600,
-                        }}
-                      >
-                        {promoCodeMessage}
-                      </p>
-                    ) : null}
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setPromoFieldOpen(true)}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      color: "#00877A",
-                      fontWeight: 700,
-                      fontSize: 13,
-                      fontFamily: "inherit",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <Plus size={14} aria-hidden="true" />
-                    {t("create.promo_input_label")}
-                  </button>
-                )}
-
-                {totalSavingsEgp > 0 && (
-                  <p
-                    style={{
-                      margin: "8px 0 0",
-                      fontSize: 12,
-                      color: "#00877A",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {t("create.discount_savings_label").replace(
-                      "{amount}",
-                      String(totalSavingsEgp),
-                    )}
-                  </p>
-                )}
-              </div>
-
-              {/* Note — collapsed by default */}
-              <div style={{ marginTop: 16 }}>
-                {noteFieldOpen || bookingNote ? (
-                  <>
-                    <label
-                      htmlFor="booking-note"
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: "#0B1E3D",
-                        display: "block",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {t("create.add_note_label")}
-                    </label>
-                    <textarea
-                      id="booking-note"
-                      autoFocus={noteFieldOpen}
-                      value={bookingNote}
-                      onChange={(event) =>
-                        setBookingNote(event.target.value.slice(0, 1000))
-                      }
-                      placeholder={t("create.pickup_instructions_placeholder")}
-                      rows={3}
-                      style={{
-                        width: "100%",
-                        boxSizing: "border-box",
-                        resize: "vertical",
-                        minHeight: 72,
-                        padding: "10px 12px",
-                        borderRadius: 12,
-                        border: "1.5px solid #e8edf0",
-                        background: "#f8f9fa",
-                        color: "#0B1E3D",
-                        fontSize: 13,
-                        fontFamily: "inherit",
-                        lineHeight: 1.45,
-                        outline: "none",
-                      }}
-                    />
-                    <p
-                      style={{
-                        fontSize: 11,
-                        color: "#5A6A7A",
-                        margin: "5px 0 0",
-                      }}
-                    >
-                      {bookingNote.length}/1000
-                    </p>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setNoteFieldOpen(true)}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      color: "#00877A",
-                      fontWeight: 700,
-                      fontSize: 13,
-                      fontFamily: "inherit",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <Plus size={14} aria-hidden="true" />
-                    {t("create.add_note_label")}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Sticky footer — Total + terms + Confirm, always visible */}
-            <div
-              style={{
-                flexShrink: 0,
-                padding: "14px 24px",
-                borderTop: "1px solid #eef0f3",
-                background: "#ffffff",
-              }}
-            >
-              {totalEgp > 0 && (
+                {/* Promo code — collapsed by default */}
                 <div
                   style={{
+                    marginTop: 8,
+                    paddingTop: 16,
+                    borderTop: "1px solid #eef0f3",
+                  }}
+                >
+                  {promoFieldOpen || promoCodeDraft ? (
+                    <>
+                      <label
+                        htmlFor="promo-code"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: "#0B1E3D",
+                          display: "block",
+                          marginBottom: 8,
+                        }}
+                      >
+                        {t("create.promo_input_label")}
+                      </label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input
+                          id="promo-code"
+                          type="text"
+                          autoFocus={promoFieldOpen}
+                          value={promoCodeDraft}
+                          onChange={(event) =>
+                            handlePromoCodeInputChange(event.target.value)
+                          }
+                          placeholder="PROMO-XXXXXX"
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            height: 38,
+                            borderRadius: 10,
+                            border: "1.5px solid #d0d8e0",
+                            padding: "0 10px",
+                            fontSize: 13,
+                            color: "#0B1E3D",
+                            fontFamily: "inherit",
+                            textTransform: "uppercase",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleValidatePromoCode()}
+                          disabled={promoCodeChecking || !promoCodeDraft.trim()}
+                          style={{
+                            height: 38,
+                            padding: "0 14px",
+                            border: 0,
+                            borderRadius: 10,
+                            background:
+                              promoCodeChecking || !promoCodeDraft.trim()
+                                ? "#9aa8b5"
+                                : "#0B1E3D",
+                            color: "#fff",
+                            fontWeight: 700,
+                            fontSize: 12,
+                            cursor:
+                              promoCodeChecking || !promoCodeDraft.trim()
+                                ? "not-allowed"
+                                : "pointer",
+                          }}
+                        >
+                          {promoCodeChecking
+                            ? t("create.promo_checking")
+                            : t("create.promo_apply_action")}
+                        </button>
+                      </div>
+                      {promoCodeMessage ? (
+                        <p
+                          style={{
+                            margin: "8px 0 0",
+                            fontSize: 12,
+                            color: promoCodeValid ? "#00877A" : "#e74c3c",
+                            fontWeight: promoCodeValid ? 700 : 600,
+                          }}
+                        >
+                          {promoCodeMessage}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPromoFieldOpen(true)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        color: "#00877A",
+                        fontWeight: 700,
+                        fontSize: 13,
+                        fontFamily: "inherit",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Plus size={14} aria-hidden="true" />
+                      {t("create.promo_input_label")}
+                    </button>
+                  )}
+
+                  {totalSavingsEgp > 0 && (
+                    <p
+                      style={{
+                        margin: "8px 0 0",
+                        fontSize: 12,
+                        color: "#00877A",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {t("create.discount_savings_label").replace(
+                        "{amount}",
+                        String(totalSavingsEgp),
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                {/* Note — collapsed by default */}
+                <div style={{ marginTop: 16 }}>
+                  {noteFieldOpen || bookingNote ? (
+                    <>
+                      <label
+                        htmlFor="booking-note"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#0B1E3D",
+                          display: "block",
+                          marginBottom: 6,
+                        }}
+                      >
+                        {t("create.add_note_label")}
+                      </label>
+                      <textarea
+                        id="booking-note"
+                        autoFocus={noteFieldOpen}
+                        value={bookingNote}
+                        onChange={(event) =>
+                          setBookingNote(event.target.value.slice(0, 1000))
+                        }
+                        placeholder={t(
+                          "create.pickup_instructions_placeholder",
+                        )}
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          boxSizing: "border-box",
+                          resize: "vertical",
+                          minHeight: 72,
+                          padding: "10px 12px",
+                          borderRadius: 12,
+                          border: "1.5px solid #e8edf0",
+                          background: "#f8f9fa",
+                          color: "#0B1E3D",
+                          fontSize: 13,
+                          fontFamily: "inherit",
+                          lineHeight: 1.45,
+                          outline: "none",
+                        }}
+                      />
+                      <p
+                        style={{
+                          fontSize: 11,
+                          color: "#5A6A7A",
+                          margin: "5px 0 0",
+                        }}
+                      >
+                        {bookingNote.length}/1000
+                      </p>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setNoteFieldOpen(true)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        color: "#00877A",
+                        fontWeight: 700,
+                        fontSize: 13,
+                        fontFamily: "inherit",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Plus size={14} aria-hidden="true" />
+                      {t("create.add_note_label")}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Sticky footer — Total + terms + Confirm, always visible */}
+              <div
+                style={{
+                  flexShrink: 0,
+                  padding: "14px 24px",
+                  borderTop: "1px solid #eef0f3",
+                  background: "#ffffff",
+                }}
+              >
+                {totalEgp > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 12,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        fontSize: 15,
+                        color: "#0B1E3D",
+                      }}
+                    >
+                      {t("create.total_label")}
+                      {selectedDates.length > 1 &&
+                        ` ${t("create.days_suffix").replace("{n}", String(selectedDates.length))}`}
+                    </span>
+                    <span
+                      style={{
+                        fontWeight: 900,
+                        fontSize: 20,
+                        color: "#0B1E3D",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {formatEgp(locale, grandTotalEgp)}
+                    </span>
+                  </div>
+                )}
+
+                <label
+                  style={{
                     display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
+                    alignItems: "flex-start",
+                    gap: 10,
+                    cursor: "pointer",
                     marginBottom: 12,
                   }}
                 >
+                  <input
+                    type="checkbox"
+                    checked={agreedTerms}
+                    onChange={(e) => setAgreedTerms(e.target.checked)}
+                    style={{
+                      marginTop: 2,
+                      width: 16,
+                      height: 16,
+                      accentColor: "#00C2A8",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                    }}
+                  />
                   <span
-                    style={{ fontWeight: 700, fontSize: 15, color: "#0B1E3D" }}
+                    style={{
+                      fontSize: 13,
+                      color: "#0B1E3D",
+                      fontWeight: 600,
+                      lineHeight: 1.5,
+                    }}
                   >
-                    {t("create.total_label")}
+                    {t("create.terms_agree_prefix")}{" "}
+                    <Link
+                      href="/terms"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#00C2A8", fontWeight: 700 }}
+                    >
+                      {t("create.terms_link_text")}
+                    </Link>{" "}
+                    {t("create.terms_agree_suffix")}
+                  </span>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmRequest()}
+                  disabled={!agreedTerms || submitting}
+                  style={{
+                    width: "100%",
+                    height: 52,
+                    background:
+                      agreedTerms && !submitting ? "#0B1E3D" : "#d0d8e0",
+                    color: agreedTerms && !submitting ? "#ffffff" : "#9aa5b4",
+                    fontWeight: 700,
+                    fontSize: 15,
+                    border: "none",
+                    borderRadius: 12,
+                    cursor:
+                      agreedTerms && !submitting ? "pointer" : "not-allowed",
+                    fontFamily: "inherit",
+                    transition: "background 0.2s",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (agreedTerms && !submitting)
+                      e.currentTarget.style.background = "#00C2A8";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (agreedTerms && !submitting)
+                      e.currentTarget.style.background = "#0B1E3D";
+                  }}
+                >
+                  {submitting
+                    ? t("create.submitting")
+                    : t("create.confirm_request")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Payment modal ── */}
+        {showPaymentModal && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("create.payment_aria")}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 200,
+              background: "rgba(11,30,61,0.55)",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowPaymentModal(false);
+            }}
+          >
+            <div
+              style={{
+                background: "#ffffff",
+                borderRadius: "20px 20px 0 0",
+                width: "100%",
+                maxWidth: 520,
+                maxHeight: "70dvh",
+                overflowY: "auto",
+                padding: "0 0 32px",
+              }}
+            >
+              <div
+                style={{
+                  padding: "16px 24px 0",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <h2
+                  style={{
+                    fontSize: 17,
+                    fontWeight: 800,
+                    color: "#0B1E3D",
+                    margin: 0,
+                  }}
+                >
+                  {t("create.payment_heading")}
+                </h2>
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  aria-label={t("create.close_payment_aria")}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#5A6A7A",
+                    padding: 4,
+                    minWidth: 36,
+                    minHeight: 36,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ padding: "16px 24px 0" }}>
+                {/* Total recap */}
+                <div
+                  style={{
+                    padding: "12px 14px",
+                    background: "#f8f9fa",
+                    borderRadius: 12,
+                    border: "1.5px solid #eef0f3",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 18,
+                  }}
+                >
+                  <span
+                    style={{ fontSize: 14, fontWeight: 600, color: "#5A6A7A" }}
+                  >
+                    {t("create.total_amount_label")}
                     {selectedDates.length > 1 &&
                       ` ${t("create.days_suffix").replace("{n}", String(selectedDates.length))}`}
                   </span>
                   <span
                     style={{
+                      fontSize: 18,
                       fontWeight: 900,
-                      fontSize: 20,
                       color: "#0B1E3D",
                       fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {formatEgp(locale, grandTotalEgp)}
+                    {formatEgp(locale, checkoutTotalEgp)}
                   </span>
                 </div>
-              )}
 
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 10,
-                  cursor: "pointer",
-                  marginBottom: 12,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={agreedTerms}
-                  onChange={(e) => setAgreedTerms(e.target.checked)}
-                  style={{
-                    marginTop: 2,
-                    width: 16,
-                    height: 16,
-                    accentColor: "#00C2A8",
-                    cursor: "pointer",
-                    flexShrink: 0,
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: 13,
-                    color: "#0B1E3D",
-                    fontWeight: 600,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {t("create.terms_agree_prefix")}{" "}
-                  <Link
-                    href="/terms"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: "#00C2A8", fontWeight: 700 }}
-                  >
-                    {t("create.terms_link_text")}
-                  </Link>{" "}
-                  {t("create.terms_agree_suffix")}
-                </span>
-              </label>
+                {/* Payment split — wallet portion + card portion */}
+                {(() => {
+                  const avail = walletAvailable ?? 0;
+                  const walletPortion = useWallet
+                    ? Math.min(checkoutTotalEgp, avail)
+                    : 0;
+                  const cardPortion = checkoutTotalEgp - walletPortion;
+                  const walletDisabled = checkoutTotalEgp > 0 && avail <= 0;
+                  return (
+                    <div>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: "#0B1E3D",
+                          display: "block",
+                          marginBottom: 10,
+                        }}
+                      >
+                        {t("create.payment_method_label")}
+                      </span>
 
-              <button
-                type="button"
-                onClick={() => void handleConfirmRequest()}
-                disabled={!agreedTerms || submitting}
-                style={{
-                  width: "100%",
-                  height: 52,
-                  background:
-                    agreedTerms && !submitting ? "#0B1E3D" : "#d0d8e0",
-                  color: agreedTerms && !submitting ? "#ffffff" : "#9aa5b4",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  border: "none",
-                  borderRadius: 12,
-                  cursor:
-                    agreedTerms && !submitting ? "pointer" : "not-allowed",
-                  fontFamily: "inherit",
-                  transition: "background 0.2s",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                }}
-                onMouseEnter={(e) => {
-                  if (agreedTerms && !submitting)
-                    e.currentTarget.style.background = "#00C2A8";
-                }}
-                onMouseLeave={(e) => {
-                  if (agreedTerms && !submitting)
-                    e.currentTarget.style.background = "#0B1E3D";
-                }}
-              >
-                {submitting
-                  ? t("create.submitting")
-                  : t("create.confirm_request")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                      {checkoutTotalEgp > 0 && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            padding: "12px 14px",
+                            borderRadius: 12,
+                            border: "1.5px solid #0B1E3D",
+                            background: "rgba(11,30,61,0.04)",
+                            marginBottom: 10,
+                          }}
+                        >
+                          <span>
+                            <span
+                              style={{
+                                display: "block",
+                                fontSize: 14,
+                                fontWeight: 700,
+                                color: "#0B1E3D",
+                              }}
+                            >
+                              Card
+                            </span>
+                            <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                              Pay via Kashier
+                            </span>
+                          </span>
+                          <strong
+                            style={{
+                              fontSize: 14,
+                              color: "#0B1E3D",
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          >
+                            {formatEgp(locale, cardPortion)}
+                          </strong>
+                        </div>
+                      )}
 
-      {/* ── Payment modal ── */}
-      {showPaymentModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={t("create.payment_aria")}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 200,
-            background: "rgba(11,30,61,0.55)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowPaymentModal(false);
-          }}
-        >
-          <div
-            style={{
-              background: "#ffffff",
-              borderRadius: "20px 20px 0 0",
-              width: "100%",
-              maxWidth: 520,
-              maxHeight: "70dvh",
-              overflowY: "auto",
-              padding: "0 0 32px",
-            }}
-          >
-            <div
-              style={{
-                padding: "16px 24px 0",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: 17,
-                  fontWeight: 800,
-                  color: "#0B1E3D",
-                  margin: 0,
-                }}
-              >
-                {t("create.payment_heading")}
-              </h2>
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                aria-label={t("create.close_payment_aria")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#5A6A7A",
-                  padding: 4,
-                  minWidth: 36,
-                  minHeight: 36,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ padding: "16px 24px 0" }}>
-              {/* Total recap */}
-              <div
-                style={{
-                  padding: "12px 14px",
-                  background: "#f8f9fa",
-                  borderRadius: 12,
-                  border: "1.5px solid #eef0f3",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 18,
-                }}
-              >
-                <span
-                  style={{ fontSize: 14, fontWeight: 600, color: "#5A6A7A" }}
-                >
-                  {t("create.total_amount_label")}
-                  {selectedDates.length > 1 &&
-                    ` ${t("create.days_suffix").replace("{n}", String(selectedDates.length))}`}
-                </span>
-                <span
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 900,
-                    color: "#0B1E3D",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {formatEgp(locale, checkoutTotalEgp)}
-                </span>
-              </div>
-
-              {/* Payment split — wallet portion + card portion */}
-              {(() => {
-                const avail = walletAvailable ?? 0;
-                const walletPortion = useWallet
-                  ? Math.min(checkoutTotalEgp, avail)
-                  : 0;
-                const cardPortion = checkoutTotalEgp - walletPortion;
-                const walletDisabled = checkoutTotalEgp > 0 && avail <= 0;
-                return (
-                  <div>
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: "#0B1E3D",
-                        display: "block",
-                        marginBottom: 10,
-                      }}
-                    >
-                      {t("create.payment_method_label")}
-                    </span>
-
-                    {checkoutTotalEgp > 0 && (
-                      <div
+                      <label
                         style={{
                           display: "flex",
                           alignItems: "center",
@@ -2178,8 +2356,14 @@ export default function CreateClient({
                           gap: 10,
                           padding: "12px 14px",
                           borderRadius: 12,
-                          border: "1.5px solid #0B1E3D",
-                          background: "rgba(11,30,61,0.04)",
+                          border: useWallet
+                            ? "1.5px solid #00C2A8"
+                            : "1.5px solid #eef0f3",
+                          background: useWallet
+                            ? "rgba(0,194,168,0.08)"
+                            : "#fff",
+                          cursor: walletDisabled ? "not-allowed" : "pointer",
+                          opacity: walletDisabled ? 0.55 : 1,
                           marginBottom: 10,
                         }}
                       >
@@ -2192,253 +2376,215 @@ export default function CreateClient({
                               color: "#0B1E3D",
                             }}
                           >
-                            Card
+                            {t("create.pay_wallet")}
                           </span>
                           <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                            Pay via Kashier
+                            {walletBalance === null
+                              ? t("create.loading_balance")
+                              : `${t("create.wallet_balance_label").replace(
+                                  "{amount}",
+                                  formatEgp(locale, walletBalance),
+                                )}${
+                                  walletAvailable !== null &&
+                                  walletAvailable !== walletBalance
+                                    ? ` · ${formatEgp(locale, walletAvailable)} available`
+                                    : ""
+                                }`}
                           </span>
                         </span>
-                        <strong
+                        <input
+                          type="checkbox"
+                          checked={useWallet}
+                          disabled={walletDisabled}
+                          onChange={(e) => setUseWallet(e.target.checked)}
                           style={{
-                            fontSize: 14,
-                            color: "#0B1E3D",
-                            fontVariantNumeric: "tabular-nums",
+                            width: 18,
+                            height: 18,
+                            accentColor: "#00C2A8",
+                            cursor: walletDisabled ? "not-allowed" : "pointer",
                           }}
-                        >
-                          {formatEgp(locale, cardPortion)}
-                        </strong>
-                      </div>
-                    )}
+                        />
+                      </label>
 
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        padding: "12px 14px",
-                        borderRadius: 12,
-                        border: useWallet
-                          ? "1.5px solid #00C2A8"
-                          : "1.5px solid #eef0f3",
-                        background: useWallet ? "rgba(0,194,168,0.08)" : "#fff",
-                        cursor: walletDisabled ? "not-allowed" : "pointer",
-                        opacity: walletDisabled ? 0.55 : 1,
-                        marginBottom: 10,
-                      }}
-                    >
-                      <span>
-                        <span
-                          style={{
-                            display: "block",
-                            fontSize: 14,
-                            fontWeight: 700,
-                            color: "#0B1E3D",
-                          }}
-                        >
-                          {t("create.pay_wallet")}
-                        </span>
-                        <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                          {walletBalance === null
-                            ? t("create.loading_balance")
-                            : `${t("create.wallet_balance_label").replace(
-                                "{amount}",
-                                formatEgp(locale, walletBalance),
-                              )}${
-                                walletAvailable !== null &&
-                                walletAvailable !== walletBalance
-                                  ? ` · ${formatEgp(locale, walletAvailable)} available`
-                                  : ""
-                              }`}
-                        </span>
-                      </span>
-                      <input
-                        type="checkbox"
-                        checked={useWallet}
-                        disabled={walletDisabled}
-                        onChange={(e) => setUseWallet(e.target.checked)}
-                        style={{
-                          width: 18,
-                          height: 18,
-                          accentColor: "#00C2A8",
-                          cursor: walletDisabled ? "not-allowed" : "pointer",
-                        }}
-                      />
-                    </label>
-
-                    <div
-                      style={{
-                        padding: "12px 14px",
-                        borderRadius: 12,
-                        background: "#f8f9fa",
-                        border: "1.5px solid #eef0f3",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                        fontSize: 13,
-                        color: "#0B1E3D",
-                      }}
-                    >
                       <div
                         style={{
+                          padding: "12px 14px",
+                          borderRadius: 12,
+                          background: "#f8f9fa",
+                          border: "1.5px solid #eef0f3",
                           display: "flex",
-                          justifyContent: "space-between",
+                          flexDirection: "column",
+                          gap: 6,
+                          fontSize: 13,
+                          color: "#0B1E3D",
                         }}
                       >
-                        <span>Trip total</span>
-                        <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-                          {formatEgp(locale, checkoutTotalEgp)}
-                        </strong>
-                      </div>
-                      {walletPortion > 0 && (
                         <div
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
-                            color: "#00877A",
                           }}
                         >
-                          <span>Paid from wallet</span>
+                          <span>Trip total</span>
                           <strong
                             style={{ fontVariantNumeric: "tabular-nums" }}
                           >
-                            −{formatEgp(locale, walletPortion)}
+                            {formatEgp(locale, checkoutTotalEgp)}
                           </strong>
                         </div>
-                      )}
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          borderTop: "1px solid #e5e9ee",
-                          paddingTop: 6,
-                          marginTop: 2,
-                        }}
-                      >
-                        <span>
-                          {cardPortion === 0
-                            ? "Wallet covers the total"
-                            : "Pay by card (Kashier)"}
-                        </span>
-                        <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-                          {formatEgp(locale, cardPortion)}
-                        </strong>
-                      </div>
-                    </div>
-
-                    {walletBalance !== null && walletDisabled && (
-                      <p
-                        style={{
-                          fontSize: 12,
-                          color: "#5A6A7A",
-                          margin: "8px 0 0",
-                        }}
-                      >
-                        <Link
-                          href="/wallet"
-                          style={{ color: "#00C2A8", fontWeight: 600 }}
+                        {walletPortion > 0 && (
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              color: "#00877A",
+                            }}
+                          >
+                            <span>Paid from wallet</span>
+                            <strong
+                              style={{ fontVariantNumeric: "tabular-nums" }}
+                            >
+                              −{formatEgp(locale, walletPortion)}
+                            </strong>
+                          </div>
+                        )}
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            borderTop: "1px solid #e5e9ee",
+                            paddingTop: 6,
+                            marginTop: 2,
+                          }}
                         >
-                          {t("create.top_up_wallet")}
-                        </Link>
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
+                          <span>
+                            {cardPortion === 0
+                              ? "Wallet covers the total"
+                              : "Pay by card (Kashier)"}
+                          </span>
+                          <strong
+                            style={{ fontVariantNumeric: "tabular-nums" }}
+                          >
+                            {formatEgp(locale, cardPortion)}
+                          </strong>
+                        </div>
+                      </div>
 
-              {submitError && (
-                <p
-                  role="alert"
-                  aria-live="assertive"
-                  style={{
-                    fontSize: 13,
-                    color: "#e74c3c",
-                    background: "rgba(231,76,60,0.07)",
-                    border: "1px solid rgba(231,76,60,0.2)",
-                    borderRadius: 8,
-                    padding: "10px 14px",
-                    marginTop: 12,
-                    marginBottom: 0,
-                  }}
-                >
-                  {submitError}
-                </p>
-              )}
+                      {walletBalance !== null && walletDisabled && (
+                        <p
+                          style={{
+                            fontSize: 12,
+                            color: "#5A6A7A",
+                            margin: "8px 0 0",
+                          }}
+                        >
+                          <Link
+                            href="/wallet"
+                            style={{ color: "#00C2A8", fontWeight: 600 }}
+                          >
+                            {t("create.top_up_wallet")}
+                          </Link>
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
 
-              {promoWarning && (
-                <p
-                  role="status"
-                  aria-live="polite"
-                  style={{
-                    fontSize: 13,
-                    color: "#0B1E3D",
-                    background: "rgba(245,166,35,0.12)",
-                    border: "1px solid rgba(245,166,35,0.45)",
-                    borderRadius: 8,
-                    padding: "10px 14px",
-                    marginTop: 12,
-                    marginBottom: 0,
-                  }}
-                >
-                  {promoWarning}
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting}
-                style={{
-                  marginTop: 16,
-                  width: "100%",
-                  height: 52,
-                  background: submitting ? "#5A6A7A" : "#0B1E3D",
-                  color: "#ffffff",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  border: "none",
-                  borderRadius: 12,
-                  cursor: submitting ? "not-allowed" : "pointer",
-                  fontFamily: "inherit",
-                  transition: "background 0.2s",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                }}
-                onMouseEnter={(e) => {
-                  if (!submitting) e.currentTarget.style.background = "#00C2A8";
-                }}
-                onMouseLeave={(e) => {
-                  if (!submitting) e.currentTarget.style.background = "#0B1E3D";
-                }}
-              >
-                {submitting ? (
-                  <>
-                    <span
-                      style={{
-                        width: 16,
-                        height: 16,
-                        border: "2px solid rgba(255,255,255,0.4)",
-                        borderTopColor: "#fff",
-                        borderRadius: "50%",
-                        display: "inline-block",
-                        animation: "spin 0.7s linear infinite",
-                      }}
-                      aria-hidden="true"
-                    />
-                    {t("create.processing")}
-                  </>
-                ) : (
-                  t("create.confirm_and_pay")
+                {submitError && (
+                  <p
+                    role="alert"
+                    aria-live="assertive"
+                    style={{
+                      fontSize: 13,
+                      color: "#e74c3c",
+                      background: "rgba(231,76,60,0.07)",
+                      border: "1px solid rgba(231,76,60,0.2)",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      marginTop: 12,
+                      marginBottom: 0,
+                    }}
+                  >
+                    {submitError}
+                  </p>
                 )}
-              </button>
+
+                {promoWarning && (
+                  <p
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      fontSize: 13,
+                      color: "#0B1E3D",
+                      background: "rgba(245,166,35,0.12)",
+                      border: "1px solid rgba(245,166,35,0.45)",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      marginTop: 12,
+                      marginBottom: 0,
+                    }}
+                  >
+                    {promoWarning}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  style={{
+                    marginTop: 16,
+                    width: "100%",
+                    height: 52,
+                    background: submitting ? "#5A6A7A" : "#0B1E3D",
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: 15,
+                    border: "none",
+                    borderRadius: 12,
+                    cursor: submitting ? "not-allowed" : "pointer",
+                    fontFamily: "inherit",
+                    transition: "background 0.2s",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!submitting)
+                      e.currentTarget.style.background = "#00C2A8";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!submitting)
+                      e.currentTarget.style.background = "#0B1E3D";
+                  }}
+                >
+                  {submitting ? (
+                    <>
+                      <span
+                        style={{
+                          width: 16,
+                          height: 16,
+                          border: "2px solid rgba(255,255,255,0.4)",
+                          borderTopColor: "#fff",
+                          borderRadius: "50%",
+                          display: "inline-block",
+                          animation: "spin 0.7s linear infinite",
+                        }}
+                        aria-hidden="true"
+                      />
+                      {t("create.processing")}
+                    </>
+                  ) : (
+                    t("create.confirm_and_pay")
+                  )}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <style>{`
+        <style>{`
         .email-desktop { display: block; }
         .create-request-dates-content {
           transition: max-height 240ms ease, opacity 180ms ease, padding 240ms ease;
@@ -2493,7 +2639,7 @@ export default function CreateClient({
             z-index: 20 !important;
             width: auto !important;
             height: min(100dvh, calc(var(--drawer-height-vh, 74) * 1dvh)) !important;
-            max-height: 100dvh !important;
+            max-height: 90dvh !important;
             margin: 0 !important; 
             border: 1px solid #dfe5eb !important;
             border-bottom: none !important;
@@ -2538,7 +2684,8 @@ export default function CreateClient({
         }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
-    </div>
+      </div>
+    </MapSearchProvider>
   );
 }
 

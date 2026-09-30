@@ -4,6 +4,20 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim();
   if (!q || q.length < 3) return NextResponse.json([]);
 
+  if (req.nextUrl.searchParams.get("provider") === "google") {
+    const key = process.env.GOOGLE_MAPS_API_KEY;
+    if (!key) return NextResponse.json([], { status: 503 });
+    const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key, "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.text.text" },
+      body: JSON.stringify({ input: q, languageCode: "en" }),
+      cache: "no-store",
+    });
+    if (!response.ok) return NextResponse.json([], { status: 502 });
+    const data = await response.json() as { suggestions?: Array<{ placePrediction?: { placeId?: string; text?: { text?: string } } }> };
+    return NextResponse.json((data.suggestions ?? []).flatMap(({ placePrediction }) => placePrediction?.placeId && placePrediction.text?.text ? [{ place_id: placePrediction.placeId, display_name: placePrediction.text.text }] : []));
+  }
+
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("q", q);
   url.searchParams.set("format", "jsonv2");

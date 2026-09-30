@@ -8,7 +8,8 @@ function cleanRegionConfig(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { error: "Invalid region configuration." };
   const value = input as Record<string, unknown>;
   if (typeof value.regionCode !== "string" || !REGION_CODES.includes(value.regionCode as (typeof REGION_CODES)[number])) return { error: "Invalid region." };
-  const config: Record<string, string | number> = { regionCode: value.regionCode };
+  if (value.active !== undefined && typeof value.active !== "boolean") return { error: `Invalid active flag for ${value.regionCode}.` };
+  const config: Record<string, string | number | boolean> = { regionCode: value.regionCode, active: value.active !== false };
   for (const field of numericFields) {
     const number = Number(value[field]);
     if (!Number.isFinite(number) || number < 0) return { error: `Invalid ${field} for ${value.regionCode}.` };
@@ -40,10 +41,10 @@ export function cleanVehicle(input: Record<string, unknown>, partial = false) {
   }
   if (input.regionConfigs !== undefined) {
     if (!Array.isArray(input.regionConfigs)) return { error: "Invalid regional configurations." };
-    const parsed: Array<{ config?: Record<string, string | number>; error?: string }> = input.regionConfigs.map(cleanRegionConfig);
+    const parsed: Array<{ config?: Record<string, string | number | boolean>; error?: string }> = input.regionConfigs.map(cleanRegionConfig);
     const failed = parsed.find((result) => "error" in result);
     if (failed?.error) return { error: failed.error };
-    const configs = parsed.map((result) => result.config as Record<string, string | number>);
+    const configs = parsed.map((result) => result.config as Record<string, string | number | boolean>);
     if (new Set(configs.map((config) => config.regionCode)).size !== configs.length) return { error: "Each region can be configured once." };
     update.regionConfigs = configs;
     update.regionCodes = configs.map((config) => config.regionCode);

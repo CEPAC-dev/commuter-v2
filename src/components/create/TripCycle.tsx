@@ -20,6 +20,7 @@ import {
   toArabicDigits,
 } from "@/lib/i18n";
 import AddressInput from "@/components/landing/AddressInput";
+import AppSelect from "@/components/shared/AppSelect";
 import {
   VEHICLES,
   VEHICLE_LIST,
@@ -40,6 +41,8 @@ import {
 } from "@/lib/time/pickupWindow";
 import { fetchRoadRoutes } from "@/lib/osrm";
 import type { TripPoint } from "@/lib/store/useTripStore";
+import type { RegionCode } from "@/lib/config/regions";
+import type { MapSettings } from "@/lib/config/mapSettings";
 import type { SavedAddress } from "@/types/shared";
 import {
   isSharedVehicle,
@@ -114,10 +117,71 @@ export interface TripData {
   passengerDetourKm: number | null; // last computed combined route distance through distinct passenger points
 }
 
+type ZoneFeature = {
+  type: "Feature";
+  id?: string | number;
+  properties?: { NAME?: string };
+  geometry?: {
+    type: "Polygon" | "MultiPolygon";
+    coordinates?:
+      | Array<Array<[number, number]>>
+      | Array<Array<Array<[number, number]>>>;
+  };
+};
+
+function pointInRing(point: [number, number], ring: Array<[number, number]>) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [x1, y1] = ring[i];
+    const [x2, y2] = ring[j];
+    const intersects =
+      y1 > point[1] !== y2 > point[1] &&
+      point[0] < ((x2 - x1) * (point[1] - y1)) / (y2 - y1) + x1;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInPolygon(
+  point: [number, number],
+  polygon: Array<Array<[number, number]>>,
+) {
+  if (!polygon.length) return false;
+  const outerRing = polygon[0] as Array<[number, number]>;
+  const holes = polygon.slice(1) as Array<Array<[number, number]>>;
+  if (!outerRing || !outerRing.length) return false;
+  const insideOuter = pointInRing(point, outerRing);
+  if (!insideOuter) return false;
+  return !holes.some((hole) => pointInRing(point, hole));
+}
+
+function isPointInZone(point: [number, number], feature?: ZoneFeature) {
+  if (!feature?.geometry?.coordinates) return false;
+  const geometry = feature.geometry;
+  if (geometry.type === "Polygon") {
+    return pointInPolygon(
+      point,
+      geometry.coordinates as Array<Array<[number, number]>>,
+    );
+  }
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates as Array<Array<Array<[number, number]>>>).some(
+      (polygon) => pointInPolygon(point, polygon),
+    );
+  }
+  return false;
+}
+
+function isPointInAnyZone(point: [number, number], features: ZoneFeature[]) {
+  return features.some((feature) => isPointInZone(point, feature));
+}
+
 interface Props {
   data: TripData;
   index: number;
   canRemove: boolean;
+  regionCode?: RegionCode;
+  mapSettings?: MapSettings;
   onChange: (updated: TripData) => void;
   onRemove: () => void;
   picking?: { field: "pickup" | "dropoff" | "stop"; stopId?: string } | null;
@@ -425,6 +489,8 @@ export default function TripCycle({
   data,
   index,
   canRemove,
+  regionCode = "EG-CAIRO",
+  mapSettings,
   onChange,
   onRemove,
   picking,
@@ -454,6 +520,54 @@ export default function TripCycle({
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
   const previousStopErrorRef = useRef<string | null>(null);
+  const [zoneFeatures, setZoneFeatures] = useState<ZoneFeature[]>([]);
+
+  useEffect(() => {
+    if (!mapSettings?.showZones || regionCode !== "EG-CAIRO") {
+      setZoneFeatures([]);
+      return;
+    }
+
+    let cancelled = false;
+    fetch("/geo/zone_polygon.geojson")
+      .then((response) => response.json())
+      .then((geojson: { features?: ZoneFeature[] }) => {
+        if (cancelled) return;
+        setZoneFeatures(
+          (geojson.features ?? []).filter(
+            (feature): feature is ZoneFeature =>
+              feature.geometry?.type === "Polygon" ||
+              feature.geometry?.type === "MultiPolygon",
+          ),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setZoneFeatures([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mapSettings?.showZones, regionCode]);
+
+  function validateLocationPoint(point: TripPoint | null) {
+    if (!point) return true;
+    if (!mapSettings?.showZones || regionCode !== "EG-CAIRO") return true;
+    if (!zoneFeatures.length) {
+      window.alert(
+        "The service zones are still loading. Please try again in a moment.",
+      );
+      return false;
+    }
+    const inZone = isPointInAnyZone([point.lng, point.lat], zoneFeatures);
+    if (!inZone) {
+      window.alert(
+        "This location is outside the available service zones. Please choose a point inside one of the highlighted zones.",
+      );
+      return false;
+    }
+    return true;
+  }
 
   useEffect(() => {
     const nextError = stopError || null;
@@ -546,12 +660,14 @@ export default function TripCycle({
             data.vehicleType,
           )
         : [];
-      const toStation = pickupStationOptions.find(
-        (option) => option.id === data.pickupStation?.id,
-      ) ?? pickupStationOptions[0];
-      const fromStation = dropoffStationOptions.find(
-        (option) => option.id === data.dropoffStation?.id,
-      ) ?? dropoffStationOptions[0];
+      const toStation =
+        pickupStationOptions.find(
+          (option) => option.id === data.pickupStation?.id,
+        ) ?? pickupStationOptions[0];
+      const fromStation =
+        dropoffStationOptions.find(
+          (option) => option.id === data.dropoffStation?.id,
+        ) ?? dropoffStationOptions[0];
       const stationValue = (option: StationOption | undefined) =>
         option
           ? {
@@ -970,6 +1086,14 @@ export default function TripCycle({
     [data, onChange],
   );
 
+  function applyLocationField(
+    field: "pickup" | "dropoff",
+    point: TripPoint | null,
+  ) {
+    if (!validateLocationPoint(point)) return;
+    set(field, point);
+  }
+
   function handleArrivalTimeChange(nextArrivalTime: string) {
     if (!nextArrivalTime) {
       setTimeError(null);
@@ -1015,7 +1139,12 @@ export default function TripCycle({
             if (result.address) address = result.address;
           }
         } catch {}
-        onChange({ ...data, [field]: { address, lat, lng } });
+        const point = { address, lat, lng };
+        if (!validateLocationPoint(point)) {
+          setLocating(null);
+          return;
+        }
+        onChange({ ...data, [field]: point });
         setLocating(null);
       },
       () => setLocating(null),
@@ -1192,146 +1321,149 @@ export default function TripCycle({
       }}
     >
       {/* Card header */}
-      {showHeader && <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "14px 18px",
-          borderBottom: "1px solid rgb(200, 232, 228)",
-          borderTopLeftRadius: 16,
-          borderTopRightRadius: 16,
-          background: "#fafbfc",
-          gap: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <span style={{ fontWeight: 700, fontSize: 14, color: "#0B1E3D" }}>
-          {t("create.trip_number").replace(
-            "{n}",
-            locale === "ar"
-              ? toArabicDigits(String(index + 1))
-              : String(index + 1),
-          )}
-        </span>
-
-        {/* Return trip checkbox — only for trips after the first */}
-        {index > 0 && sourceTripData && (
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 600,
-              color: data.returnTrip ? "#00897B" : "#5A6A7A",
-              background: data.returnTrip
-                ? "rgba(0,194,168,0.08)"
-                : "rgb(200, 232, 228)",
-              border: `1.5px solid ${data.returnTrip ? "#00C2A8" : "rgb(200, 232, 228)"}`,
-              borderRadius: 5,
-              padding: "5px 10px",
-              transition: "all 0.15s",
-              userSelect: "none",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={!!data.returnTrip}
-              onChange={(e) => handleReturnToggle(e.target.checked)}
-              style={{
-                width: 14,
-                height: 14,
-                accentColor: "#00C2A8",
-                cursor: "pointer",
-              }}
-            />
-            <RotateCcw size={12} aria-hidden="true" />
-            {t("create.return_trip")}
-          </label>
-        )}
-
-        {displayedPrice != null && (
-          <span
-            className="price-pop"
-            style={{
-              fontWeight: 800,
-              fontSize: 15,
-              color: "#00C2A8",
-              fontVariantNumeric: "tabular-nums",
-              marginLeft: "auto",
-            }}
-          >
-            {displayedPrice} EGP
+      {showHeader && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "14px 18px",
+            borderBottom: "1px solid rgb(200, 232, 228)",
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            background: "#fafbfc",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontWeight: 700, fontSize: 14, color: "#0B1E3D" }}>
+            {t("create.trip_number").replace(
+              "{n}",
+              locale === "ar"
+                ? toArabicDigits(String(index + 1))
+                : String(index + 1),
+            )}
           </span>
-        )}
-        {canRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            aria-label={`Remove trip ${index + 1}`}
-            style={{
-              background: "rgba(231,76,60,0.08)",
-              border: "none",
-              borderRadius: 5,
-              cursor: "pointer",
-              color: "#e74c3c",
-              padding: "6px 8px",
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-              fontSize: 12,
-              fontWeight: 600,
-              fontFamily: "inherit",
-              minHeight: 36,
-              transition: "background 0.15s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "rgba(231,76,60,0.15)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(231,76,60,0.08)";
-            }}
-          >
-            <X size={14} /> {t("create.remove_trip")}
-          </button>
-        )}
-        {onToggleCollapsed && (
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            aria-expanded={!collapsed}
-            aria-label={(collapsed
-              ? t("create.expand_trip_aria")
-              : t("create.collapse_trip_aria")
-            ).replace("{n}", String(index + 1))}
-            style={{
-              minHeight: 36,
-              padding: "6px 8px",
-              border: "none",
-              borderRadius: 5,
-              background: "transparent",
-              color: "#0B1E3D",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              fontSize: 12,
-              fontWeight: 600,
-              fontFamily: "inherit",
-            }}
-          >
-            <span
-              className="create-trip-collapse-icon"
-              style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+
+          {/* Return trip checkbox — only for trips after the first */}
+          {index > 0 && sourceTripData && (
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+                color: data.returnTrip ? "#00897B" : "#5A6A7A",
+                background: data.returnTrip
+                  ? "rgba(0,194,168,0.08)"
+                  : "rgb(200, 232, 228)",
+                border: `1.5px solid ${data.returnTrip ? "#00C2A8" : "rgb(200, 232, 228)"}`,
+                borderRadius: 5,
+                padding: "5px 10px",
+                transition: "all 0.15s",
+                userSelect: "none",
+              }}
             >
-              <ChevronDown size={16} />
+              <input
+                type="checkbox"
+                checked={!!data.returnTrip}
+                onChange={(e) => handleReturnToggle(e.target.checked)}
+                style={{
+                  width: 14,
+                  height: 14,
+                  accentColor: "#00C2A8",
+                  cursor: "pointer",
+                }}
+              />
+              <RotateCcw size={12} aria-hidden="true" />
+              {t("create.return_trip")}
+            </label>
+          )}
+
+          {displayedPrice != null && (
+            <span
+              className="price-pop"
+              style={{
+                fontWeight: 800,
+                fontSize: 15,
+                color: "#00C2A8",
+                fontVariantNumeric: "tabular-nums",
+                marginLeft: "auto",
+              }}
+            >
+              {displayedPrice} EGP
             </span>
-            {collapsed ? t("create.expand") : t("create.collapse")}
-          </button>
-        )}
-      </div>}
+          )}
+          {canRemove && (
+            <button
+              type="button"
+              onClick={onRemove}
+              aria-label={`Remove trip ${index + 1}`}
+              style={{
+                background: "rgba(231,76,60,0.08)",
+                border: "none",
+                borderRadius: 5,
+                cursor: "pointer",
+                color: "#e74c3c",
+                padding: "6px 8px",
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                fontSize: 12,
+                fontWeight: 600,
+                fontFamily: "inherit",
+                minHeight: 36,
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(231,76,60,0.15)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(231,76,60,0.08)";
+              }}
+            >
+              <X size={14} /> {t("create.remove_trip")}
+            </button>
+          )}
+          {onToggleCollapsed && (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-expanded={!collapsed}
+              aria-label={(collapsed
+                ? t("create.expand_trip_aria")
+                : t("create.collapse_trip_aria")
+              ).replace("{n}", String(index + 1))}
+              style={{
+                minHeight: 36,
+                padding: "6px 8px",
+                border: "none",
+                borderRadius: 5,
+                background: "transparent",
+                color: "#0B1E3D",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: 12,
+                fontWeight: 600,
+                fontFamily: "inherit",
+              }}
+            >
+              <span
+                className="create-trip-collapse-icon"
+                style={{
+                  transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                }}
+              >
+                <ChevronDown size={16} />
+              </span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Form fields */}
       <div
@@ -1348,577 +1480,577 @@ export default function TripCycle({
         <div style={{ minHeight: 0, overflow: "hidden" }}>
           <div
             style={{
-          padding: "18px 18px 20px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
+              padding: "18px 18px 20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
             }}
           >
-        {beforeFields}
-        {/* Vehicle type */}
-        <div style={floatingFieldStyle} hidden={stage !== "vehicle"}>
-          <label htmlFor={`vehicle-${data.id}`} style={floatingLabelStyle}>
-            {t("create.vehicle_type")} *
-          </label>
-          <select
-            id={`vehicle-${data.id}`}
-            value={data.vehicleType}
-            onChange={(e) => {
-              const newVehicle = e.target.value as VehicleKey | "";
-              if (!newVehicle) {
-                onChange({ ...data, vehicleType: "" });
-                return;
-              }
-              const newMax = maxExtraPassengers(newVehicle);
-              const clampedPassengers = Math.min(
-                data.extraPassengers ?? 0,
-                newMax,
-              );
-              // Sync passengers array AFTER extraPassengers is clamped — trim to
-              // the new count; shared vehicles force everyone back to "same as main".
-              const isPrivate = !isSharedVehicle(newVehicle);
-              const syncedPassengers = Array.from(
-                { length: clampedPassengers },
-                (_, i) => {
-                  const existing = (data.passengers ?? [])[i];
-                  if (!isPrivate) {
-                    return {
-                      id:
-                        existing?.id ?? Math.random().toString(36).slice(2, 9),
-                      sameAsMain: true,
-                      pickup: null,
-                      dropoff: null,
-                    };
+            {beforeFields}
+            {/* Vehicle type */}
+            <div style={floatingFieldStyle} hidden={stage !== "vehicle"}>
+              <label htmlFor={`vehicle-${data.id}`} style={floatingLabelStyle}>
+                {t("create.vehicle_type")} *
+              </label>
+              <AppSelect
+                id={`vehicle-${data.id}`}
+                value={data.vehicleType}
+                placeholder={t("create.select_vehicle_type")}
+                options={vList.map((v) => ({
+                  value: v.key,
+                  label: `${t(`vehicles.${v.key}`)}${disabledVehicleKeys.includes(v.key) ? " (Unavailable)" : ""}`,
+                  disabled: disabledVehicleKeys.includes(v.key),
+                }))}
+                onValueChange={(value) => {
+                  const newVehicle = value as VehicleKey | "";
+                  if (!newVehicle) {
+                    onChange({ ...data, vehicleType: "" });
+                    return;
                   }
-                  return (
-                    existing ?? {
-                      id: Math.random().toString(36).slice(2, 9),
-                      sameAsMain: true,
-                      pickup: null,
-                      dropoff: null,
-                    }
+                  const newMax = maxExtraPassengers(newVehicle);
+                  const clampedPassengers = Math.min(
+                    data.extraPassengers ?? 0,
+                    newMax,
                   );
-                },
-              );
-              const newPickupTime =
-                data.arrivalTime && data.durationMinutes
-                  ? computePickupTime(
-                      data.arrivalTime,
-                      data.durationMinutes,
-                      newVehicle,
-                      vMap,
-                    )
-                  : data.pickupTime;
-              onChange({
-                ...data,
-                vehicleType: newVehicle,
-                extraPassengers: isPrivate ? 0 : clampedPassengers,
-                numberOfPassengers: isPrivate
-                  ? Math.min(
-                      Math.max(1, data.numberOfPassengers),
-                      vMap[newVehicle].occupancy,
-                    )
-                  : 1,
-                stops: isPrivate ? data.stops : [],
-                passengers: isPrivate ? [] : syncedPassengers,
-                pickupTime: newPickupTime,
-              });
-            }}
-            style={{
-              width: "100%",
-              height: 52,
-              padding: "0 14px",
-              borderRadius: 5,
-              border: "1.5px solid rgb(200, 232, 228)",
-              background: "#f8f9fa",
-              fontSize: 15,
-              fontFamily: "inherit",
-              color: "rgb(11, 30, 61)",
-              appearance: "none",
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235A6A7A' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right 14px center",
-              paddingRight: 40,
-              cursor: "pointer",
-              outline: "none",
-              transition: "border-color 0.15s",
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = "#00C2A8";
-              e.currentTarget.style.boxShadow =
-                "0 0 0 3px rgba(0,194,168,0.12)";
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = "rgb(200, 232, 228)";
-              e.currentTarget.style.boxShadow = "none";
-            }}
-          >
-            <option value="" disabled>
-              {t("create.select_vehicle_type")}
-            </option>
-            {vList.map((v) => (
-              <option
-                key={v.key}
-                value={v.key}
-                disabled={disabledVehicleKeys.includes(v.key)}
-              >
-                {t(`vehicles.${v.key}`)}
-                {disabledVehicleKeys.includes(v.key)
-                  ? ` (${t("create.coming_soon")})`
-                  : ""}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Everything below is exclusive to shared rides for now — private ride
-            form structure lands in a follow-up phase. */}
-        {isSharedVehicle(data.vehicleType) && stage !== "vehicle" && (
-          <>
-            <div hidden={stage !== "locations"} style={{ display: "contents" }}>
-            {/* Pickup */}
-            <div>
-              <AddressInput
-                id={`pickup-${data.id}`}
-                placeholder={t("create.enter_pickup_address")}
-                label={`${t("create.route_pickup_label")} *`}
-                value={data.pickup}
-                onChange={(p) => set("pickup", p)}
-                iconColor="#00C2A8"
-                savedAddresses={savedAddresses}
-              />
-              <div className="flex flex-row gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => handleCurrentLocation("pickup")}
-                  disabled={locating === "pickup"}
-                  style={pickBtnStyle(false)}
-                >
-                  {locating === "pickup" ? (
-                    <Loader2 size={13} className="spin" aria-hidden="true" />
-                  ) : (
-                    <Navigation size={13} aria-hidden="true" />
-                  )}
-                  {t("create.use_current_location")}
-                </button>
-                {data.pickup &&
-                  !isAlreadySaved(data.pickup, savedAddresses) && (
-                    <SaveAddressButton
-                      point={data.pickup}
-                      onSaved={(s) => onAddressSaved?.(s)}
-                    />
-                  )}
-                {onPickFromMap && (
-                  <button
-                    type="button"
-                    onClick={() => onPickFromMap("pickup")}
-                    style={pickBtnStyle(picking?.field === "pickup")}
-                  >
-                    <MapPin size={13} aria-hidden="true" />
-                    {picking?.field === "pickup"
-                      ? t("create.click_map")
-                      : t("create.pick_from_map")}
-                  </button>
-                )}
-              </div>
-
-              {isSharedVehicle(data.vehicleType) &&
-                data.pickup &&
-                data.pickupStation && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      marginTop: 6,
-                      fontSize: 12,
-                      color: "#7A5000",
-                      background: "rgba(245,166,35,0.1)",
-                      border: "1px solid rgba(245,166,35,0.35)",
-                      borderRadius: 5,
-                      padding: "5px 10px",
-                    }}
-                  >
-                    <span aria-hidden="true">↪</span>
-                    <span>
-                      {t("create.station")}:{" "}
-                      <strong>{data.pickupStation.name}</strong>
-                      {data.walkingMinToStation != null
-                        ? ` (~${data.walkingMinToStation} min walk)`
-                        : ""}
-                    </span>
-                  </div>
-                )}
-              <StationOptions
-                label={t("create.pickup_station_for_trip").replace(
-                  "{tripNumber}",
-                  String(index + 1),
-                )}
-                options={data.pickupStationOptions}
-                selectedId={data.pickupStation?.id}
-                onSelect={(stationId) => selectStation("pickup", stationId)}
-                locale={locale}
-              />
-            </div>
-
-            {/* Dropoff */}
-            <div>
-              <AddressInput
-                id={`dropoff-${data.id}`}
-                placeholder={t("create.enter_dropoff_address")}
-                label={`${t("create.route_dropoff_label")} *`}
-                value={data.dropoff}
-                onChange={(p) => set("dropoff", p)}
-                iconColor="#00C2A8"
-                savedAddresses={savedAddresses}
-              />
-              <div className="flex flex-row gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => handleCurrentLocation("dropoff")}
-                  disabled={locating === "dropoff"}
-                  style={pickBtnStyle(false)}
-                >
-                  {locating === "dropoff" ? (
-                    <Loader2 size={13} className="spin" aria-hidden="true" />
-                  ) : (
-                    <Navigation size={13} aria-hidden="true" />
-                  )}
-                  {t("create.use_current_location")}
-                </button>
-                {data.dropoff &&
-                  !isAlreadySaved(data.dropoff, savedAddresses) && (
-                    <SaveAddressButton
-                      point={data.dropoff}
-                      onSaved={(s) => onAddressSaved?.(s)}
-                    />
-                  )}
-                {onPickFromMap && (
-                  <button
-                    type="button"
-                    onClick={() => onPickFromMap("dropoff")}
-                    style={pickBtnStyle(picking?.field === "dropoff")}
-                  >
-                    <MapPin size={13} aria-hidden="true" />
-                    {picking?.field === "dropoff"
-                      ? t("create.click_map")
-                      : t("create.pick_from_map")}
-                  </button>
-                )}
-              </div>
-              {isSharedVehicle(data.vehicleType) &&
-                data.dropoff &&
-                data.dropoffStation && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      marginTop: 6,
-                      fontSize: 12,
-                      color: "#7A5000",
-                      background: "rgba(245,166,35,0.1)",
-                      border: "1px solid rgba(245,166,35,0.35)",
-                      borderRadius: 5,
-                      padding: "5px 10px",
-                    }}
-                  >
-                    <span aria-hidden="true">↪</span>
-                    <span>
-                      {t("create.station")}:{" "}
-                      <strong>{data.dropoffStation.name}</strong>
-                      {data.walkingMinFromStation != null
-                        ? ` (~${data.walkingMinFromStation} min walk)`
-                        : ""}
-                    </span>
-                  </div>
-                )}
-              <StationOptions
-                label={t("create.dropoff_station_for_trip").replace(
-                  "{tripNumber}",
-                  String(index + 1),
-                )}
-                options={data.dropoffStationOptions}
-                selectedId={data.dropoffStation?.id}
-                onSelect={(stationId) => selectStation("dropoff", stationId)}
-                locale={locale}
-              />
-              {locationError && (
-                <div
-                  role="alert"
-                  style={{
-                    fontSize: 13,
-                    color: "#e74c3c",
-                    background: "rgba(231,76,60,0.07)",
-                    border: "1px solid rgba(231,76,60,0.2)",
-                    borderRadius: 5,
-                    padding: "8px 12px",
-                    marginTop: 6,
-                  }}
-                >
-                  ⚠ {locationError}
-                </div>
-              )}
-            </div>
-
-            {/* Route info pill */}
-            {routeLoading && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontSize: 13,
-                  color: "#5A6A7A",
-                }}
-              >
-                <Loader2 size={14} className="spin" aria-hidden="true" />
-                Calculating route…
-              </div>
-            )}
-            {!routeLoading && data.distanceKm && data.durationMinutes && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "8px 12px",
-                  background: "#eff7f6",
-                  borderRadius: 5,
-                  fontSize: 13,
-                  color: "#0B1E3D",
-                  fontWeight: 500,
-                }}
-              >
-                <Info
-                  size={14}
-                  style={{ color: "#00C2A8", flexShrink: 0 }}
-                  aria-hidden="true"
-                />
-                <span>
-                  <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {formatDistanceKm(locale, data.distanceKm)}
-                  </strong>
-                  {" · "}
-                  <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {formatMinutes(locale, data.durationMinutes)}
-                  </strong>
-                </span>
-              </div>
-            )}
-
-            </div>
-
-            <div hidden={stage !== "timing"} style={{ display: "contents" }}>
-            {/* Arrival time */}
-            <div style={floatingFieldStyle}>
-              <label htmlFor={`arrival-${data.id}`} style={floatingLabelStyle}>
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <Clock
-                    size={13}
-                    style={{ color: "#00C2A8" }}
-                    aria-hidden="true"
-                  />
-                  {t("latest_arrival_time")}{" "}
-                  <span aria-hidden="true" style={{ color: "#e74c3c" }}>
-                    *
-                  </span>
-                </span>
-              </label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <select
-                  aria-label={t("create.period_label")}
-                  value={arrivalPeriod}
-                  onChange={(e) =>
-                    handleArrivalPeriodChange(e.target.value as "AM" | "PM")
-                  }
-                  style={{
-                    width: 84,
-                    flexShrink: 0,
-                    height: 52,
-                    padding: "0 10px",
-                    borderRadius: 5,
-                    border: "1.5px solid #e8edf0",
-                    background: "#f8f9fa",
-                    fontSize: 15,
-                    fontFamily: "inherit",
-                    color: "#0B1E3D",
-                    boxSizing: "border-box",
-                    appearance: "none",
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235A6A7A' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-                    backgroundRepeat: "no-repeat",
-                    backgroundPosition: "right 8px center",
-                    paddingRight: 26,
-                    cursor: "pointer",
-                    outline: "none",
-                  }}
-                >
-                  <option value="AM">{t("create.period_am")}</option>
-                  <option value="PM">{t("create.period_pm")}</option>
-                </select>
-                <select
-                  id={`arrival-${data.id}`}
-                  value={
-                    data.arrivalTime &&
-                    (toMinutes(data.arrivalTime) < 12 * 60 ? "AM" : "PM") ===
-                      arrivalPeriod
-                      ? data.arrivalTime
-                      : ""
-                  }
-                  onChange={(e) => handleArrivalTimeChange(e.target.value)}
-                  required
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    height: 52,
-                    padding: "0 14px",
-                    borderRadius: 5,
-                    border: `1.5px solid ${arrivalTooEarly ? "#e74c3c" : "#e8edf0"}`,
-                    background: "#f8f9fa",
-                    fontSize: 15,
-                    fontFamily: "inherit",
-                    color: "#0B1E3D",
-                    boxSizing: "border-box",
-                    appearance: "none",
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235A6A7A' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-                    backgroundRepeat: "no-repeat",
-                    backgroundPosition: "right 14px center",
-                    paddingRight: 40,
-                    cursor: "pointer",
-                    outline: "none",
-                    transition: "border-color 0.15s",
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = arrivalTooEarly
-                      ? "#e74c3c"
-                      : "#00C2A8";
-                    e.currentTarget.style.boxShadow = arrivalTooEarly
-                      ? "0 0 0 3px rgba(231,76,60,0.12)"
-                      : "0 0 0 3px rgba(0,194,168,0.12)";
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = arrivalTooEarly
-                      ? "#e74c3c"
-                      : "#e8edf0";
-                    e.currentTarget.style.boxShadow = "none";
-                  }}
-                >
-                  <option value="" disabled>
-                    {t("create.arrival_time_label")}
-                  </option>
-                  {arrivalPeriodSlots.map((slot) => (
-                    <option key={slot.start} value={slot.value}>
-                      {formatHourMinuteRange(locale, slot)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {timeError && (
-                <p
-                  role="alert"
-                  style={{
-                    fontSize: 12,
-                    color: "#e74c3c",
-                    margin: "5px 0 0",
-                  }}
-                >
-                  ⚠ {timeError}
-                </p>
-              )}
-              {arrivalTooEarly && minArrivalTime ? (
-                <p
-                  role="alert"
-                  style={{
-                    fontSize: 12,
-                    color: "#e74c3c",
-                    margin: "5px 0 0",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  ⚠{" "}
-                  {t("create.must_be_after_previous_trip").replace(
-                    "{time}",
-                    formatTime(locale, minArrivalTime),
-                  )}
-                </p>
-              ) : (
-                <p
-                  style={{ fontSize: 12, color: "#5A6A7A", margin: "5px 0 0" }}
-                >
-                  {t("create.booked_arrival_question")}
-                </p>
-              )}
-            </div>
-
-            {/* Pickup time — readonly window: arrival − duration − vehicle margin, ±10min */}
-            <div>
-              <label
-                style={{
-                  ...labelStyle,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                <Clock
-                  size={13}
-                  style={{ color: "#00C2A8" }}
-                  aria-hidden="true"
-                />
-                {isSharedVehicle(data.vehicleType)
-                  ? t("board_station_by")
-                  : t("create.pickup_time_label")}
-                <span
-                  title={
-                    isSharedVehicle(data.vehicleType)
-                      ? t("create.pickup_time_tooltip_shared")
-                      : t("create.pickup_time_tooltip_private")
-                  }
-                  style={{ cursor: "help", color: "#5A6A7A" }}
-                >
-                  <Info size={12} aria-hidden="true" />
-                </span>
-              </label>
-              {data.pickupTime ? (
-                <div
-                  style={readonlyStyle}
-                  aria-label={t("create.pickup_time_window_aria")}
-                  role="status"
-                >
-                  <span
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 700,
-                      color: "#0B1E3D",
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {isSharedVehicle(data.vehicleType)
-                      ? formatTimeRange(
-                          locale,
-                          pickupWindowRange(data.pickupTime),
+                  // Sync passengers array AFTER extraPassengers is clamped — trim to
+                  // the new count; shared vehicles force everyone back to "same as main".
+                  const isPrivate = !isSharedVehicle(newVehicle);
+                  const syncedPassengers = Array.from(
+                    { length: clampedPassengers },
+                    (_, i) => {
+                      const existing = (data.passengers ?? [])[i];
+                      if (!isPrivate) {
+                        return {
+                          id:
+                            existing?.id ??
+                            Math.random().toString(36).slice(2, 9),
+                          sameAsMain: true,
+                          pickup: null,
+                          dropoff: null,
+                        };
+                      }
+                      return (
+                        existing ?? {
+                          id: Math.random().toString(36).slice(2, 9),
+                          sameAsMain: true,
+                          pickup: null,
+                          dropoff: null,
+                        }
+                      );
+                    },
+                  );
+                  const newPickupTime =
+                    data.arrivalTime && data.durationMinutes
+                      ? computePickupTime(
+                          data.arrivalTime,
+                          data.durationMinutes,
+                          newVehicle,
+                          vMap,
                         )
-                      : formatTime(locale, data.pickupTime)}
-                  </span>
-                </div>
-              ) : (
+                      : data.pickupTime;
+                  onChange({
+                    ...data,
+                    vehicleType: newVehicle,
+                    extraPassengers: isPrivate ? 0 : clampedPassengers,
+                    numberOfPassengers: isPrivate
+                      ? Math.min(
+                          Math.max(1, data.numberOfPassengers),
+                          vMap[newVehicle].occupancy,
+                        )
+                      : 1,
+                    stops: isPrivate ? data.stops : [],
+                    passengers: isPrivate ? [] : syncedPassengers,
+                    pickupTime: newPickupTime,
+                  });
+                }}
+              />
+            </div>
+
+            {/* Everything below is exclusive to shared rides for now — private ride
+            form structure lands in a follow-up phase. */}
+            {isSharedVehicle(data.vehicleType) && stage !== "vehicle" && (
+              <>
                 <div
-                  style={readonlyStyle}
-                  aria-label={t("create.computed_pickup_time_aria")}
-                  role="status"
+                  hidden={stage !== "locations"}
+                  style={{ display: "contents" }}
                 >
-                  <span style={{ fontSize: 14, color: "#9aa5b4" }}>
-                    {!data.pickup || !data.dropoff
-                      ? t("create.set_pickup_dropoff_first")
-                      : !data.arrivalTime
-                        ? t("create.set_arrival_time_above")
-                        : t("create.calculating")}
-                  </span>
+                  {/* Pickup */}
+                  <div>
+                    <AddressInput
+                      id={`pickup-${data.id}`}
+                      placeholder={t("create.enter_pickup_address")}
+                      label={`${t("create.route_pickup_label")} *`}
+                      value={data.pickup}
+                      validateLocation={validateLocationPoint}
+                      onChange={(p) => applyLocationField("pickup", p)}
+                      iconColor="#00C2A8"
+                      savedAddresses={savedAddresses}
+                    />
+                    <div className="flex flex-row gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCurrentLocation("pickup")}
+                        disabled={locating === "pickup"}
+                        style={pickBtnStyle(false)}
+                      >
+                        {locating === "pickup" ? (
+                          <Loader2
+                            size={13}
+                            className="spin"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Navigation size={13} aria-hidden="true" />
+                        )}
+                        {t("create.use_current_location")}
+                      </button>
+                      {data.pickup &&
+                        !isAlreadySaved(data.pickup, savedAddresses) && (
+                          <SaveAddressButton
+                            point={data.pickup}
+                            onSaved={(s) => onAddressSaved?.(s)}
+                          />
+                        )}
+                      {onPickFromMap && (
+                        <button
+                          type="button"
+                          onClick={() => onPickFromMap("pickup")}
+                          style={pickBtnStyle(picking?.field === "pickup")}
+                        >
+                          <MapPin size={13} aria-hidden="true" />
+                          {picking?.field === "pickup"
+                            ? t("create.click_map")
+                            : t("create.pick_from_map")}
+                        </button>
+                      )}
+                    </div>
+
+                    {isSharedVehicle(data.vehicleType) &&
+                      data.pickup &&
+                      data.pickupStation && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            marginTop: 6,
+                            fontSize: 12,
+                            color: "#7A5000",
+                            background: "rgba(245,166,35,0.1)",
+                            border: "1px solid rgba(245,166,35,0.35)",
+                            borderRadius: 5,
+                            padding: "5px 10px",
+                          }}
+                        >
+                          <span aria-hidden="true">↪</span>
+                          <span>
+                            {t("create.station")}:{" "}
+                            <strong>{data.pickupStation.name}</strong>
+                            {data.walkingMinToStation != null
+                              ? ` (~${data.walkingMinToStation} min walk)`
+                              : ""}
+                          </span>
+                        </div>
+                      )}
+                    <StationOptions
+                      label={t("create.pickup_station_for_trip").replace(
+                        "{tripNumber}",
+                        String(index + 1),
+                      )}
+                      options={data.pickupStationOptions}
+                      selectedId={data.pickupStation?.id}
+                      onSelect={(stationId) =>
+                        selectStation("pickup", stationId)
+                      }
+                      locale={locale}
+                    />
+                  </div>
+
+                  {/* Dropoff */}
+                  <div>
+                    <AddressInput
+                      id={`dropoff-${data.id}`}
+                      placeholder={t("create.enter_dropoff_address")}
+                      label={`${t("create.route_dropoff_label")} *`}
+                      value={data.dropoff}
+                      validateLocation={validateLocationPoint}
+                      onChange={(p) => applyLocationField("dropoff", p)}
+                      iconColor="#00C2A8"
+                      savedAddresses={savedAddresses}
+                    />
+                    <div className="flex flex-row gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCurrentLocation("dropoff")}
+                        disabled={locating === "dropoff"}
+                        style={pickBtnStyle(false)}
+                      >
+                        {locating === "dropoff" ? (
+                          <Loader2
+                            size={13}
+                            className="spin"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Navigation size={13} aria-hidden="true" />
+                        )}
+                        {t("create.use_current_location")}
+                      </button>
+                      {data.dropoff &&
+                        !isAlreadySaved(data.dropoff, savedAddresses) && (
+                          <SaveAddressButton
+                            point={data.dropoff}
+                            onSaved={(s) => onAddressSaved?.(s)}
+                          />
+                        )}
+                      {onPickFromMap && (
+                        <button
+                          type="button"
+                          onClick={() => onPickFromMap("dropoff")}
+                          style={pickBtnStyle(picking?.field === "dropoff")}
+                        >
+                          <MapPin size={13} aria-hidden="true" />
+                          {picking?.field === "dropoff"
+                            ? t("create.click_map")
+                            : t("create.pick_from_map")}
+                        </button>
+                      )}
+                    </div>
+                    {isSharedVehicle(data.vehicleType) &&
+                      data.dropoff &&
+                      data.dropoffStation && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            marginTop: 6,
+                            fontSize: 12,
+                            color: "#7A5000",
+                            background: "rgba(245,166,35,0.1)",
+                            border: "1px solid rgba(245,166,35,0.35)",
+                            borderRadius: 5,
+                            padding: "5px 10px",
+                          }}
+                        >
+                          <span aria-hidden="true">↪</span>
+                          <span>
+                            {t("create.station")}:{" "}
+                            <strong>{data.dropoffStation.name}</strong>
+                            {data.walkingMinFromStation != null
+                              ? ` (~${data.walkingMinFromStation} min walk)`
+                              : ""}
+                          </span>
+                        </div>
+                      )}
+                    <StationOptions
+                      label={t("create.dropoff_station_for_trip").replace(
+                        "{tripNumber}",
+                        String(index + 1),
+                      )}
+                      options={data.dropoffStationOptions}
+                      selectedId={data.dropoffStation?.id}
+                      onSelect={(stationId) =>
+                        selectStation("dropoff", stationId)
+                      }
+                      locale={locale}
+                    />
+                    {locationError && (
+                      <div
+                        role="alert"
+                        style={{
+                          fontSize: 13,
+                          color: "#e74c3c",
+                          background: "rgba(231,76,60,0.07)",
+                          border: "1px solid rgba(231,76,60,0.2)",
+                          borderRadius: 5,
+                          padding: "8px 12px",
+                          marginTop: 6,
+                        }}
+                      >
+                        ⚠ {locationError}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Route info pill */}
+                  {routeLoading && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 13,
+                        color: "#5A6A7A",
+                      }}
+                    >
+                      <Loader2 size={14} className="spin" aria-hidden="true" />
+                      Calculating route…
+                    </div>
+                  )}
+                  {!routeLoading && data.distanceKm && data.durationMinutes && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "8px 12px",
+                        background: "#eff7f6",
+                        borderRadius: 5,
+                        fontSize: 13,
+                        color: "#0B1E3D",
+                        fontWeight: 500,
+                      }}
+                    >
+                      <Info
+                        size={14}
+                        style={{ color: "#00C2A8", flexShrink: 0 }}
+                        aria-hidden="true"
+                      />
+                      <span>
+                        <strong style={{ fontVariantNumeric: "tabular-nums" }}>
+                          {formatDistanceKm(locale, data.distanceKm)}
+                        </strong>
+                        {" · "}
+                        <strong style={{ fontVariantNumeric: "tabular-nums" }}>
+                          {formatMinutes(locale, data.durationMinutes)}
+                        </strong>
+                      </span>
+                    </div>
+                  )}
                 </div>
-              )}
-              {/* {isSharedVehicle(data.vehicleType) &&
+
+                <div
+                  hidden={stage !== "timing"}
+                  style={{ display: "contents" }}
+                >
+                  {/* Arrival time */}
+                  <div style={floatingFieldStyle}>
+                    <label
+                      htmlFor={`arrival-${data.id}`}
+                      style={floatingLabelStyle}
+                    >
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <Clock
+                          size={13}
+                          style={{ color: "#00C2A8" }}
+                          aria-hidden="true"
+                        />
+                        {t("latest_arrival_time")}{" "}
+                        <span aria-hidden="true" style={{ color: "#e74c3c" }}>
+                          *
+                        </span>
+                      </span>
+                    </label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <select
+                        aria-label={t("create.period_label")}
+                        value={arrivalPeriod}
+                        onChange={(e) =>
+                          handleArrivalPeriodChange(
+                            e.target.value as "AM" | "PM",
+                          )
+                        }
+                        style={{
+                          width: 84,
+                          flexShrink: 0,
+                          height: 52,
+                          padding: "0 10px",
+                          borderRadius: 5,
+                          border: "1.5px solid #e8edf0",
+                          background: "#f8f9fa",
+                          fontSize: 15,
+                          fontFamily: "inherit",
+                          color: "#0B1E3D",
+                          boxSizing: "border-box",
+                          appearance: "none",
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235A6A7A' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                          backgroundRepeat: "no-repeat",
+                          backgroundPosition: "right 8px center",
+                          paddingRight: 26,
+                          cursor: "pointer",
+                          outline: "none",
+                        }}
+                      >
+                        <option value="AM">{t("create.period_am")}</option>
+                        <option value="PM">{t("create.period_pm")}</option>
+                      </select>
+                      <select
+                        id={`arrival-${data.id}`}
+                        value={
+                          data.arrivalTime &&
+                          (toMinutes(data.arrivalTime) < 12 * 60
+                            ? "AM"
+                            : "PM") === arrivalPeriod
+                            ? data.arrivalTime
+                            : ""
+                        }
+                        onChange={(e) =>
+                          handleArrivalTimeChange(e.target.value)
+                        }
+                        required
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          height: 52,
+                          padding: "0 14px",
+                          borderRadius: 5,
+                          border: `1.5px solid ${arrivalTooEarly ? "#e74c3c" : "#e8edf0"}`,
+                          background: "#f8f9fa",
+                          fontSize: 15,
+                          fontFamily: "inherit",
+                          color: "#0B1E3D",
+                          boxSizing: "border-box",
+                          appearance: "none",
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235A6A7A' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                          backgroundRepeat: "no-repeat",
+                          backgroundPosition: "right 14px center",
+                          paddingRight: 40,
+                          cursor: "pointer",
+                          outline: "none",
+                          transition: "border-color 0.15s",
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = arrivalTooEarly
+                            ? "#e74c3c"
+                            : "#00C2A8";
+                          e.currentTarget.style.boxShadow = arrivalTooEarly
+                            ? "0 0 0 3px rgba(231,76,60,0.12)"
+                            : "0 0 0 3px rgba(0,194,168,0.12)";
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = arrivalTooEarly
+                            ? "#e74c3c"
+                            : "#e8edf0";
+                          e.currentTarget.style.boxShadow = "none";
+                        }}
+                      >
+                        <option value="" disabled>
+                          {t("create.arrival_time_label")}
+                        </option>
+                        {arrivalPeriodSlots.map((slot) => (
+                          <option key={slot.start} value={slot.value}>
+                            {formatHourMinuteRange(locale, slot)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {timeError && (
+                      <p
+                        role="alert"
+                        style={{
+                          fontSize: 12,
+                          color: "#e74c3c",
+                          margin: "5px 0 0",
+                        }}
+                      >
+                        ⚠ {timeError}
+                      </p>
+                    )}
+                    {arrivalTooEarly && minArrivalTime ? (
+                      <p
+                        role="alert"
+                        style={{
+                          fontSize: 12,
+                          color: "#e74c3c",
+                          margin: "5px 0 0",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        ⚠{" "}
+                        {t("create.must_be_after_previous_trip").replace(
+                          "{time}",
+                          formatTime(locale, minArrivalTime),
+                        )}
+                      </p>
+                    ) : (
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: "#5A6A7A",
+                          margin: "5px 0 0",
+                        }}
+                      >
+                        {t("create.booked_arrival_question")}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Pickup time — readonly window: arrival − duration − vehicle margin, ±10min */}
+                  <div>
+                    <label
+                      style={{
+                        ...labelStyle,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <Clock
+                        size={13}
+                        style={{ color: "#00C2A8" }}
+                        aria-hidden="true"
+                      />
+                      {isSharedVehicle(data.vehicleType)
+                        ? t("board_station_by")
+                        : t("create.pickup_time_label")}
+                      <span
+                        title={
+                          isSharedVehicle(data.vehicleType)
+                            ? t("create.pickup_time_tooltip_shared")
+                            : t("create.pickup_time_tooltip_private")
+                        }
+                        style={{ cursor: "help", color: "#5A6A7A" }}
+                      >
+                        <Info size={12} aria-hidden="true" />
+                      </span>
+                    </label>
+                    {data.pickupTime ? (
+                      <div
+                        style={readonlyStyle}
+                        aria-label={t("create.pickup_time_window_aria")}
+                        role="status"
+                      >
+                        <span
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 700,
+                            color: "#0B1E3D",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {isSharedVehicle(data.vehicleType)
+                            ? formatTimeRange(
+                                locale,
+                                pickupWindowRange(data.pickupTime),
+                              )
+                            : formatTime(locale, data.pickupTime)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        style={readonlyStyle}
+                        aria-label={t("create.computed_pickup_time_aria")}
+                        role="status"
+                      >
+                        <span style={{ fontSize: 14, color: "#9aa5b4" }}>
+                          {!data.pickup || !data.dropoff
+                            ? t("create.set_pickup_dropoff_first")
+                            : !data.arrivalTime
+                              ? t("create.set_arrival_time_above")
+                              : t("create.calculating")}
+                        </span>
+                      </div>
+                    )}
+                    {/* {isSharedVehicle(data.vehicleType) &&
                 data.pickupTime &&
                 data.walkingMinToStation != null &&
                 data.walkingMinToStation > 0 && (
@@ -1940,678 +2072,744 @@ export default function TripCycle({
                     (~{data.walkingMinToStation} min walk to station)
                   </p>
                 )} */}
-            </div>
+                  </div>
+                </div>
 
-            </div>
-
-            <div hidden={stage !== "passengers"} style={{ display: "contents" }}>
-            {/* Extra passengers */}
-            <div>
-              <label style={labelStyle}>{t("create.extra_passengers")}</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextPassengers = (data.passengers ?? []).slice(0, -1);
-                    onChange({
-                      ...data,
-                      extraPassengers: nextPassengers.length,
-                      passengers: nextPassengers,
-                    });
-                  }}
-                  disabled={(data.extraPassengers ?? 0) <= 0}
-                  aria-label={t("create.decrease_passengers_aria")}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 5,
-                    border: "1.5px solid rgb(200, 232, 228)",
-                    background: "#f8f9fa",
-                    cursor:
-                      (data.extraPassengers ?? 0) <= 0
-                        ? "not-allowed"
-                        : "pointer",
-                    fontSize: 20,
-                    color: "#0B1E3D",
-                    fontFamily: "inherit",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
+                <div
+                  hidden={stage !== "passengers"}
+                  style={{ display: "contents" }}
                 >
-                  −
-                </button>
-                <span
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: "#0B1E3D",
-                    minWidth: 24,
-                    textAlign: "center",
-                  }}
-                >
-                  {data.extraPassengers ?? 0}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (
-                      (data.extraPassengers ?? 0) >=
-                      maxExtraPassengers(data.vehicleType)
-                    )
-                      return;
-                    const nextPassengers = [
-                      ...(data.passengers ?? []),
-                      {
-                        id: Math.random().toString(36).slice(2, 9),
-                        sameAsMain: true,
-                        pickup: null,
-                        dropoff: null,
-                      },
-                    ];
-                    onChange({
-                      ...data,
-                      extraPassengers: nextPassengers.length,
-                      passengers: nextPassengers,
-                    });
-                  }}
-                  disabled={
-                    (data.extraPassengers ?? 0) >=
-                    maxExtraPassengers(data.vehicleType)
-                  }
-                  aria-label={t("create.increase_passengers_aria")}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    border: "1.5px solid rgb(200, 232, 228)",
-                    background: "#f8f9fa",
-                    cursor:
-                      (data.extraPassengers ?? 0) >=
-                      maxExtraPassengers(data.vehicleType)
-                        ? "not-allowed"
-                        : "pointer",
-                    fontSize: 20,
-                    color: "#0B1E3D",
-                    fontFamily: "inherit",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  +
-                </button>
-                <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                  {t("create.you_plus_passengers").replace(
-                    "{n}",
-                    String(data.extraPassengers ?? 0),
-                  )}
-                </span>
-              </div>
-
-              {/* Per-passenger pickup/dropoff choice — private vehicles only */}
-              {!isSharedVehicle(data.vehicleType) &&
-                (data.passengers ?? []).map((p, idx) => (
-                  <div
-                    key={p.id}
-                    style={{
-                      marginTop: 10,
-                      padding: "10px 12px",
-                      background: "#f8f9fa",
-                      borderRadius: 5,
-                      border: "1.5px solid rgb(200, 232, 228)",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: "#0B1E3D",
-                        display: "block",
-                        marginBottom: 6,
-                      }}
+                  {/* Extra passengers */}
+                  <div>
+                    <label style={labelStyle}>
+                      {t("create.extra_passengers")}
+                    </label>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 12 }}
                     >
-                      {t("create.passenger_label").replace(
-                        "{n}",
-                        String(idx + 1),
-                      )}
-                    </span>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                       <button
                         type="button"
-                        onClick={() =>
-                          updatePassenger(p.id, {
-                            sameAsMain: true,
-                            pickup: null,
-                            dropoff: null,
-                          })
-                        }
-                        style={pickBtnStyle(p.sameAsMain)}
-                      >
-                        {t("create.same_as_main")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updatePassenger(p.id, { sameAsMain: false })
-                        }
-                        style={pickBtnStyle(!p.sameAsMain)}
-                      >
-                        {t("create.different_points")}
-                      </button>
-                    </div>
-                    {!p.sameAsMain && (
-                      <div
+                        onClick={() => {
+                          const nextPassengers = (data.passengers ?? []).slice(
+                            0,
+                            -1,
+                          );
+                          onChange({
+                            ...data,
+                            extraPassengers: nextPassengers.length,
+                            passengers: nextPassengers,
+                          });
+                        }}
+                        disabled={(data.extraPassengers ?? 0) <= 0}
+                        aria-label={t("create.decrease_passengers_aria")}
                         style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 5,
+                          border: "1.5px solid rgb(200, 232, 228)",
+                          background: "#f8f9fa",
+                          cursor:
+                            (data.extraPassengers ?? 0) <= 0
+                              ? "not-allowed"
+                              : "pointer",
+                          fontSize: 20,
+                          color: "#0B1E3D",
+                          fontFamily: "inherit",
                           display: "flex",
-                          flexDirection: "column",
-                          gap: 8,
+                          alignItems: "center",
+                          justifyContent: "center",
                         }}
                       >
-                        <div>
-                          <AddressInput
-                            id={`pax-${p.id}-pickup`}
-                            placeholder={t("create.passenger_pickup_address")}
-                            label={t("create.passenger_pickup_address")}
-                            value={p.pickup}
-                            onChange={(pt) =>
-                              updatePassenger(p.id, { pickup: pt })
-                            }
-                            iconColor="#00C2A8"
-                            savedAddresses={savedAddresses}
-                          />
-                          {data.pickup && (
+                        −
+                      </button>
+                      <span
+                        style={{
+                          fontSize: 18,
+                          fontWeight: 700,
+                          color: "#0B1E3D",
+                          minWidth: 24,
+                          textAlign: "center",
+                        }}
+                      >
+                        {data.extraPassengers ?? 0}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (
+                            (data.extraPassengers ?? 0) >=
+                            maxExtraPassengers(data.vehicleType)
+                          )
+                            return;
+                          const nextPassengers = [
+                            ...(data.passengers ?? []),
+                            {
+                              id: Math.random().toString(36).slice(2, 9),
+                              sameAsMain: true,
+                              pickup: null,
+                              dropoff: null,
+                            },
+                          ];
+                          onChange({
+                            ...data,
+                            extraPassengers: nextPassengers.length,
+                            passengers: nextPassengers,
+                          });
+                        }}
+                        disabled={
+                          (data.extraPassengers ?? 0) >=
+                          maxExtraPassengers(data.vehicleType)
+                        }
+                        aria-label={t("create.increase_passengers_aria")}
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 10,
+                          border: "1.5px solid rgb(200, 232, 228)",
+                          background: "#f8f9fa",
+                          cursor:
+                            (data.extraPassengers ?? 0) >=
+                            maxExtraPassengers(data.vehicleType)
+                              ? "not-allowed"
+                              : "pointer",
+                          fontSize: 20,
+                          color: "#0B1E3D",
+                          fontFamily: "inherit",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        +
+                      </button>
+                      <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                        {t("create.you_plus_passengers").replace(
+                          "{n}",
+                          String(data.extraPassengers ?? 0),
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Per-passenger pickup/dropoff choice — private vehicles only */}
+                    {!isSharedVehicle(data.vehicleType) &&
+                      (data.passengers ?? []).map((p, idx) => (
+                        <div
+                          key={p.id}
+                          style={{
+                            marginTop: 10,
+                            padding: "10px 12px",
+                            background: "#f8f9fa",
+                            borderRadius: 5,
+                            border: "1.5px solid rgb(200, 232, 228)",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: "#0B1E3D",
+                              display: "block",
+                              marginBottom: 6,
+                            }}
+                          >
+                            {t("create.passenger_label").replace(
+                              "{n}",
+                              String(idx + 1),
+                            )}
+                          </span>
+                          <div
+                            style={{ display: "flex", gap: 8, marginBottom: 8 }}
+                          >
                             <button
                               type="button"
                               onClick={() =>
-                                updatePassenger(p.id, { pickup: data.pickup })
+                                updatePassenger(p.id, {
+                                  sameAsMain: true,
+                                  pickup: null,
+                                  dropoff: null,
+                                })
                               }
-                              style={{
-                                marginTop: 4,
-                                fontSize: 11,
-                                fontWeight: 600,
-                                fontFamily: "inherit",
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                color: "#0B1E3D",
-                                padding: 0,
-                              }}
+                              style={pickBtnStyle(p.sameAsMain)}
                             >
-                              {t("create.use_main_pickup_location")}
+                              {t("create.same_as_main")}
                             </button>
-                          )}
-                        </div>
-                        <div>
-                          <AddressInput
-                            id={`pax-${p.id}-dropoff`}
-                            placeholder={t("create.passenger_dropoff_address")}
-                            label={t("create.passenger_dropoff_address")}
-                            value={p.dropoff}
-                            onChange={(pt) =>
-                              updatePassenger(p.id, { dropoff: pt })
-                            }
-                            iconColor="#00C2A8"
-                            savedAddresses={savedAddresses}
-                          />
-                          {data.dropoff && (
                             <button
                               type="button"
                               onClick={() =>
-                                updatePassenger(p.id, { dropoff: data.dropoff })
+                                updatePassenger(p.id, { sameAsMain: false })
                               }
+                              style={pickBtnStyle(!p.sameAsMain)}
+                            >
+                              {t("create.different_points")}
+                            </button>
+                          </div>
+                          {!p.sameAsMain && (
+                            <div
                               style={{
-                                marginTop: 4,
-                                fontSize: 11,
-                                fontWeight: 600,
-                                fontFamily: "inherit",
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                color: "#00897B",
-                                padding: 0,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 8,
                               }}
                             >
-                              {t("create.use_main_dropoff_location")}
-                            </button>
+                              <div>
+                                <AddressInput
+                                  id={`pax-${p.id}-pickup`}
+                                  placeholder={t(
+                                    "create.passenger_pickup_address",
+                                  )}
+                                  label={t("create.passenger_pickup_address")}
+                                  value={p.pickup}
+                                  onChange={(pt) =>
+                                    updatePassenger(p.id, { pickup: pt })
+                                  }
+                                  iconColor="#00C2A8"
+                                  savedAddresses={savedAddresses}
+                                />
+                                {data.pickup && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updatePassenger(p.id, {
+                                        pickup: data.pickup,
+                                      })
+                                    }
+                                    style={{
+                                      marginTop: 4,
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      fontFamily: "inherit",
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      color: "#0B1E3D",
+                                      padding: 0,
+                                    }}
+                                  >
+                                    {t("create.use_main_pickup_location")}
+                                  </button>
+                                )}
+                              </div>
+                              <div>
+                                <AddressInput
+                                  id={`pax-${p.id}-dropoff`}
+                                  placeholder={t(
+                                    "create.passenger_dropoff_address",
+                                  )}
+                                  label={t("create.passenger_dropoff_address")}
+                                  value={p.dropoff}
+                                  onChange={(pt) =>
+                                    updatePassenger(p.id, { dropoff: pt })
+                                  }
+                                  iconColor="#00C2A8"
+                                  savedAddresses={savedAddresses}
+                                />
+                                {data.dropoff && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updatePassenger(p.id, {
+                                        dropoff: data.dropoff,
+                                      })
+                                    }
+                                    style={{
+                                      marginTop: 4,
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      fontFamily: "inherit",
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      color: "#00897B",
+                                      padding: 0,
+                                    }}
+                                  >
+                                    {t("create.use_main_dropoff_location")}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           )}
                         </div>
+                      ))}
+
+                    {detourExceeded && (
+                      <div
+                        role="alert"
+                        style={{
+                          fontSize: 13,
+                          color: "#e74c3c",
+                          background: "rgba(231,76,60,0.07)",
+                          border: "1px solid rgba(231,76,60,0.2)",
+                          borderRadius: 5,
+                          padding: "8px 12px",
+                          marginTop: 10,
+                        }}
+                      >
+                        ⚠ {t("create.passenger_detour_exceeded")}
                       </div>
                     )}
                   </div>
-                ))}
-
-              {detourExceeded && (
-                <div
-                  role="alert"
-                  style={{
-                    fontSize: 13,
-                    color: "#e74c3c",
-                    background: "rgba(231,76,60,0.07)",
-                    border: "1px solid rgba(231,76,60,0.2)",
-                    borderRadius: 5,
-                    padding: "8px 12px",
-                    marginTop: 10,
-                  }}
-                >
-                  ⚠ {t("create.passenger_detour_exceeded")}
                 </div>
-              )}
-            </div>
-            </div>
-          </>
-        )}
+              </>
+            )}
 
-        {isPrivate && stage !== "vehicle" && (
-          <>
-            <div hidden={stage !== "locations"} style={{ display: "contents" }}>
-            <div>
-              <AddressInput
-                id={`pickup-${data.id}`}
-                placeholder={t("create.enter_pickup_address")}
-                label={`${t("create.pickup_location")} *`}
-                value={data.pickup}
-                onChange={(point) => set("pickup", point)}
-                iconColor="#00C2A8"
-                savedAddresses={savedAddresses}
-              />
-              <div className="flex flex-row gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => handleCurrentLocation("pickup")}
-                  disabled={locating === "pickup"}
-                  style={pickBtnStyle(false)}
+            {isPrivate && stage !== "vehicle" && (
+              <>
+                <div
+                  hidden={stage !== "locations"}
+                  style={{ display: "contents" }}
                 >
-                  {locating === "pickup" ? (
-                    <Loader2 size={13} className="spin" aria-hidden="true" />
-                  ) : (
-                    <Navigation size={13} aria-hidden="true" />
-                  )}
-                  {t("create.use_current_location")}
-                </button>
-                {data.pickup &&
-                  !isAlreadySaved(data.pickup, savedAddresses) && (
-                    <SaveAddressButton
-                      point={data.pickup}
-                      onSaved={(saved) => onAddressSaved?.(saved)}
-                    />
-                  )}
-                {onPickFromMap && (
-                  <button
-                    type="button"
-                    onClick={() => onPickFromMap("pickup")}
-                    style={pickBtnStyle(picking?.field === "pickup")}
-                  >
-                    <MapPin size={13} aria-hidden="true" />
-                    {picking?.field === "pickup"
-                      ? t("create.click_map")
-                      : t("create.pick_from_map")}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {data.stops.map((stop, stopIndex) => {
-                const onboardBefore = data.stops
-                  .slice(0, stopIndex)
-                  .reduce(
-                    (count, previous) =>
-                      count - previous.alighting + previous.boarding,
-                    data.numberOfPassengers,
-                  );
-                const maxAlighting = Math.max(0, onboardBefore - 1);
-                const maxBoarding = Math.max(
-                  0,
-                  vMap[data.vehicleType as VehicleKey].occupancy -
-                    (onboardBefore - stop.alighting),
-                );
-                return (
-                  <div
-                    key={stop.id}
-                    style={{
-                      padding: 12,
-                      background: "#f8f9fa",
-                      border: "1.5px solid rgb(200, 232, 228)",
-                      borderRadius: 5,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: 8,
-                      }}
-                    >
-                      <strong style={{ fontSize: 13, color: "#0B1E3D" }}>
-                        {t("create.stop_label").replace(
-                          "{n}",
-                          String(stopIndex + 1),
-                        )}
-                      </strong>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          set(
-                            "stops",
-                            data.stops.filter((item) => item.id !== stop.id),
-                          )
-                        }
-                        aria-label={t("create.remove_stop_aria").replace(
-                          "{n}",
-                          String(stopIndex + 1),
-                        )}
-                        style={{
-                          border: "none",
-                          background: "none",
-                          color: "#e74c3c",
-                          cursor: "pointer",
-                          padding: 4,
-                        }}
-                      >
-                        <X size={15} />
-                      </button>
-                    </div>
+                  <div>
                     <AddressInput
-                      id={`stop-${data.id}-${stop.id}`}
-                      placeholder={t("create.enter_stop_address")}
-                      value={stop.point}
-                      onChange={(point) => updateStop(stop.id, { point })}
+                      id={`pickup-${data.id}`}
+                      placeholder={t("create.enter_pickup_address")}
+                      label={`${t("create.pickup_location")} *`}
+                      value={data.pickup}
+                      onChange={(point) => set("pickup", point)}
                       iconColor="#00C2A8"
                       savedAddresses={savedAddresses}
                     />
-                    {onPickFromMap && (
+                    <div className="flex flex-row gap-2 mt-2">
                       <button
                         type="button"
-                        onClick={() => onPickFromMap("stop", stop.id)}
-                        style={pickBtnStyle(
-                          picking?.field === "stop" &&
-                            picking.stopId === stop.id,
-                        )}
+                        onClick={() => handleCurrentLocation("pickup")}
+                        disabled={locating === "pickup"}
+                        style={pickBtnStyle(false)}
                       >
-                        <MapPin size={13} aria-hidden="true" />
-                        {picking?.field === "stop" && picking.stopId === stop.id
-                          ? t("create.click_map")
-                          : t("create.pick_from_map")}
+                        {locating === "pickup" ? (
+                          <Loader2
+                            size={13}
+                            className="spin"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Navigation size={13} aria-hidden="true" />
+                        )}
+                        {t("create.use_current_location")}
+                      </button>
+                      {data.pickup &&
+                        !isAlreadySaved(data.pickup, savedAddresses) && (
+                          <SaveAddressButton
+                            point={data.pickup}
+                            onSaved={(saved) => onAddressSaved?.(saved)}
+                          />
+                        )}
+                      {onPickFromMap && (
+                        <button
+                          type="button"
+                          onClick={() => onPickFromMap("pickup")}
+                          style={pickBtnStyle(picking?.field === "pickup")}
+                        >
+                          <MapPin size={13} aria-hidden="true" />
+                          {picking?.field === "pickup"
+                            ? t("create.click_map")
+                            : t("create.pick_from_map")}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                    }}
+                  >
+                    {data.stops.map((stop, stopIndex) => {
+                      const onboardBefore = data.stops
+                        .slice(0, stopIndex)
+                        .reduce(
+                          (count, previous) =>
+                            count - previous.alighting + previous.boarding,
+                          data.numberOfPassengers,
+                        );
+                      const maxAlighting = Math.max(0, onboardBefore - 1);
+                      const maxBoarding = Math.max(
+                        0,
+                        vMap[data.vehicleType as VehicleKey].occupancy -
+                          (onboardBefore - stop.alighting),
+                      );
+                      return (
+                        <div
+                          key={stop.id}
+                          style={{
+                            padding: 12,
+                            background: "#f8f9fa",
+                            border: "1.5px solid rgb(200, 232, 228)",
+                            borderRadius: 5,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 8,
+                            }}
+                          >
+                            <strong style={{ fontSize: 13, color: "#0B1E3D" }}>
+                              {t("create.stop_label").replace(
+                                "{n}",
+                                String(stopIndex + 1),
+                              )}
+                            </strong>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                set(
+                                  "stops",
+                                  data.stops.filter(
+                                    (item) => item.id !== stop.id,
+                                  ),
+                                )
+                              }
+                              aria-label={t("create.remove_stop_aria").replace(
+                                "{n}",
+                                String(stopIndex + 1),
+                              )}
+                              style={{
+                                border: "none",
+                                background: "none",
+                                color: "#e74c3c",
+                                cursor: "pointer",
+                                padding: 4,
+                              }}
+                            >
+                              <X size={15} />
+                            </button>
+                          </div>
+                          <AddressInput
+                            id={`stop-${data.id}-${stop.id}`}
+                            placeholder={t("create.enter_stop_address")}
+                            value={stop.point}
+                            onChange={(point) => updateStop(stop.id, { point })}
+                            iconColor="#00C2A8"
+                            savedAddresses={savedAddresses}
+                          />
+                          {onPickFromMap && (
+                            <button
+                              type="button"
+                              onClick={() => onPickFromMap("stop", stop.id)}
+                              style={pickBtnStyle(
+                                picking?.field === "stop" &&
+                                  picking.stopId === stop.id,
+                              )}
+                            >
+                              <MapPin size={13} aria-hidden="true" />
+                              {picking?.field === "stop" &&
+                              picking.stopId === stop.id
+                                ? t("create.click_map")
+                                : t("create.pick_from_map")}
+                            </button>
+                          )}
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr 1fr",
+                              gap: 10,
+                              marginTop: 10,
+                            }}
+                          >
+                            <CounterField
+                              label={t("create.alighting")}
+                              value={stop.alighting}
+                              max={maxAlighting}
+                              onChange={(alighting) =>
+                                updateStop(stop.id, { alighting })
+                              }
+                              t={t}
+                            />
+                            <CounterField
+                              label={t("create.boarding")}
+                              value={stop.boarding}
+                              max={maxBoarding}
+                              onChange={(boarding) =>
+                                updateStop(stop.id, { boarding })
+                              }
+                              t={t}
+                            />
+                          </div>
+                          <div style={{ ...floatingFieldStyle, marginTop: 10 }}>
+                            <label
+                              htmlFor={`wait-${stop.id}`}
+                              style={floatingLabelStyle}
+                            >
+                              {t("create.waiting_time_label")}
+                            </label>
+                            <WaitDurationInput
+                              key={`${stop.id}-${stop.waitingMinutes}`}
+                              id={`wait-${stop.id}`}
+                              minutes={stop.waitingMinutes}
+                              onChange={(waitingMinutes) =>
+                                updateStop(stop.id, { waitingMinutes })
+                              }
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {data.stops.length < 4 && (
+                      <button
+                        type="button"
+                        onClick={addStopPoint}
+                        style={{ ...pickBtnStyle(false), marginTop: 0 }}
+                      >
+                        {t("create.add_stop_point")}
                       </button>
                     )}
+                    {stopError && (
+                      <p
+                        role="alert"
+                        style={{ ...locationErrorStyle, marginTop: 0 }}
+                      >
+                        {stopError}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <AddressInput
+                      id={`dropoff-${data.id}`}
+                      placeholder={t("create.enter_dropoff_address")}
+                      label={`${t("create.dropoff_location")} *`}
+                      value={data.dropoff}
+                      onChange={(point) => set("dropoff", point)}
+                      iconColor="#00C2A8"
+                      savedAddresses={savedAddresses}
+                    />
+                    <div className="flex flex-row gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCurrentLocation("dropoff")}
+                        disabled={locating === "dropoff"}
+                        style={pickBtnStyle(false)}
+                      >
+                        {locating === "dropoff" ? (
+                          <Loader2
+                            size={13}
+                            className="spin"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Navigation size={13} aria-hidden="true" />
+                        )}
+                        {t("create.use_current_location")}
+                      </button>
+                      {data.dropoff &&
+                        !isAlreadySaved(data.dropoff, savedAddresses) && (
+                          <SaveAddressButton
+                            point={data.dropoff}
+                            onSaved={(saved) => onAddressSaved?.(saved)}
+                          />
+                        )}
+                      {onPickFromMap && (
+                        <button
+                          type="button"
+                          onClick={() => onPickFromMap("dropoff")}
+                          style={pickBtnStyle(picking?.field === "dropoff")}
+                        >
+                          <MapPin size={13} aria-hidden="true" />
+                          {picking?.field === "dropoff"
+                            ? t("create.click_map")
+                            : t("create.pick_from_map")}
+                        </button>
+                      )}
+                      {locationError && (
+                        <div role="alert" style={locationErrorStyle}>
+                          ⚠ {locationError}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {routeLoading && (
                     <div
                       style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 10,
-                        marginTop: 10,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 13,
+                        color: "#5A6A7A",
                       }}
                     >
-                      <CounterField
-                        label={t("create.alighting")}
-                        value={stop.alighting}
-                        max={maxAlighting}
-                        onChange={(alighting) =>
-                          updateStop(stop.id, { alighting })
-                        }
-                        t={t}
-                      />
-                      <CounterField
-                        label={t("create.boarding")}
-                        value={stop.boarding}
-                        max={maxBoarding}
-                        onChange={(boarding) =>
-                          updateStop(stop.id, { boarding })
-                        }
-                        t={t}
-                      />
+                      <Loader2 size={14} className="spin" aria-hidden="true" />
+                      {t("create.calculating_route")}
                     </div>
-                    <div style={{ ...floatingFieldStyle, marginTop: 10 }}>
-                      <label
-                        htmlFor={`wait-${stop.id}`}
-                        style={floatingLabelStyle}
-                      >
-                        {t("create.waiting_time_label")}
-                      </label>
-                      <WaitDurationInput
-                        key={`${stop.id}-${stop.waitingMinutes}`}
-                        id={`wait-${stop.id}`}
-                        minutes={stop.waitingMinutes}
-                        onChange={(waitingMinutes) =>
-                          updateStop(stop.id, { waitingMinutes })
-                        }
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-              {data.stops.length < 4 && (
-                <button
-                  type="button"
-                  onClick={addStopPoint}
-                  style={{ ...pickBtnStyle(false), marginTop: 0 }}
-                >
-                  {t("create.add_stop_point")}
-                </button>
-              )}
-              {stopError && (
-                <p role="alert" style={{ ...locationErrorStyle, marginTop: 0 }}>
-                  {stopError}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <AddressInput
-                id={`dropoff-${data.id}`}
-                placeholder={t("create.enter_dropoff_address")}
-                label={`${t("create.dropoff_location")} *`}
-                value={data.dropoff}
-                onChange={(point) => set("dropoff", point)}
-                iconColor="#00C2A8"
-                savedAddresses={savedAddresses}
-              />
-              <div className="flex flex-row gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => handleCurrentLocation("dropoff")}
-                  disabled={locating === "dropoff"}
-                  style={pickBtnStyle(false)}
-                >
-                  {locating === "dropoff" ? (
-                    <Loader2 size={13} className="spin" aria-hidden="true" />
-                  ) : (
-                    <Navigation size={13} aria-hidden="true" />
                   )}
-                  {t("create.use_current_location")}
-                </button>
-                {data.dropoff &&
-                  !isAlreadySaved(data.dropoff, savedAddresses) && (
-                    <SaveAddressButton
-                      point={data.dropoff}
-                      onSaved={(saved) => onAddressSaved?.(saved)}
+                  {!routeLoading && data.distanceKm && data.durationMinutes && (
+                    <div style={routeInfoStyle}>
+                      <Info
+                        size={14}
+                        style={{ color: "#00C2A8", flexShrink: 0 }}
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {formatDistanceKm(locale, data.distanceKm)} ·{" "}
+                        {formatMinutes(locale, data.durationMinutes)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  hidden={stage !== "timing"}
+                  style={{ display: "contents" }}
+                >
+                  <div style={floatingFieldStyle}>
+                    <label
+                      htmlFor={`pickup-time-${data.id}`}
+                      style={floatingLabelStyle}
+                    >
+                      {t("create.pickup_time_label")} *
+                    </label>
+                    <input
+                      id={`pickup-time-${data.id}`}
+                      type="time"
+                      value={data.pickupTime}
+                      min={
+                        enforcePrivatePickupWindow
+                          ? MORNING_TIME_MIN
+                          : undefined
+                      }
+                      max={
+                        enforcePrivatePickupWindow
+                          ? MORNING_TIME_MAX
+                          : undefined
+                      }
+                      onChange={(event) =>
+                        handlePrivatePickupTimeChange(event.target.value)
+                      }
+                      required
+                      style={timeInputStyle}
                     />
-                  )}
-                {onPickFromMap && (
-                  <button
-                    type="button"
-                    onClick={() => onPickFromMap("dropoff")}
-                    style={pickBtnStyle(picking?.field === "dropoff")}
-                  >
-                    <MapPin size={13} aria-hidden="true" />
-                    {picking?.field === "dropoff"
-                      ? t("create.click_map")
-                      : t("create.pick_from_map")}
-                  </button>
-                )}
-                {locationError && (
-                  <div role="alert" style={locationErrorStyle}>
-                    ⚠ {locationError}
+                    {timeError && (
+                      <p
+                        role="alert"
+                        style={{
+                          fontSize: 12,
+                          color: "#e74c3c",
+                          margin: "5px 0 0",
+                        }}
+                      >
+                        ⚠ {timeError}
+                      </p>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
 
-            {routeLoading && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontSize: 13,
-                  color: "#5A6A7A",
-                }}
-              >
-                <Loader2 size={14} className="spin" aria-hidden="true" />
-                {t("create.calculating_route")}
-              </div>
+                  <div>
+                    <label style={labelStyle}>{t("latest_arrival_time")}</label>
+                    <div style={readonlyStyle} role="status">
+                      <Clock
+                        size={15}
+                        style={{ color: "#00C2A8" }}
+                        aria-hidden="true"
+                      />
+                      <span
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 700,
+                          color: data.arrivalTime ? "#0B1E3D" : "#9aa5b4",
+                        }}
+                      >
+                        {data.arrivalTime
+                          ? formatTime(locale, data.arrivalTime)
+                          : t("create.set_pickup_dropoff_first")}
+                      </span>
+                    </div>
+                    {data.stops.length > 0 && (
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: "#5A6A7A",
+                          margin: "5px 0 0",
+                        }}
+                      >
+                        {t("create.includes_waiting_time").replace(
+                          "{n}",
+                          String(
+                            data.stops.reduce(
+                              (total, stop) => total + stop.waitingMinutes,
+                              0,
+                            ),
+                          ),
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  hidden={stage !== "passengers"}
+                  style={{ display: "contents" }}
+                >
+                  <div>
+                    <label style={labelStyle}>
+                      {t("create.number_of_passengers")}
+                    </label>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 12 }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateNumberOfPassengers(
+                            Math.max(1, data.numberOfPassengers - 1),
+                          )
+                        }
+                        disabled={data.numberOfPassengers <= 1}
+                        aria-label={t("create.decrease_passengers_aria")}
+                        style={counterButtonStyle(data.numberOfPassengers <= 1)}
+                      >
+                        −
+                      </button>
+                      <span
+                        style={{
+                          fontSize: 18,
+                          fontWeight: 700,
+                          color: "#0B1E3D",
+                          minWidth: 24,
+                          textAlign: "center",
+                        }}
+                      >
+                        {data.numberOfPassengers}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateNumberOfPassengers(
+                            Math.min(
+                              vMap[data.vehicleType as VehicleKey].occupancy,
+                              data.numberOfPassengers + 1,
+                            ),
+                          )
+                        }
+                        disabled={
+                          data.numberOfPassengers >=
+                          vMap[data.vehicleType as VehicleKey].occupancy
+                        }
+                        aria-label={t("create.increase_passengers_aria")}
+                        style={counterButtonStyle(
+                          data.numberOfPassengers >=
+                            vMap[data.vehicleType as VehicleKey].occupancy,
+                        )}
+                      >
+                        +
+                      </button>
+                      <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                        {t("create.up_to_including_you").replace(
+                          "{max}",
+                          String(
+                            vMap[data.vehicleType as VehicleKey].occupancy,
+                          ),
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
-            {!routeLoading && data.distanceKm && data.durationMinutes && (
-              <div style={routeInfoStyle}>
-                <Info
-                  size={14}
-                  style={{ color: "#00C2A8", flexShrink: 0 }}
-                  aria-hidden="true"
-                />
-                <span>
-                  {formatDistanceKm(locale, data.distanceKm)} ·{" "}
-                  {formatMinutes(locale, data.durationMinutes)}
-                </span>
-              </div>
-            )}
-
-            </div>
-
-            <div hidden={stage !== "timing"} style={{ display: "contents" }}>
-            <div style={floatingFieldStyle}>
-              <label
-                htmlFor={`pickup-time-${data.id}`}
-                style={floatingLabelStyle}
-              >
-                {t("create.pickup_time_label")} *
-              </label>
-              <input
-                id={`pickup-time-${data.id}`}
-                type="time"
-                value={data.pickupTime}
-                min={enforcePrivatePickupWindow ? MORNING_TIME_MIN : undefined}
-                max={enforcePrivatePickupWindow ? MORNING_TIME_MAX : undefined}
-                onChange={(event) =>
-                  handlePrivatePickupTimeChange(event.target.value)
-                }
-                required
-                style={timeInputStyle}
-              />
-              {timeError && (
-                <p
-                  role="alert"
-                  style={{ fontSize: 12, color: "#e74c3c", margin: "5px 0 0" }}
-                >
-                  ⚠ {timeError}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label style={labelStyle}>{t("latest_arrival_time")}</label>
-              <div style={readonlyStyle} role="status">
-                <Clock
-                  size={15}
-                  style={{ color: "#00C2A8" }}
-                  aria-hidden="true"
-                />
-                <span
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 700,
-                    color: data.arrivalTime ? "#0B1E3D" : "#9aa5b4",
-                  }}
-                >
-                  {data.arrivalTime
-                    ? formatTime(locale, data.arrivalTime)
-                    : t("create.set_pickup_dropoff_first")}
-                </span>
-              </div>
-              {data.stops.length > 0 && (
-                <p
-                  style={{ fontSize: 12, color: "#5A6A7A", margin: "5px 0 0" }}
-                >
-                  {t("create.includes_waiting_time").replace(
-                    "{n}",
-                    String(
-                      data.stops.reduce(
-                        (total, stop) => total + stop.waitingMinutes,
-                        0,
-                      ),
-                    ),
-                  )}
-                </p>
-              )}
-            </div>
-
-            </div>
-
-            <div hidden={stage !== "passengers"} style={{ display: "contents" }}>
-            <div>
-              <label style={labelStyle}>
-                {t("create.number_of_passengers")}
-              </label>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateNumberOfPassengers(
-                      Math.max(1, data.numberOfPassengers - 1),
-                    )
-                  }
-                  disabled={data.numberOfPassengers <= 1}
-                  aria-label={t("create.decrease_passengers_aria")}
-                  style={counterButtonStyle(data.numberOfPassengers <= 1)}
-                >
-                  −
-                </button>
-                <span
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: "#0B1E3D",
-                    minWidth: 24,
-                    textAlign: "center",
-                  }}
-                >
-                  {data.numberOfPassengers}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateNumberOfPassengers(
-                      Math.min(
-                        vMap[data.vehicleType as VehicleKey].occupancy,
-                        data.numberOfPassengers + 1,
-                      ),
-                    )
-                  }
-                  disabled={
-                    data.numberOfPassengers >=
-                    vMap[data.vehicleType as VehicleKey].occupancy
-                  }
-                  aria-label={t("create.increase_passengers_aria")}
-                  style={counterButtonStyle(
-                    data.numberOfPassengers >=
-                      vMap[data.vehicleType as VehicleKey].occupancy,
-                  )}
-                >
-                  +
-                </button>
-                <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                  {t("create.up_to_including_you").replace(
-                    "{max}",
-                    String(vMap[data.vehicleType as VehicleKey].occupancy),
-                  )}
-                </span>
-              </div>
-            </div>
-            </div>
-          </>
-        )}
-        {afterFields}
+            {afterFields}
           </div>
         </div>
       </div>

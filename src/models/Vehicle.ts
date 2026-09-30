@@ -3,6 +3,7 @@ import { Schema, model, models, type InferSchemaType } from "mongoose";
 const VehicleRegionConfigSchema = new Schema(
   {
     regionCode: { type: String, required: true },
+    active: { type: Boolean, required: true, default: true },
     rate: { type: Number, required: true },
     additional_rate: { type: Number, required: true, default: 0 },
     buffer: { type: Number, required: true },

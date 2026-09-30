@@ -157,7 +157,9 @@ export async function POST(req: NextRequest) {
   const userRegion = activeRegion.code;
   const vehiclesMap = await getVehicles(userRegion);
   const allowedVehicleSet = new Set(
-    Object.keys(vehiclesMap),
+    Object.values(vehiclesMap)
+      .filter((vehicle) => vehicle.active !== false)
+      .map((vehicle) => vehicle.key),
   );
   const stationDocs = await Station.find({
     regionCode: userRegion,

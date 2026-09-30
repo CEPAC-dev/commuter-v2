@@ -24,7 +24,7 @@ export async function getVehicles(region?: RegionCode): Promise<Record<string, V
 
   try {
     await ensureVehicleSeed();
-    const docs = await Vehicle.find({ active: true }).lean<(VehicleConfig & { key: string })[]>();
+    const docs = await Vehicle.find({}).lean<(VehicleConfig & { key: string })[]>();
 
     const map: Record<string, VehicleConfig> = {};
     for (const d of docs) {
@@ -46,7 +46,7 @@ export async function getVehicles(region?: RegionCode): Promise<Record<string, V
         min_occupancy: scoped.min_occupancy,
         minimum_charge: scoped.minimum_charge ?? fallback?.minimum_charge ?? 0,
         regionCodes: scoped.regionCodes ?? [],
-        active: true,
+        active: scoped.active !== false,
         sortOrder: d.sortOrder ?? 0,
       };
     }

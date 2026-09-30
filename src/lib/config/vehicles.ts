@@ -28,6 +28,8 @@ export interface VehicleConfig {
 
 export interface VehicleRegionConfig {
   regionCode: string;
+  /** Regional availability. Inactive types remain visible but cannot be booked. */
+  active: boolean;
   rate: number;
   additional_rate: number;
   buffer: number;

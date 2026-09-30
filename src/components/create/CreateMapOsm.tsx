@@ -9,6 +9,7 @@ import { formatDisplayName, reverseGeocode } from "@/lib/nominatim";
 import OsmMapCanvas, { type OsmPoint } from "@/components/map/OsmMapCanvas";
 import { fitPoints, svgIcon } from "@/components/map/leafletLayers";
 import type { RegionCode, RegionConfig } from "@/lib/config/regions";
+import type { MapSettings } from "@/lib/config/mapSettings";
 
 const ROUTE_COLORS = ["#4361EE", "#F5A623", "#00C2A8"];
 const ORIGIN_ICON = svgIcon(
@@ -141,6 +142,7 @@ function isLeafletMapReady(map: L.Map | null): map is L.Map {
 interface Props {
   regionCode: RegionCode;
   mapConfig: RegionConfig["map"];
+  mapSettings: MapSettings;
   trips: TripData[];
   picking?: {
     tripId: string;
@@ -159,6 +161,7 @@ interface Props {
 export default function CreateMapOsm({
   regionCode,
   mapConfig,
+  mapSettings,
   trips,
   picking,
   onMapPick,
@@ -168,12 +171,11 @@ export default function CreateMapOsm({
   const [map, setMap] = useState<L.Map | null>(null);
   const lastFittedPointLayoutRef = useRef<string | null>(null);
   const zoneFeaturesRef = useRef<ZoneFeature[]>([]);
-  const zoneLabelLocationsRef = useRef<
-    Array<{ lat: number; lng: number; name: string }>
-  >([]);
-  const zoneLabelMarkersRef = useRef<L.Marker[]>([]);
   const pointLayoutKey = trips
-    .filter((trip) => trip.pickup || trip.dropoff || trip.stops.some((stop) => stop.point))
+    .filter(
+      (trip) =>
+        trip.pickup || trip.dropoff || trip.stops.some((stop) => stop.point),
+    )
     .map((trip) =>
       [
         trip.pickup && `${trip.pickup.lat},${trip.pickup.lng}`,
@@ -187,9 +189,8 @@ export default function CreateMapOsm({
 
   useEffect(() => {
     if (!isLeafletMapReady(map)) return;
-    if (regionCode !== "EG-CAIRO") {
+    if (regionCode !== "EG-CAIRO" || !mapSettings.showZones) {
       zoneFeaturesRef.current = [];
-      zoneLabelLocationsRef.current = [];
       return;
     }
 
@@ -197,34 +198,10 @@ export default function CreateMapOsm({
     const zoneLayer = L.layerGroup().addTo(map);
     let cancelled = false;
 
-    const refreshZoneLabels = () => {
-      if (cancelled || !isLeafletMapReady(map)) return;
-      zoneLabelMarkersRef.current.forEach((marker) => marker.remove());
-      zoneLabelMarkersRef.current = [];
-
-      const zoom = map.getZoom();
-      const labelData = zoneLabelLocationsRef.current;
-
-      labelData.forEach(({ lat, lng, name }) => {
-        const scale = Math.max(0.8, Math.min(1.4, 0.8 + (zoom - 20) * 0.12));
-        const iconSize = Math.max(90, Math.round(140 * scale));
-        const iconHeight = Math.max(24, Math.round(24 * scale));
-        const marker = L.marker([lat, lng], {
-          icon: L.divIcon({
-            className: "",
-            html: zoneLabelHtml(name, zoom),
-            iconSize: [iconSize, iconHeight],
-            iconAnchor: [iconSize / 2, iconHeight / 2],
-          }),
-          interactive: false,
-        }).addTo(zoneLayer);
-        zoneLabelMarkersRef.current.push(marker);
-      });
-    };
-
     const refreshMask = () => {
       if (cancelled || !isLeafletMapReady(map)) return;
       maskLayer.clearLayers();
+      if (!mapSettings.maskOutsideZones) return;
 
       const bounds = map.getBounds();
       const southWest = bounds.getSouthWest();
@@ -274,10 +251,8 @@ export default function CreateMapOsm({
     };
 
     refreshMask();
-    refreshZoneLabels();
     map.on("moveend", refreshMask);
     map.on("zoomend", refreshMask);
-    map.on("zoomend", refreshZoneLabels);
 
     fetch("/geo/zone_polygon.geojson")
       .then((response) => response.json())
@@ -289,43 +264,15 @@ export default function CreateMapOsm({
             feature.geometry?.type === "MultiPolygon",
         );
         zoneFeaturesRef.current = features;
-        refreshZoneLabels();
         L.geoJSON(features as unknown as Parameters<typeof L.geoJSON>[0], {
           style: {
             color: "#00C2A8",
             weight: 2,
             fillColor: "transparent",
             fillOpacity: 0,
-            // border: "4px solid #00C2A8",
           },
           interactive: false,
         }).addTo(zoneLayer);
-      })
-      .catch(() => {});
-
-    fetch("/geo/zone_centroid.geojson")
-      .then((response) => response.json())
-      .then((geojson) => {
-        if (cancelled || !isLeafletMapReady(map)) return;
-        const features = geojson.features ?? [];
-        zoneLabelLocationsRef.current = features
-          .map(
-            (feature: {
-              id?: string;
-              properties?: { NAME?: string };
-              geometry?: { coordinates?: [number, number] };
-            }) => {
-              const coords = feature.geometry?.coordinates;
-              if (!Array.isArray(coords) || coords.length < 2) return null;
-              const [lng, lat] = coords as [number, number];
-              const rawName = feature.properties?.NAME || feature.id || "Zone";
-              const match = String(feature.id || "").match(/(\d+)/);
-              const name = match ? `${match[1]} ${rawName}` : rawName;
-              return { lat, lng, name };
-            },
-          )
-          .filter(Boolean) as Array<{ lat: number; lng: number; name: string }>;
-        refreshZoneLabels();
       })
       .catch(() => {});
 
@@ -333,15 +280,11 @@ export default function CreateMapOsm({
       cancelled = true;
       map.off("moveend", refreshMask);
       map.off("zoomend", refreshMask);
-      map.off("zoomend", refreshZoneLabels);
-      zoneLabelMarkersRef.current.forEach((marker) => marker.remove());
-      zoneLabelMarkersRef.current = [];
-      zoneLabelLocationsRef.current = [];
       maskLayer.remove();
       zoneLayer.remove();
       zoneFeaturesRef.current = [];
     };
-  }, [map, regionCode]);
+  }, [map, regionCode, mapSettings.showZones, mapSettings.maskOutsideZones]);
 
   useEffect(() => {
     if (!isLeafletMapReady(map)) return;
@@ -383,7 +326,7 @@ export default function CreateMapOsm({
             allPoints.push(stop.point);
           }
         });
-      if (shared) {
+      if (shared && mapSettings.showStations) {
         trip.pickupStationOptions.forEach((station) => {
           const marker = L.marker([station.lat, station.lng], {
             icon:
@@ -454,13 +397,16 @@ export default function CreateMapOsm({
       if (!picking || !onMapPick) return;
 
       const point: [number, number] = [lng, lat];
-      if (!zoneFeaturesRef.current.length) {
+      if (mapSettings.showZones && !zoneFeaturesRef.current.length) {
         window.alert(
           "The service zones are still loading. Please try again in a moment.",
         );
         return;
       }
-      if (!isPointInAnyZone(point, zoneFeaturesRef.current)) {
+      if (
+        mapSettings.showZones &&
+        !isPointInAnyZone(point, zoneFeaturesRef.current)
+      ) {
         window.alert(
           "This location is outside the available service zones. Please choose a point inside one of the highlighted zones.",
         );
@@ -474,7 +420,7 @@ export default function CreateMapOsm({
       } catch {}
       onMapPick({ address, lat, lng });
     },
-    [picking, onMapPick],
+    [picking, onMapPick, mapSettings.showZones],
   );
 
   const active = trips.find((trip) => trip.distanceKm && trip.durationMinutes);

@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   if (region && !isRegionCode(region)) {
     return NextResponse.json({ error: "Invalid region" }, { status: 400 });
   }
-  const vehicles = await Vehicle.find({ active: true })
+  const vehicles = await Vehicle.find({})
     .sort({ sortOrder: 1 })
     .select(
       "key label rate additional_rate ride vehicle_type trip_type buffer window capacity occupancy min_occupancy minimum_charge regionCodes regionConfigs sortOrder active",

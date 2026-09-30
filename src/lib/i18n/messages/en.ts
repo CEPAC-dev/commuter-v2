@@ -573,8 +573,8 @@ export const en = {
   "create.next": "Next",
   "create.expand": "Expand",
   "create.collapse": "Collapse",
-  "create.expand_trip_aria": "Expand trip {n}",
-  "create.collapse_trip_aria": "Collapse trip {n}",
+  "create.expand_trip_aria": "Trip {n}",
+  "create.collapse_trip_aria": "Trip {n}",
   "create.step_vehicle_date_required":
     "Choose request date(s) and a vehicle type to continue.",
   "create.step_vehicle_required": "Choose a vehicle type to continue.",
@@ -968,7 +968,7 @@ export const en = {
   "hero.stats.fully_covered": "fully covered",
   "hero.stats.coverage_value": "Greater Cairo",
   "hero.stats.from": "from",
-  "hero.stats.price_value": "4 EGP",
+  "hero.stats.price_value": "4 EGP per km",
   // How it works section
   "howitworks.section_label": "How it works",
   "howitworks.heading": "Four steps to your ride",
