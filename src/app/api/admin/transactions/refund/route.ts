@@ -63,6 +63,30 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
 
+  const completedGatewayRefunds = await WalletTransaction.find({
+    paymentId: payment._id,
+    type: "payment_refund_partial",
+    status: "completed",
+  })
+    .select("kashierTransactionIds")
+    .lean<{ kashierTransactionIds?: string[] }[]>();
+  const seenRefundIds = new Set<string>();
+  const hasUnreconciledRefundLedger = completedGatewayRefunds.some((entry) => {
+    const ids = entry.kashierTransactionIds ?? [];
+    if (ids.length !== 1 || seenRefundIds.has(ids[0])) return true;
+    seenRefundIds.add(ids[0]);
+    return false;
+  });
+  if (hasUnreconciledRefundLedger) {
+    return NextResponse.json(
+      {
+        error:
+          "Existing Kashier refund records contain missing or repeated transaction IDs. Reconcile this payment against Kashier before issuing another refund.",
+      },
+      { status: 409 },
+    );
+  }
+
   const eligibleStatuses = ["submitted", "matched", "nomatch"];
   const existingTrip = await Trip.findOne({
     _id: tripId,
@@ -166,6 +190,7 @@ export async function POST(req: NextRequest) {
   const walletRemaining = Math.max(0, walletCaptured - walletAlreadyRefunded);
   const walletRefundEgp = Math.min(amountEgp, walletRemaining);
   const gatewayRefundEgp = amountEgp - walletRefundEgp;
+  const previouslyRecordedRefundIds = new Set(payment.kashierRefundIds ?? []);
 
   const timelineEvents: { event: string; detail?: string }[] = [
     {
@@ -203,6 +228,7 @@ export async function POST(req: NextRequest) {
   let kashierRefundId: string | null = null;
   let gatewayRefundFailed = false;
   let gatewayRefundPending = false;
+  let gatewayRefundDuplicate = false;
   let gatewayRefundRetrySafe = false;
   if (gatewayRefundEgp > 0) {
     const kashierOrderId = await resolveKashierRefundOrderId(
@@ -218,7 +244,21 @@ export async function POST(req: NextRequest) {
         gatewayRefundEgp,
         reason,
       );
-      if (result.status === "succeeded") {
+      if (
+        result.status === "succeeded" &&
+        (!result.refundId || previouslyRecordedRefundIds.has(result.refundId))
+      ) {
+        gatewayRefundPending = true;
+        gatewayRefundDuplicate = Boolean(result.refundId);
+        timelineEvents.push({
+          event: result.refundId
+            ? "kashier_refund_duplicate_reference"
+            : "kashier_refund_unconfirmed",
+          detail: result.refundId
+            ? `${gatewayRefundEgp} EGP — Kashier returned already-recorded ref ${result.refundId}; verify before retrying`
+            : `${gatewayRefundEgp} EGP — Kashier did not provide a refund reference; verify before retrying`,
+        });
+      } else if (result.status === "succeeded") {
         kashierRefundId = result.refundId;
         await WalletTransaction.create({
           userId: payment.userId,
@@ -365,7 +405,7 @@ export async function POST(req: NextRequest) {
       ? "Trip refund needs review"
       : "Trip refund completed";
   const outcomeBody = gatewayRefundPending
-    ? `${tripLabel} on ${trip.date}, ${pickupAddress} to ${dropoffAddress}. Trip status remains ${trip.status}. Confirmed refund: ${refundTotalEgp} EGP (wallet ${previousRefundEgp + walletRefundEgp}, Kashier ${confirmedGatewayRefundEgp}); compensation: ${compensationTotalEgp} EGP. Kashier is still confirming the remaining amount. ${reason ? `Reason: ${reason}` : ""}`
+    ? `${tripLabel} on ${trip.date}, ${pickupAddress} to ${dropoffAddress}. Trip status remains ${trip.status}. Confirmed refund: ${refundTotalEgp} EGP (wallet ${previousRefundEgp + walletRefundEgp}, Kashier ${confirmedGatewayRefundEgp}); compensation: ${compensationTotalEgp} EGP. ${gatewayRefundDuplicate ? "Kashier returned a refund reference already recorded; verify with Kashier before retrying." : "Kashier is still confirming the remaining amount."} ${reason ? `Reason: ${reason}` : ""}`
     : gatewayRefundFailed
       ? `${tripLabel} on ${trip.date}, ${pickupAddress} to ${dropoffAddress}. Trip status remains ${trip.status}. Confirmed refund: ${refundTotalEgp} EGP (wallet ${previousRefundEgp + walletRefundEgp}, Kashier ${confirmedGatewayRefundEgp}); compensation: ${compensationTotalEgp} EGP. The Kashier portion needs review. ${reason ? `Reason: ${reason}` : ""}`
       : `${tripLabel} on ${trip.date}, ${pickupAddress} to ${dropoffAddress} is now refunded. Refund: ${refundTotalEgp} EGP (wallet ${previousRefundEgp + walletRefundEgp}, Kashier ${confirmedGatewayRefundEgp}); compensation: ${compensationTotalEgp} EGP; total returned: ${totalReturnEgp} EGP. ${reason ? `Reason: ${reason}` : ""}`;
@@ -375,7 +415,7 @@ export async function POST(req: NextRequest) {
       ? "استرداد الرحلة يحتاج إلى مراجعة"
       : "تم استرداد قيمة الرحلة";
   const outcomeBodyAr = gatewayRefundPending
-    ? `${tripLabel} بتاريخ ${trip.date} من ${pickupAddress} إلى ${dropoffAddress}. المبلغ المؤكد استرداده: ${refundTotalEgp} ج.م (المحفظة ${previousRefundEgp + walletRefundEgp}، كاشير ${confirmedGatewayRefundEgp})؛ التعويض: ${compensationTotalEgp} ج.م. ما زلنا نتحقق من الجزء المتبقي عبر كاشير.`
+    ? `${tripLabel} بتاريخ ${trip.date} من ${pickupAddress} إلى ${dropoffAddress}. المبلغ المؤكد استرداده: ${refundTotalEgp} ج.م (المحفظة ${previousRefundEgp + walletRefundEgp}، كاشير ${confirmedGatewayRefundEgp})؛ التعويض: ${compensationTotalEgp} ج.م. ${gatewayRefundDuplicate ? "أعادت كاشير رقم استرداد مسجلاً من قبل؛ يرجى التحقق من كاشير قبل إعادة المحاولة." : "ما زلنا نتحقق من الجزء المتبقي عبر كاشير."}`
     : gatewayRefundFailed
       ? `${tripLabel} بتاريخ ${trip.date} من ${pickupAddress} إلى ${dropoffAddress}. المبلغ المؤكد استرداده: ${refundTotalEgp} ج.م (المحفظة ${previousRefundEgp + walletRefundEgp}، كاشير ${confirmedGatewayRefundEgp})؛ التعويض: ${compensationTotalEgp} ج.م. الجزء الخاص بكاشير يحتاج إلى مراجعة.`
       : `تم استرداد قيمة ${tripLabel} بتاريخ ${trip.date} من ${pickupAddress} إلى ${dropoffAddress}. المبلغ المسترد: ${refundTotalEgp} ج.م (المحفظة ${previousRefundEgp + walletRefundEgp}، كاشير ${confirmedGatewayRefundEgp})؛ التعويض: ${compensationTotalEgp} ج.م؛ إجمالي المبلغ المعاد: ${totalReturnEgp} ج.م.`;
@@ -400,6 +440,7 @@ export async function POST(req: NextRequest) {
           : gatewayRefundFailed
             ? "needs_review"
             : "completed",
+        duplicateGatewayRefundReference: gatewayRefundDuplicate,
         refundedAmountEgp: refundTotalEgp,
         compensationAmountEgp: compensationTotalEgp,
         totalReturnEgp,
@@ -423,6 +464,7 @@ export async function POST(req: NextRequest) {
     compensationAmountEgp: creditedCompensationEgp,
     gatewayRefundFailed,
     gatewayRefundPending,
+    gatewayRefundDuplicate,
     kashierRefundId,
     overallStatus: update.overallStatus,
   });
