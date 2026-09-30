@@ -566,8 +566,8 @@ export const ar: Record<MessageKey, string> = {
   "create.next": "التالي",
   "create.expand": "توسيع",
   "create.collapse": "طي",
-  "create.expand_trip_aria": "توسيع الرحلة {n}",
-  "create.collapse_trip_aria": "طي الرحلة {n}",
+  "create.expand_trip_aria": "الرحلة {n}",
+  "create.collapse_trip_aria": "الرحلة {n}",
   "create.step_vehicle_date_required":
     "اختر تاريخ الطلب ونوع المركبة للمتابعة.",
   "create.step_vehicle_required": "اختر نوع المركبة للمتابعة.",

@@ -16,6 +16,19 @@ export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id")?.trim();
   if (!id) return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
+  if (req.nextUrl.searchParams.get("provider") === "google") {
+    const key = process.env.GOOGLE_MAPS_API_KEY;
+    if (!key) return NextResponse.json({ error: "Google Maps is not configured" }, { status: 503 });
+    const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(id)}`, {
+      headers: { "X-Goog-Api-Key": key, "X-Goog-FieldMask": "location" },
+      cache: "no-store",
+    });
+    if (!response.ok) return NextResponse.json({ error: "upstream" }, { status: 502 });
+    const data = await response.json() as { location?: { latitude?: number; longitude?: number } };
+    if (!Number.isFinite(data.location?.latitude) || !Number.isFinite(data.location?.longitude)) return NextResponse.json({ error: "not found" }, { status: 404 });
+    return NextResponse.json({ lat: data.location!.latitude, lng: data.location!.longitude });
+  }
+
   const directCoordinates = parseLatLng(id);
   if (directCoordinates) {
     return NextResponse.json(directCoordinates);

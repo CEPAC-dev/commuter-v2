@@ -11,7 +11,7 @@ export function vehicleForRegion(
   if (!regional && !vehicle.regionCodes?.includes(region)) return null;
   return {
     ...vehicle,
-    ...(regional ?? {}),
+    ...(regional ?? { active: vehicle.active !== false }),
     regionCodes: [region],
     currencyCode: getCurrencyConfig(region).code,
   };

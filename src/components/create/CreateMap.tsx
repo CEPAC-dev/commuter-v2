@@ -66,14 +66,6 @@ interface Props {
   onCancelPick?: () => void;
 }
 
-interface ZoneLabel {
-  id: string;
-  no: number;
-  name: string;
-  lat: number;
-  lng: number;
-}
-
 export default function CreateMap({
   regionCode,
   mapConfig,
@@ -88,44 +80,6 @@ export default function CreateMap({
   const zoneLayerRef = useRef<GeoJSON | null>(null);
   const [leafletReady, setLeafletReady] = useState(false);
   const [zoom, setZoom] = useState(11);
-  const [zoneLabels, setZoneLabels] = useState<ZoneLabel[]>([]);
-
-  useEffect(() => {
-    if (regionCode !== "EG-CAIRO") {
-      setZoneLabels([]);
-      return;
-    }
-    let cancelled = false;
-    fetch("/geo/zone_centroid.geojson")
-      .then((r) => r.json())
-      .then((fc) => {
-        if (cancelled) return;
-        const labels: ZoneLabel[] = fc.features.map(
-          (feature: {
-            id: unknown;
-            properties?: { NO?: number; NAME?: string };
-            geometry: { coordinates: [number, number] };
-          }) => {
-            const idStr = String(feature.id);
-            const noMatch = idStr.match(/\d+/);
-            return {
-              id: String(feature.id),
-              no:
-                feature.properties?.NO ??
-                (noMatch ? parseInt(noMatch[0], 10) : 0),
-              name: feature.properties?.NAME ?? "",
-              lat: feature.geometry.coordinates[1],
-              lng: feature.geometry.coordinates[0],
-            };
-          },
-        );
-        setZoneLabels(labels);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [regionCode]);
 
   const allPoints = useMemo(() => {
     const points: Array<{ lat: number; lng: number }> = [];
@@ -231,18 +185,6 @@ export default function CreateMap({
       if (disposed || !layersRef.current) return;
       const layers = layersRef.current;
       layers.clearLayers();
-
-      zoneLabels.forEach((label) => {
-        const icon = L.divIcon({
-          className: "",
-          html: `<div style="font-size:11px;font-weight:600;color:#0B1E3D;white-space:nowrap;text-shadow:0 1px 2px rgba(255,255,255,0.8)">${label.name ? `${label.no} ${label.name}` : `Zone ${label.no}`}</div>`,
-          iconSize: [72, 16],
-          iconAnchor: [36, 8],
-        });
-        L.marker([label.lat, label.lng], { icon, interactive: false }).addTo(
-          layers,
-        );
-      });
 
       trips.forEach((trip, index) => {
         const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
@@ -371,7 +313,7 @@ export default function CreateMap({
     return () => {
       disposed = true;
     };
-  }, [trips, zoneLabels]);
+  }, [trips]);
 
   useEffect(() => {
     if (!mapRef.current) return;

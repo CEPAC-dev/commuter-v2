@@ -53,6 +53,7 @@ const sections = [
     icon: MapPinned,
     statKey: null,
   },
+  { href: "/admin/maps", label: "Maps", icon: MapPinned, statKey: null },
   { href: "/admin/rides", label: "Rides", icon: Car, statKey: "rides" },
   { href: "/admin/vehicles", label: "Vehicles", icon: CarFront, statKey: null },
   {

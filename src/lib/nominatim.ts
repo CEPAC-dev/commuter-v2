@@ -5,10 +5,10 @@ export interface NominatimResult {
   display_name: string; // Full description e.g. "Tahrir Square, Cairo, Egypt"
 }
 
-export async function searchAddress(query: string): Promise<NominatimResult[]> {
+export async function searchAddress(query: string, provider: "google" | "osm" = "osm"): Promise<NominatimResult[]> {
   if (!query || query.length < 3) return [];
   try {
-    const res = await fetch(`/api/places/autocomplete?q=${encodeURIComponent(query)}`);
+    const res = await fetch(`/api/places/autocomplete?q=${encodeURIComponent(query)}&provider=${provider}`);
     if (!res.ok) return [];
     return res.json();
   } catch {
@@ -21,15 +21,15 @@ export function formatDisplayName(displayName: string): string {
   return displayName.replace(/, (Egypt|مصر)$/, '').trim();
 }
 
-export async function getPlaceDetails(placeId: string): Promise<{ lat: number; lng: number }> {
-  const res = await fetch(`/api/places/details?id=${encodeURIComponent(placeId)}`);
+export async function getPlaceDetails(placeId: string, provider: "google" | "osm" = "osm"): Promise<{ lat: number; lng: number }> {
+  const res = await fetch(`/api/places/details?id=${encodeURIComponent(placeId)}&provider=${provider}`);
   if (!res.ok) throw new Error('Place details fetch failed');
   return res.json();
 }
 
-export async function reverseGeocode(lat: number, lng: number): Promise<string> {
+export async function reverseGeocode(lat: number, lng: number, provider: "google" | "osm" = "osm"): Promise<string> {
   try {
-    const res = await fetch(`/api/geocode/reverse?lat=${lat}&lng=${lng}`);
+    const res = await fetch(`/api/geocode/reverse?lat=${lat}&lng=${lng}&provider=${provider}`);
     if (!res.ok) throw new Error();
     const data = await res.json();
     return data.address ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`;

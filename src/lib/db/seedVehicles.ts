@@ -18,7 +18,7 @@ export async function ensureVehicleSeed() {
           $setOnInsert: {
             ...vehicle,
             regionCodes: regions === "all" ? [...REGION_CODES] : (regions ?? []),
-            regionConfigs: (regions === "all" ? REGION_CODES : (regions ?? [])).map((regionCode) => ({ ...vehicle, regionCode, sortOrder })),
+            regionConfigs: (regions === "all" ? REGION_CODES : (regions ?? [])).map((regionCode) => ({ ...vehicle, regionCode, active: true, sortOrder })),
             sortOrder,
             active: true,
           },
@@ -36,6 +36,6 @@ export async function ensureVehicleSeed() {
   const legacyVehicles = await Vehicle.find({ $or: [{ regionConfigs: { $exists: false } }, { regionConfigs: { $size: 0 } }] }).lean();
   await Promise.all(legacyVehicles.map((vehicle) => {
     const regions = vehicle.regionCodes ?? [];
-    return Vehicle.updateOne({ _id: vehicle._id }, { $set: { regionConfigs: regions.map((regionCode: string) => ({ regionCode, rate: vehicle.rate, additional_rate: vehicle.additional_rate ?? 0, buffer: vehicle.buffer, window: vehicle.window, capacity: vehicle.capacity, occupancy: vehicle.occupancy, min_occupancy: vehicle.min_occupancy, minimum_charge: vehicle.minimum_charge ?? 0, vehicle_type: vehicle.vehicle_type ?? 0, trip_type: vehicle.trip_type ?? 0, sortOrder: vehicle.sortOrder ?? 0 })) } });
+    return Vehicle.updateOne({ _id: vehicle._id }, { $set: { regionConfigs: regions.map((regionCode: string) => ({ regionCode, active: vehicle.active !== false, rate: vehicle.rate, additional_rate: vehicle.additional_rate ?? 0, buffer: vehicle.buffer, window: vehicle.window, capacity: vehicle.capacity, occupancy: vehicle.occupancy, min_occupancy: vehicle.min_occupancy, minimum_charge: vehicle.minimum_charge ?? 0, vehicle_type: vehicle.vehicle_type ?? 0, trip_type: vehicle.trip_type ?? 0, sortOrder: vehicle.sortOrder ?? 0 })) } });
   }));
 }
