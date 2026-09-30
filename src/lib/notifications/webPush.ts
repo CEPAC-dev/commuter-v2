@@ -4,25 +4,35 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Notification } from "@/models/Notification";
 import { PushSubscription } from "@/models/PushSubscription";
 
-let configured = false;
+let configurationState: "unchecked" | "valid" | "invalid" = "unchecked";
 
 function configureWebPush() {
+  if (configurationState === "valid") return true;
+  if (configurationState === "invalid") return false;
+
   const publicKey = process.env.VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (!publicKey || !privateKey) return false;
-  if (!configured) {
+  try {
     webPush.setVapidDetails(
-      process.env.VAPID_SUBJECT || "mailto:support@commuter.app",
+      process.env.VAPID_SUBJECT || "mailto:support@commuter.site",
       publicKey,
       privateKey,
     );
-    configured = true;
+    configurationState = "valid";
+    return true;
+  } catch (error) {
+    configurationState = "invalid";
+    console.error(
+      "Web Push is disabled because VAPID configuration is invalid. Check VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.",
+      error instanceof Error ? error.message : error,
+    );
+    return false;
   }
-  return true;
 }
 
 export function getVapidPublicKey() {
-  return process.env.VAPID_PUBLIC_KEY ?? null;
+  return configureWebPush() ? (process.env.VAPID_PUBLIC_KEY ?? null) : null;
 }
 
 export async function sendPushPayloadToUser(
