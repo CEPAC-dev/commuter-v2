@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Check, CheckCheck, ChevronRight } from "lucide-react";
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  ChevronRight,
+  Smartphone,
+} from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import {
   getNotifications,
@@ -14,6 +20,18 @@ import {
 import { useClientLocale } from "@/lib/i18n/client";
 
 const POLL_INTERVAL_MS = 30_000;
+type PushState = "checking" | "enabled" | "disabled" | "unsupported" | "denied";
+
+function decodeVapidKey(value: string): ArrayBuffer {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) {
+    bytes[index] = raw.charCodeAt(index);
+  }
+  return bytes.buffer;
+}
 
 function notificationHref(notification: NotificationItem): string {
   const linkUrl = notification.data.linkUrl;
@@ -78,6 +96,7 @@ export default function NotificationCenter({
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pushState, setPushState] = useState<PushState>("checking");
   const arabic = dir === "rtl";
 
   function displayTitle(notification: NotificationItem) {
@@ -119,8 +138,16 @@ export default function NotificationCenter({
         }
 
         const latest = newItems[newItems.length - 1];
+        const serviceWorkerRegistration =
+          "serviceWorker" in navigator
+            ? await navigator.serviceWorker.getRegistration("/")
+            : undefined;
+        const hasPushSubscription = Boolean(
+          await serviceWorkerRegistration?.pushManager.getSubscription(),
+        );
         if (
           latest &&
+          !hasPushSubscription &&
           document.visibilityState !== "visible" &&
           "Notification" in window &&
           window.Notification.permission === "granted"
@@ -161,6 +188,42 @@ export default function NotificationCenter({
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    async function checkPushState() {
+      if (
+        !("serviceWorker" in navigator) ||
+        !("PushManager" in window) ||
+        !("Notification" in window)
+      ) {
+        if (!cancelled) setPushState("unsupported");
+        return;
+      }
+      if (window.Notification.permission === "denied") {
+        if (!cancelled) setPushState("denied");
+        return;
+      }
+      try {
+        const registration = await navigator.serviceWorker.getRegistration("/");
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription) {
+          await fetch("/api/push/subscriptions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subscription: subscription.toJSON() }),
+          });
+        }
+        if (!cancelled) setPushState(subscription ? "enabled" : "disabled");
+      } catch {
+        if (!cancelled) setPushState("unsupported");
+      }
+    }
+    void checkPushState();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
       if (
         containerRef.current &&
@@ -188,11 +251,69 @@ export default function NotificationCenter({
     if (!nextOpen) return;
 
     await loadNotifications(false);
-    if (
-      "Notification" in window &&
-      window.Notification.permission === "default"
-    ) {
-      await window.Notification.requestPermission();
+  }
+
+  async function togglePushNotifications() {
+    if (pushState === "unsupported" || pushState === "checking") return;
+    try {
+      const registration =
+        (await navigator.serviceWorker.getRegistration("/")) ??
+        (await navigator.serviceWorker.register("/service-worker.js", {
+          scope: "/",
+        }));
+      let subscription = await registration.pushManager.getSubscription();
+
+      if (subscription) {
+        const deleteResponse = await fetch("/api/push/subscriptions", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
+        });
+        if (!deleteResponse.ok)
+          throw new Error(t("notifications.push_setup_error"));
+        await subscription.unsubscribe();
+        setPushState("disabled");
+        toast.success(t("notifications.push_disabled"));
+        return;
+      }
+
+      const keyResponse = await fetch("/api/push/vapid-public-key", {
+        cache: "no-store",
+      });
+      const keyResult = await keyResponse.json();
+      if (!keyResponse.ok || typeof keyResult.publicKey !== "string") {
+        throw new Error(
+          keyResult.error ?? "Push notifications are not configured.",
+        );
+      }
+
+      const permission = await window.Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushState(permission === "denied" ? "denied" : "disabled");
+        toast.error(t("notifications.push_permission_required"));
+        return;
+      }
+
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: decodeVapidKey(keyResult.publicKey),
+      });
+      const saveResponse = await fetch("/api/push/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
+      });
+      if (!saveResponse.ok)
+        throw new Error(t("notifications.push_setup_error"));
+      setPushState("enabled");
+      toast.success(t("notifications.push_enabled"));
+    } catch (error) {
+      console.error("Could not configure push notifications:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("notifications.push_setup_error"),
+      );
     }
   }
 
@@ -297,6 +418,27 @@ export default function NotificationCenter({
               </button>
             )}
           </div>
+          <button
+            type="button"
+            className="notification-push-toggle"
+            onClick={() => void togglePushNotifications()}
+            disabled={
+              pushState === "checking" ||
+              pushState === "unsupported" ||
+              pushState === "denied"
+            }
+          >
+            <Smartphone size={15} aria-hidden="true" />
+            {pushState === "checking"
+              ? t("notifications.push_checking")
+              : pushState === "enabled"
+                ? t("notifications.push_disable")
+                : pushState === "denied"
+                  ? t("notifications.push_denied")
+                  : pushState === "unsupported"
+                    ? t("notifications.push_unsupported")
+                    : t("notifications.push_enable")}
+          </button>
 
           <div className="notification-popover-list">
             {loading ? (
@@ -384,6 +526,9 @@ export default function NotificationCenter({
         .notification-popover-header strong { font-size: 16px; }
         .notification-popover-header span { color: #5A6A7A; font-size: 12px; }
         .notification-popover-header button { border: 0; background: transparent; color: #00806E; display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; padding: 7px; }
+        .notification-push-toggle { width:100%; min-height:40px; padding:8px 14px; display:flex; align-items:center; gap:8px; border:0; border-bottom:1px solid #EEF1F4; background:#F6FAF9; color:#0B1E3D; font:inherit; font-size:12px; font-weight:700; text-align:left; cursor:pointer; }
+        .notification-push-toggle:hover:not(:disabled) { color:#00806E; background:#EAF8F5; }
+        .notification-push-toggle:disabled { color:#8896A5; cursor:not-allowed; }
         .notification-popover-list { min-height: 86px; }
         .notification-popover-item { position: relative; border-bottom: 1px solid #EEF1F4; opacity: 0; animation: notification-item-in .22s ease-out forwards; }
         .notification-popover-item.is-unread { background: #F1FCF9; }

@@ -1,10 +1,8 @@
-import { connectDB } from "@/lib/db/mongoose";
-import { Notification } from "@/models/Notification";
+import { createNotification } from "@/lib/notifications/createNotification";
 
 export async function createWelcomeNotification(userId: string) {
   try {
-    await connectDB();
-    await Notification.create({
+    await createNotification({
       userId,
       type: "admin_broadcast",
       title: "Welcome to Commuter",

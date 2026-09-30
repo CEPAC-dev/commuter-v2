@@ -12,6 +12,12 @@ export const metadata: Metadata = {
   description:
     "Book affordable private and shared rides across Greater Cairo, Egypt. Plan your trip, choose your vehicle, and travel with confidence.",
   applicationName: "Commuter",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Commuter",
+    statusBarStyle: "default",
+  },
   keywords: [
     "Cairo ride booking",
     "Greater Cairo transportation",

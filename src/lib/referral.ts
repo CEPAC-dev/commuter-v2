@@ -9,6 +9,7 @@ import {
 import { ReferralUsage } from "@/models/ReferralUsage";
 import { Notification } from "@/models/Notification";
 import { notifyAdminsOfAdminCampaignClaim } from "@/lib/notifications/adminActivity";
+import { sendPushToUserNotification } from "@/lib/notifications/webPush";
 import { User } from "@/models/User";
 import { Wallet } from "@/models/Wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
@@ -205,7 +206,9 @@ export async function applyReferralOnSignup(
       success: false,
       message: "Referral failed.",
     };
+    let pushNotificationIds: string[] = [];
     await session.withTransaction(async () => {
+      pushNotificationIds = [];
       // Serialize referrals for this code so concurrent transactions cannot share a stale count.
       const lockedReferrer = await User.findOneAndUpdate(
         { _id: referrer._id },
@@ -291,7 +294,7 @@ export async function applyReferralOnSignup(
       );
 
       // 5. Create Notifications for both users
-      await Notification.create(
+      const createdNotifications = await Notification.create(
         [
           {
             userId: referrer._id,
@@ -318,6 +321,9 @@ export async function applyReferralOnSignup(
         ],
         { session, ordered: true },
       );
+      pushNotificationIds = createdNotifications.map((item) =>
+        String(item._id),
+      );
 
       await ReferralAuditLog.create(
         [
@@ -342,6 +348,7 @@ export async function applyReferralOnSignup(
 
       result = { success: true, message: "Referral applied successfully." };
     });
+    await Promise.all(pushNotificationIds.map(sendPushToUserNotification));
     return result;
   } catch (error) {
     const message = (error as { message?: string }).message;
@@ -383,7 +390,9 @@ async function applyAdminReferralOnSignup(
       success: false,
       message: "Referral failed.",
     };
+    let pushNotificationIds: string[] = [];
     await session.withTransaction(async () => {
+      pushNotificationIds = [];
       const recipient = await User.findOneAndUpdate(
         { _id: referredUserId, referredBy: null, referralClaimedAt: null },
         {
@@ -430,7 +439,7 @@ async function applyAdminReferralOnSignup(
         "Admin referral welcome bonus",
         { adminReferralUsageId: usage[0]._id },
       );
-      await Notification.create(
+      const createdNotifications = await Notification.create(
         [
           {
             userId: referredUserId,
@@ -445,6 +454,9 @@ async function applyAdminReferralOnSignup(
           },
         ],
         { session, ordered: true },
+      );
+      pushNotificationIds = createdNotifications.map((item) =>
+        String(item._id),
       );
 
       const creator = await User.findById(campaign.createdBy)
@@ -477,6 +489,7 @@ async function applyAdminReferralOnSignup(
       }
       result = { success: true, message: "Referral applied successfully." };
     });
+    await Promise.all(pushNotificationIds.map(sendPushToUserNotification));
     if (result.success) {
       try {
         await notifyAdminsOfAdminCampaignClaim(String(referredUserId));
@@ -563,8 +576,10 @@ export async function reconcileReferralUsage(
       refereeNewBalance: 0,
       status: "pending",
     };
+    let pushNotificationIds: string[] = [];
 
     await session.withTransaction(async () => {
+      pushNotificationIds = [];
       const updatedUsage = await ReferralUsage.findOneAndUpdate(
         { _id: usage._id, status: "pending" },
         { $set: { status: "credited", creditedAt: new Date() } },
@@ -628,7 +643,7 @@ export async function reconcileReferralUsage(
         { session, ordered: true },
       );
 
-      await Notification.create(
+      const createdNotifications = await Notification.create(
         [
           {
             userId: usage.referrer,
@@ -655,6 +670,9 @@ export async function reconcileReferralUsage(
         ],
         { session, ordered: true },
       );
+      pushNotificationIds = createdNotifications.map((item) =>
+        String(item._id),
+      );
 
       result = {
         success: true,
@@ -664,6 +682,8 @@ export async function reconcileReferralUsage(
         status: "credited",
       };
     });
+
+    await Promise.all(pushNotificationIds.map(sendPushToUserNotification));
 
     return result;
   } catch (error: unknown) {
