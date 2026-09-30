@@ -16,6 +16,9 @@ import { Types } from "mongoose";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+const REFUND_COOLDOWN_MS = 60_000;
+const REFUND_LOCK_STALE_MS = 5 * 60_000;
+
 /**
  * Issue a refund against a paid Payment. Wallet portion is refunded first
  * (creating a NEW `refund` ledger row), then Kashier is called for the
@@ -88,10 +91,85 @@ export async function POST(req: NextRequest) {
   }
 
   const eligibleStatuses = ["submitted", "matched", "nomatch"];
-  const existingTrip = await Trip.findOne({
+  const tripRefundFilter = {
     _id: tripId,
     requestId: payment.bookingId,
-  }).select("adminRefund");
+    status: { $in: eligibleStatuses },
+    $or: [
+      { adminRefund: null },
+      { "adminRefund.status": "failed", "adminRefund.retryAllowed": true },
+    ],
+    "cancellation.refundStatus": { $nin: ["pending", "approved"] },
+  };
+  const existingTrip =
+    await Trip.findOne(tripRefundFilter).select("adminRefund");
+  if (!existingTrip)
+    return NextResponse.json(
+      {
+        error:
+          "Trip is not refundable. It must be submitted, matched, or nomatch, and not already refunded successfully.",
+      },
+      { status: 409 },
+    );
+
+  const now = new Date();
+  const lastRefundAttemptAt = payment.lastRefundAttemptAt?.getTime();
+  if (
+    lastRefundAttemptAt &&
+    now.getTime() - lastRefundAttemptAt < REFUND_COOLDOWN_MS
+  ) {
+    const retryAfterSeconds = Math.ceil(
+      (REFUND_COOLDOWN_MS - (now.getTime() - lastRefundAttemptAt)) / 1000,
+    );
+    return NextResponse.json(
+      {
+        error: `Please wait ${retryAfterSeconds} seconds before refunding another trip on this payment.`,
+        retryAfterSeconds,
+      },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+    );
+  }
+
+  const refundLockToken = new Types.ObjectId().toString();
+  const cooldownCutoff = new Date(now.getTime() - REFUND_COOLDOWN_MS);
+  const staleLockCutoff = new Date(now.getTime() - REFUND_LOCK_STALE_MS);
+  const acquiredLock = await Payment.findOneAndUpdate(
+    {
+      _id: payment._id,
+      $and: [
+        {
+          $or: [
+            { refundLock: null },
+            { refundLock: { $exists: false } },
+            { "refundLock.acquiredAt": { $lte: staleLockCutoff } },
+          ],
+        },
+        {
+          $or: [
+            { lastRefundAttemptAt: null },
+            { lastRefundAttemptAt: { $exists: false } },
+            { lastRefundAttemptAt: { $lte: cooldownCutoff } },
+          ],
+        },
+      ],
+    },
+    {
+      $set: {
+        refundLock: { token: refundLockToken, acquiredAt: now },
+        lastRefundAttemptAt: now,
+      },
+    },
+    { returnDocument: "after" },
+  );
+  if (!acquiredLock)
+    return NextResponse.json(
+      {
+        error:
+          "Another refund was just started for this payment. Please wait before retrying.",
+      },
+      { status: 409 },
+    );
+
   const previousAdminRefund = existingTrip?.adminRefund as
     | {
         status?: string;
@@ -102,16 +180,7 @@ export async function POST(req: NextRequest) {
     | null
     | undefined;
   const trip = await Trip.findOneAndUpdate(
-    {
-      _id: tripId,
-      requestId: payment.bookingId,
-      status: { $in: eligibleStatuses },
-      $or: [
-        { adminRefund: null },
-        { "adminRefund.status": "failed", "adminRefund.retryAllowed": true },
-      ],
-      "cancellation.refundStatus": { $nin: ["pending", "approved"] },
-    },
+    tripRefundFilter,
     {
       $set: {
         adminRefund: {
@@ -129,7 +198,11 @@ export async function POST(req: NextRequest) {
     },
     { returnDocument: "after" },
   );
-  if (!trip)
+  if (!trip) {
+    await Payment.updateOne(
+      { _id: payment._id, "refundLock.token": refundLockToken },
+      { $unset: { refundLock: 1 } },
+    );
     return NextResponse.json(
       {
         error:
@@ -137,6 +210,7 @@ export async function POST(req: NextRequest) {
       },
       { status: 409 },
     );
+  }
 
   const isBaseRefundEligible = ["submitted", "matched", "nomatch"].includes(
     trip.status,
@@ -172,6 +246,10 @@ export async function POST(req: NextRequest) {
             "Payment has insufficient refundable balance",
         },
       },
+    );
+    await Payment.updateOne(
+      { _id: payment._id, "refundLock.token": refundLockToken },
+      { $unset: { refundLock: 1 } },
     );
     return NextResponse.json(
       {
@@ -358,7 +436,9 @@ export async function POST(req: NextRequest) {
     {
       $set: {
         "adminRefund.status": gatewayRefundPending
-          ? "processing"
+          ? gatewayRefundDuplicate
+            ? "failed"
+            : "processing"
           : gatewayRefundFailed
             ? "failed"
             : "completed",
@@ -381,11 +461,13 @@ export async function POST(req: NextRequest) {
             }
           : gatewayRefundPending
             ? {
-                "adminRefund.failureReason":
-                  "Kashier refund outcome is unconfirmed; verify before retrying",
+                "adminRefund.failureReason": gatewayRefundDuplicate
+                  ? "Kashier repeated an existing refund reference; retry after the payment cooldown"
+                  : "Kashier refund outcome is unconfirmed; verify before retrying",
               }
             : { paymentStatus: "refunded" }),
-        "adminRefund.retryAllowed": gatewayRefundRetrySafe,
+        "adminRefund.retryAllowed":
+          gatewayRefundRetrySafe || gatewayRefundDuplicate,
       },
     },
   );
@@ -455,6 +537,11 @@ export async function POST(req: NextRequest) {
       error,
     });
   }
+
+  await Payment.updateOne(
+    { _id: payment._id, "refundLock.token": refundLockToken },
+    { $unset: { refundLock: 1 } },
+  );
 
   return NextResponse.json({
     ok: true,
