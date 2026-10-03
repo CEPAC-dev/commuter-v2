@@ -74,6 +74,7 @@ const WalletTransactionSchema = new Schema(
     kashierSessionId: { type: String },
     kashierOrderId: { type: String },
     kashierTransactionIds: { type: [String], default: [] },
+    kashierRefundId: { type: String },
     kashierPayoutId: { type: String },
 
     // ── Withdrawal destination (masked for display) ──
@@ -96,6 +97,13 @@ WalletTransactionSchema.index({ createdAt: -1 });
 WalletTransactionSchema.index({ type: 1, status: 1, createdAt: -1 });
 WalletTransactionSchema.index({ userId: 1, createdAt: -1 });
 WalletTransactionSchema.index({ kashierOrderId: 1 });
+WalletTransactionSchema.index(
+  { kashierRefundId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { kashierRefundId: { $type: "string" } },
+  },
+);
 
 WalletTransactionSchema.pre(
   [
@@ -115,6 +123,15 @@ WalletTransactionSchema.pre(
 export type WalletTransactionDoc = InferSchemaType<
   typeof WalletTransactionSchema
 >;
+const existingWalletTransactionModel = models.WalletTransaction;
+if (
+  existingWalletTransactionModel &&
+  !existingWalletTransactionModel.schema.path("kashierRefundId")
+) {
+  existingWalletTransactionModel.schema.add({
+    kashierRefundId: { type: String },
+  });
+}
 export const WalletTransaction =
-  models.WalletTransaction ||
+  existingWalletTransactionModel ||
   model("WalletTransaction", WalletTransactionSchema);

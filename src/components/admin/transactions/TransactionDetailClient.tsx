@@ -105,6 +105,8 @@ export default function TransactionDetailClient({
   const [refundReason, setRefundReason] = useState("");
   const [refunding, setRefunding] = useState(false);
   const [refundResult, setRefundResult] = useState<string>("");
+  const [reconcilingRefunds, setReconcilingRefunds] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -130,6 +132,7 @@ export default function TransactionDetailClient({
       setRefundResult("Choose an eligible trip first.");
       return;
     }
+
     setRefunding(true);
     setRefundResult("");
     try {
@@ -146,13 +149,60 @@ export default function TransactionDetailClient({
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Refund failed");
       setRefundResult(
-        `Refunded ${j.refundedAmountEgp} EGP (wallet ${j.walletRefundEgp}, Kashier ${j.gatewayRefundEgp}); compensation ${j.compensationAmountEgp} EGP. ${j.gatewayRefundFailed ? "Kashier portion failed — manual action required." : ""}`,
+        j.gatewayRefundPending
+          ? `Kashier confirmation is pending. Confirmed wallet refund: ${j.walletRefundEgp} EGP. Do not retry until reconciliation.`
+          : `Refunded ${j.refundedAmountEgp} EGP (wallet ${j.walletRefundEgp}, Kashier ${j.gatewayRefundEgp}); compensation ${j.compensationAmountEgp} EGP.${j.gatewayRefundFailed ? " Kashier reported failure; verify the final status before retrying." : ""}`,
       );
       await load();
     } catch (e) {
       setRefundResult(e instanceof Error ? e.message : String(e));
     } finally {
       setRefunding(false);
+    }
+  }
+
+  async function reconcileRefunds() {
+    if (!data?.payment) return;
+    setReconcilingRefunds(true);
+    setReconcileResult("");
+    try {
+      const r = await fetch("/api/admin/transactions/refund/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId: data.payment.id }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "Reconciliation failed");
+      const results = [
+        j.reconciled ? `Reconciled ${j.reconciled} Kashier refund(s).` : "",
+        j.retryReady
+          ? `Kashier confirms no successful refund for ${j.retryReady} attempt(s); retry is available.`
+          : "",
+        j.amountMismatch
+          ? `${j.amountMismatch} Kashier amount(s) did not match the requested refund; review before retrying.`
+          : "",
+        j.historicalReference
+          ? `${j.historicalReference} earlier Kashier refund reference(s) were found; trip assignment needs review.`
+          : "",
+        j.providerUnavailable
+          ? `Kashier lookup was unavailable for ${j.providerUnavailable} reference(s); those refunds remain pending.`
+          : "",
+        !j.reconciled &&
+        !j.retryReady &&
+        !j.amountMismatch &&
+        !j.historicalReference &&
+        !j.providerUnavailable
+          ? j.checked
+            ? `${j.alreadyRecorded} Kashier refund(s) were already reconciled.`
+            : "No refund result was found to reconcile."
+          : "",
+      ].filter(Boolean);
+      setReconcileResult(results.join(" "));
+      await load();
+    } catch (e) {
+      setReconcileResult(e instanceof Error ? e.message : String(e));
+    } finally {
+      setReconcilingRefunds(false);
     }
   }
 
@@ -269,6 +319,44 @@ export default function TransactionDetailClient({
               k="Kashier refunds"
               v={(p.kashierRefundIds ?? []).join(", ") || "—"}
             />
+            {canRefund && (
+              <div style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  disabled={reconcilingRefunds || refunding}
+                  onClick={reconcileRefunds}
+                  style={{
+                    padding: "7px 12px",
+                    background: "var(--color-primary)",
+                    color: "var(--color-on-primary)",
+                    border: "none",
+                    borderRadius: 8,
+                    fontWeight: 700,
+                    cursor:
+                      reconcilingRefunds || refunding
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity: reconcilingRefunds || refunding ? 0.65 : 1,
+                  }}
+                >
+                  {reconcilingRefunds
+                    ? "Reconciling…"
+                    : "Reconcile recorded Kashier refunds"}
+                </button>
+                {reconcileResult && (
+                  <div
+                    role="status"
+                    style={{
+                      marginTop: 8,
+                      fontSize: 12,
+                      color: "var(--color-primary)",
+                    }}
+                  >
+                    {reconcileResult}
+                  </div>
+                )}
+              </div>
+            )}
           </Section>
         )}
 

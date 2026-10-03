@@ -429,6 +429,96 @@ export async function refundKashierPayment(
   }
 }
 
+export type KashierRefundLookup =
+  | {
+      status: "found";
+      transactionStatus: "approved" | "failed" | "unknown";
+      amountEgp: number | null;
+      merchantOrderId: string;
+      transactionId: string;
+      date: Date | null;
+    }
+  | { status: "not_found" | "unavailable" };
+
+/** Read Kashier's transaction record by reference before allowing a retry. */
+export async function queryKashierRefundTransaction(
+  transactionId: string,
+  expectedMerchantOrderId: string,
+): Promise<KashierRefundLookup> {
+  if (!process.env.KASHIER_SECRET_KEY) return { status: "unavailable" };
+
+  const url = new URL(`${BASE}/v2/aggregator/transactions`);
+  url.searchParams.set("search", transactionId);
+  url.searchParams.set("type", "refund");
+  url.searchParams.set("limit", "100");
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: process.env.KASHIER_SECRET_KEY },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error("Kashier refund lookup failed", {
+        status: res.status,
+        transactionId,
+      });
+      return { status: "unavailable" };
+    }
+
+    const payload = (await res.json()) as Record<string, unknown>;
+    const records = Array.isArray(payload.body)
+      ? payload.body
+      : Array.isArray(payload.data)
+        ? payload.data
+        : null;
+    if (!records) return { status: "unavailable" };
+
+    const record = records.find((entry) => {
+      if (!entry || typeof entry !== "object") return false;
+      const transaction = entry as Record<string, unknown>;
+      return (
+        String(transaction.transactionId ?? "") === transactionId &&
+        String(transaction.merchantOrderId ?? "") === expectedMerchantOrderId &&
+        String(transaction.type ?? "").toUpperCase() === "REFUND"
+      );
+    });
+    if (!record) return { status: "not_found" };
+
+    const transaction = record as Record<string, unknown>;
+    const rawAmount =
+      transaction.totalAuthorizedAmount ??
+      transaction.amount ??
+      transaction.transactionAmount;
+    const parsedAmount =
+      rawAmount == null ? Number.NaN : Number(rawAmount);
+    const rawDate =
+      transaction.dateToFilter ?? transaction.date ?? transaction.createdAt;
+    const parsedDate = rawDate ? new Date(String(rawDate)) : null;
+    const status = String(transaction.status ?? "").toLowerCase();
+    const transactionStatus =
+      status === "approved"
+        ? "approved"
+        : status === "rejected"
+          ? "failed"
+          : "unknown";
+
+    return {
+      status: "found",
+      transactionStatus,
+      amountEgp: Number.isFinite(parsedAmount) ? parsedAmount : null,
+      merchantOrderId: String(transaction.merchantOrderId),
+      transactionId: String(transaction.transactionId),
+      date:
+        parsedDate && Number.isFinite(parsedDate.getTime()) ? parsedDate : null,
+    };
+  } catch (error) {
+    console.error("Kashier refund lookup request failed", {
+      transactionId,
+      error,
+    });
+    return { status: "unavailable" };
+  }
+}
+
 export async function resolveKashierRefundOrderId(
   sessionId?: string | null,
   fallbackOrderId?: string | null,
