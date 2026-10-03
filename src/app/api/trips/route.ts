@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
+import { AdminSettings } from "@/models/AdminSettings";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { nextSequence } from "@/models/Counter";
@@ -34,7 +35,11 @@ import {
   createNotification,
   createNotifications,
 } from "@/lib/notifications/createNotification";
-import { buildWaitingListCreatedAdminNotifications } from "@/lib/admin/waitingList";
+import {
+  buildWaitingListCreatedAdminNotifications,
+  getSharedRideWaitingListEnabled,
+  shouldCreateWaitingListRequest,
+} from "@/lib/admin/waitingList";
 import { Types } from "mongoose";
 import {
   applyPromoCodeToTrip,
@@ -627,6 +632,16 @@ export async function POST(req: NextRequest) {
     0,
   );
   const hasSharedRide = serverTrips.some((trip) => trip.rideType === "shared");
+  const settings = await AdminSettings.findOne()
+    .select("sharedRideWaitingListEnabled")
+    .lean<{ sharedRideWaitingListEnabled?: boolean } | null>();
+  const sharedRideWaitingListEnabled = getSharedRideWaitingListEnabled(
+    settings?.sharedRideWaitingListEnabled,
+  );
+  const isWaitingListRequest = shouldCreateWaitingListRequest(
+    hasSharedRide,
+    sharedRideWaitingListEnabled,
+  );
   let createdRequestId: Types.ObjectId | null = null;
 
   try {
@@ -638,7 +653,7 @@ export async function POST(req: NextRequest) {
       amountEgp,
       note,
       paymentStatus: "pending",
-      status: hasSharedRide ? "waiting_list" : "pending_payment",
+      status: isWaitingListRequest ? "waiting_list" : "pending_payment",
     });
     createdRequestId = request._id;
 
@@ -666,7 +681,7 @@ export async function POST(req: NextRequest) {
     );
     await Trip.insertMany(tripDocuments);
 
-    if (hasSharedRide) {
+    if (isWaitingListRequest) {
       try {
         const admins = await User.find({ role: "admin" }).select("_id").lean();
         const firstTrip = serverTrips[0];
@@ -698,7 +713,7 @@ export async function POST(req: NextRequest) {
       {
         bookingId: String(request._id),
         amountEgp,
-        ...(hasSharedRide
+        ...(isWaitingListRequest
           ? {
               waitingList: true,
               status: "waiting_list",

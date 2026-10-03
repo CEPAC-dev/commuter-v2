@@ -692,6 +692,23 @@ export const ar: Record<MessageKey, string> = {
   "admin.promo.countdown_format": "{days}ي {hours}س {minutes}د {seconds}ث",
   "admin.waiting_list.title": "قائمة الانتظار",
   "admin.waiting_list.description": "راجع طلبات الرحلات المشتركة قبل دفع الركاب.",
+  "admin.waiting_list.settings_title": "قائمة انتظار الرحلات المشتركة",
+  "admin.waiting_list.settings_toggle_label": "تفعيل قائمة انتظار الرحلات المشتركة",
+  "admin.waiting_list.settings_on": "شغالة",
+  "admin.waiting_list.settings_off": "مقفولة",
+  "admin.waiting_list.settings_enabled_description":
+    "الطلبات المشتركة الجديدة هتستنى مراجعة الإدارة قبل الدفع.",
+  "admin.waiting_list.settings_disabled_description":
+    "الطلبات المشتركة الجديدة هتروح للدفع على طول من غير مراجعة الإدارة.",
+  "admin.waiting_list.settings_last_changed": "آخر تعديل بواسطة {name} · {date}",
+  "admin.waiting_list.settings_confirm_title": "هل تريد إيقاف قائمة انتظار الرحلات المشتركة؟",
+  "admin.waiting_list.settings_confirm_description":
+    "ستنتقل الحجوزات المشتركة الجديدة مباشرةً إلى الدفع دون مراجعة الإدارة. لن تتأثر الطلبات الموجودة في قائمة الانتظار.",
+  "admin.waiting_list.settings_confirm_off": "إيقاف قائمة الانتظار",
+  "admin.waiting_list.settings_enabled_success": "قائمة الانتظار اتفعّلت.",
+  "admin.waiting_list.settings_disabled_success": "قائمة الانتظار اتقفلت.",
+  "admin.waiting_list.settings_load_error": "ماقدرناش نحمل إعداد قائمة الانتظار.",
+  "admin.waiting_list.settings_save_error": "ماقدرناش نحفظ الإعداد. جرّب تاني.",
   "admin.waiting_list.empty_title": "لا توجد طلبات في الانتظار",
   "admin.waiting_list.empty_description": "طلبات الرحلات المشتركة الجديدة هتظهر هنا.",
   "admin.waiting_list.loading": "جارٍ تحميل طلبات الانتظار...",

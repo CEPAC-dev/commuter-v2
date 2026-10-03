@@ -8,9 +8,11 @@ const {
   buildWaitingListRejectedNotification,
   buildWaitingListReviewUpdate,
   buildWaitingListTransitionFilter,
+  getSharedRideWaitingListEnabled,
   groupPromoUsageCounts,
   hasPastWaitingListTrip,
   mapWaitingListRequest,
+  shouldCreateWaitingListRequest,
   validateWaitingListAction,
 } = await import('../src/lib/admin/waitingList.ts');
 const {
@@ -49,6 +51,16 @@ test('waiting-list transition is conditional on waiting_list', () => {
       },
     },
   );
+});
+
+test('waiting-list creation requires both an enabled feature and a shared ride', () => {
+  assert.equal(shouldCreateWaitingListRequest(true, true), true);
+  assert.equal(shouldCreateWaitingListRequest(true, false), false);
+  assert.equal(shouldCreateWaitingListRequest(false, true), false);
+  assert.equal(shouldCreateWaitingListRequest(false, false), false);
+  assert.equal(getSharedRideWaitingListEnabled(undefined), true);
+  assert.equal(getSharedRideWaitingListEnabled(null), true);
+  assert.equal(getSharedRideWaitingListEnabled(false), false);
 });
 
 test('passenger projection and response mapping exclude sensitive fields', () => {

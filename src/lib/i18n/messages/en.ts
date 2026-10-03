@@ -704,6 +704,23 @@ export const en = {
   "admin.promo.countdown_format": "{days}d {hours}h {minutes}m {seconds}s",
   "admin.waiting_list.title": "Waiting list",
   "admin.waiting_list.description": "Review shared-ride requests before passengers pay.",
+  "admin.waiting_list.settings_title": "Shared-ride waiting list",
+  "admin.waiting_list.settings_toggle_label": "Enable shared-ride waiting list",
+  "admin.waiting_list.settings_on": "On",
+  "admin.waiting_list.settings_off": "Off",
+  "admin.waiting_list.settings_enabled_description":
+    "New shared-ride bookings require admin approval before passengers can pay.",
+  "admin.waiting_list.settings_disabled_description":
+    "New shared-ride bookings go straight to payment without admin review.",
+  "admin.waiting_list.settings_last_changed": "Last changed by {name} · {date}",
+  "admin.waiting_list.settings_confirm_title": "Turn off the shared-ride waiting list?",
+  "admin.waiting_list.settings_confirm_description":
+    "New shared bookings will go straight to payment without admin review. Requests already waiting will not be affected.",
+  "admin.waiting_list.settings_confirm_off": "Turn off",
+  "admin.waiting_list.settings_enabled_success": "Waiting list is on.",
+  "admin.waiting_list.settings_disabled_success": "Waiting list is off.",
+  "admin.waiting_list.settings_load_error": "Could not load the waiting-list setting.",
+  "admin.waiting_list.settings_save_error": "Could not save the setting. Please try again.",
   "admin.waiting_list.empty_title": "No requests waiting",
   "admin.waiting_list.empty_description": "New shared-ride requests will appear here.",
   "admin.waiting_list.loading": "Loading waiting-list requests...",

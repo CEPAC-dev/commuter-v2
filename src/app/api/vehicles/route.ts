@@ -3,6 +3,8 @@ import { ensureVehicleSeed } from "@/lib/db/seedVehicles";
 import { Vehicle } from "@/models/Vehicle";
 import { isRegionCode, type RegionCode } from "@/lib/config/regions";
 import { vehicleForRegion } from "@/lib/vehicles/regionConfig";
+import { AdminSettings } from "@/models/AdminSettings";
+import { getSharedRideWaitingListEnabled } from "@/lib/admin/waitingList";
 
 export async function GET(req: NextRequest) {
   await ensureVehicleSeed();
@@ -19,5 +21,13 @@ export async function GET(req: NextRequest) {
   const scoped = region
     ? vehicles.map((vehicle) => vehicleForRegion(vehicle, region as RegionCode)).filter(Boolean)
     : vehicles;
-  return NextResponse.json({ vehicles: scoped });
+  const settings = await AdminSettings.findOne()
+    .select("sharedRideWaitingListEnabled")
+    .lean<{ sharedRideWaitingListEnabled?: boolean } | null>();
+  return NextResponse.json({
+    vehicles: scoped,
+    sharedRideWaitingListEnabled: getSharedRideWaitingListEnabled(
+      settings?.sharedRideWaitingListEnabled,
+    ),
+  });
 }

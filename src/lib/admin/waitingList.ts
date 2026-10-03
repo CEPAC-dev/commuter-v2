@@ -9,6 +9,19 @@ export type WaitingListActionInput = {
 
 export type CairoNowParts = { dateStr: string; timeStr: string };
 
+export function getSharedRideWaitingListEnabled(
+  value: boolean | null | undefined,
+): boolean {
+  return value ?? true;
+}
+
+export function shouldCreateWaitingListRequest(
+  hasSharedRide: boolean,
+  enabled: boolean,
+): boolean {
+  return hasSharedRide && enabled;
+}
+
 export function hasPastTrip(
   trips: readonly { date: string; pickupTime: string }[],
   now: CairoNowParts,

@@ -78,7 +78,77 @@ export default function WaitingListClient() {
   const [reason, setReason] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [sharedRideWaitingListEnabled, setSharedRideWaitingListEnabled] =
+    useState(true);
+  const [settingUpdatedByName, setSettingUpdatedByName] = useState<string | null>(null);
+  const [settingUpdatedAt, setSettingUpdatedAt] = useState<string | null>(null);
+  const [settingLoading, setSettingLoading] = useState(true);
+  const [settingSaving, setSettingSaving] = useState(false);
+  const [confirmTurnOff, setConfirmTurnOff] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+
+  const fetchWaitingListSetting = useCallback(async () => {
+    setSettingLoading(true);
+    try {
+      const response = await fetch("/api/admin/settings/waiting-list", {
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.data) throw new Error("settings-load");
+      setSharedRideWaitingListEnabled(
+        payload.data.sharedRideWaitingListEnabled !== false,
+      );
+      setSettingUpdatedByName(payload.data.updatedByName ?? null);
+      setSettingUpdatedAt(payload.data.updatedAt ?? null);
+    } catch {
+      toast.error(t("admin.waiting_list.settings_load_error"));
+    } finally {
+      setSettingLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void fetchWaitingListSetting();
+  }, [fetchWaitingListSetting]);
+
+  async function saveWaitingListSetting(enabled: boolean) {
+    setSettingSaving(true);
+    try {
+      const response = await fetch("/api/admin/settings/waiting-list", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sharedRideWaitingListEnabled: enabled }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.data) throw new Error("settings-save");
+      setSharedRideWaitingListEnabled(
+        payload.data.sharedRideWaitingListEnabled !== false,
+      );
+      setSettingUpdatedByName(payload.data.updatedByName ?? null);
+      setSettingUpdatedAt(payload.data.updatedAt ?? null);
+      setConfirmTurnOff(false);
+      toast.success(
+        t(
+          enabled
+            ? "admin.waiting_list.settings_enabled_success"
+            : "admin.waiting_list.settings_disabled_success",
+        ),
+      );
+    } catch {
+      toast.error(t("admin.waiting_list.settings_save_error"));
+    } finally {
+      setSettingSaving(false);
+    }
+  }
+
+  function handleWaitingListToggle() {
+    if (settingLoading || settingSaving) return;
+    if (sharedRideWaitingListEnabled) {
+      setConfirmTurnOff(true);
+    } else {
+      void saveWaitingListSetting(true);
+    }
+  }
 
   const fetchRequests = useCallback(async (targetPage = page) => {
     setLoading(true);
@@ -212,6 +282,51 @@ export default function WaitingListClient() {
   return (
     <div dir={dir} style={{ display: "grid", gap: 16, direction: dir }}>
       <Toaster position={dir === "rtl" ? "top-left" : "top-right"} />
+      <AdminCard className="waiting-list-setting-card">
+        <div className="waiting-list-setting-row">
+          <div className="waiting-list-setting-copy">
+            <h2>{t("admin.waiting_list.settings_title")}</h2>
+            <p>
+              {t(
+                sharedRideWaitingListEnabled
+                  ? "admin.waiting_list.settings_enabled_description"
+                  : "admin.waiting_list.settings_disabled_description",
+              )}
+            </p>
+            {settingUpdatedAt ? (
+              <small>
+                {t("admin.waiting_list.settings_last_changed", {
+                  name: settingUpdatedByName ?? "—",
+                  date: new Date(settingUpdatedAt).toLocaleString(
+                    locale === "ar" ? "ar-EG" : "en-EG",
+                  ),
+                })}
+              </small>
+            ) : null}
+          </div>
+          <div className="waiting-list-setting-control">
+            <span className="waiting-list-setting-state">
+              {t(
+                sharedRideWaitingListEnabled
+                  ? "admin.waiting_list.settings_on"
+                  : "admin.waiting_list.settings_off",
+              )}
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-label={t("admin.waiting_list.settings_toggle_label")}
+              aria-checked={sharedRideWaitingListEnabled}
+              disabled={settingLoading || settingSaving}
+              onClick={handleWaitingListToggle}
+              className="waiting-list-setting-switch"
+            >
+              <span className="waiting-list-setting-switch-knob" />
+            </button>
+          </div>
+        </div>
+      </AdminCard>
+
       {loading && items.length === 0 ? (
         <AdminCard>
           <AdminLoadingState title={t("admin.waiting_list.loading")} />
@@ -364,7 +479,59 @@ export default function WaitingListClient() {
         </div>
       ) : null}
 
+      {confirmTurnOff ? (
+        <div
+          role="presentation"
+          className="waiting-list-dialog-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !settingSaving) {
+              setConfirmTurnOff(false);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="waiting-list-toggle-dialog-title"
+            className="waiting-list-dialog"
+            dir={dir}
+          >
+            <h2 id="waiting-list-toggle-dialog-title">
+              {t("admin.waiting_list.settings_confirm_title")}
+            </h2>
+            <p>{t("admin.waiting_list.settings_confirm_description")}</p>
+            <div className="waiting-list-dialog-actions">
+              <AdminButton
+                variant="ghost"
+                disabled={settingSaving}
+                onClick={() => setConfirmTurnOff(false)}
+              >
+                {t("admin.waiting_list.cancel")}
+              </AdminButton>
+              <AdminButton
+                variant="destructive"
+                disabled={settingSaving}
+                onClick={() => void saveWaitingListSetting(false)}
+              >
+                {settingSaving ? <Loader2 size={15} className="animate-spin" /> : null}
+                {t("admin.waiting_list.settings_confirm_off")}
+              </AdminButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <style>{`
+        .waiting-list-setting-row { display:flex; justify-content:space-between; align-items:center; gap:20px; }
+        .waiting-list-setting-copy { min-width:0; }
+        .waiting-list-setting-copy h2 { margin:0; color:var(--color-primary); font-size:16px; }
+        .waiting-list-setting-copy p { margin:5px 0 0; color:var(--color-muted); font-size:13px; line-height:1.5; }
+        .waiting-list-setting-copy small { display:block; margin-top:7px; color:var(--color-muted); font-size:12px; }
+        .waiting-list-setting-control { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+        .waiting-list-setting-state { color:var(--color-primary); font-size:13px; font-weight:800; }
+        .waiting-list-setting-switch { position:relative; width:48px; height:28px; padding:3px; border:0; border-radius:999px; background:${sharedRideWaitingListEnabled ? "var(--color-secondary)" : "var(--color-border)"}; cursor:pointer; transition:background .15s ease; }
+        .waiting-list-setting-switch:disabled { cursor:not-allowed; opacity:.6; }
+        .waiting-list-setting-switch-knob { display:block; width:22px; height:22px; border-radius:50%; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.2); transform:translateX(${sharedRideWaitingListEnabled ? (dir === "rtl" ? "-20px" : "20px") : "0"}); transition:transform .15s ease; }
         .waiting-list-request-header { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; }
         .waiting-list-request-header a { display:inline-flex; align-items:center; gap:5px; text-decoration:none; }
         .waiting-list-past-note { margin:14px 0 0; color:var(--color-warning); font-size:13px; font-weight:700; }
@@ -386,7 +553,7 @@ export default function WaitingListClient() {
         .waiting-list-dialog textarea { width:100%; box-sizing:border-box; resize:vertical; border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:10px; background:var(--color-background); color:var(--color-primary); font:inherit; }
         .waiting-list-dialog small { color:var(--color-muted); text-align:end; }
         .waiting-list-dialog-actions { display:flex; justify-content:flex-end; gap:9px; flex-wrap:wrap; }
-        @media (max-width: 640px) { .waiting-list-request-header { flex-direction:column; } .waiting-list-request-header > div:last-child { text-align:start !important; } .waiting-list-meta-grid { grid-template-columns:1fr; } .waiting-list-actions > button { flex:1 1 140px; justify-content:center; } }
+        @media (max-width: 640px) { .waiting-list-setting-row { align-items:flex-start; flex-direction:column; } .waiting-list-setting-control { width:100%; justify-content:space-between; } .waiting-list-request-header { flex-direction:column; } .waiting-list-request-header > div:last-child { text-align:start !important; } .waiting-list-meta-grid { grid-template-columns:1fr; } .waiting-list-actions > button { flex:1 1 140px; justify-content:center; } }
       `}</style>
     </div>
   );

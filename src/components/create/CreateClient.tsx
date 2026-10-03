@@ -17,6 +17,7 @@ import {
   Info,
 } from "lucide-react";
 import { useTripStore } from "@/lib/store/useTripStore";
+import { getSharedRideWaitingListEnabled } from "@/lib/admin/waitingList";
 import { useClientLocale } from "@/lib/locale.client";
 import {
   formatTime,
@@ -148,6 +149,8 @@ export default function CreateClient({
     string,
     (typeof VEHICLES)[keyof typeof VEHICLES]
   > | null>(null);
+  const [sharedRideWaitingListEnabled, setSharedRideWaitingListEnabled] =
+    useState(() => getSharedRideWaitingListEnabled(undefined));
   const [tripErrors, setTripErrors] = useState<Record<string, string | null>>(
     {},
   );
@@ -228,6 +231,9 @@ export default function CreateClient({
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!Array.isArray(d?.vehicles)) return;
+        setSharedRideWaitingListEnabled(
+          getSharedRideWaitingListEnabled(d.sharedRideWaitingListEnabled),
+        );
         const map: Record<string, (typeof VEHICLES)[keyof typeof VEHICLES]> = {};
         for (const v of d.vehicles) map[v.key] = v;
         setVehiclesMap(map);
@@ -437,7 +443,7 @@ export default function CreateClient({
         vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType];
       return vehicle?.ride === "shared";
     });
-    if (hasSharedRide) {
+    if (hasSharedRide && sharedRideWaitingListEnabled) {
       setShowRequestModal(true);
       return;
     }
@@ -449,7 +455,12 @@ export default function CreateClient({
     const booking = createdBooking ?? (await createBooking());
     if (!booking) return;
     setShowRequestModal(false);
-    if (booking.waitingList) setRequestSentBookingId(booking.id);
+    if (booking.waitingList) {
+      setRequestSentBookingId(booking.id);
+      return;
+    }
+    if (grandTotalEgp === 0) setUseWallet(true);
+    setShowPaymentModal(true);
   }
 
   async function handleSubmit() {
