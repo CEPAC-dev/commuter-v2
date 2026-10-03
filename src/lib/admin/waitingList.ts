@@ -1,3 +1,5 @@
+import { hasPastPickup, type CairoNowParts } from "../time/cairoTime.ts";
+
 export const WAITING_LIST_PASSENGER_SELECT = "name phone email";
 
 export type WaitingListAction = "approve" | "reject";
@@ -7,7 +9,7 @@ export type WaitingListActionInput = {
   reason?: string;
 };
 
-export type CairoNowParts = { dateStr: string; timeStr: string };
+export type { CairoNowParts } from "../time/cairoTime.ts";
 
 export function getSharedRideWaitingListEnabled(
   value: boolean | null | undefined,
@@ -26,11 +28,7 @@ export function hasPastTrip(
   trips: readonly { date: string; pickupTime: string }[],
   now: CairoNowParts,
 ): boolean {
-  return trips.some(
-    (trip) =>
-      trip.date < now.dateStr ||
-      (trip.date === now.dateStr && trip.pickupTime < now.timeStr),
-  );
+  return hasPastPickup(trips, now);
 }
 
 export const hasPastWaitingListTrip = hasPastTrip;
@@ -97,6 +95,8 @@ export function buildWaitingListTripCancellationUpdate(
   return {
     $set: {
       status: "cancelled",
+      cancelledBy: "admin_rejected",
+      cancelReason: reason,
       cancellation: {
         cancelledAt,
         tierLabel: "admin_rejected",
@@ -156,6 +156,7 @@ export function buildWaitingListCreatedAdminNotifications(input: {
 export function buildWaitingListApprovedNotification(
   userId: string,
   bookingId: string,
+  tripId: string,
 ): WaitingListNotification {
   return {
     userId,
@@ -166,7 +167,8 @@ export function buildWaitingListApprovedNotification(
     bodyAr: "تمت الموافقة على طلبك. تقدر دلوقتي تكمل الدفع.",
     data: {
       bookingId,
-      linkUrl: `/my-requests/${bookingId}`,
+      tripId,
+      linkUrl: `/my-trips/${tripId}`,
       linkLabel: "Continue to payment",
     },
   };
@@ -175,6 +177,7 @@ export function buildWaitingListApprovedNotification(
 export function buildWaitingListRejectedNotification(
   userId: string,
   bookingId: string,
+  tripId: string,
   reason?: string,
 ): WaitingListNotification {
   const normalizedReason = reason?.trim();
@@ -189,7 +192,8 @@ export function buildWaitingListRejectedNotification(
     bodyAr: `الطلب لم تتم الموافقة عليه.${reasonSuffixAr}`,
     data: {
       bookingId,
-      linkUrl: `/my-requests/${bookingId}`,
+      tripId,
+      linkUrl: `/my-trips/${tripId}`,
       linkLabel: "View request",
     },
   };

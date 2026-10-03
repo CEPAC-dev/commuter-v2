@@ -147,6 +147,8 @@ export async function POST(
     const refundStatus = refundAmount > 0 ? "pending" : "none";
 
     trip.status = "cancelled";
+    trip.cancelledBy = "passenger";
+    trip.cancelReason = reason;
     trip.cancellation = {
       cancelledAt: new Date(),
       tierLabel: evaluation.tierLabel,

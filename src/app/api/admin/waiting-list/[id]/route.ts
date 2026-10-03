@@ -144,9 +144,22 @@ export async function PATCH(
 
   try {
     const passengerId = String(reviewedRequest.userId);
+    const representativeTripId = reviewedRequest.tripIds?.[0]
+      ? String(reviewedRequest.tripIds[0])
+      : String(
+          (
+            await Trip.findOne({ requestId: new Types.ObjectId(id) })
+              .sort({ date: 1, cycleIndex: 1 })
+              .select("_id")
+              .lean<{ _id: Types.ObjectId } | null>()
+          )?._id ?? "",
+        );
+    if (!representativeTripId) {
+      throw new Error("Request has no Trip to use for its notification link.");
+    }
     const notification = parsed.value.action === "approve"
-      ? buildWaitingListApprovedNotification(passengerId, id)
-      : buildWaitingListRejectedNotification(passengerId, id, parsed.value.reason);
+      ? buildWaitingListApprovedNotification(passengerId, id, representativeTripId)
+      : buildWaitingListRejectedNotification(passengerId, id, representativeTripId, parsed.value.reason);
     await createNotification(notification);
   } catch (error) {
     console.error(`[Admin waiting list] Notification failed for request ${id}:`, error);

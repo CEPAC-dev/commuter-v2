@@ -120,6 +120,7 @@ export default function CreateClient({
   const [submitting, setSubmitting] = useState(false);
   const [createdBooking, setCreatedBooking] = useState<{
     id: string;
+    representativeTripId: string;
     amountEgp: number;
     waitingList?: boolean;
   } | null>(null);
@@ -132,7 +133,7 @@ export default function CreateClient({
   const [bookingNote, setBookingNote] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [requestSentBookingId, setRequestSentBookingId] = useState<string | null>(null);
+  const [requestSentTripId, setRequestSentTripId] = useState<string | null>(null);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [promoFieldOpen, setPromoFieldOpen] = useState(false);
   const [noteFieldOpen, setNoteFieldOpen] = useState(false);
@@ -416,13 +417,16 @@ export default function CreateClient({
 
       if (
         typeof data.bookingId !== "string" ||
-        !Number.isFinite(data.amountEgp)
+        !Number.isFinite(data.amountEgp) ||
+        !Array.isArray(data.tripIds) ||
+        typeof data.tripIds[0] !== "string"
       ) {
         setSubmitError(t("create.booking_create_failed"));
         return null;
       }
       const booking = {
         id: data.bookingId,
+        representativeTripId: data.tripIds[0] as string,
         amountEgp: data.amountEgp,
         waitingList: data.waitingList === true,
       };
@@ -456,7 +460,7 @@ export default function CreateClient({
     if (!booking) return;
     setShowRequestModal(false);
     if (booking.waitingList) {
-      setRequestSentBookingId(booking.id);
+      setRequestSentTripId(booking.representativeTripId);
       return;
     }
     if (grandTotalEgp === 0) setUseWallet(true);
@@ -468,7 +472,7 @@ export default function CreateClient({
     if (!booking) return;
     if (booking.waitingList) {
       setShowPaymentModal(false);
-      setRequestSentBookingId(booking.id);
+      setRequestSentTripId(booking.representativeTripId);
       return;
     }
     setSubmitting(true);
@@ -2168,7 +2172,7 @@ export default function CreateClient({
         </div>
       )}
 
-      {requestSentBookingId && (
+      {requestSentTripId && (
         <div
           role="dialog"
           aria-modal="true"
@@ -2199,8 +2203,8 @@ export default function CreateClient({
               {t("request_status.waiting_payment_explanation")}
             </p>
             <Link
-              href={`/my-requests/${requestSentBookingId}`}
-              onClick={() => setRequestSentBookingId(null)}
+              href={`/my-trips/${requestSentTripId}`}
+              onClick={() => setRequestSentTripId(null)}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -2220,7 +2224,7 @@ export default function CreateClient({
             </Link>
             <button
               type="button"
-              onClick={() => setRequestSentBookingId(null)}
+              onClick={() => setRequestSentTripId(null)}
               style={{ width: "100%", marginTop: 10, height: 44, background: "transparent", color: "#5A6A7A", border: "none", fontFamily: "inherit", fontWeight: 700, cursor: "pointer" }}
             >
               {t("create.close_request_sent")}

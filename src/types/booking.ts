@@ -118,7 +118,15 @@ export interface TripListRow {
   parentRequestStatus?: BookingStatus;
   parentPaymentStatus?: PaymentStatus;
   rejectionReason?: string | null;
+  reviewedAt?: string | null;
   hasPastTrip?: boolean;
+  cancelledBy?: string;
+  cancelReason?: string;
+  cancellation?: {
+    refundStatus?: string;
+    refundAmount?: number;
+    reason?: string;
+  } | null;
   createdAt: string;
   assignedDriver?: {
     name?: string;

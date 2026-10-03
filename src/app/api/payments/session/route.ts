@@ -439,12 +439,32 @@ export async function POST(req: NextRequest) {
     kashierOrderId: String(payment._id),
   });
 
+  const representativeTripId = booking.tripIds?.[0]
+    ? String(booking.tripIds[0])
+    : String(
+        (
+          await Trip.findOne({ requestId: booking._id })
+            .sort({ date: 1, cycleIndex: 1 })
+            .select("_id")
+            .lean<{ _id: Types.ObjectId } | null>()
+        )?._id ?? "",
+      );
+
   await createNotification({
     userId: session.userId,
     type: "payment_required",
     title: "Complete your payment",
     body: "Your booking is waiting for payment. Continue checkout to secure your trip.",
-    data: { bookingId, paymentId: String(payment._id) },
+    data: {
+      bookingId,
+      paymentId: String(payment._id),
+      ...(representativeTripId
+        ? {
+            tripId: representativeTripId,
+            linkUrl: `/my-trips/${representativeTripId}`,
+          }
+        : { linkUrl: "/my-trips" }),
+    },
   });
 
   return NextResponse.json({

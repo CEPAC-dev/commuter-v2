@@ -20,6 +20,7 @@ interface Props {
   durationMinutes: number;
   to12h: (hhmm: string) => string;
   isDriver?: boolean;
+  showDistanceBreakdown?: boolean;
 }
 
 export default function SharedRideDetails({
@@ -38,6 +39,7 @@ export default function SharedRideDetails({
   durationMinutes,
   to12h,
   isDriver = false,
+  showDistanceBreakdown = true,
   locale,
 }: Props & { locale: Locale }) {
   const pickupOpt = pickupStationOptions.find((o) => o.id === pickupStation?.id);
@@ -220,25 +222,27 @@ export default function SharedRideDetails({
         </div>
       </div>
 
-      <div
-        style={{
-          marginTop: 18,
-          paddingTop: 18,
-          borderTop: "1px solid #eef0f3",
-        }}
-      >
-        <TripStatBlock
-          icon={<RouteIcon size={15} color="#0B1E3D" aria-hidden="true" />}
-          headline={translate(locale, "ride.distance_duration")}
-          value={`${totalKm.toFixed(1)} km · ${totalMin} ${translate(locale, "ride.minutes_short")}`}
-          lines={[
-            { label: translate(locale, "ride.distance"), value: `${totalKm.toFixed(1)} km` },
-            { label: translate(locale, "ride.duration"), value: `${totalMin} ${translate(locale, "ride.minutes_short")}` },
-            ...segLines,
-          ]}
-          accent="#F5A623"
-        />
-      </div>
+      {showDistanceBreakdown && (
+        <div
+          style={{
+            marginTop: 18,
+            paddingTop: 18,
+            borderTop: "1px solid #eef0f3",
+          }}
+        >
+          <TripStatBlock
+            icon={<RouteIcon size={15} color="#0B1E3D" aria-hidden="true" />}
+            headline={translate(locale, "ride.distance_duration")}
+            value={`${totalKm.toFixed(1)} km · ${totalMin} ${translate(locale, "ride.minutes_short")}`}
+            lines={[
+              { label: translate(locale, "ride.distance"), value: `${totalKm.toFixed(1)} km` },
+              { label: translate(locale, "ride.duration"), value: `${totalMin} ${translate(locale, "ride.minutes_short")}` },
+              ...segLines,
+            ]}
+            accent="#F5A623"
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -40,7 +40,7 @@ import {
   getSharedRideWaitingListEnabled,
   shouldCreateWaitingListRequest,
 } from "@/lib/admin/waitingList";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import {
   applyPromoCodeToTrip,
   computePromoDiscountedPrice,
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(rawDates) || rawDates.length === 0) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
   }
-  const dates = Array.from(new Set(rawDates)).slice(0, 7);
+  const dates = Array.from(new Set(rawDates)).slice(0, 7).sort();
   for (const d of dates) {
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d) || !isDateInWindow(d)) {
       return NextResponse.json(
@@ -645,23 +645,14 @@ export async function POST(req: NextRequest) {
   let createdRequestId: Types.ObjectId | null = null;
 
   try {
-    const request = await Request.create({
-      userId: new Types.ObjectId(userId),
-      regionCode: userRegion,
-      tripIds: tripInstances.map((instance) => instance.id),
-      dates,
-      amountEgp,
-      note,
-      paymentStatus: "pending",
-      status: isWaitingListRequest ? "waiting_list" : "pending_payment",
-    });
-    createdRequestId = request._id;
+    const requestId = new Types.ObjectId();
+    createdRequestId = requestId;
 
     const tripDocuments = await Promise.all(
       pricedTripInstances.map(async (instance) => ({
         _id: instance.id,
         tripNumber: await nextSequence("tripNumber"),
-        requestId: request._id,
+        requestId,
         regionCode: userRegion,
         userId: new Types.ObjectId(userId),
         date: instance.date,
@@ -679,7 +670,34 @@ export async function POST(req: NextRequest) {
         status: "pending_payment",
       })),
     );
-    await Trip.insertMany(tripDocuments);
+
+    const dbSession = await mongoose.startSession();
+    try {
+      await dbSession.withTransaction(async () => {
+        await Request.create(
+          [
+            {
+              _id: requestId,
+              userId: new Types.ObjectId(userId),
+              regionCode: userRegion,
+              tripIds: tripInstances.map((instance) => instance.id),
+              dates,
+              amountEgp,
+              note,
+              paymentStatus: "pending",
+              status: isWaitingListRequest ? "waiting_list" : "pending_payment",
+            },
+          ],
+          { session: dbSession },
+        );
+        await Trip.insertMany(tripDocuments, { session: dbSession });
+      });
+    } finally {
+      await dbSession.endSession();
+    }
+
+    const tripIds = tripDocuments.map((trip) => String(trip._id));
+    const representativeTripId = tripIds[0];
 
     if (isWaitingListRequest) {
       try {
@@ -688,14 +706,14 @@ export async function POST(req: NextRequest) {
         await createNotifications(
           buildWaitingListCreatedAdminNotifications({
             adminIds: admins.map((admin) => String(admin._id)),
-            bookingId: String(request._id),
+            bookingId: String(requestId),
             routeSummary: `${firstTrip.pickup.address} → ${firstTrip.dropoff.address}`,
             date: tripInstances[0].date,
           }),
         );
       } catch (error) {
         console.error(
-          `[Waiting list] Admin notification failed for request ${String(request._id)}:`,
+          `[Waiting list] Admin notification failed for request ${String(requestId)}:`,
           error,
         );
       }
@@ -705,13 +723,19 @@ export async function POST(req: NextRequest) {
         type: "request_created",
         title: "Trip request received",
         body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
-        data: { bookingId: String(request._id), amountEgp },
+        data: {
+          bookingId: String(requestId),
+          tripId: representativeTripId,
+          linkUrl: `/my-trips/${representativeTripId}`,
+          amountEgp,
+        },
       });
     }
 
     return NextResponse.json(
       {
-        bookingId: String(request._id),
+        bookingId: String(requestId),
+        tripIds,
         amountEgp,
         ...(isWaitingListRequest
           ? {

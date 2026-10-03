@@ -93,6 +93,16 @@ test('past-trip helper uses the booking pickup date and time', () => {
   assert.equal(hasPastWaitingListTrip([{ date: '2026-09-28', pickupTime: '11:59' }], now), true);
   assert.equal(hasPastWaitingListTrip([{ date: '2026-09-28', pickupTime: '12:00' }], now), false);
   assert.equal(hasPastWaitingListTrip([{ date: '2026-09-29', pickupTime: '08:00' }], now), false);
+  assert.equal(
+    hasPastWaitingListTrip(
+      [
+        { date: '2026-09-29', pickupTime: '08:00' },
+        { date: '2026-09-27', pickupTime: '23:59' },
+      ],
+      now,
+    ),
+    true,
+  );
 });
 
 test('waiting-list notification payloads use links and omit passenger contact data', () => {
@@ -107,14 +117,15 @@ test('waiting-list notification payloads use links and omit passenger contact da
   assert.equal('phone' in adminPayload[0].data, false);
   assert.equal('email' in adminPayload[0].data, false);
 
-  const approved = buildWaitingListApprovedNotification('passenger-id', 'request-id');
-  assert.equal(approved.data.linkUrl, '/my-requests/request-id');
+  const approved = buildWaitingListApprovedNotification('passenger-id', 'request-id', 'trip-id');
+  assert.equal(approved.data.linkUrl, '/my-trips/trip-id');
 
-  const rejectedWithoutReason = buildWaitingListRejectedNotification('passenger-id', 'request-id', '   ');
+  const rejectedWithoutReason = buildWaitingListRejectedNotification('passenger-id', 'request-id', 'trip-id', '   ');
   assert.equal(rejectedWithoutReason.body.includes('Reason:'), false);
   assert.equal(rejectedWithoutReason.bodyAr.includes('السبب:'), false);
 
-  const rejectedWithReason = buildWaitingListRejectedNotification('passenger-id', 'request-id', 'No seats');
+  const rejectedWithReason = buildWaitingListRejectedNotification('passenger-id', 'request-id', 'trip-id', 'No seats');
+  assert.equal(rejectedWithReason.data.linkUrl, '/my-trips/trip-id');
   assert.equal(rejectedWithReason.body.includes('No seats'), true);
   assert.equal(rejectedWithReason.bodyAr.includes('No seats'), true);
 });

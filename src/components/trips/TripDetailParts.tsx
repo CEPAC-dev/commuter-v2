@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useClientLocale } from "@/lib/i18n/client";
 
 export function RideDetailRow({
@@ -58,46 +57,39 @@ export function TripStatBlock({
   lines: { label: string; value: string }[];
   accent?: string;
 }) {
-  const [hover, setHover] = useState(false);
   const hasTooltip = lines.length > 0;
   const { t } = useClientLocale();
 
   return (
-    <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+    <details
       style={{
         flex: 1,
         minWidth: 230,
-        padding: "18px 18px 16px",
-        borderRadius: 18,
-        background: hover ? "#ffffff" : "#f8f9fa",
-        border: hover ? `1.5px solid ${accent}` : "1px solid #eef0f3",
-        boxShadow: hover ? "0 14px 36px rgba(0,0,0,0.08)" : "none",
-        transform: hover ? "translateY(-2px)" : "none",
-        transition: "all 0.22s ease",
-        position: "relative",
-        cursor: hasTooltip ? "pointer" : "default",
+        padding: "14px 16px",
+        borderRadius: 8,
+        background: "#fff",
+        border: "1px solid #DCE6E4",
       }}
     >
-      <div
+      <summary
+        className="trip-stat-summary"
         style={{
           display: "flex",
-          alignItems: "flex-start",
-          gap: 12,
-          marginBottom: 8,
+          alignItems: "center",
+          gap: 10,
+          cursor: hasTooltip ? "pointer" : "default",
+          listStylePosition: "inside",
         }}
       >
         <span
           style={{
-            width: 38,
-            height: 38,
-            borderRadius: 12,
+            width: 34,
+            height: 34,
+            borderRadius: 6,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: hover ? "rgba(0,194,168,0.16)" : "rgba(11,30,61,0.08)",
-            transition: "background 0.22s ease",
+            background: "#E8F4F1",
             flexShrink: 0,
           }}
         >
@@ -109,18 +101,16 @@ export function TripStatBlock({
               margin: 0,
               fontSize: 13,
               fontWeight: 700,
-              color: hover ? "#00806E" : "#0B1E3D",
+              color: "#0B1E3D",
               lineHeight: 1.3,
-              transition: "color 0.22s ease",
               textTransform: "uppercase",
-              letterSpacing: "0.06em",
             }}
           >
             {headline}
           </p>
           <p
             style={{
-              margin: "8px 0 0",
+              margin: "5px 0 0",
               fontSize: 16,
               fontWeight: 800,
               color: "#0B1E3D",
@@ -130,7 +120,7 @@ export function TripStatBlock({
             {value}
           </p>
         </div>
-      </div>
+      </summary>
 
       {hasTooltip && (
         <p
@@ -141,25 +131,17 @@ export function TripStatBlock({
             color: "#5A6A7A",
           }}
         >
-          {hover ? t("map.route_breakdown") : t("map.hover_for_details")}
+          {t("map.route_breakdown")}
         </p>
       )}
 
-      {hover && hasTooltip && (
+      {hasTooltip && (
         <div
-          role="tooltip"
           style={{
-            position: "absolute",
-            bottom: "calc(100% + 12px)",
-            left: 0,
-            right: 0,
-            background: "#0B1E3D",
-            color: "#fff",
-            padding: "14px 16px",
-            borderRadius: 16,
+            marginTop: 14,
+            paddingTop: 10,
+            borderTop: `2px solid ${accent}`,
             fontSize: 13,
-            zIndex: 30,
-            boxShadow: "0 12px 30px rgba(11,30,61,0.24)",
           }}
         >
           {lines.map((l, i) => (
@@ -173,25 +155,16 @@ export function TripStatBlock({
                 borderBottom: i < lines.length - 1 ? "1px solid rgba(255,255,255,0.12)" : undefined,
               }}
             >
-              <span style={{ color: "rgba(255,255,255,0.7)" }}>{l.label}</span>
+              <span style={{ color: "#5A6A7A" }}>{l.label}</span>
               <strong style={{ fontWeight: 700 }}>{l.value}</strong>
             </div>
           ))}
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              top: "100%",
-              left: 28,
-              width: 0,
-              height: 0,
-              borderLeft: "7px solid transparent",
-              borderRight: "7px solid transparent",
-              borderTop: "7px solid #0B1E3D",
-            }}
-          />
         </div>
       )}
-    </div>
+      <style jsx>{`
+        .trip-stat-summary:focus-visible { outline: 3px solid #F5A623; outline-offset: 3px; border-radius: 4px; }
+        .trip-stat-summary::-webkit-details-marker { color: ${accent}; }
+      `}</style>
+    </details>
   );
 }

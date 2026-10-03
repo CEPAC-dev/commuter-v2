@@ -26,6 +26,8 @@ import AppHeader from "@/components/layout/AppHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import { PassengerEmptyIcon, DriverEmptyIcon } from "@/components/icons/EmptyStateIcons";
 import StatusGroupFilter from "@/components/shared/StatusGroupFilter";
+import TripTabs from "@/components/trips/TripTabs";
+import NextTripCard from "@/components/trips/NextTripCard";
 import DateRangeCalendar from "@/components/shared/DateRangeCalendar";
 import Pagination from "@/components/shared/Pagination";
 import type { BookingStatus, RideListRow, TripListRow } from "@/types/booking";
@@ -33,8 +35,9 @@ import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import RateTripModal from "@/components/trips/RateTripModal";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 import CancelTripModal from "@/components/trips/CancelTripModal";
-import StickySidebar from "@/components/shared/StickySidebar";
-import { getRequestPaymentState } from "@/lib/requestPaymentState";
+import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
+import { buildTripTabView, type TripTabKey } from "@/lib/tripTabView.ts";
+import { getNextTrip } from "@/lib/nextTrip.ts";
 
 export const metadata = { title: "My trips — Commuter" };
 export const dynamic = "force-dynamic";
@@ -91,9 +94,9 @@ function getStatusPill(locale: "en" | "ar") {
     matched: { label: translate(locale, "status.ongoing"), bg: "#00C2A8", color: "#fff" },
     confirmed: { label: translate(locale, "status.upcoming"), bg: "#E2E8F0", color: "#5A6A7A" },
     active: { label: translate(locale, "status.ongoing"), bg: "#00C2A8", color: "#fff" },
-    completed: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
-    cancelled: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
-    time_out: { label: translate(locale, "status.previous"), bg: "#0B1E3D", color: "#fff" },
+    completed: { label: translate(locale, "status.completed"), bg: "#0B1E3D", color: "#fff" },
+    cancelled: { label: translate(locale, "status.cancelled"), bg: "#0B1E3D", color: "#fff" },
+    time_out: { label: translate(locale, "status.expired"), bg: "#0B1E3D", color: "#fff" },
     nomatch: { label: translate(locale, "status.nomatch"), bg: "#FFEBEE", color: "#E74C3C" },
   } satisfies Record<BookingStatus, { label: string; bg: string; color: string }>;
 }
@@ -134,6 +137,20 @@ function Pill({
       {label}
     </span>
   );
+}
+
+function displayPill(locale: "en" | "ar", status: ReturnType<typeof getDisplayStatus>) {
+  const tone = {
+    neutral: { bg: "#EEF2F2", color: "#5A6A7A" },
+    warning: { bg: "#FFF3E0", color: "#E65100" },
+    success: { bg: "#E8F5E9", color: "#20834A" },
+    danger: { bg: "#FFEBEE", color: "#C0392B" },
+    info: { bg: "#E2F8F5", color: "#007A6A" },
+  }[status.tone];
+  return {
+    label: translate(locale, status.key),
+    ...tone,
+  };
 }
 
 function rideStatusPill(status: RideListRow["status"], locale: "en" | "ar") {
@@ -504,7 +521,165 @@ function SharedSummaryCard({
 }
 type DayItem =
   | { kind: "trip"; data: TripListRow }
+  | {
+      kind: "request_group";
+      data: { requestId: string; date: string; trips: TripListRow[] };
+    }
   | { kind: "ride"; data: RideListRow };
+
+function RequestTripGroupCard({
+  requestId,
+  trips,
+  walletBalance,
+  locale,
+  allowPay,
+  sharedTripDetailsById,
+}: {
+  requestId: string;
+  trips: TripListRow[];
+  walletBalance: number;
+  locale: "en" | "ar";
+  allowPay: boolean;
+  sharedTripDetailsById: Map<string, UserTripDetail | null>;
+}) {
+  const firstTrip = trips[0];
+  const displayStatus = getDisplayStatus({
+    request: {
+      status: firstTrip.parentRequestStatus ?? firstTrip.status,
+      paymentStatus: firstTrip.parentPaymentStatus ?? firstTrip.paymentStatus,
+      rejectionReason: firstTrip.rejectionReason,
+      hasPastTrip: firstTrip.hasPastTrip,
+    },
+    trip: firstTrip,
+  });
+  const rejectionDisplay = getRejectionDisplay({
+    request: {
+      status: firstTrip.parentRequestStatus ?? firstTrip.status,
+      rejectionReason: firstTrip.rejectionReason,
+    },
+    trip: firstTrip,
+  });
+  const secondaryText = rejectionDisplay.showReasonCard
+    ? rejectionDisplay.reason ?? translate(locale, "rejection.no_reason")
+    : displayStatus.secondaryKey
+      ? translate(locale, displayStatus.secondaryKey)
+      : displayStatus.secondaryText;
+
+  return (
+    <div
+      className="request-group-card"
+      style={{
+        background: "#fff",
+        borderRadius: 14,
+        border: "1px solid #eef0f3",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          flexWrap: "wrap",
+          padding: "15px 18px",
+          borderBottom: "1px solid #f4f6f8",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+          <strong style={{ color: "#0B1E3D", fontSize: 14 }}>
+            {translate(locale, "my_trips.booking_group", {
+              count: trips.length,
+              plural: trips.length === 1 ? "" : "s",
+            })}
+          </strong>
+          <Pill {...displayPill(locale, displayStatus)} />
+        </div>
+        <strong style={{ color: "#0B1E3D", fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
+          {formatEgp(locale, firstTrip.bookingAmountEgp)}
+        </strong>
+      </div>
+
+      {secondaryText && (
+        <p
+          className={displayStatus.secondaryKey === "status.approved_by_admin" ? "trip-approved-caption" : undefined}
+          title={rejectionDisplay.showReasonCard ? secondaryText : undefined}
+          style={{
+            ...(displayStatus.secondaryKey === "status.approved_by_admin"
+              ? { margin: "-6px 0 8px", marginInlineStart: 18, padding: 0, fontSize: 11, lineHeight: 1.35, color: "#687978" }
+              : {
+                  margin: 0,
+                  padding: "11px 18px 0",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  color: "#5A6A7A",
+                  ...(rejectionDisplay.showReasonCard
+                    ? { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }
+                    : {}),
+                }),
+          }}
+        >
+          {secondaryText}
+        </p>
+      )}
+
+      <div style={{ display: "grid", gap: 0 }}>
+        {trips.map((trip) => {
+          const detail = sharedTripDetailsById.get(trip.id);
+          const shared = isSharedVehicle(trip.vehicleType);
+          const pickupName = detail?.pickupStation?.name ?? trip.pickupAddress;
+          const dropoffName = detail?.dropoffStation?.name ?? trip.dropoffAddress;
+          return (
+            <Link
+              key={trip.id}
+              className="trip-card-link"
+              href={`/my-trips/${trip.id}`}
+              style={{
+                display: "grid",
+                gap: 8,
+                padding: "13px 18px",
+                color: "inherit",
+                textDecoration: "none",
+                borderTop: "1px solid #f4f6f8",
+              }}
+            >
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span className="trip-card-date">{formatDate(locale, trip.date)}<span>{formatTime(locale, trip.pickupTime)}</span></span>
+                  <span className="trip-type-badge">{translate(locale, shared ? "ride.shared" : "ride.private")}</span>
+                  <span style={{ color: "#526262", fontSize: 12, fontWeight: 700 }}>{descriptionForVehicle(locale, trip.vehicleType)}</span>
+                </span>
+                <span style={{ color: "#006D60", fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{formatEgp(locale, trip.priceEgp)}</span>
+              </span>
+              <span className="trip-card-route-row">
+                <MapPin size={13} color="#00C2A8" aria-hidden="true" />
+                <span title={pickupName}>{truncate(pickupName)}</span>
+              </span>
+              <span className="trip-card-route-row">
+                <MapPin size={13} color="#D46A32" aria-hidden="true" />
+                <span title={dropoffName}>{truncate(dropoffName)}</span>
+              </span>
+              <span className="trip-card-view-action">
+                {translate(locale, "my_trips.view_trip")}
+                <ChevronRight size={15} aria-hidden="true" />
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+
+      {allowPay && displayStatus.canPay && (
+        <div style={{ borderTop: "1px solid #f4f6f8" }}>
+          <ContinueCheckoutButton
+            bookingId={requestId}
+            amountEgp={firstTrip.bookingAmountEgp}
+            walletBalance={walletBalance}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TripsPageHeader({
   locale,
@@ -548,14 +723,14 @@ export default async function MyTripsPage({
   const params = await searchParams;
   const groupFilter =
     typeof params.group === "string" &&
-    ["all", "upcoming", "ongoing", "previous", "pending_payment"].includes(
+    ["all", "pending", "upcoming", "ongoing", "pending_payment"].includes(
       params.group,
     )
       ? (params.group as
           | "all"
+          | "pending"
           | "upcoming"
           | "ongoing"
-          | "previous"
           | "pending_payment")
       : isPassenger
         ? "all"
@@ -574,14 +749,18 @@ export default async function MyTripsPage({
 
   const driverOngoingView = isDriver && groupFilter === "ongoing";
   const passengerOngoingView = isPassenger && groupFilter === "ongoing";
+  const activePassengerTab: TripTabKey =
+    groupFilter === "pending" || groupFilter === "pending_payment"
+      ? "pending"
+      : groupFilter === "upcoming" || groupFilter === "ongoing"
+        ? groupFilter
+        : "all";
 
   const passengerListOptions = {
-    page,
+    page: 1,
     pageSize: PAGE_SIZE,
-    statusGroup:
-      groupFilter === "all" || groupFilter === undefined
-        ? undefined
-        : groupFilter,
+    groupByRequest: true,
+    fetchAll: true,
     dateFrom,
     dateTo,
   };
@@ -590,14 +769,14 @@ export default async function MyTripsPage({
     groupFilter &&
       groupFilter !== "all" &&
       groupFilter !== "ongoing" &&
-      ["upcoming", "previous", "pending_payment"].includes(groupFilter),
+      ["pending", "upcoming", "pending_payment"].includes(groupFilter),
   );
 
   const driverListOptions = {
     page,
     pageSize: PAGE_SIZE,
     statusGroup:
-      groupFilter && groupFilter !== "all" && groupFilter !== "upcoming"
+      groupFilter === "ongoing" || groupFilter === "pending_payment"
         ? groupFilter
         : undefined,
     dateFrom,
@@ -605,25 +784,62 @@ export default async function MyTripsPage({
   };
 
   let tripRows: TripListRow[] = [];
+  let allPassengerTrips: TripListRow[] = [];
   let rideRows: RideListRow[] = [];
+  let listItems: DayItem[] = [];
   let total = 0;
+  let paginationTotal = 0;
+  let tabCounts: Record<TripTabKey, number> = {
+    all: 0,
+    pending: 0,
+    upcoming: 0,
+    ongoing: 0,
+  };
+  const displayNow = new Date();
   if (isDriver) {
     const result = await getRidesByDriver(session.userId, driverListOptions);
     if (Array.isArray(result)) {
       rideRows = result;
       total = result.length;
+      paginationTotal = result.length;
     } else {
       rideRows = result.rows;
       total = result.total;
+      paginationTotal = result.total;
     }
+    listItems = rideRows.map((ride) => ({ kind: "ride", data: ride }));
   } else {
     const result = await listUserTrips(session.userId, passengerListOptions);
-    console.log("Fetched trips", result);
-    tripRows = result.rows;
-    total = result.total;
+    allPassengerTrips = result.rows;
+    const selectedTab: TripTabKey =
+      groupFilter === "pending" || groupFilter === "pending_payment"
+        ? "pending"
+        : groupFilter === "upcoming" || groupFilter === "ongoing"
+          ? groupFilter
+          : "all";
+    const view = buildTripTabView(result.rows, selectedTab, displayNow);
+    tabCounts = view.counts;
+    total = view.items.length;
+    paginationTotal = total;
+    const pageItems = view.items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    tripRows = pageItems.flatMap((item) =>
+      item.kind === "request" ? item.trips : [item.trip],
+    );
+    listItems = pageItems.map((item): DayItem =>
+      item.kind === "request"
+        ? {
+            kind: "request_group",
+            data: {
+              requestId: item.requestId,
+              date: item.date,
+              trips: item.trips as TripListRow[],
+            },
+          }
+        : { kind: "trip", data: item.trip as TripListRow },
+    );
   }
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const totalPages = Math.ceil(paginationTotal / PAGE_SIZE);
 
   const wallet = isDriver ? null : await getOrCreateWallet(session.userId);
   const walletBalance = wallet?.balanceEgp ?? 0;
@@ -633,9 +849,6 @@ export default async function MyTripsPage({
 
   // Group consecutive items by day (order already sorted above).
   const dayGroups: { date: string; items: DayItem[] }[] = [];
-  const listItems: DayItem[] = isDriver
-    ? rideRows.map((ride) => ({ kind: "ride", data: ride }))
-    : tripRows.map((trip) => ({ kind: "trip", data: trip }));
 
   const sharedTripDetailsById = !isDriver
     ? new Map(
@@ -649,6 +862,32 @@ export default async function MyTripsPage({
       )
     : new Map<string, UserTripDetail>();
 
+  const nextTrip = isPassenger ? getNextTrip({ trips: allPassengerTrips, now: displayNow }) : null;
+  const nextTripDetail =
+    nextTrip && isSharedVehicle(nextTrip.vehicleType)
+      ? sharedTripDetailsById.get(nextTrip.id) ?? await getUserTrip(session.userId, nextTrip.id)
+      : null;
+  const paymentRequestCount = new Set(
+    allPassengerTrips
+      .filter((trip) =>
+        getDisplayStatus({
+          request: {
+            status: trip.parentRequestStatus ?? trip.status,
+            paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
+            hasPastTrip: trip.hasPastTrip,
+            rejectionReason: trip.rejectionReason,
+          },
+          trip,
+        }).canPay,
+      )
+      .map((trip) => trip.requestId),
+  ).size;
+  const approvalRequestCount = new Set(
+    allPassengerTrips
+      .filter((trip) => trip.parentRequestStatus === "waiting_list")
+      .map((trip) => trip.requestId),
+  ).size;
+
   for (const item of listItems) {
     const date = item.data.date;
     const last = dayGroups[dayGroups.length - 1];
@@ -660,7 +899,7 @@ export default async function MyTripsPage({
     (isDriver ? groupFilter : passengerHasActiveStatusFilter) || dateFrom || dateTo,
   );
   const hiddenGroups: Array<
-    "all" | "upcoming" | "ongoing" | "previous" | "pending_payment"
+    "all" | "upcoming" | "ongoing" | "pending_payment"
   > = isPassenger ? [] : ["upcoming", "pending_payment"];
 
   const locale = await getServerLocale();
@@ -677,7 +916,11 @@ export default async function MyTripsPage({
     } else {
       summaryText = passengerOngoingView
         ? translate(locale, "my_trips.total_ongoing", { total, plural: total === 1 ? "" : "s" })
-        : translate(locale, "my_trips.total_history", { total, plural: total === 1 ? "" : "s" });
+        : activePassengerTab === "pending"
+          ? translate(locale, "my_trips.total_pending_requests", { total })
+          : activePassengerTab === "upcoming"
+            ? translate(locale, "my_trips.total_upcoming", { total, plural: total === 1 ? "" : "s" })
+            : translate(locale, "my_trips.total_active", { total, plural: total === 1 ? "" : "s" });
     }
   }
 
@@ -691,9 +934,7 @@ export default async function MyTripsPage({
       : translate(locale, `status.${groupFilter}`);
 
   const pendingPaymentCount = !isDriver
-    ? tripRows.filter(
-        (t) => t.paymentStatus === "pending" || t.paymentStatus === "failed",
-      ).length
+    ? paymentRequestCount
     : 0;
 
   return (
@@ -708,78 +949,248 @@ export default async function MyTripsPage({
 
       <style>{`
         .my-trips-page {
-          overflow: visible;
+          --my-trips-tabbar-height: 45px;
+          overflow-x: clip;
+          overflow-y: visible;
         }
         .empty-state-icon { width: 80px; height: 80px; }
         .my-trips-shell {
-          margin: 0 auto;
-          padding: var(--space-24) var(--space-16) var(--space-48);
+          width: 100%;
+          max-width: 1200px;
+          margin-inline: auto;
+          padding-block: var(--space-24) calc(var(--space-48) + env(safe-area-inset-bottom) + 72px);
+          padding-inline: var(--space-16);
           overflow: visible;
+        }
+        .my-trips-heading { margin-bottom: var(--space-20); }
+        .my-trips-alerts { display: grid; gap: var(--space-8); margin-block: var(--space-16); }
+        .my-trips-alert {
+          display: flex;
+          align-items: center;
+          gap: var(--space-8);
+          min-height: 42px;
+          padding: 8px 12px;
+          border: 1px solid #EAD5AB;
+          border-radius: 6px;
+          background: #FFF8E9;
+          color: #71470D;
+          font-size: 13px;
+          font-weight: 700;
+          text-decoration: none;
+        }
+        .my-trips-alert.approval { border-color: #D8E7E3; background: #EFF7F4; color: #16594F; }
+        .my-trips-alert:focus-visible, .my-trips-history-link:focus-visible,
+        .next-trip-action:focus-visible, .my-trips-book-link:focus-visible {
+          outline: 3px solid #F5A623;
+          outline-offset: 3px;
+        }
+        .my-trips-tabbar {
+          position: sticky;
+          position: -webkit-sticky;
+          top: var(--app-header-h);
+          z-index: 90;
+          box-sizing: border-box;
+          isolation: isolate;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+          min-height: var(--my-trips-tabbar-height);
+          margin-block: 0 var(--space-24);
+          margin-inline: calc(-1 * var(--space-16));
+          padding-inline: var(--space-16);
+          background: var(--color-surface);
+          box-shadow: none;
+        }
+        .my-trips-tabbar.is-stuck::after {
+          content: "";
+          position: absolute;
+          inset-inline: 0;
+          inset-block-end: 0;
+          height: 1px;
+          background: #DCE6E4;
+          pointer-events: none;
+        }
+        .my-trips-tab-sentinel { display: block; height: 1px; margin-block-end: -1px; }
+        .my-trips-tab-scroll {
+          width: 100%;
+          min-width: 0;
+          overflow-x: auto;
+          overflow-y: hidden;
+          overscroll-behavior-inline: contain;
+          scroll-snap-type: x mandatory;
+          scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
+          mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+        }
+        .my-trips-tab-items { display: flex; width: max-content; min-width: 100%; flex-wrap: nowrap; align-items: stretch; gap: 6px; }
+        .my-trips-tab-scroll::-webkit-scrollbar { display: none; }
+        .my-trips-history-link-desktop { display: none; }
+        .my-trips-history-link-mobile {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-4);
+          min-height: 40px;
+          margin-block: 0 var(--space-16);
+          color: #006D60;
+          font-size: 12px;
+          font-weight: 800;
+          text-decoration: none;
+        }
+        .my-trips-history-link {
+          flex-shrink: 0;
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-4);
+          min-height: 42px;
+          color: #006D60;
+          font-size: 13px;
+          font-weight: 800;
+          text-decoration: none;
         }
         .my-trips-filters-mobile {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
           gap: var(--space-8);
-          margin-bottom: var(--space-16);
+          margin-bottom: var(--space-24);
         }
         .my-trips-layout {
-          display: block;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: var(--space-24);
+          align-items: start;
         }
-        .my-trips-header-desktop {
-          display: none;
+        .my-trips-content { min-width: 0; }
+        .my-trips-header-desktop { display: none; }
+        .my-trips-sidebar { display: none; background: var(--color-surface); }
+        .next-trip-card, .next-trip-empty {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: var(--space-20);
+          margin-bottom: var(--space-20);
+          min-width: 0;
+          padding: var(--space-16);
+          border: 1px solid #D8E7E3;
+          border-radius: 8px;
+          background: #fff;
+          box-shadow: 0 8px 24px rgba(11, 30, 61, 0.06);
         }
-        .my-trips-sidebar {
-          display: none;
+        .next-trip-main { min-width: 0; }
+        .next-trip-meta { display: flex; align-items: center; gap: var(--space-8); flex-wrap: nowrap; min-width: 0; }
+        .next-trip-eyebrow { margin: 0; color: #006D60; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+        .next-trip-type { padding: 4px 8px; border-radius: 4px; background: #EEF2F2; color: #526262; font-size: 11px; font-weight: 700; }
+        .next-trip-relative-time { margin: 9px 0 2px; color: #0B1E3D; font-size: 20px; font-weight: 800; line-height: 1.3; overflow-wrap: anywhere; }
+        .next-trip-date { margin: 0 0 12px; color: #647575; font-size: 11px; font-weight: 600; }
+        .next-trip-route { display: flex; align-items: stretch; gap: 10px; min-height: 64px; min-width: 0; }
+        .next-trip-route-rail { display: flex; flex-direction: column; align-items: center; padding: 5px 0; }
+        .next-trip-dot { width: 9px; height: 9px; border: 2px solid #007A6A; border-radius: 50%; background: #fff; }
+        .next-trip-dot.dropoff { border-color: #D46A32; }
+        .next-trip-route-line { width: 1px; flex: 1; min-height: 24px; background: #AAC8C0; }
+        .next-trip-stations { display: grid; gap: 9px; min-width: 0; flex: 1; }
+        .next-trip-stations p { display: grid; gap: 2px; margin: 0; min-width: 0; }
+        .next-trip-stations p > span { color: #647575; font-size: 11px; }
+        .next-trip-stations strong { display: -webkit-box; min-width: 0; overflow: hidden; color: #173337; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+        .next-trip-driver { display: flex; align-items: center; gap: 7px; margin-top: 12px; color: #24454A; font-size: 12px; font-weight: 700; }
+        .next-trip-vehicle { color: #647575; font-weight: 500; }
+        .next-trip-aside { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding-top: 12px; border-top: 1px solid #EEF2F2; }
+        .next-trip-status { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; width: max-content; max-width: 100%; padding: 5px 9px; border-radius: 4px; font-size: 11px; font-weight: 800; white-space: normal; }
+        .next-trip-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        .next-trip-vehicle-name { color: #526262; font-size: 12px; }
+        .next-trip-action {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          min-height: 44px;
+          width: 100%;
+          margin-inline-start: 0;
+          padding: 0 13px;
+          border-radius: 5px;
+          background: #0B1E3D;
+          color: #fff;
+          font-size: 12px;
+          font-weight: 800;
+          text-decoration: none;
         }
+        .next-trip-empty > div { display: flex; align-items: center; gap: 12px; }
+        .next-trip-empty-mark { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 40px; border-radius: 6px; background: #E7F4F0; color: #006D60; }
+        .next-trip-empty h2 { margin: 0; color: #173337; font-size: 16px; }
+        .next-trip-empty p { margin: 4px 0 0; color: #647575; font-size: 13px; line-height: 1.5; }
+        .next-trip-empty .next-trip-action { width: 100%; }
+        .trip-card:focus-within { outline: 2px solid #007A6A; outline-offset: 2px; }
+        .trip-card-link:focus-visible { outline: 3px solid #F5A623; outline-offset: -3px; }
+        .trip-type-badge { padding: 4px 8px; border-radius: 4px; background: #EEF2F2; color: #405555; font-size: 10px; font-weight: 800; }
+        .trip-card-date { display: grid; gap: 3px; min-width: 88px; padding: 7px 9px; border-inline-start: 2px solid #00C2A8; background: #F2F8F6; color: #173337; font-size: 12px; font-weight: 800; }
+        .trip-card-date span { color: #526262; font-size: 11px; font-weight: 600; }
+        .trip-card-route { display: grid; gap: 9px; margin-block: 10px 12px; }
+        .trip-card-route-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+        .trip-card-route-row span { min-width: 0; overflow: hidden; color: #24454A; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+        .trip-card-view-action { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding-top: 10px; border-top: 1px solid #EEF2F2; color: #006D60; font-size: 12px; font-weight: 800; }
+        .trip-approved-caption { margin-block-start: 2px; color: #687978; font-size: 11px; line-height: 1.35; font-weight: 600; }
+        .my-trips-day-group, .trip-card, .request-group-card {
+          scroll-margin-top: calc(var(--app-header-h) + var(--my-trips-tabbar-height));
+          scroll-margin-block-start: calc(var(--app-header-h) + var(--my-trips-tabbar-height));
+        }
+        .my-trips-history-link:focus-visible { outline: 3px solid #F5A623; outline-offset: 3px; }
         @media (min-width: 640px) {
           .empty-state-icon { width: 96px; height: 96px; }
+          .my-trips-tabbar { grid-template-columns: minmax(0, 1fr) auto; }
+          .my-trips-history-link-desktop { display: inline-flex; }
+          .my-trips-history-link-mobile { display: none; }
         }
         @media (min-width: 900px) {
           .empty-state-icon { width: 120px; height: 120px; }
         }
         @media (min-width: 1024px) {
           .my-trips-shell {
-            max-width: 1280px;
-            padding: var(--space-32) var(--space-32) var(--space-48);
+            padding-block: var(--space-32) calc(var(--space-48) + 96px + env(safe-area-inset-bottom));
+            padding-inline: var(--space-32);
           }
           .my-trips-header h1 {
             font-size: 28px;
           }
-          .my-trips-filters-mobile {
-            display: none;
-          }
+          .my-trips-tabbar { margin-inline: calc(-1 * var(--space-32)); padding-inline: var(--space-32); }
+          .my-trips-tab-scroll { mask-image: none; }
+          .my-trips-history-link-desktop { display: inline-flex; }
+          .my-trips-history-link-mobile { display: none; }
+          .my-trips-filters-mobile { display: none; }
+          .my-trips-tabbar { margin-bottom: var(--space-24); }
           .my-trips-layout {
             display: grid;
-            grid-template-columns: 280px minmax(0, 1fr);
+            grid-template-columns: minmax(0, 1fr) 300px;
             gap: var(--space-32);
             align-items: start;
             overflow: visible;
           }
-          .my-trips-header-mobile {
-            display: none;
-          }
-          .my-trips-header-desktop {
-            display: block;
-            margin-bottom: var(--space-24);
-          }
+          .my-trips-header-mobile { display: block; }
+          .my-trips-header-desktop { display: none; }
           .my-trips-sidebar {
             display: block;
-            align-self: start;
+            position: sticky;
+            top: calc(var(--app-header-h) + var(--my-trips-tabbar-height) + var(--space-16));
+            grid-column: 2;
+            grid-row: 1;
             min-width: 0;
-            z-index: 5;
+            z-index: 2;
             height: fit-content;
           }
           .my-trips-sidebar-pin {
             position: static;
             width: 100%;
           }
+          .my-trips-content { grid-column: 1; grid-row: 1; }
+          .next-trip-card { grid-template-columns: minmax(0, 1fr) 250px; align-items: stretch; gap: var(--space-24); padding: var(--space-16); }
+          .next-trip-relative-time { font-size: 23px; }
+          .next-trip-aside { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 10px; padding: 0; border-top: 0; border-inline-start: 1px solid #EEF2F2; padding-inline-start: var(--space-16); }
+          .next-trip-action { width: auto; min-width: 116px; margin-inline-start: auto; }
+          .next-trip-empty .next-trip-action { width: auto; }
+          .my-trips-sidebar { background: var(--color-surface); }
           .my-trips-sidebar-panel {
             background: #fff;
             border: 1px solid #eef0f3;
             border-radius: 14px;
             padding: var(--space-16);
-            margin-bottom: var(--space-16);
+            margin-block-end: var(--space-16);
           }
           .my-trips-sidebar-panel:last-child {
             margin-bottom: 0;
@@ -813,23 +1224,56 @@ export default async function MyTripsPage({
       <main className="my-trips-shell">
         <div
           className="my-trips-header my-trips-header-mobile"
-          style={{ marginBottom: "var(--space-24)" }}
+          style={{ marginBottom: "var(--space-16)" }}
         >
           <TripsPageHeader locale={locale} summaryText={summaryText} />
         </div>
 
         <div className="my-trips-filters-mobile">
           <DateRangeCalendar />
-          <StatusGroupFilter hiddenGroups={hiddenGroups} />
+          {isDriver && <StatusGroupFilter hiddenGroups={hiddenGroups} />}
         </div>
 
+        {isPassenger && (
+          <>
+            <NextTripCard
+              trip={nextTrip}
+              pickupName={nextTripDetail?.pickupStation?.name}
+              dropoffName={nextTripDetail?.dropoffStation?.name}
+              locale={locale}
+              now={displayNow}
+            />
+            {(paymentRequestCount > 0 || approvalRequestCount > 0) && (
+              <div className="my-trips-alerts" aria-label={translate(locale, "my_trips.request_alerts")}>
+                {paymentRequestCount > 0 && (
+                  <Link className="my-trips-alert" href="/my-trips?group=pending" aria-label={translate(locale, paymentRequestCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: paymentRequestCount })}>
+                    <Clock size={15} aria-hidden="true" />
+                    {translate(locale, paymentRequestCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: toArabicDigitsIf(locale, String(paymentRequestCount)) })}
+                    <ChevronRight size={15} aria-hidden="true" />
+                  </Link>
+                )}
+                {approvalRequestCount > 0 && (
+                  <div className="my-trips-alert approval" role="status">
+                    <ShieldCheck size={15} aria-hidden="true" />
+                    {translate(locale, approvalRequestCount === 1 ? "my_trips.approval_alert_one" : "my_trips.approval_alert_many", { count: toArabicDigitsIf(locale, String(approvalRequestCount)) })}
+                  </div>
+                )}
+              </div>
+            )}
+            <TripTabs active={activePassengerTab} counts={tabCounts} />
+          </>
+        )}
+
         <div className="my-trips-layout">
-          <StickySidebar className="my-trips-sidebar" ariaLabel={translate(locale, "my_trips.title")}>
+          <aside className="my-trips-sidebar" aria-label={translate(locale, "my_trips.title")}>
+            <div className="my-trips-sidebar-pin">
             <div className="my-trips-sidebar-panel">
               <p className="my-trips-sidebar-label">{translate(locale, "my_trips.sidebar_filters")}</p>
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-16)" }}>
                 <DateRangeCalendar fullWidth />
-                <StatusGroupFilter hiddenGroups={hiddenGroups} orientation="vertical" />
+                {isDriver && (
+                  <StatusGroupFilter hiddenGroups={hiddenGroups} orientation="vertical" />
+                )}
               </div>
             </div>
 
@@ -872,6 +1316,16 @@ export default async function MyTripsPage({
                   </span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "#E65100" }}>
                     {toArabicDigitsIf(locale, String(pendingPaymentCount))}
+                  </span>
+                </div>
+              )}
+              {!isDriver && approvalRequestCount > 0 && (
+                <div className="my-trips-stat-row">
+                  <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                    {translate(locale, "request_status.waiting_for_approval")}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#16594F" }}>
+                    {toArabicDigitsIf(locale, String(approvalRequestCount))}
                   </span>
                 </div>
               )}
@@ -924,7 +1378,8 @@ export default async function MyTripsPage({
                 </Link>
               </div>
             )}
-          </StickySidebar>
+            </div>
+          </aside>
 
           <div className="my-trips-content" style={{ minWidth: 0 }}>
             <div className="my-trips-header my-trips-header-desktop">
@@ -947,26 +1402,26 @@ export default async function MyTripsPage({
               )
             }
             title={
-              hasFilters
-                ? translate(locale, "my_trips.empty_title_filtered")
-                : isDriver
+              isPassenger
+                ? translate(locale, `my_trips.empty_tab_${activePassengerTab}_title`)
+                : hasFilters
+                  ? translate(locale, "my_trips.empty_title_filtered")
+                  : isDriver
                   ? driverOngoingView
                     ? translate(locale, "my_trips.empty_ongoing")
                     : translate(locale, "my_trips.empty_assigned")
-                  : passengerOngoingView
-                    ? translate(locale, "my_trips.empty_ongoing")
-                    : translate(locale, "my_trips.empty")
+                  : translate(locale, "my_trips.empty")
             }
             description={
-              hasFilters
-                ? translate(locale, "my_trips.empty_description_filtered")
-                : isDriver
+              isPassenger
+                ? translate(locale, `my_trips.empty_tab_${activePassengerTab}_description`)
+                : hasFilters
+                  ? translate(locale, "my_trips.empty_description_filtered")
+                  : isDriver
                   ? driverOngoingView
                     ? translate(locale, "my_trips.empty_description_ongoing")
                     : translate(locale, "my_trips.empty_description_assigned")
-                  : passengerOngoingView
-                    ? translate(locale, "my_trips.empty_description_ongoing_passenger")
-                    : translate(locale, "my_trips.empty_description_book")
+                  : translate(locale, "my_trips.empty_description_book")
             }
             action={
               !isDriver ? (
@@ -976,12 +1431,14 @@ export default async function MyTripsPage({
                     display: "inline-block",
                     padding: "var(--space-12) var(--space-24)",
                     background: "#0B1E3D",
+                    outlineOffset: 3,
                     color: "#fff",
                     borderRadius: 10,
                     fontWeight: 700,
                     fontSize: 14,
                     textDecoration: "none",
                   }}
+                  className="my-trips-book-link"
                 >
                   {translate(locale, "my_trips.book_ride")}
                 </Link>
@@ -991,13 +1448,14 @@ export default async function MyTripsPage({
         ) : (
           <>
             {dayGroups.map((group) => (
-              <div key={group.date} style={{ marginBottom: "var(--space-24)" }}>
+              <div key={group.date} className="my-trips-day-group" style={{ marginBottom: "var(--space-24)" }}>
                 <div
+                  className="my-trips-date-heading"
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: "var(--space-8)",
-                    marginBottom: "var(--space-8)",
+                    marginBottom: "var(--space-12)",
                   }}
                 >
                   <CalendarDays size={14} color="#00806E" aria-hidden="true" />
@@ -1015,7 +1473,7 @@ export default async function MyTripsPage({
                   <span
                     style={{ fontSize: 12, color: "#9aa7b4", fontWeight: 600 }}
                   >
-                    · {group.items.length} {group.items.length === 1 ? (isDriver ? translate(locale, "my_trips.ride_singular") : translate(locale, "my_trips.trip_singular")) : (isDriver ? translate(locale, "my_trips.ride_plural") : translate(locale, "my_trips.trip_plural"))}
+                    · {group.items.reduce((count, item) => count + (item.kind === "request_group" ? item.data.trips.length : 1), 0)} {group.items.reduce((count, item) => count + (item.kind === "request_group" ? item.data.trips.length : 1), 0) === 1 ? (isDriver ? translate(locale, "my_trips.ride_singular") : translate(locale, "my_trips.trip_singular")) : (isDriver ? translate(locale, "my_trips.ride_plural") : translate(locale, "my_trips.trip_plural"))}
                     {isDriver ? (
                       ` · ${group.items.reduce((sum, item) => item.kind === "ride" ? sum + item.data.passengerCount : sum, 0)} ${translate(locale, "my_trips.passengers")}`
                     ) : ""}
@@ -1025,6 +1483,19 @@ export default async function MyTripsPage({
                   style={{ display: "flex", flexDirection: "column", gap: "var(--space-12)" }}
                 >
                   {group.items.map((item) => {
+                    if (item.kind === "request_group") {
+                      return (
+                        <RequestTripGroupCard
+                          key={item.data.requestId}
+                          requestId={item.data.requestId}
+                          trips={item.data.trips}
+                          walletBalance={walletBalance}
+                          locale={locale}
+                          allowPay={activePassengerTab === "pending"}
+                          sharedTripDetailsById={sharedTripDetailsById}
+                        />
+                      );
+                    }
                     if (item.kind === "ride") {
                       const ride = item.data;
                       const vLabel = descriptionForVehicle(locale, ride.vehicleType);
@@ -1369,12 +1840,14 @@ export default async function MyTripsPage({
 
                     const trip = item.data;
                     const vLabel = descriptionForVehicle(locale, trip.vehicleType);
-                    const requestPaymentState = getRequestPaymentState({
+                    const displayRequest = {
                       status: trip.parentRequestStatus ?? trip.status,
                       paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
                       hasPastTrip: trip.hasPastTrip,
                       rejectionReason: trip.rejectionReason,
-                    });
+                    };
+                    const displayStatus = getDisplayStatus({ request: displayRequest, trip });
+                    const rejectionDisplay = getRejectionDisplay({ request: displayRequest, trip });
                     const timedOut = trip.status === "time_out";
                     const hasAssignedDriver = Boolean(trip.assignedDriver);
                     const sharedDetail = !isDriver ? sharedTripDetailsById.get(trip.id) : null;
@@ -1382,20 +1855,28 @@ export default async function MyTripsPage({
                       !isDriver &&
                       isSharedVehicle(trip.vehicleType) &&
                       Boolean(sharedDetail?.rideDetails);
+                    const pickupName = sharedDetail?.pickupStation?.name ?? trip.pickupAddress;
+                    const dropoffName = sharedDetail?.dropoffStation?.name ?? trip.dropoffAddress;
+                    const sharedTrip = isSharedVehicle(trip.vehicleType);
                     const needsPayment =
-                      !isDriver && requestPaymentState.showPayButton;
+                      !isDriver &&
+                      activePassengerTab === "pending" &&
+                      displayStatus.canPay;
                     return (
                       <div
                         key={trip.id}
+                        className="trip-card"
                         style={{
                           background: "#fff",
-                          borderRadius: 14,
-                          border: "1px solid #eef0f3",
+                          borderRadius: 8,
+                          border: "1px solid #DCE6E4",
                           overflow: "hidden",
-                          opacity: timedOut ? 0.55 : 1,
+                          opacity: timedOut ? 0.7 : 1,
+                          boxShadow: "0 3px 12px rgba(11,30,61,0.035)",
                         }}
                       >
                         <Link
+                          className="trip-card-link"
                           href={`/my-trips/${trip.id}`}
                           style={{
                             textDecoration: "none",
@@ -1431,10 +1912,13 @@ export default async function MyTripsPage({
                                 marginBottom: 8,
                               }}
                             >
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
                                 <Car size={20} color="#00806E" aria-hidden="true" />
-                                <span style={{ fontSize: 18, fontWeight: 800, color: "#0B1E3D", letterSpacing: "-0.01em" }}>
+                                <span style={{ fontSize: 16, fontWeight: 800, color: "#0B1E3D" }}>
                                   {vLabel}
+                                </span>
+                                <span className="trip-type-badge">
+                                  {translate(locale, sharedTrip ? "ride.shared" : "ride.private")}
                                 </span>
                               </div>
                               <span style={{ fontWeight: 800, fontSize: 16, color: "#00C2A8", fontVariantNumeric: "tabular-nums" }}>
@@ -1459,14 +1943,11 @@ export default async function MyTripsPage({
                             </div>
 
                             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                              <Pill
-                                {...(requestPaymentState.statusLabelKey
-                                  ? {
-                                      ...getStatusPill(locale)[trip.parentRequestStatus ?? trip.status],
-                                      label: translate(locale, requestPaymentState.statusLabelKey),
-                                    }
-                                  : getStatusPill(locale)[trip.status])}
-                              />
+                              <span className="trip-card-date">
+                                {formatDate(locale, trip.date)}
+                                <span>{formatTime(locale, trip.pickupTime)}</span>
+                              </span>
+                              <Pill {...displayPill(locale, displayStatus)} />
                               {trip.status === "matched" && (
                                 <MatchedTripCountdown
                                   date={trip.date}
@@ -1474,7 +1955,7 @@ export default async function MyTripsPage({
                                   locale={locale}
                                 />
                               )}
-                              {trip.status === "cancelled" && (trip as any).cancellation && (
+                              {displayStatus.showRefundBadge && trip.cancellation && (
                                 <span
                                   style={{
                                     display: "inline-flex",
@@ -1485,39 +1966,54 @@ export default async function MyTripsPage({
                                     fontSize: 11,
                                     fontWeight: 700,
                                     background:
-                                      (trip as any).cancellation.refundStatus === "approved"
+                                      trip.cancellation.refundStatus === "approved"
                                         ? "#E8F8F5"
-                                        : (trip as any).cancellation.refundStatus === "rejected"
+                                        : trip.cancellation.refundStatus === "rejected"
                                           ? "#FDECEA"
                                           : "#FFF3E0",
                                     color:
-                                      (trip as any).cancellation.refundStatus === "approved"
+                                      trip.cancellation.refundStatus === "approved"
                                         ? "#00806E"
-                                        : (trip as any).cancellation.refundStatus === "rejected"
+                                        : trip.cancellation.refundStatus === "rejected"
                                           ? "#C0392B"
                                           : "#E65100",
                                     border: `1px solid ${
-                                      (trip as any).cancellation.refundStatus === "approved"
+                                      trip.cancellation.refundStatus === "approved"
                                         ? "#CBE9E2"
-                                        : (trip as any).cancellation.refundStatus === "rejected"
+                                        : trip.cancellation.refundStatus === "rejected"
                                           ? "#FADBD8"
                                           : "#FFE0B2"
                                     }`,
                                   }}
                                 >
-                                  {(trip as any).cancellation.refundStatus === "approved"
-                                    ? `Refund Approved (${(trip as any).cancellation.refundAmount} EGP)`
-                                    : (trip as any).cancellation.refundStatus === "rejected"
+                                  {trip.cancellation.refundStatus === "approved"
+                                    ? `Refund Approved (${trip.cancellation.refundAmount} EGP)`
+                                    : trip.cancellation.refundStatus === "rejected"
                                       ? "Refund Rejected"
-                                      : `Refund Pending Review (${(trip as any).cancellation.refundAmount} EGP)`}
+                                      : `Refund Pending Review (${trip.cancellation.refundAmount} EGP)`}
                                 </span>
                               )}
                             </div>
-                            {(requestPaymentState.explanationKey || requestPaymentState.rejectionReason) && (
-                              <p style={{ margin: "-4px 0 12px", fontSize: 13, lineHeight: 1.5, color: "#5A6A7A" }}>
-                                {requestPaymentState.explanationKey
-                                  ? translate(locale, requestPaymentState.explanationKey)
-                                  : requestPaymentState.rejectionReason}
+                            {(rejectionDisplay.showReasonCard || displayStatus.secondaryKey || displayStatus.secondaryText) && (
+                              <p
+                                className={displayStatus.secondaryKey === "status.approved_by_admin" ? "trip-approved-caption" : undefined}
+                                title={rejectionDisplay.showReasonCard ? (rejectionDisplay.reason ?? translate(locale, "rejection.no_reason")) : undefined}
+                                style={{
+                                  margin: displayStatus.secondaryKey === "status.approved_by_admin" ? "-5px 0 10px" : "-4px 0 12px",
+                                  marginInlineStart: displayStatus.secondaryKey === "status.approved_by_admin" ? 28 : 0,
+                                  fontSize: displayStatus.secondaryKey === "status.approved_by_admin" ? 11 : 13,
+                                  lineHeight: displayStatus.secondaryKey === "status.approved_by_admin" ? 1.35 : 1.5,
+                                  color: displayStatus.secondaryKey === "status.approved_by_admin" ? "#687978" : "#5A6A7A",
+                                  ...(rejectionDisplay.showReasonCard
+                                    ? { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }
+                                    : {}),
+                                }}
+                              >
+                                {rejectionDisplay.showReasonCard
+                                  ? rejectionDisplay.reason ?? translate(locale, "rejection.no_reason")
+                                  : displayStatus.secondaryKey
+                                    ? translate(locale, displayStatus.secondaryKey)
+                                    : displayStatus.secondaryText}
                               </p>
                             )}
 
@@ -1576,14 +2072,14 @@ export default async function MyTripsPage({
                                   </div>
                                 )}
 
-                                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                                <div className="trip-card-route">
+                                  <div className="trip-card-route-row">
                                     <MapPin size={13} color="#00C2A8" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
-                                    <span style={{ fontSize: 13, color: "#0B1E3D" }} title={trip.pickupAddress}>{truncate(trip.pickupAddress)}</span>
+                                    <span title={pickupName}>{truncate(pickupName)}</span>
                                   </div>
-                                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                                  <div className="trip-card-route-row">
                                     <MapPin size={13} color="#E74C3C" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
-                                    <span style={{ fontSize: 13, color: "#0B1E3D" }} title={trip.dropoffAddress}>{truncate(trip.dropoffAddress)}</span>
+                                    <span title={dropoffName}>{truncate(dropoffName)}</span>
                                   </div>
                                 </div>
 
@@ -1597,23 +2093,26 @@ export default async function MyTripsPage({
                                   <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                                     <Clock size={12} color="#5A6A7A" aria-hidden="true" />
                                     <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                                      {isSharedVehicle(trip.vehicleType) ? translate(locale, "latest_arrival_time") : translate(locale, "arrive")} <strong style={{ color: "#0B1E3D" }}>{formatTime(locale, trip.arrivalTime)}</strong>
+                                      {translate(locale, "arrive")} <strong style={{ color: "#0B1E3D" }}>{formatTime(locale, trip.arrivalTime)}</strong>
                                     </span>
                                   </div>
                                 </div>
 
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingTop: 10, borderTop: "1px solid #f4f6f8" }}>
-                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "#9aa7b4" }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "#647575" }}>
                                     <Route size={12} aria-hidden="true" />
                                     {formatDistanceKm(locale, trip.distanceKm ?? 0)} · {formatMinutes(locale, trip.durationMinutes ?? 0)}
                                   </span>
-                                  <ChevronRight size={16} color="#9aa7b4" aria-hidden="true" />
+                                  <span className="trip-card-view-action">
+                                    {translate(locale, "my_trips.view_trip")}
+                                    <ChevronRight size={15} aria-hidden="true" />
+                                  </span>
                                 </div>
                               </>
                             )}
                           </div>
                         </Link>
-                        {!isDriver && (trip.status === "submitted" || trip.status === "matched" || trip.status === "confirmed" || trip.status === "active") && (
+                        {!isDriver && displayStatus.canCancel && (
                           <div style={{ padding: "0 18px 16px", display: "flex", justifyContent: "flex-end" }}>
                             <CancelTripModal
                               tripId={trip.id}
@@ -1629,7 +2128,7 @@ export default async function MyTripsPage({
                             <ContinueCheckoutButton bookingId={trip.requestId} amountEgp={trip.bookingAmountEgp} walletBalance={walletBalance} />
                           </div>
                         )}
-                        {!isDriver && trip.status === "completed" && (
+                        {!isDriver && displayStatus.canRate && (
                           <div style={{ padding: "0 18px 16px" }}>
                             <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />
                           </div>
