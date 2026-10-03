@@ -392,9 +392,9 @@ export default function UserManagementClient({
   }
 
   return (
-    <AdminCard padding={0}>
+    <AdminCard className="admin-users-card" padding={0}>
       {/* Header */}
-      <div className="flex flex-col gap-5 border-b border-[var(--color-border)] p-6 sm:p-7">
+      <div className="admin-users-header flex flex-col gap-5 border-b border-[var(--color-border)] p-6 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold tracking-tight text-[var(--color-primary)]">
@@ -405,7 +405,7 @@ export default function UserManagementClient({
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="admin-users-stats flex flex-wrap gap-2">
             <StatPill
               icon={Users}
               tone="navy"
@@ -434,7 +434,7 @@ export default function UserManagementClient({
         </div>
 
         {/* Search + filter */}
-        <div className="flex flex-col gap-3">
+        <div className="admin-users-filters flex flex-col gap-3">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
             <input

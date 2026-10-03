@@ -21,6 +21,7 @@ import {
   SlidersHorizontal,
   TicketPercent,
   Users,
+  X,
 } from "lucide-react";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import AdminActivityBell from "@/components/admin/layout/AdminActivityBell";
@@ -145,6 +146,7 @@ export default function AdminShell({
   const isAuthPage =
     pathname === "/admin/login" || pathname === "/admin/signup";
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
 
   // read persisted preference after mount to avoid SSR/client markup mismatch
@@ -202,24 +204,36 @@ export default function AdminShell({
 
   return (
     <div
-      className={`admin-shell admin-shell-frame${collapsed ? " admin-shell-collapsed" : ""}`}
+      className={`admin-shell admin-shell-frame${collapsed ? " admin-shell-collapsed" : ""}${mobileMenuOpen ? " admin-mobile-menu-open" : ""}`}
       dir="ltr"
     >
       <aside className="admin-sidebar">
         <button
           type="button"
           className="admin-sidebar-toggle"
-          onClick={toggleCollapsed}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={() => {
+            if (window.matchMedia("(max-width: 640px)").matches) {
+              setMobileMenuOpen((open) => !open);
+            } else {
+              toggleCollapsed();
+            }
+          }}
+          aria-label="Toggle admin navigation"
+          aria-controls="admin-navigation"
+          aria-expanded={mobileMenuOpen}
           aria-pressed={collapsed}
         >
-          <Menu size={18} aria-hidden="true" />
+          {mobileMenuOpen ? (
+            <X size={18} aria-hidden="true" />
+          ) : (
+            <Menu size={18} aria-hidden="true" />
+          )}
         </button>
         <Link href="/admin/dashboard" className="admin-sidebar-brand">
           <ListChecks size={22} aria-hidden="true" style={{ flexShrink: 0 }} />
           <span className="admin-sidebar-brand-label">Commuter Admin</span>
         </Link>
-        <nav className="admin-sidebar-nav" aria-label="Admin sections">
+        <nav id="admin-navigation" className="admin-sidebar-nav" aria-label="Admin sections">
           {sections.map(({ href, label, icon: Icon, statKey }) => {
             const destination = sidebarHref(href);
             const normalizedPath = pathname.replace(
@@ -237,6 +251,7 @@ export default function AdminShell({
                 href={destination}
                 className="admin-sidebar-link"
                 aria-current={active ? "page" : undefined}
+                onClick={() => setMobileMenuOpen(false)}
               >
                 <span style={{ position: "relative", display: "inline-flex" }}>
                   <Icon size={17} aria-hidden="true" />
@@ -266,8 +281,8 @@ export default function AdminShell({
           <p className="admin-topbar-title">{currentTitle(pathname)}</p>
           <div className="admin-topbar-actions">
             {activeRegionSlug && allowedRegions.length > 0 ? (
-              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>
+              <label className="admin-region-control" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="admin-region-label" style={{ fontSize: 13, fontWeight: 600 }}>
                   Active region
                 </span>
                 <select
@@ -289,7 +304,7 @@ export default function AdminShell({
                 </select>
               </label>
             ) : null}
-            <div id="admin-page-actions" className="admin-topbar-actions" />
+            <div id="admin-page-actions" className="admin-topbar-actions admin-page-action-slot" />
             <AdminActivityBell />
             <AdminLogoutButton />
           </div>

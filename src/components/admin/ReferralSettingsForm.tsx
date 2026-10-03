@@ -109,18 +109,30 @@ export default function ReferralSettingsForm({
   return (
     <div className="referral-settings-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 280px", gap: 20, alignItems: "start" }}>
       <style>{`
-        @media (max-width: 760px) {
+        @media (max-width: 900px) {
           .referral-settings-grid { grid-template-columns: 1fr !important; }
+          .referral-settings-summary { position: static !important; }
+        }
+        @media (max-width: 640px) {
+          .referral-settings-role-tabs { grid-template-columns: repeat(4, minmax(112px, 1fr)) !important; }
+          .referral-settings-form-card .admin-card-content { padding: 0 !important; }
+          .referral-settings-section { padding: 16px !important; }
+          .referral-settings-status { align-items: flex-start !important; }
+          .referral-settings-footer { align-items: stretch !important; flex-direction: column; padding: 14px !important; }
+          .referral-settings-footer > div:last-child { width: 100%; }
+          .referral-settings-footer button { flex: 1; justify-content: center; }
+          .referral-settings-summary-inner { gap: 12px !important; }
         }
       `}</style>
-      <AdminCard padding={0}>
+      <AdminCard className="referral-settings-form-card" padding={0}>
       <AdminFormLayout onSubmit={handleSubmit}>
         {/* Role switch */}
-        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--color-border)" }}>
+        <div className="referral-settings-section" style={{ padding: "18px 20px", borderBottom: "1px solid var(--color-border)" }}>
           <p style={eyebrowStyle}>Referral code owner</p>
           <div
             role="tablist"
             aria-label="Referral code owner"
+            className="referral-settings-role-tabs"
             style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(120px, 1fr))", gap: 4, padding: 4, marginTop: 10, background: "var(--color-background)", borderRadius: 8, overflowX: "auto" }}
           >
             {TAB_OPTIONS.map((option) => {
@@ -168,12 +180,12 @@ export default function ReferralSettingsForm({
         </div>
 
         {isAdminCampaign ? (
-          <div style={{ padding: 20 }}>
+          <div className="referral-settings-section" style={{ padding: 20 }}>
             <AdminReferralCampaigns selectedRole={role === "admin-driver" ? "driver" : "passenger"} />
           </div>
         ) : <>
         {/* Bonus amounts */}
-        <fieldset style={fieldsetStyle}>
+        <fieldset className="referral-settings-section" style={fieldsetStyle}>
           <legend style={legendStyle}>
             <Gift size={14} aria-hidden="true" /> Bonus amounts
           </legend>
@@ -198,7 +210,7 @@ export default function ReferralSettingsForm({
         </fieldset>
 
         {/* Usage limits */}
-        <fieldset style={fieldsetStyle}>
+        <fieldset className="referral-settings-section" style={fieldsetStyle}>
           <legend style={legendStyle}>
             <Users size={14} aria-hidden="true" /> Usage limits
           </legend>
@@ -214,7 +226,7 @@ export default function ReferralSettingsForm({
         </fieldset>
 
         {/* Status */}
-        <div style={{ padding: "16px 20px" }}>
+        <div className="referral-settings-section" style={{ padding: "16px 20px" }}>
           <div
             style={{
               display: "flex",
@@ -256,10 +268,11 @@ export default function ReferralSettingsForm({
             background: "var(--color-surface)",
           }}
         >
-          <div style={{ minHeight: 20 }}>
+          <div className="referral-settings-status" style={{ minHeight: 20 }}>
             {message ? (
               <p
                 role={message.ok ? "status" : "alert"}
+                className="referral-settings-footer"
                 style={{ margin: 0, color: message.ok ? "var(--color-secondary-deep)" : "var(--color-danger)", display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 }}
               >
                 {message.ok ? <Check size={15} /> : <AlertCircle size={15} />}
@@ -391,8 +404,8 @@ function SummarySidebar({ draftByRole }: { draftByRole: SettingsByRole }) {
   );
 
   return (
-    <AdminCard padding={20} style={{ position: "sticky", top: 20 }}>
-      <div style={{ display: "grid", gap: 16 }}>
+    <AdminCard className="referral-settings-summary" padding={20} style={{ position: "sticky", top: 20 }}>
+      <div className="referral-settings-summary-inner" style={{ display: "grid", gap: 16 }}>
       <p style={{ ...eyebrowStyle, display: "flex", alignItems: "center", gap: 6 }}>
         <Sparkles size={13} aria-hidden="true" /> Live overview
       </p>
