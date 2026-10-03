@@ -49,7 +49,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         { status: 400 },
       );
     }
-    const updated = await Availability.findByIdAndUpdate(id, { $set: { dayOfWeek, origin, startTime, endTime, active: body.active ?? existing.active } }, { new: true }).populate("driverId", "name phone email").lean();
+    const updated = await Availability.findByIdAndUpdate(id, { $set: { dayOfWeek, origin, startTime, endTime, active: body.active ?? existing.active } }, { returnDocument: "after" }).populate("driverId", "name phone email").lean();
     return NextResponse.json({ ok: true, data: updated });
   } catch {
     return NextResponse.json({ error: "Could not update availability." }, { status: 500 });

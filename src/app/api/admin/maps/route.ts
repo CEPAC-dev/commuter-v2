@@ -90,7 +90,7 @@ export async function PUT(request: NextRequest) {
           maskOutsideZones: body.maskOutsideZones,
         },
       },
-      { upsert: true, new: true, runValidators: true },
+      { upsert: true, returnDocument: "after", runValidators: true },
     ).lean();
     return NextResponse.json({ data });
   } catch {

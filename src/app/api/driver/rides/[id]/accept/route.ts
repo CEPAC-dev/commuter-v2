@@ -19,7 +19,7 @@ export async function POST(
   const ride = await Ride.findOneAndUpdate(
     { _id: id, driverId: null, status: "matched", offeredToDriverIds: session.userId, rejectedByDriverIds: { $ne: session.userId } },
     { $set: { driverId: session.userId, assignedDriver, status: "confirmed", offeredToDriverIds: [] } },
-    { new: true },
+    { returnDocument: "after" },
   );
   if (!ride) return NextResponse.json({ error: "This ride is no longer available." }, { status: 409 });
 

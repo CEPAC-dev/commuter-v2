@@ -52,7 +52,7 @@ export async function POST(
         resetPassword: true,
       },
     },
-    { new: true },
+    { returnDocument: "after" },
   ).select("_id");
   if (!user)
     return NextResponse.json({ error: "User not found" }, { status: 404 });

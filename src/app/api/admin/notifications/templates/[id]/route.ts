@@ -33,7 +33,7 @@ export async function PATCH(
   const template = await NotificationTemplate.findOneAndUpdate(
     { _id: id, createdBy: auth.userId },
     { $set: update },
-    { new: true, runValidators: true },
+    { returnDocument: "after", runValidators: true },
   ).lean();
   if (!template)
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
