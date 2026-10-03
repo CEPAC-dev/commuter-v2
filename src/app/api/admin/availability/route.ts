@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
       ? await Availability.findOneAndUpdate(
           { _id: id, driverId },
           { $set: fields },
-          { new: true },
+          { returnDocument: "after" },
         )
       : await Availability.create(fields);
     if (!record)

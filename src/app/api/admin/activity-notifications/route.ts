@@ -96,7 +96,7 @@ export async function PATCH(req: NextRequest) {
   const result = await AdminActivityNotification.findOneAndUpdate(
     { _id: body.id, adminId: auth.userId },
     { $set: { isRead: true, readAt: new Date() } },
-    { new: true },
+    { returnDocument: "after" },
   );
   if (!result)
     return NextResponse.json(

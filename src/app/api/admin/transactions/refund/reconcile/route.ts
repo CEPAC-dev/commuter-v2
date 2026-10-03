@@ -7,6 +7,7 @@ import { Types } from "mongoose";
 import { reconcileKashierRefund } from "@/lib/payments/kashierRefundReconciliation";
 import { queryKashierRefundTransaction } from "@/lib/payments/kashier";
 import { Trip } from "@/models/Trip";
+import { WalletTransaction } from "@/models/WalletTransaction";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,7 +48,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const timeline = payment.timeline as { event: string; detail?: string }[];
+  const timeline = payment.timeline as {
+    at: Date | string;
+    event: string;
+    detail?: string;
+  }[];
   const successfulEvents = timeline.filter((entry) =>
     [
       "kashier_refund_webhook_success",
@@ -115,24 +120,81 @@ export async function POST(req: NextRequest) {
         0,
         trip.priceEgp - (trip.adminRefund?.refundAmountEgp ?? 0),
       );
+    const attemptAt =
+      trip.adminRefund?.refundedAt ?? payment.lastRefundAttemptAt ?? null;
     const referenceFromTimeline = timeline
       .filter((entry) => entry.event === "kashier_refund_duplicate_reference")
-      .map((entry) => {
+      .flatMap((entry) => {
         const match = entry.detail?.match(
           /^(\d+(?:\.\d+)?) EGP — Kashier returned already-recorded ref ([^;]+)/,
         );
-        return match
-          ? { amountEgp: Number(match[1]), refundId: match[2] }
-          : null;
+        if (
+          !match ||
+          (attemptAt &&
+            new Date(entry.at).getTime() <
+              new Date(attemptAt).getTime() - 10_000)
+        )
+          return [];
+        return [
+          {
+            amountEgp: Number(match[1]),
+            refundId: match[2],
+            at: new Date(entry.at).getTime(),
+          },
+        ];
       })
-      .find(
-        (entry) =>
-          entry &&
-          entry.amountEgp === expectedAmount,
-      );
+      .filter((entry) => entry.amountEgp === expectedAmount)
+      .sort((left, right) => right.at - left.at)[0];
     const refundId =
       trip.adminRefund?.kashierRefundId ?? referenceFromTimeline?.refundId;
     if (!refundId || expectedAmount <= 0) continue;
+
+    const existingConfirmedRefund = await WalletTransaction.findOne({
+      paymentId: payment._id,
+      type: "payment_refund_partial",
+      status: "completed",
+      amountEgp: expectedAmount,
+      kashierTransactionIds: refundId,
+    })
+      .select("_id")
+      .lean();
+    if (existingConfirmedRefund && referenceFromTimeline?.refundId === refundId) {
+      await Trip.updateOne(
+        {
+          _id: trip._id,
+          "adminRefund.status": { $in: ["processing", "failed"] },
+        },
+        {
+          $set: {
+            "adminRefund.status": "failed",
+            "adminRefund.failureReason":
+              `Kashier returned ${refundId}, which is already recorded for an earlier refund. This attempt did not refund this trip; it is safe to retry.`,
+            "adminRefund.retryAllowed": true,
+          },
+        },
+      );
+      const eventAlreadyRecorded = timeline.some(
+        (entry) =>
+          entry.event === "refund_retry_enabled_duplicate_reference" &&
+          entry.detail?.includes(refundId),
+      );
+      if (!eventAlreadyRecorded) {
+        await Payment.updateOne(
+          { _id: payment._id },
+          {
+            $push: {
+              timeline: {
+                event: "refund_retry_enabled_duplicate_reference",
+                detail: `Trip ${String(trip._id)} returned previously recorded Kashier refund ref ${refundId}; no additional refund was counted.`,
+                actor: "admin",
+              },
+            },
+          },
+        );
+      }
+      retryReady += 1;
+      continue;
+    }
 
     const lookup = await queryKashierRefundTransaction(
       refundId,
@@ -144,8 +206,6 @@ export async function POST(req: NextRequest) {
     }
     providerChecked += 1;
 
-    const attemptAt =
-      trip.adminRefund?.refundedAt ?? payment.lastRefundAttemptAt ?? null;
     const attemptIsRecent =
       attemptAt != null &&
       Date.now() - new Date(attemptAt).getTime() <

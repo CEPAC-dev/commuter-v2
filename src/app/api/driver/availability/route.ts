@@ -203,7 +203,7 @@ export async function PUT(req: NextRequest) {
             active: active ?? true,
           },
         },
-        { new: true },
+        { returnDocument: "after" },
       );
       if (!record)
         return NextResponse.json({ error: "Shift not found." }, { status: 404 });
@@ -246,5 +246,4 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
-
 

@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
         userAgent: req.headers.get("user-agent")?.slice(0, 500) ?? "",
       },
     },
-    { upsert: true, new: true, runValidators: true },
+    { upsert: true, returnDocument: "after", runValidators: true },
   );
   return NextResponse.json({ success: true });
 }
