@@ -6,6 +6,7 @@ import { Trip } from "@/models/Trip";
 import { Payment } from "@/models/Payment";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { verifyAndSettleTopup } from "@/lib/payments/kashier";
+import { reconcileKashierRefund } from "@/lib/payments/kashierRefundReconciliation";
 import {
   completeWithdrawal,
   refundWithdrawal,
@@ -16,6 +17,8 @@ import { queryKashierPayoutStatus } from "@/lib/payments/kashierPayout";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { syncPaidTripsForRequest } from "@/lib/notifications/adminActivity";
 import { Types } from "mongoose";
+
+const REFUND_LOCK_STALE_MS = 5 * 60_000;
 
 function verifyLegacySignature(
   p: Record<string, unknown>,
@@ -151,19 +154,99 @@ export async function POST(req: NextRequest) {
     "completed",
   ].includes(st);
 
-  // Refund event confirms Kashier's processor outcome. Financial refund work
-  // is initiated by the admin route; acknowledge verified delivery to stop
-  // Kashier retries, then retain gateway reference for audit.
+  // Refund callbacks are the final authority when Kashier's synchronous
+  // response was ambiguous or arrived out of order.
   if (event === "refund") {
-    if (Types.ObjectId.isValid(String(orderId))) {
+    if (!Types.ObjectId.isValid(orderId))
+      return NextResponse.json({ error: "Unknown payment" }, { status: 404 });
+
+    const payment = await Payment.findById(orderId);
+    if (!payment)
+      return NextResponse.json({ error: "Unknown payment" }, { status: 404 });
+    if (payment.refundLock) {
+      if (
+        Date.now() - payment.refundLock.acquiredAt.getTime() <
+        REFUND_LOCK_STALE_MS
+      ) {
+        return NextResponse.json(
+          { error: "Refund is still being processed" },
+          { status: 503, headers: { "Retry-After": "5" } },
+        );
+      }
       await Payment.updateOne(
-        { _id: orderId },
+        { _id: payment._id, "refundLock.token": payment.refundLock.token },
+        { $unset: { refundLock: 1 } },
+      );
+    }
+
+    const successfulRefund = [
+      "success",
+      "succeeded",
+      "refunded",
+      "complete",
+      "completed",
+    ].includes(st);
+    const failedRefund = ["failed", "declined", "error", "rejected"].includes(
+      st,
+    );
+    const eventName = `kashier_refund_webhook_${st}`;
+    const detail = `${receivedAmount} EGP ref ${transactionId}`;
+
+    if (successfulRefund) {
+      await reconcileKashierRefund(
+        String(payment._id),
+        receivedAmount,
+        transactionId,
+        payment.kashierOrderId ?? null,
+      );
+    } else if (failedRefund) {
+      const alreadyRefunded = await WalletTransaction.exists({
+        paymentId: payment._id,
+        type: "payment_refund_partial",
+        $or: [
+          { kashierRefundId: transactionId },
+          { kashierTransactionIds: transactionId },
+        ],
+      });
+      if (!alreadyRefunded) {
+        const candidates = await Trip.find({
+          requestId: payment.bookingId,
+          "adminRefund.paymentId": payment._id,
+          "adminRefund.status": { $in: ["processing", "failed"] },
+          "adminRefund.gatewayRefundAmountEgp": receivedAmount,
+        })
+          .select("_id")
+          .lean<{ _id: Types.ObjectId }[]>();
+        if (candidates.length === 1) {
+          await Trip.updateOne(
+            {
+              _id: candidates[0]._id,
+              "adminRefund.status": { $in: ["processing", "failed"] },
+            },
+            {
+              $set: {
+                "adminRefund.status": "failed",
+                "adminRefund.failureReason": "Kashier confirmed refund failure",
+                "adminRefund.retryAllowed": true,
+              },
+            },
+          );
+        }
+      }
+    }
+
+    const duplicateEvent = await Payment.exists({
+      _id: payment._id,
+      timeline: { $elemMatch: { event: eventName, detail } },
+    });
+    if (!duplicateEvent) {
+      await Payment.updateOne(
+        { _id: payment._id },
         {
-          $addToSet: { kashierRefundIds: String(transactionId) },
           $push: {
             timeline: {
-              event: `kashier_refund_webhook_${st}`,
-              detail: `${receivedAmount} EGP ref ${transactionId}`,
+              event: eventName,
+              detail,
               actor: "kashier",
             },
           },

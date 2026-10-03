@@ -247,6 +247,8 @@ const TripSchema = new Schema(
           refundedAt: { type: Date },
           refundedBy: { type: Types.ObjectId, ref: "User", required: true },
           refundAmountEgp: { type: Number, required: true, min: 0 },
+          gatewayRefundAmountEgp: { type: Number, min: 0 },
+          kashierRefundId: { type: String },
           compensationPercent: {
             type: Number,
             required: true,
