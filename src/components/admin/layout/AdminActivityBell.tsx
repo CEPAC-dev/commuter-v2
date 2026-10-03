@@ -447,6 +447,11 @@ export default function AdminActivityBell() {
         .admin-activity-detail dt { color: var(--color-muted); }
         .admin-activity-detail dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
         .admin-activity-open-link { min-height: 40px; padding: 0 12px; display: inline-flex; align-items: center; gap: 5px; color: var(--color-on-primary); background: var(--color-primary); border-radius: 8px; text-decoration: none; font-size: 12px; font-weight: 800; }
+        @media (max-width: 640px) {
+          .admin-activity-popover { position: fixed; top: 122px; left: 12px; right: 12px; width: auto; max-height: calc(100dvh - 136px); }
+          .admin-activity-detail { padding: 16px; }
+          .admin-activity-detail dl { grid-template-columns: 88px minmax(0, 1fr); gap: 7px 10px; }
+        }
         @keyframes admin-alert-enter { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>

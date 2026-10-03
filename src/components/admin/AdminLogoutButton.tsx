@@ -27,6 +27,7 @@ export default function AdminLogoutButton() {
       variant="destructive"
       onClick={handleLogout}
       disabled={isLoggingOut}
+      className="admin-logout-button"
       aria-label="Log out"
     >
       <LogOut size={16} aria-hidden="true" />

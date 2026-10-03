@@ -70,6 +70,7 @@ export function AdminPageContainer({
 }) {
   return (
     <main
+      className="admin-page-container"
       style={{
         minHeight: "100dvh",
         background: "var(--color-surface)",
@@ -77,6 +78,7 @@ export function AdminPageContainer({
       }}
     >
       <div
+        className="admin-page-content"
         style={{
           width: "100%",
           maxWidth,
@@ -213,6 +215,7 @@ export function AdminCard({
     >
       {title || description || actions ? (
         <div
+          className="admin-card-header"
           style={{
             display: "flex",
             alignItems: "flex-start",
@@ -230,7 +233,7 @@ export function AdminCard({
           {actions}
         </div>
       ) : null}
-      <div style={{ padding }}>{children}</div>
+      <div className="admin-card-content" style={{ padding }}>{children}</div>
     </section>
   );
 }

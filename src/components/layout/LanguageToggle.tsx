@@ -28,6 +28,7 @@ export default function LanguageToggle({
     <button
       onClick={toggle}
       disabled={isPending}
+      className="admin-language-toggle"
       style={{
         padding: "6px 12px",
         borderRadius: 8,
