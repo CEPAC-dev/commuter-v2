@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { ArrowUpRight, Car, Navigation } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Car, Clock3, Navigation } from "lucide-react";
 import { getDisplayStatus } from "@/lib/statusDisplay.ts";
 import { getTripTab } from "@/lib/tripTabs.ts";
-import { getCairoNowParts, getMinutesUntilPickup } from "@/lib/time/cairoTime.ts";
-import { formatDate, formatTime, translate } from "@/lib/i18n";
+import { getCairoPickupAt, getCountdown } from "@/lib/countdown";
+import { formatTime, toArabicDigits, translate } from "@/lib/i18n";
 import { isSharedVehicle } from "@/lib/geo/stations";
 import type { TripListRow } from "@/types/booking";
+import NextTripCountdown from "./NextTripCountdown";
 
 function statusTone(tone: ReturnType<typeof getDisplayStatus>["tone"]) {
   return {
@@ -17,34 +18,12 @@ function statusTone(tone: ReturnType<typeof getDisplayStatus>["tone"]) {
   }[tone];
 }
 
-function pickupRelativeLabel(
-  trip: TripListRow,
-  locale: "en" | "ar",
-  now: Date,
-) {
-  const minutes = getMinutesUntilPickup(trip, now);
-  const localToday = getCairoNowParts(now).dateStr;
-  const tomorrowDate = new Date(`${localToday}T00:00:00Z`);
-  tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
-  const tomorrow = tomorrowDate.toISOString().slice(0, 10);
-  const time = formatTime(locale, trip.pickupTime);
-
-  if (trip.date === tomorrow) {
-    return translate(locale, "my_trips.tomorrow_at", { time });
-  }
-  if (minutes >= 1440) {
-    return translate(locale, "my_trips.in_days_at", {
-      days: Math.floor(minutes / 1440),
-      time,
-    });
-  }
-  if (minutes < 60) {
-    return translate(locale, "my_trips.in_minutes", { minutes });
-  }
-  return translate(locale, "my_trips.in_hours", {
-    hours: Math.floor(minutes / 60),
-    minutes: minutes % 60,
-  });
+function formatCompactDate(locale: "en" | "ar", date: string) {
+  const formatted = new Date(`${date}T12:00:00`).toLocaleDateString(
+    locale === "ar" ? "ar-EG" : "en-EG",
+    { weekday: "short", month: "short", day: "numeric" },
+  );
+  return locale === "ar" ? toArabicDigits(formatted) : formatted;
 }
 
 export default function NextTripCard({
@@ -89,24 +68,76 @@ export default function NextTripCard({
   const colors = statusTone(displayStatus.tone);
   const shared = isSharedVehicle(trip.vehicleType);
   const href = `/my-trips/${trip.id}`;
+  const pickupAt = getCairoPickupAt(trip);
+  const initialCountdown = pickupAt ? getCountdown({ pickupAt, now }) : null;
+  const elapsedMinutes =
+    ongoing && initialCountdown?.state === "reached" && pickupAt
+      ? Math.floor(Math.max(0, now.getTime() - Date.parse(pickupAt)) / 60_000)
+      : null;
+  const elapsedLabel =
+    elapsedMinutes === null
+      ? null
+      : translate(
+          locale,
+          elapsedMinutes >= 60 ? "my_trips.elapsed_hours" : "my_trips.elapsed_minutes",
+          elapsedMinutes >= 60
+            ? { hours: Math.floor(elapsedMinutes / 60), minutes: elapsedMinutes % 60 }
+            : { minutes: elapsedMinutes },
+        );
 
   return (
     <section className="next-trip-card" aria-labelledby="next-trip-title">
-      <div className="next-trip-main">
-        <div className="next-trip-meta">
-          <p className="next-trip-eyebrow">
-            {translate(locale, ongoing ? "my_trips.live_now" : "my_trips.next_trip")}
-          </p>
+      <header className="next-trip-header">
+        <div className="next-trip-heading-group">
+          <h2 id="next-trip-title" className="next-trip-heading">
+            <span className={`next-trip-heading-dot${ongoing ? " is-live" : ""}`} aria-hidden="true" />
+            {ongoing ? (
+              <NextTripCountdown
+                pickupAt={pickupAt ?? ""}
+                initialCountdown={initialCountdown}
+                locale={locale}
+                ongoing
+              />
+            ) : (
+              translate(locale, "my_trips.next_trip")
+            )}
+          </h2>
           <span className="next-trip-type">
             {translate(locale, shared ? "ride.shared" : "ride.private")}
           </span>
         </div>
+        <span className="next-trip-status" style={colors}>
+          <span className="next-trip-status-dot" aria-hidden="true" />
+          {translate(locale, displayStatus.key)}
+        </span>
+      </header>
 
-        <h2 id="next-trip-title" className="next-trip-relative-time">
-          {ongoing ? formatTime(locale, trip.pickupTime) : pickupRelativeLabel(trip, locale, now)}
-        </h2>
-        <p className="next-trip-date">{formatDate(locale, trip.date)}</p>
+      <div className="next-trip-summary">
+        {!ongoing && (
+          <div className="next-trip-countdown-area">
+            <NextTripCountdown
+              pickupAt={pickupAt ?? ""}
+              initialCountdown={initialCountdown}
+              locale={locale}
+              ongoing={false}
+            />
+          </div>
+        )}
+        <p className="next-trip-date">
+          <CalendarDays size={16} aria-hidden="true" />
+          <span>{formatCompactDate(locale, trip.date)}</span>
+          <span aria-hidden="true"> · </span>
+          <span>{formatTime(locale, trip.pickupTime)}</span>
+        </p>
+        {elapsedLabel && (
+          <p className="next-trip-elapsed">
+            <Clock3 size={14} aria-hidden="true" />
+            <span>{elapsedLabel}</span>
+          </p>
+        )}
+      </div>
 
+      <div className="next-trip-route-column">
         <div className="next-trip-route">
           <div className="next-trip-route-rail" aria-hidden="true">
             <span className="next-trip-dot pickup" />
@@ -124,7 +155,6 @@ export default function NextTripCard({
             </p>
           </div>
         </div>
-
         {trip.status === "matched" && (
           <div className="next-trip-driver">
             <Car size={15} aria-hidden="true" />
@@ -138,17 +168,13 @@ export default function NextTripCard({
         )}
       </div>
 
-      <aside className="next-trip-aside">
-        <span className="next-trip-status" style={colors}>
-          <span className="next-trip-status-dot" aria-hidden="true" />
-          {translate(locale, displayStatus.key)}
-        </span>
+      <footer className="next-trip-footer">
         <span className="next-trip-vehicle-name">{translate(locale, `vehicles.${trip.vehicleType}`)}</span>
         <Link className="next-trip-action" href={href} aria-label={`${translate(locale, ongoing ? "my_trips.track_trip" : "my_trips.view_trip")}: ${trip.pickupAddress} to ${trip.dropoffAddress}`}>
-          {translate(locale, ongoing ? "my_trips.track_trip" : "my_trips.view_trip")}
+          {translate(locale, ongoing ? "my_trips.track_short" : "my_trips.view_trip")}
           {ongoing ? <Navigation size={16} aria-hidden="true" /> : <ArrowUpRight size={16} aria-hidden="true" />}
         </Link>
-      </aside>
+      </footer>
     </section>
   );
 }

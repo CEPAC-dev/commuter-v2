@@ -45,14 +45,39 @@ export function getMinutesUntilPickup(
   trip: { date: string; pickupTime: string },
   now: Date = new Date(),
 ): number {
+  const pickup = getPickupInstant(trip);
+  return pickup ? Math.round((pickup.getTime() - now.getTime()) / 60_000) : Number.NaN;
+}
+
+export function getPickupInstant(trip: {
+  date: string;
+  pickupTime: string;
+}): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trip.date) || !/^\d{2}:\d{2}$/.test(trip.pickupTime)) {
+    return null;
+  }
+
+  const dateStart = Date.parse(`${trip.date}T00:00:00.000Z`);
+  const [hour, minute] = trip.pickupTime.split(":").map(Number);
+  if (
+    !Number.isFinite(dateStart) ||
+    new Date(dateStart).toISOString().slice(0, 10) !== trip.date ||
+    hour > 23 ||
+    minute > 59
+  ) {
+    return null;
+  }
+
   const targetWallTime = Date.parse(`${trip.date}T${trip.pickupTime}:00Z`);
+  if (!Number.isFinite(targetWallTime)) return null;
+
   let instant = targetWallTime;
   for (let iteration = 0; iteration < 3; iteration += 1) {
     const local = getCairoNowParts(new Date(instant));
     const representedWallTime = Date.parse(`${local.dateStr}T${local.timeStr}:00Z`);
     instant += targetWallTime - representedWallTime;
   }
-  return Math.round((instant - now.getTime()) / 60_000);
+  return Number.isFinite(instant) ? new Date(instant) : null;
 }
 
 export function isPastPickup(

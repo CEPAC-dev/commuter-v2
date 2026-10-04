@@ -60,6 +60,7 @@ export default function StatusGroupFilter({
               fontWeight: 700,
               fontSize: 13,
               padding: isVertical ? "10px 14px" : "8px 16px",
+              minHeight: 44,
               borderRadius: isVertical ? 10 : 20,
               cursor: "pointer",
               fontFamily: "inherit",

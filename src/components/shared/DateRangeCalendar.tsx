@@ -30,7 +30,7 @@ const triggerStyle: React.CSSProperties = {
   fontFamily: "inherit",
   cursor: "pointer",
   background: "var(--color-panel)",
-  minHeight: 38,
+  minHeight: 44,
 };
 
 function parseDate(s: string | null): Date | null {
@@ -150,14 +150,14 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
           style={{
             position: "absolute",
             top: "calc(100% + 8px)",
-            left: 0,
+            insetInlineStart: 0,
             zIndex: 30,
             background: "var(--color-panel)",
             borderRadius: 14,
             border: "1px solid var(--color-border)",
             boxShadow: "0 8px 24px var(--color-shadow)",
-            padding: 16,
-            width: "min(300px, calc(100vw - 32px))",
+            padding: 8,
+            width: "min(336px, calc(100vw - 16px))",
           }}
         >
           <div
@@ -176,7 +176,8 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                padding: 4,
+                minWidth: 44,
+                minHeight: 44,
                 display: "flex",
               }}
             >
@@ -205,7 +206,7 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(7, 1fr)",
-              gap: 2,
+              gap: 0,
               marginBottom: 4,
             }}
           >
@@ -229,7 +230,7 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(7, 1fr)",
-              gap: 2,
+              gap: 0,
             }}
           >
             {Array.from({ length: leadingBlanks }).map((_, i) => (
@@ -251,7 +252,8 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
                   style={{
                     border: "none",
                     borderRadius: 8,
-                    padding: "7px 0",
+                    minHeight: 44,
+                    padding: 0,
                     fontSize: 12,
                     fontWeight: isEdge ? 800 : 500,
                     cursor: "pointer",

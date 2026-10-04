@@ -958,7 +958,7 @@ export default async function MyTripsPage({
           width: 100%;
           max-width: 1200px;
           margin-inline: auto;
-          padding-block: var(--space-24) calc(var(--space-48) + env(safe-area-inset-bottom) + 72px);
+          padding-block: var(--space-24) calc(96px + env(safe-area-inset-bottom));
           padding-inline: var(--space-16);
           overflow: visible;
         }
@@ -968,7 +968,7 @@ export default async function MyTripsPage({
           display: flex;
           align-items: center;
           gap: var(--space-8);
-          min-height: 42px;
+          min-height: 44px;
           padding: 8px 12px;
           border: 1px solid #EAD5AB;
           border-radius: 6px;
@@ -1029,7 +1029,7 @@ export default async function MyTripsPage({
           display: inline-flex;
           align-items: center;
           gap: var(--space-4);
-          min-height: 40px;
+          min-height: 44px;
           margin-block: 0 var(--space-16);
           color: #006D60;
           font-size: 12px;
@@ -1041,7 +1041,7 @@ export default async function MyTripsPage({
           display: inline-flex;
           align-items: center;
           gap: var(--space-4);
-          min-height: 42px;
+          min-height: 44px;
           color: #006D60;
           font-size: 13px;
           font-weight: 800;
@@ -1060,63 +1060,67 @@ export default async function MyTripsPage({
           gap: var(--space-24);
           align-items: start;
         }
-        .my-trips-content { min-width: 0; }
+        .my-trips-content { min-width: 0; grid-row: 1; }
         .my-trips-header-desktop { display: none; }
-        .my-trips-sidebar { display: none; background: var(--color-surface); }
+        .my-trips-sidebar { display: block; grid-row: 2; min-width: 0; background: var(--color-surface); }
+        .my-trips-sidebar-panel:first-child { display: none; }
         .next-trip-card, .next-trip-empty {
           display: grid;
           grid-template-columns: minmax(0, 1fr);
-          gap: var(--space-20);
+          gap: 16px;
           margin-bottom: var(--space-20);
           min-width: 0;
-          padding: var(--space-16);
-          border: 1px solid #D8E7E3;
-          border-radius: 8px;
-          background: #fff;
-          box-shadow: 0 8px 24px rgba(11, 30, 61, 0.06);
-        }
-        .next-trip-main { min-width: 0; }
-        .next-trip-meta { display: flex; align-items: center; gap: var(--space-8); flex-wrap: nowrap; min-width: 0; }
-        .next-trip-eyebrow { margin: 0; color: #006D60; font-size: 11px; font-weight: 800; text-transform: uppercase; }
-        .next-trip-type { padding: 4px 8px; border-radius: 4px; background: #EEF2F2; color: #526262; font-size: 11px; font-weight: 700; }
-        .next-trip-relative-time { margin: 9px 0 2px; color: #0B1E3D; font-size: 20px; font-weight: 800; line-height: 1.3; overflow-wrap: anywhere; }
-        .next-trip-date { margin: 0 0 12px; color: #647575; font-size: 11px; font-weight: 600; }
-        .next-trip-route { display: flex; align-items: stretch; gap: 10px; min-height: 64px; min-width: 0; }
-        .next-trip-route-rail { display: flex; flex-direction: column; align-items: center; padding: 5px 0; }
-        .next-trip-dot { width: 9px; height: 9px; border: 2px solid #007A6A; border-radius: 50%; background: #fff; }
-        .next-trip-dot.dropoff { border-color: #D46A32; }
-        .next-trip-route-line { width: 1px; flex: 1; min-height: 24px; background: #AAC8C0; }
-        .next-trip-stations { display: grid; gap: 9px; min-width: 0; flex: 1; }
-        .next-trip-stations p { display: grid; gap: 2px; margin: 0; min-width: 0; }
-        .next-trip-stations p > span { color: #647575; font-size: 11px; }
-        .next-trip-stations strong { display: -webkit-box; min-width: 0; overflow: hidden; color: #173337; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-        .next-trip-driver { display: flex; align-items: center; gap: 7px; margin-top: 12px; color: #24454A; font-size: 12px; font-weight: 700; }
-        .next-trip-vehicle { color: #647575; font-weight: 500; }
-        .next-trip-aside { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding-top: 12px; border-top: 1px solid #EEF2F2; }
-        .next-trip-status { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; width: max-content; max-width: 100%; padding: 5px 9px; border-radius: 4px; font-size: 11px; font-weight: 800; white-space: normal; }
-        .next-trip-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-        .next-trip-vehicle-name { color: #526262; font-size: 12px; }
-        .next-trip-action {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          min-height: 44px;
-          width: 100%;
-          margin-inline-start: 0;
-          padding: 0 13px;
-          border-radius: 5px;
-          background: #0B1E3D;
+          padding: 20px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 18px;
+          background: var(--color-primary);
           color: #fff;
-          font-size: 12px;
-          font-weight: 800;
-          text-decoration: none;
+          box-shadow: 0 8px 20px rgba(11, 30, 61, 0.08);
         }
-        .next-trip-empty > div { display: flex; align-items: center; gap: 12px; }
-        .next-trip-empty-mark { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 40px; border-radius: 6px; background: #E7F4F0; color: #006D60; }
-        .next-trip-empty h2 { margin: 0; color: #173337; font-size: 16px; }
-        .next-trip-empty p { margin: 4px 0 0; color: #647575; font-size: 13px; line-height: 1.5; }
+        .next-trip-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 14px; grid-column: 1 / -1; min-width: 0; }
+        .next-trip-heading-group { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
+        .next-trip-heading { display: inline-flex; align-items: center; gap: 9px; min-width: 0; margin: 0; color: #fff; font-size: 16px; font-weight: 800; line-height: 1.3; }
+        .next-trip-heading-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--color-secondary); }
+        .next-trip-heading-dot.is-live { animation: next-trip-pulse 1.8s ease-out infinite; }
+        @keyframes next-trip-pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 194, 168, 0.65); } 70% { box-shadow: 0 0 0 8px rgba(0, 194, 168, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 194, 168, 0); } }
+        .next-trip-type { padding: 5px 10px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: #E2EBF3; font-size: 11px; font-weight: 700; }
+        .next-trip-summary, .next-trip-route-column { min-width: 0; }
+        .next-trip-countdown-area { display: flex; align-items: center; min-height: 88px; min-width: 0; }
+        .next-trip-countdown { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; width: min(100%, 420px); min-width: 0; }
+        .next-trip-countdown-unit { display: grid; align-content: center; justify-items: center; min-width: 0; min-height: 82px; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; background: rgba(255, 255, 255, 0.08); font-variant-numeric: tabular-nums; }
+        .next-trip-countdown-unit strong { min-width: 2ch; color: #fff; font-size: clamp(28px, 3vw, 44px); line-height: 1; text-align: center; }
+        .next-trip-countdown-unit > span { margin-block-start: 5px; color: var(--color-secondary); font-size: 12px; font-weight: 800; line-height: 1; }
+        .next-trip-reached-label { color: #fff; font-size: 19px; font-weight: 800; line-height: 1.35; }
+        .next-trip-live-label { color: #fff; font-size: 15px; font-weight: 800; }
+        .next-trip-date { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-block: 14px 0; margin-inline: 0; color: #D5E0EB; font-size: 15px; font-weight: 600; line-height: 1.45; }
+        .next-trip-date svg { flex: 0 0 auto; color: var(--color-secondary); }
+        .next-trip-elapsed { display: flex; align-items: center; gap: 6px; margin-block: 8px 0; margin-inline: 0; color: var(--color-secondary); font-size: 13px; font-weight: 700; }
+        .next-trip-elapsed svg { flex: 0 0 auto; }
+        .next-trip-route { display: flex; align-items: stretch; gap: 12px; min-width: 0; }
+        .next-trip-route-rail { display: flex; flex: 0 0 12px; flex-direction: column; align-items: center; padding-block: 5px; }
+        .next-trip-dot { width: 10px; height: 10px; flex: 0 0 10px; border: 2px solid var(--color-secondary); border-radius: 50%; background: var(--color-primary); }
+        .next-trip-dot.dropoff { border-color: var(--color-accent); }
+        .next-trip-route-line { width: 1px; flex: 1; min-height: 18px; background: rgba(213, 224, 235, 0.48); }
+        .next-trip-stations { display: grid; flex: 1; gap: 12px; min-width: 0; }
+        .next-trip-stations p { display: grid; gap: 3px; margin: 0; min-width: 0; }
+        .next-trip-stations p > span { color: #B8C8D8; font-size: 12px; line-height: 1.3; }
+        .next-trip-stations strong { min-width: 0; color: #fff; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; white-space: normal; text-align: start; }
+        .next-trip-driver { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-block-start: 12px; color: #D5E0EB; font-size: 12px; font-weight: 700; }
+        .next-trip-driver svg { flex: 0 0 auto; color: var(--color-secondary); }
+        .next-trip-vehicle { color: #B8C8D8; font-weight: 500; }
+        .next-trip-status { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; width: max-content; max-width: 100%; padding: 6px 10px; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 999px; font-size: 11px; font-weight: 800; white-space: normal; }
+        .next-trip-status-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: currentColor; }
+        .next-trip-footer { display: flex; grid-column: 1 / -1; flex-direction: column; align-items: stretch; gap: 12px; min-width: 0; padding-block-start: 16px; border-block-start: 1px solid rgba(255, 255, 255, 0.14); }
+        .next-trip-vehicle-name { min-width: 0; color: #D5E0EB; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+        .next-trip-action { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; width: 100%; margin-inline-start: 0; padding-block: 0; padding-inline: 16px; border: 1px solid transparent; border-radius: 8px; background: var(--color-secondary); color: var(--color-primary); font-size: 14px; font-weight: 800; text-decoration: none; }
+        .next-trip-empty-copy { display: flex; align-items: center; gap: 14px; min-width: 0; }
+        .next-trip-empty-mark { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; border: 1px solid rgba(0, 194, 168, 0.4); border-radius: 10px; background: rgba(0, 194, 168, 0.12); color: var(--color-secondary); }
+        .next-trip-empty h2 { margin: 0; color: #fff; font-size: 17px; }
+        .next-trip-empty p { margin-block: 5px 0; margin-inline: 0; color: #D5E0EB; font-size: 14px; line-height: 1.5; }
         .next-trip-empty .next-trip-action { width: 100%; }
+        .my-trips-sidebar-panel, .my-trips-day-group, .trip-card, .request-group-card { min-width: 0; }
+        .my-trips-date-heading { min-width: 0; flex-wrap: wrap; }
+        @media (prefers-reduced-motion: reduce) { .next-trip-heading-dot.is-live { animation: none; } }
         .trip-card:focus-within { outline: 2px solid #007A6A; outline-offset: 2px; }
         .trip-card-link:focus-visible { outline: 3px solid #F5A623; outline-offset: -3px; }
         .trip-type-badge { padding: 4px 8px; border-radius: 4px; background: #EEF2F2; color: #405555; font-size: 10px; font-weight: 800; }
@@ -1137,9 +1141,26 @@ export default async function MyTripsPage({
           .my-trips-tabbar { grid-template-columns: minmax(0, 1fr) auto; }
           .my-trips-history-link-desktop { display: inline-flex; }
           .my-trips-history-link-mobile { display: none; }
+          .next-trip-card { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); column-gap: 24px; row-gap: 18px; padding: 22px; }
+          .next-trip-summary { grid-column: 1; grid-row: 2; }
+          .next-trip-route-column { grid-column: 2; grid-row: 2; }
+          .next-trip-footer { grid-row: 3; flex-direction: row; align-items: center; justify-content: space-between; }
+          .next-trip-action { width: auto; min-width: 150px; }
+          .next-trip-empty { grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 22px; }
+          .next-trip-empty .next-trip-action { width: auto; }
         }
         @media (min-width: 900px) {
           .empty-state-icon { width: 120px; height: 120px; }
+          .my-trips-layout { grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; }
+          .my-trips-sidebar { grid-column: 2; grid-row: 1; }
+          .my-trips-sidebar-pin { width: 100%; }
+          .my-trips-sidebar-panel:first-child { display: block; }
+          .my-trips-content { grid-column: 1; grid-row: 1; }
+          .next-trip-card { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); column-gap: 32px; row-gap: 20px; padding: 24px; border-radius: 20px; }
+          .next-trip-summary { grid-column: 1; grid-row: 2; }
+          .next-trip-route-column { grid-column: 2; grid-row: 2; }
+          .next-trip-footer { grid-row: 3; }
+          .next-trip-empty .next-trip-action { width: auto; }
         }
         @media (min-width: 1024px) {
           .my-trips-shell {
@@ -1179,11 +1200,6 @@ export default async function MyTripsPage({
             width: 100%;
           }
           .my-trips-content { grid-column: 1; grid-row: 1; }
-          .next-trip-card { grid-template-columns: minmax(0, 1fr) 250px; align-items: stretch; gap: var(--space-24); padding: var(--space-16); }
-          .next-trip-relative-time { font-size: 23px; }
-          .next-trip-aside { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 10px; padding: 0; border-top: 0; border-inline-start: 1px solid #EEF2F2; padding-inline-start: var(--space-16); }
-          .next-trip-action { width: auto; min-width: 116px; margin-inline-start: auto; }
-          .next-trip-empty .next-trip-action { width: auto; }
           .my-trips-sidebar { background: var(--color-surface); }
           .my-trips-sidebar-panel {
             background: #fff;
@@ -1347,7 +1363,7 @@ export default async function MyTripsPage({
                   href="/create"
                   style={{
                     display: "block",
-                    padding: "var(--space-12) var(--space-16)",
+                    padding: "14px var(--space-16)",
                     background: "#0B1E3D",
                     color: "#fff",
                     borderRadius: 10,
@@ -1363,7 +1379,7 @@ export default async function MyTripsPage({
                   href="/wallet"
                   style={{
                     display: "block",
-                    padding: "var(--space-12) var(--space-16)",
+                    padding: "14px var(--space-16)",
                     background: "#fff",
                     color: "#0B1E3D",
                     border: "1px solid #eef0f3",
@@ -1429,7 +1445,7 @@ export default async function MyTripsPage({
                   href="/create"
                   style={{
                     display: "inline-block",
-                    padding: "var(--space-12) var(--space-24)",
+                    padding: "14px var(--space-24)",
                     background: "#0B1E3D",
                     outlineOffset: 3,
                     color: "#fff",
