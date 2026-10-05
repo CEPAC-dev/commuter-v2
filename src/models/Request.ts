@@ -26,6 +26,9 @@ const RequestSchema = new Schema(
     },
     amountEgp: { type: Number, required: true },
     note: { type: String, default: "", trim: true, maxlength: 1000 },
+    reviewedBy: { type: Types.ObjectId, ref: "User", required: false, default: null },
+    reviewedAt: { type: Date, required: false, default: null },
+    rejectionReason: { type: String, required: false, trim: true, maxlength: 500, default: null },
     paymentStatus: {
       type: String,
       required: true,
@@ -42,6 +45,9 @@ const RequestSchema = new Schema(
       default: "pending_payment",
       enum: [
         "pending_payment",
+        "waiting_list",
+        "approved",
+        "rejected",
         "submitted",
         "matched",
         "confirmed",

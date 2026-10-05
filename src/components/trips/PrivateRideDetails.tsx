@@ -20,6 +20,7 @@ interface Props {
   distanceKm: number;
   durationMinutes: number;
   to12h: (hhmm: string) => string;
+  showDistanceBreakdown?: boolean;
 }
 
 function haversineKm(a: GeoPoint, b: GeoPoint): number {
@@ -44,6 +45,7 @@ export default function PrivateRideDetails({
   distanceKm,
   durationMinutes,
   to12h,
+  showDistanceBreakdown = true,
   locale,
 }: Props & { locale: Locale }) {
   const chain: GeoPoint[] = [pickup, ...stops.map((s) => s.point), dropoff];
@@ -186,28 +188,30 @@ export default function PrivateRideDetails({
         />
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          marginTop: 16,
-          paddingTop: 14,
-          borderTop: "1px solid #f4f6f8",
-          flexWrap: "wrap",
-        }}
-      >
-        <TripStatBlock
-          icon={<RouteIcon size={15} color="#0B1E3D" aria-hidden="true" />}
-          headline={translate(locale, "ride.distance_duration")}
-          value={`${distanceKm.toFixed(1)} km · ${durationMinutes} ${translate(locale, "ride.minutes_short")}`}
-          lines={[
-            { label: translate(locale, "ride.distance"), value: `${distanceKm.toFixed(1)} km` },
-            { label: translate(locale, "ride.duration"), value: `${durationMinutes} ${translate(locale, "ride.minutes_short")}` },
-            ...segLines,
-          ]}
-          accent="#F5A623"
-        />
-      </div>
+      {showDistanceBreakdown && (
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            marginTop: 16,
+            paddingTop: 14,
+            borderTop: "1px solid #f4f6f8",
+            flexWrap: "wrap",
+          }}
+        >
+          <TripStatBlock
+            icon={<RouteIcon size={15} color="#0B1E3D" aria-hidden="true" />}
+            headline={translate(locale, "ride.distance_duration")}
+            value={`${distanceKm.toFixed(1)} km · ${durationMinutes} ${translate(locale, "ride.minutes_short")}`}
+            lines={[
+              { label: translate(locale, "ride.distance"), value: `${distanceKm.toFixed(1)} km` },
+              { label: translate(locale, "ride.duration"), value: `${durationMinutes} ${translate(locale, "ride.minutes_short")}` },
+              ...segLines,
+            ]}
+            accent="#F5A623"
+          />
+        </div>
+      )}
     </div>
   );
 }

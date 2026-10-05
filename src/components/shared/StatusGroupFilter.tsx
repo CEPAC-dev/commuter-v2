@@ -7,7 +7,7 @@ export default function StatusGroupFilter({
   hiddenGroups = [],
   orientation = "horizontal",
 }: {
-  hiddenGroups?: Array<"all" | "upcoming" | "ongoing" | "previous" | "pending_payment">;
+  hiddenGroups?: Array<"all" | "upcoming" | "ongoing" | "pending_payment">;
   orientation?: "horizontal" | "vertical";
 }) {
   const { t } = useClientLocale();
@@ -16,7 +16,6 @@ export default function StatusGroupFilter({
     { value: "all", label: t("filter.all") },
     { value: "upcoming", label: t("status.upcoming") },
     { value: "ongoing", label: t("status.ongoing") },
-    { value: "previous", label: t("status.previous") },
     { value: "pending_payment", label: t("status.pending_payment") },
   ] as const;
 
@@ -61,6 +60,7 @@ export default function StatusGroupFilter({
               fontWeight: 700,
               fontSize: 13,
               padding: isVertical ? "10px 14px" : "8px 16px",
+              minHeight: 44,
               borderRadius: isVertical ? 10 : 20,
               cursor: "pointer",
               fontFamily: "inherit",

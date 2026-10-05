@@ -11,6 +11,9 @@ export type PaymentStatus =
 
 export type BookingStatus =
   | "pending_payment"
+  | "waiting_list"
+  | "approved"
+  | "rejected"
   | "submitted"
   | "matched"
   | "nomatch"
@@ -112,6 +115,18 @@ export interface TripListRow {
   distanceKm: number;
   durationMinutes: number;
   bookingAmountEgp: number;
+  parentRequestStatus?: BookingStatus;
+  parentPaymentStatus?: PaymentStatus;
+  rejectionReason?: string | null;
+  reviewedAt?: string | null;
+  hasPastTrip?: boolean;
+  cancelledBy?: string;
+  cancelReason?: string;
+  cancellation?: {
+    refundStatus?: string;
+    refundAmount?: number;
+    reason?: string;
+  } | null;
   createdAt: string;
   assignedDriver?: {
     name?: string;
@@ -155,5 +170,8 @@ export interface BookingRow {
   amountEgp: number;
   paymentStatus: PaymentStatus;
   status: BookingStatus;
+  rejectionReason: string | null;
+  reviewedAt: string | null;
+  hasPastTrip?: boolean;
   createdAt: string;
 }

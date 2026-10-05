@@ -20,7 +20,7 @@ export default function UserNavbar() {
 
   const LINKS = [
     { label: t("create_request"), href: "/user/request/new", isCreate: true },
-    { label: t("my_requests"), href: "/user/my-requests", isCreate: false },
+    { label: t("my_trips"), href: "/my-trips", isCreate: false },
     { label: t("profile"), href: "/user/profile", isCreate: false },
   ];
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -107,7 +107,7 @@ export default function UserNavbar() {
       >
         {/* Logo — left */}
         <Link
-          href="/user/my-requests"
+          href="/my-trips"
           style={{
             display: "flex",
             alignItems: "center",

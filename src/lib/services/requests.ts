@@ -11,24 +11,32 @@ import type {
   PaymentStatus,
 } from "@/types/booking";
 import type { GeoPoint, StationSelection } from "@/types/geo";
+import {
+  buildPendingRequestExpiryFilter,
+  buildPendingTripExpiryFilter,
+} from "@/lib/pendingRequestHardening";
+import { getCairoNowParts } from "@/lib/cancellationPolicy";
+import { hasPastTrip as hasPastPickupTime } from "@/lib/admin/waitingList";
 
-const STALE_PENDING_FILTER = {
-  status: "pending_payment",
-  paymentStatus: { $in: ["pending", "failed"] },
-  $expr: {
-    $lte: ["$createdAt", { $subtract: ["$$NOW", 2 * 60 * 60 * 1000] }],
-  },
-};
+const EXPIRY_MS = 2 * 60 * 60 * 1000;
 
 export async function expireStaleForUser(userId: string): Promise<void> {
   await connectDB();
 
+  const cutoff = new Date(Date.now() - EXPIRY_MS);
+  const expireFilter = buildPendingRequestExpiryFilter(cutoff, userId);
+  const expiringRequests = await Request.find(expireFilter)
+    .select("_id")
+    .lean<{ _id: Types.ObjectId }[]>();
+  const requestIds = expiringRequests.map((request) => request._id);
+  if (requestIds.length === 0) return;
+
   await Request.updateMany(
-    { userId, ...STALE_PENDING_FILTER },
+    { _id: { $in: requestIds }, ...expireFilter },
     { $set: { status: "time_out", paymentStatus: "expired" } },
   );
   await Trip.updateMany(
-    { userId, ...STALE_PENDING_FILTER },
+    buildPendingTripExpiryFilter(requestIds),
     { $set: { status: "time_out", paymentStatus: "expired" } },
   );
 }
@@ -39,12 +47,22 @@ export async function expireStaleRequest(
 ): Promise<void> {
   await connectDB();
 
+  const cutoff = new Date(Date.now() - EXPIRY_MS);
+  const expireFilter = buildPendingRequestExpiryFilter(cutoff, userId);
+  const expiringRequest = await Request.findOne({
+    _id: requestId,
+    ...expireFilter,
+  })
+    .select("_id")
+    .lean<{ _id: Types.ObjectId }>();
+  if (!expiringRequest) return;
+
   await Request.updateOne(
-    { _id: requestId, userId, ...STALE_PENDING_FILTER },
+    { _id: expiringRequest._id, ...expireFilter },
     { $set: { status: "time_out", paymentStatus: "expired" } },
   );
   await Trip.updateMany(
-    { requestId, ...STALE_PENDING_FILTER },
+    buildPendingTripExpiryFilter([expiringRequest._id]),
     { $set: { status: "time_out", paymentStatus: "expired" } },
   );
 }
@@ -97,6 +115,20 @@ export async function listUserRequests(
       }[]
     >();
 
+  const nowCairo = getCairoNowParts();
+  const pastTripByRequest = new Map<string, boolean>();
+  for (const trip of tripDocs) {
+    const requestId = String(trip.requestId);
+    if (
+      hasPastPickupTime(
+        [{ date: trip.date, pickupTime: trip.pickupTime }],
+        nowCairo,
+      )
+    ) {
+      pastTripByRequest.set(requestId, true);
+    }
+  }
+
   const tripsByRequest = new Map<string, BookingTripRow[]>();
   for (const trip of tripDocs) {
     const requestId = String(trip.requestId);
@@ -123,18 +155,35 @@ export async function listUserRequests(
   return {
     total,
     page,
-    rows: rawList.map((request) => ({
-      id: String(request._id),
-      dates: (request.dates as string[]) ?? [],
-      amountEgp: request.amountEgp as number,
-      paymentStatus: (request.paymentStatus as PaymentStatus) ?? "pending",
-      status: (request.status as BookingStatus) ?? "pending_payment",
-      createdAt:
-        request.createdAt instanceof Date
-          ? request.createdAt.toISOString()
-          : String(request.createdAt),
-      trips: tripsByRequest.get(String(request._id)) ?? [],
-    })),
+    rows: rawList.map((request) => {
+      const requestId = String(request._id);
+      const status = (request.status as BookingStatus) ?? "pending_payment";
+      return {
+        id: requestId,
+        dates: (request.dates as string[]) ?? [],
+        amountEgp: request.amountEgp as number,
+        paymentStatus: (request.paymentStatus as PaymentStatus) ?? "pending",
+        status,
+        rejectionReason:
+          typeof request.rejectionReason === "string"
+            ? request.rejectionReason
+            : null,
+        reviewedAt:
+          request.reviewedAt instanceof Date
+            ? request.reviewedAt.toISOString()
+            : request.reviewedAt
+              ? String(request.reviewedAt)
+              : null,
+        ...(status === "approved"
+          ? { hasPastTrip: pastTripByRequest.get(requestId) ?? false }
+          : {}),
+        createdAt:
+          request.createdAt instanceof Date
+            ? request.createdAt.toISOString()
+            : String(request.createdAt),
+        trips: tripsByRequest.get(requestId) ?? [],
+      };
+    }),
   };
 }
 
@@ -164,6 +213,9 @@ export interface UserRequestDetail {
     amountEgp: number;
     paymentStatus: PaymentStatus;
     status: BookingStatus;
+    rejectionReason: string | null;
+    reviewedAt: string | null;
+    hasPastTrip?: boolean;
     createdAt: string;
   };
   trips: RequestTripDetail[];
@@ -187,13 +239,33 @@ export async function getUserRequest(
 
   if (!request) return null;
 
+  const status = (request.status as BookingStatus) ?? "pending_payment";
+  const nowCairo = getCairoNowParts();
+  const hasPastTrip =
+    status === "approved" &&
+    hasPastPickupTime(
+      trips.map((trip) => ({ date: trip.date, pickupTime: trip.pickupTime })),
+      nowCairo,
+    );
+
   return {
     request: {
       id: String(request._id),
       dates: (request.dates as string[]) ?? [],
       amountEgp: request.amountEgp as number,
       paymentStatus: (request.paymentStatus as PaymentStatus) ?? "pending",
-      status: (request.status as BookingStatus) ?? "pending_payment",
+      status,
+      rejectionReason:
+        typeof request.rejectionReason === "string"
+          ? request.rejectionReason
+          : null,
+      reviewedAt:
+        request.reviewedAt instanceof Date
+          ? request.reviewedAt.toISOString()
+          : request.reviewedAt
+            ? String(request.reviewedAt)
+            : null,
+      ...(status === "approved" ? { hasPastTrip } : {}),
       createdAt:
         request.createdAt instanceof Date
           ? request.createdAt.toISOString()

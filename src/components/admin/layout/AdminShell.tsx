@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
+import NotificationCenter from "@/components/layout/NotificationCenter";
 import AdminActivityBell from "@/components/admin/layout/AdminActivityBell";
 import type { RegionSlug } from "@/lib/config/regions";
 
@@ -54,6 +55,12 @@ const sections = [
     statKey: null,
   },
   { href: "/admin/users", label: "Users", icon: Users, statKey: "users" },
+  {
+    href: "/admin/waiting-list",
+    label: "Waiting list",
+    icon: ListChecks,
+    statKey: "waitingList",
+  },
   { href: "/admin/trips", label: "Trips", icon: Route, statKey: "trips" },
   {
     href: "/admin/stations",
@@ -108,6 +115,7 @@ type Stats = {
   trips: number;
   rides: number;
   availability: number;
+  waitingList: number;
 };
 
 const COLLAPSE_STORAGE_KEY = "admin-sidebar-collapsed";
@@ -161,13 +169,55 @@ export default function AdminShell({
     fetch("/api/admin/stats", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
-        if (!cancelled && json) setStats(json);
+        if (!cancelled && json) {
+          setStats((current) => ({
+            users: json.users ?? 0,
+            trips: json.trips ?? 0,
+            rides: json.rides ?? 0,
+            availability: json.availability ?? 0,
+            waitingList: current?.waitingList ?? 0,
+          }));
+        }
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [isAuthPage, pathname]);
+
+  useEffect(() => {
+    if (isAuthPage) return;
+    let cancelled = false;
+    const fetchWaitingCount = () => {
+      if (document.visibilityState !== "visible") return;
+      fetch("/api/admin/waiting-list/count", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((json) => {
+          if (!cancelled && json && typeof json.count === "number") {
+            setStats((current) => ({
+              users: current?.users ?? 0,
+              trips: current?.trips ?? 0,
+              rides: current?.rides ?? 0,
+              availability: current?.availability ?? 0,
+              waitingList: json.count,
+            }));
+          }
+        })
+        .catch(() => {});
+    };
+    const onFocus = () => fetchWaitingCount();
+    const onWaitingListUpdate = () => fetchWaitingCount();
+    const interval = window.setInterval(fetchWaitingCount, 60_000);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("waiting-list-updated", onWaitingListUpdate);
+    fetchWaitingCount();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("waiting-list-updated", onWaitingListUpdate);
+    };
+  }, [isAuthPage]);
 
   function toggleCollapsed() {
     setCollapsed((current) => {
@@ -233,7 +283,11 @@ export default function AdminShell({
           <ListChecks size={22} aria-hidden="true" style={{ flexShrink: 0 }} />
           <span className="admin-sidebar-brand-label">Commuter Admin</span>
         </Link>
-        <nav id="admin-navigation" className="admin-sidebar-nav" aria-label="Admin sections">
+        <nav
+          id="admin-navigation"
+          className="admin-sidebar-nav"
+          aria-label="Admin sections"
+        >
           {sections.map(({ href, label, icon: Icon, statKey }) => {
             const destination = sidebarHref(href);
             const normalizedPath = pathname.replace(
@@ -281,8 +335,14 @@ export default function AdminShell({
           <p className="admin-topbar-title">{currentTitle(pathname)}</p>
           <div className="admin-topbar-actions">
             {activeRegionSlug && allowedRegions.length > 0 ? (
-              <label className="admin-region-control" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="admin-region-label" style={{ fontSize: 13, fontWeight: 600 }}>
+              <label
+                className="admin-region-control"
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <span
+                  className="admin-region-label"
+                  style={{ fontSize: 13, fontWeight: 600 }}
+                >
                   Active region
                 </span>
                 <select
@@ -304,7 +364,15 @@ export default function AdminShell({
                 </select>
               </label>
             ) : null}
-            <div id="admin-page-actions" className="admin-topbar-actions admin-page-action-slot" />
+            <div
+              id="admin-page-actions"
+              className="admin-topbar-actions admin-page-action-slot"
+            />
+            <NotificationCenter
+              color="var(--color-primary)"
+              buttonBackground="var(--color-primary-tint)"
+              seeAllHref="/admin/notifications"
+            />
             <AdminActivityBell />
             <AdminLogoutButton />
           </div>

@@ -8,6 +8,10 @@ import {
   captureReservation,
   releaseReservation,
 } from "@/lib/wallet/wallet";
+import {
+  buildSettlementRequestFilter,
+  isSettlementBlockedStatus,
+} from "@/lib/pendingRequestHardening";
 import { Types } from "mongoose";
 
 const BASE =
@@ -71,6 +75,12 @@ export async function verifyAndSettleBooking(
 
   if (booking.paymentStatus === "paid") return "paid";
   if (booking.paymentStatus === "failed") return "failed";
+  if (isSettlementBlockedStatus(booking.status)) {
+    console.warn(
+      `[Payment] Refusing settlement for blocked booking ${String(booking._id)} (${booking.status})`,
+    );
+    return "pending";
+  }
 
   // Prefer the newest Payment (mixed-payment aware) if one exists.
   const payment = await Payment.findOne({
@@ -82,7 +92,7 @@ export async function verifyAndSettleBooking(
     // No gateway leg — capture wallet and settle.
     if (payment.gatewayAmountEgp === 0) {
       const settled = await Request.findOneAndUpdate(
-        { _id: booking._id, paymentStatus: { $in: ["pending", "failed"] } },
+        buildSettlementRequestFilter(booking._id),
         { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
       );
 
@@ -143,7 +153,7 @@ export async function verifyAndSettleBooking(
       // Claim booking BEFORE capturing money — same invariant as the webhook
       // path: never take funds for a Payment that lost the settlement race.
       const settled = await Request.findOneAndUpdate(
-        { _id: booking._id, paymentStatus: { $in: ["pending", "failed"] } },
+        buildSettlementRequestFilter(booking._id),
         { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
       );
 
@@ -287,7 +297,7 @@ export async function verifyAndSettleBooking(
 
   if (outcome === "paid") {
     const settled = await Request.findOneAndUpdate(
-      { _id: bookingId, paymentStatus: { $in: ["pending", "failed"] } },
+      buildSettlementRequestFilter(bookingId),
       { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
     );
     if (settled) {

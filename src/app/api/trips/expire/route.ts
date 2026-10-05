@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { getAdminSettings, getNomatchSweepFilter } from "@/lib/cancellationPolicy";
 import { logTripNomatch } from "@/lib/services/logActionHelpers";
+import {
+  buildPendingRequestExpiryFilter,
+  buildPendingTripExpiryFilter,
+} from "@/lib/pendingRequestHardening";
 
 const EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -28,20 +33,23 @@ export async function POST(req: NextRequest) {
 
   const cutoff = new Date(Date.now() - EXPIRY_MS);
 
-  const expireFilter = {
-    status: "pending_payment",
-    paymentStatus: { $in: ["pending", "failed"] },
-    createdAt: { $lte: cutoff },
-  };
-
-  const [reqResult, tripResult] = await Promise.all([
-    Request.updateMany(expireFilter, {
-      $set: { status: "time_out", paymentStatus: "expired" },
-    }),
-    Trip.updateMany(expireFilter, {
-      $set: { status: "time_out", paymentStatus: "expired" },
-    }),
-  ]);
+  const expireFilter = buildPendingRequestExpiryFilter(cutoff);
+  const expiringRequests = await Request.find(expireFilter)
+    .select("_id")
+    .lean<{ _id: Types.ObjectId }[]>();
+  const requestIds = expiringRequests.map((request) => request._id);
+  const reqResult = requestIds.length
+    ? await Request.updateMany(
+        { _id: { $in: requestIds }, ...expireFilter },
+        { $set: { status: "time_out", paymentStatus: "expired" } },
+      )
+    : { modifiedCount: 0 };
+  const tripResult = requestIds.length
+    ? await Trip.updateMany(
+        buildPendingTripExpiryFilter(requestIds),
+        { $set: { status: "time_out", paymentStatus: "expired" } },
+      )
+    : { modifiedCount: 0 };
 
   // Auto-mark unmatched "submitted" trips as "nomatch" past the admin-configured cutoff.
   const settings = await getAdminSettings();

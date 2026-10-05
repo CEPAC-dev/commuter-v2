@@ -24,9 +24,9 @@ export const DEFAULT_NOTIFICATION_TEMPLATES = [
     messageAr: "حجزك في انتظار الدفع. أكمل الدفع الآن لتضمن مشوارك.",
     icon: "bell",
     style: "warning",
-    linkUrl: "/my-requests",
-    linkLabel: "View requests",
-    linkLabelAr: "عرض الطلبات",
+    linkUrl: "/my-trips",
+    linkLabel: "View trips",
+    linkLabelAr: "عرض الرحلات",
   },
   {
     name: "Driver assigned",

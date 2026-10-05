@@ -15,6 +15,9 @@ const NOTIFICATION_TYPES = [
   "referral_bonus",
   "ride_offer",
   "admin_broadcast",
+  "waiting_list_created",
+  "waiting_list_approved",
+  "waiting_list_rejected",
 ] as const;
 
 const NotificationSchema = new Schema(

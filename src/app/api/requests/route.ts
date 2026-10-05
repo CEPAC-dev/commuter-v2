@@ -12,6 +12,9 @@ const PAYMENT_STATUSES = new Set<PaymentStatus>([
 ]);
 const BOOKING_STATUSES = new Set<BookingStatus>([
   "pending_payment",
+  "waiting_list",
+  "approved",
+  "rejected",
   "submitted",
   "matched",
   "confirmed",
