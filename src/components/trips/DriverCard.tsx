@@ -13,6 +13,7 @@ interface DriverCardData {
   vehicleColor?: string;
   carColor?: string;
   plate?: string;
+  rating?: { driverRating: number; carRating: number } | null;
 }
 
 function initials(name?: string): string {
@@ -105,6 +106,15 @@ export default function DriverCard({
           >
             {driver.name ?? t("my_trips.driver_fallback")}
           </p>
+          {driver.rating && (
+            <p
+              aria-label={`${t("rate_trip.rated")} ${((driver.rating.driverRating + driver.rating.carRating) / 2).toFixed(1)}`}
+              style={{ margin: "4px 0 0", color: "#73520D", fontSize: 12, fontWeight: 700 }}
+            >
+              <span aria-hidden="true" style={{ color: "#B87900" }}>★</span>{" "}
+              {((driver.rating.driverRating + driver.rating.carRating) / 2).toFixed(1)} · {t("rate_trip.rated")}
+            </p>
+          )}
         </div>
 
         {showCall && (

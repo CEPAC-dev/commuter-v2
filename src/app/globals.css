@@ -378,6 +378,7 @@
   --space-32: 32px;
   --space-48: 48px;
   --app-header-height: 60px;
+  --app-header-h: calc(var(--app-header-height) + 1px);
   --app-header-offset: calc(var(--app-header-height) + 1px + var(--space-16));
 }
 

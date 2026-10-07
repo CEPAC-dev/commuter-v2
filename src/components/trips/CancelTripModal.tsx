@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useClientLocale } from "@/lib/locale.client";
 import {
   XCircle,
   AlertTriangle,
@@ -42,6 +43,7 @@ export default function CancelTripModal({
   onCancelled,
 }: CancelTripModalProps) {
   const router = useRouter();
+  const { t } = useClientLocale();
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -65,7 +67,13 @@ export default function CancelTripModal({
       const res = await fetch(`/api/trips/${tripId}/cancel`);
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.error || "Failed to load cancellation details");
+        throw new Error(
+          json.errorCode === "REQUEST_NOT_CANCELLABLE"
+            ? t("errors.REQUEST_NOT_CANCELLABLE")
+            : json.errorCode === "TRIP_NOT_PAID"
+              ? t("errors.TRIP_NOT_PAID")
+            : json.error || "Failed to load cancellation details",
+        );
       }
       setEvaluation(json.evaluation);
     } catch (err: any) {
@@ -88,7 +96,13 @@ export default function CancelTripModal({
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json.error || "Failed to cancel trip");
+        throw new Error(
+          json.errorCode === "REQUEST_NOT_CANCELLABLE"
+            ? t("errors.REQUEST_NOT_CANCELLABLE")
+            : json.errorCode === "TRIP_NOT_PAID"
+              ? t("errors.TRIP_NOT_PAID")
+            : json.error || "Failed to cancel trip",
+        );
       }
 
       setSuccessMsg(json.message || "Trip cancelled successfully");

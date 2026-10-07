@@ -101,8 +101,8 @@ export default function BottomNav() {
     { key: "create" as const, label: t("create"), href: "/user/request/new" },
     {
       key: "requests" as const,
-      label: t("my_requests"),
-      href: "/user/my-requests",
+      label: t("my_trips"),
+      href: "/my-trips",
     },
     {
       key: "notifications" as const,

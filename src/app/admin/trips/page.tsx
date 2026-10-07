@@ -36,6 +36,17 @@ interface TripRow {
   pickup?: { address?: string; lat?: number; lng?: number } | null;
   dropoff?: { address?: string; lat?: number; lng?: number } | null;
   status: string;
+  requestId?: {
+    _id?: string;
+    amountEgp?: number;
+    paymentStatus?: string;
+    status?: string;
+    note?: string;
+    dates?: string[];
+    tripIds?: string[];
+    createdAt?: string;
+    paidAt?: string;
+  } | null;
   userId?: {
     _id?: string;
     name?: string;
@@ -97,6 +108,19 @@ const STATUS_STYLES: Record<string, { bg: string; color: string; label?: string 
 function getStatusStyle(status: string) {
   const key = status?.toLowerCase().replace(/\s+/g, "_") ?? "";
   return STATUS_STYLES[key] ?? { bg: "var(--color-primary-tint)", color: "var(--color-muted)" };
+}
+
+function getRequestStatusBadge(status?: string) {
+  if (status === "waiting_list") {
+    return { label: "Waiting list", bg: "var(--color-warning-tint)", color: "var(--color-warning)" };
+  }
+  if (status === "approved" || status === "pending_payment") {
+    return { label: "Pending payment", bg: "var(--color-warning-tint)", color: "var(--color-warning)" };
+  }
+  if (status === "rejected") {
+    return { label: "Rejected", bg: "var(--color-danger-tint)", color: "var(--color-danger)" };
+  }
+  return null;
 }
 
 function initials(name?: string) {
@@ -218,6 +242,7 @@ export default function AdminTripsPage() {
   const [assigningId, setAssigningId] = useState<string | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const detailRequestBadge = getRequestStatusBadge(detail?.requestId?.status);
 
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -982,6 +1007,7 @@ export default function AdminTripsPage() {
                 ) : (
                   trips.map((trip) => {
                     const statusStyle = getStatusStyle(trip.status);
+                    const requestStatusStyle = getRequestStatusBadge(trip.requestId?.status);
                     const driverName = trip.driverId?.name;
                     const created = formatCreatedAt(trip.createdAt);
                     const tripDay = formatTripDay(trip.date);
@@ -1052,9 +1078,16 @@ export default function AdminTripsPage() {
                           <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>{trip.arrivalTime}</div>
                         </td>
                         <td>
-                          <span className="status-pill" style={{ background: statusStyle.bg, color: statusStyle.color }}>
-                            {statusStyle.label ?? trip.status}
-                          </span>
+                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                            <span className="status-pill" style={{ background: statusStyle.bg, color: statusStyle.color }}>
+                              {statusStyle.label ?? trip.status}
+                            </span>
+                            {requestStatusStyle && (
+                              <span className="status-pill" style={{ background: requestStatusStyle.bg, color: requestStatusStyle.color }}>
+                                {requestStatusStyle.label}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td>
                           <div className={`driver-chip ${driverName ? "" : "unassigned"}`}>
@@ -1222,6 +1255,18 @@ export default function AdminTripsPage() {
                           >
                             {getStatusStyle(detail.status).label ?? detail.status}
                           </span>
+                          {detailRequestBadge && (
+                            <span
+                              className="status-pill"
+                              style={{
+                                marginInlineStart: 5,
+                                background: detailRequestBadge.bg,
+                                color: detailRequestBadge.color,
+                              }}
+                            >
+                              {detailRequestBadge.label}
+                            </span>
+                          )}
                         </span>
                       </div>
                       <div className="detail-item">

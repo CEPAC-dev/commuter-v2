@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
+import { AdminSettings } from "@/models/AdminSettings";
 import { Trip } from "@/models/Trip";
+import { User } from "@/models/User";
 import { nextSequence } from "@/models/Counter";
 import { Station } from "@/models/Station";
 import {
@@ -29,8 +31,17 @@ import {
 import type { StopInput, TripInput } from "@/types/forms";
 import type { PaymentStatus } from "@/types/booking";
 import { listUserTrips } from "@/lib/services/trips";
-import { createNotification } from "@/lib/notifications/createNotification";
-import { Types } from "mongoose";
+import {
+  createNotification,
+  createNotifications,
+} from "@/lib/notifications/createNotification";
+import { notifyAdminsOfWaitingListTrip } from "@/lib/notifications/adminActivity";
+import {
+  buildWaitingListCreatedAdminNotifications,
+  getSharedRideWaitingListEnabled,
+  shouldCreateWaitingListRequest,
+} from "@/lib/admin/waitingList";
+import mongoose, { Types } from "mongoose";
 import {
   applyPromoCodeToTrip,
   computePromoDiscountedPrice,
@@ -129,7 +140,7 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(rawDates) || rawDates.length === 0) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
   }
-  const dates = Array.from(new Set(rawDates)).slice(0, 7);
+  const dates = Array.from(new Set(rawDates)).slice(0, 7).sort();
   for (const d of dates) {
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d) || !isDateInWindow(d)) {
       return NextResponse.json(
@@ -623,26 +634,28 @@ export async function POST(req: NextRequest) {
     (sum, instance) => sum + instance.priceEgp,
     0,
   );
+  const hasSharedRide = serverTrips.some((trip) => trip.rideType === "shared");
+  const settings = await AdminSettings.findOne()
+    .select("sharedRideWaitingListEnabled")
+    .lean<{ sharedRideWaitingListEnabled?: boolean } | null>();
+  const sharedRideWaitingListEnabled = getSharedRideWaitingListEnabled(
+    settings?.sharedRideWaitingListEnabled,
+  );
+  const isWaitingListRequest = shouldCreateWaitingListRequest(
+    hasSharedRide,
+    sharedRideWaitingListEnabled,
+  );
   let createdRequestId: Types.ObjectId | null = null;
 
   try {
-    const request = await Request.create({
-      userId: new Types.ObjectId(userId),
-      regionCode: userRegion,
-      tripIds: tripInstances.map((instance) => instance.id),
-      dates,
-      amountEgp,
-      note,
-      paymentStatus: "pending",
-      status: "pending_payment",
-    });
-    createdRequestId = request._id;
+    const requestId = new Types.ObjectId();
+    createdRequestId = requestId;
 
     const tripDocuments = await Promise.all(
       pricedTripInstances.map(async (instance) => ({
         _id: instance.id,
         tripNumber: await nextSequence("tripNumber"),
-        requestId: request._id,
+        requestId,
         regionCode: userRegion,
         userId: new Types.ObjectId(userId),
         date: instance.date,
@@ -660,20 +673,83 @@ export async function POST(req: NextRequest) {
         status: "pending_payment",
       })),
     );
-    await Trip.insertMany(tripDocuments);
 
-    await createNotification({
-      userId,
-      type: "request_created",
-      title: "Trip request received",
-      body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
-      data: { bookingId: String(request._id), amountEgp },
-    });
+    const dbSession = await mongoose.startSession();
+    try {
+      await dbSession.withTransaction(async () => {
+        await Request.create(
+          [
+            {
+              _id: requestId,
+              userId: new Types.ObjectId(userId),
+              regionCode: userRegion,
+              tripIds: tripInstances.map((instance) => instance.id),
+              dates,
+              amountEgp,
+              note,
+              paymentStatus: "pending",
+              status: isWaitingListRequest ? "waiting_list" : "pending_payment",
+            },
+          ],
+          { session: dbSession },
+        );
+        await Trip.insertMany(tripDocuments, { session: dbSession });
+      });
+    } finally {
+      await dbSession.endSession();
+    }
+
+    const tripIds = tripDocuments.map((trip) => String(trip._id));
+    const representativeTripId = tripIds[0];
+
+    if (isWaitingListRequest) {
+      await Promise.all(
+        tripIds.map((tripId) => notifyAdminsOfWaitingListTrip(tripId)),
+      );
+      try {
+        const admins = await User.find({ role: "admin" }).select("_id").lean();
+        const firstTrip = serverTrips[0];
+        await createNotifications(
+          buildWaitingListCreatedAdminNotifications({
+            adminIds: admins.map((admin) => String(admin._id)),
+            bookingId: String(requestId),
+            routeSummary: `${firstTrip.pickup.address} → ${firstTrip.dropoff.address}`,
+            date: tripInstances[0].date,
+          }),
+        );
+      } catch (error) {
+        console.error(
+          `[Waiting list] Admin notification failed for request ${String(requestId)}:`,
+          error,
+        );
+      }
+    } else {
+      await createNotification({
+        userId,
+        type: "request_created",
+        title: "Trip request received",
+        body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
+        data: {
+          bookingId: String(requestId),
+          tripId: representativeTripId,
+          linkUrl: `/my-trips/${representativeTripId}`,
+          amountEgp,
+        },
+      });
+    }
 
     return NextResponse.json(
       {
-        bookingId: String(request._id),
+        bookingId: String(requestId),
+        tripIds,
         amountEgp,
+        ...(isWaitingListRequest
+          ? {
+              waitingList: true,
+              status: "waiting_list",
+              requiresPayment: false,
+            }
+          : {}),
         promoCode,
         promoCodeApplied,
         promoCodeAppliedTrips,

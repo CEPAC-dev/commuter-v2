@@ -149,7 +149,7 @@ function CampaignCard({
         <label style={fieldLabel}>Usage limit<input type="number" min="1" step="1" disabled={campaign.maxUses === null} value={campaign.maxUses ?? ""} onChange={(event) => onChange({ maxUses: Number(event.target.value) })} placeholder="Unlimited" style={inputStyle} /></label>
         <label style={{ ...fieldLabel, justifyContent: "center" }}><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="checkbox" checked={campaign.maxUses === null} onChange={(event) => onChange({ maxUses: event.target.checked ? null : 5 })} /><Infinity size={15} /> Unlimited usage</span></label>
       </div>
-
+                                
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 160px", gap: 16, alignItems: "center" }}>
         <input readOnly value={campaign.shareUrl} onFocus={(event) => event.currentTarget.select()} style={{ ...inputStyle, direction: "ltr", fontSize: 12 }} />
         <div style={{ display: "flex", justifyContent: "center", padding: 10, background: "rgba(0,194,168,0.08)", borderRadius: 12 }}>

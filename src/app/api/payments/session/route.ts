@@ -14,6 +14,9 @@ import { createNotification } from "@/lib/notifications/createNotification";
 import { syncPaidTripsForRequest } from "@/lib/notifications/adminActivity";
 import { Types } from "mongoose";
 import { validateMutationRequest } from "@/lib/security/request";
+import { buildSettlementRequestFilter } from "@/lib/pendingRequestHardening";
+import { getCairoNowParts } from "@/lib/cancellationPolicy";
+import { hasPastTrip } from "@/lib/admin/waitingList";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
@@ -59,6 +62,35 @@ export async function POST(req: NextRequest) {
       { error: "Request not found or already paid." },
       { status: 404 },
     );
+
+  if (booking.status === "waiting_list") {
+    return NextResponse.json(
+      { error: "This shared-ride request is waiting for admin approval." },
+      { status: 409 },
+    );
+  }
+
+  if (booking.status === "rejected") {
+    return NextResponse.json(
+      { error: "This shared-ride request was rejected and cannot be paid." },
+      { status: 409 },
+    );
+  }
+
+  if (booking.status === "approved") {
+    const trips = await Trip.find({ requestId: booking._id })
+      .select("date pickupTime")
+      .lean<{ date: string; pickupTime: string }[]>();
+    if (hasPastTrip(trips, getCairoNowParts())) {
+      return NextResponse.json(
+        {
+          errorCode: "APPROVED_TRIP_IN_PAST",
+          error: "This request has a trip whose pickup time has passed. Please book again.",
+        },
+        { status: 409 },
+      );
+    }
+  }
 
   const totalEgp = Number(booking.amountEgp);
   if (!Number.isFinite(totalEgp) || totalEgp < 0)
@@ -189,7 +221,7 @@ export async function POST(req: NextRequest) {
 
     // Settle booking — race-safe conditional update.
     const settled = await Request.findOneAndUpdate(
-      { _id: booking._id, paymentStatus: { $in: ["pending", "failed"] } },
+      buildSettlementRequestFilter(booking._id),
       { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
     );
     if (!settled) {
@@ -405,12 +437,32 @@ export async function POST(req: NextRequest) {
     kashierOrderId: String(payment._id),
   });
 
+  const representativeTripId = booking.tripIds?.[0]
+    ? String(booking.tripIds[0])
+    : String(
+        (
+          await Trip.findOne({ requestId: booking._id })
+            .sort({ date: 1, cycleIndex: 1 })
+            .select("_id")
+            .lean<{ _id: Types.ObjectId } | null>()
+        )?._id ?? "",
+      );
+
   await createNotification({
     userId: session.userId,
     type: "payment_required",
     title: "Complete your payment",
     body: "Your booking is waiting for payment. Continue checkout to secure your trip.",
-    data: { bookingId, paymentId: String(payment._id) },
+    data: {
+      bookingId,
+      paymentId: String(payment._id),
+      ...(representativeTripId
+        ? {
+            tripId: representativeTripId,
+            linkUrl: `/my-trips/${representativeTripId}`,
+          }
+        : { linkUrl: "/my-trips" }),
+    },
   });
 
   return NextResponse.json({

@@ -198,6 +198,12 @@ const TripSchema = new Schema(
         "time_out",
       ],
     },
+    cancelledBy: {
+      type: String,
+      required: false,
+      enum: ["passenger", "driver", "admin", "admin_rejected", "system"],
+    },
+    cancelReason: { type: String, required: false },
     rideId: {
       type: Types.ObjectId,
       ref: "Ride",

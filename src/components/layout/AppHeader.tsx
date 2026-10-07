@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
@@ -67,6 +67,7 @@ export default function AppHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const headerRef = useRef<HTMLElement | null>(null);
 
   function toggleLocale() {
     setLocaleCookie(locale === "ar" ? "en" : "ar");
@@ -81,6 +82,26 @@ export default function AppHeader({
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, [isLanding]);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+
+    const root = document.documentElement;
+    const updateHeaderHeight = () => {
+      const height = header.offsetHeight;
+      if (height > 0) root.style.setProperty("--app-header-h", `${height}px`);
+    };
+
+    updateHeaderHeight();
+    const observer = new ResizeObserver(updateHeaderHeight);
+    observer.observe(header);
+
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--app-header-h");
+    };
+  }, []);
 
   // Solid (app) headers are always dark; landing is transparent until scrolled.
   const solid = !isLanding || scrolled;
@@ -109,6 +130,7 @@ export default function AppHeader({
 
   return (
     <header
+      ref={headerRef}
       dir="ltr"
       className="force-ltr"
       style={{
@@ -134,10 +156,12 @@ export default function AppHeader({
           maxWidth: 1200,
           margin: "0 auto",
           padding: "0 20px",
-          height: "var(--app-header-height)",
+          minHeight: "var(--app-header-height)",
+          height: "auto",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          flexWrap: "wrap",
           gap: 12,
         }}
       >

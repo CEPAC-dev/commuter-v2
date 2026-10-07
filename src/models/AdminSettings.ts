@@ -56,6 +56,20 @@ const AdminSettingsSchema = new Schema(
     defaultWithdrawalLimit: { type: Number, required: false, default: null },
     availabilityLockTime: { type: String, required: true, default: "17:00" },
     nomatchCutoffTime: { type: String, required: true, default: "23:00" },
+    sharedRideWaitingListEnabled: {
+      type: Boolean,
+      required: true,
+      default: true,
+    },
+    sharedRideWaitingListEnabledUpdatedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    sharedRideWaitingListEnabledUpdatedAt: {
+      type: Date,
+      default: null,
+    },
     verificationMethod: {
       type: String,
       required: true,

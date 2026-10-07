@@ -15,6 +15,9 @@ const NOTIFICATION_TYPES = [
   "referral_bonus",
   "ride_offer",
   "admin_broadcast",
+  "waiting_list_created",
+  "waiting_list_approved",
+  "waiting_list_rejected",
 ] as const;
 
 const NotificationSchema = new Schema(
@@ -30,6 +33,15 @@ const NotificationSchema = new Schema(
     titleAr: { type: String, default: "", trim: true, maxlength: 120 },
     bodyAr: { type: String, default: "", trim: true, maxlength: 500 },
     data: { type: Schema.Types.Mixed, default: {} },
+    sentAt: { type: Date, default: Date.now, index: true },
+    deliveryStatus: {
+      type: String,
+      enum: ["pending", "delivered", "seen", "read"],
+      default: "pending",
+      index: true,
+    },
+    deliveredAt: { type: Date, default: null },
+    seenAt: { type: Date, default: null },
     isRead: { type: Boolean, required: true, default: false, index: true },
     readAt: { type: Date, default: null },
   },

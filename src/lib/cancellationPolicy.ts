@@ -1,5 +1,8 @@
 import { connectDB } from "@/lib/db/mongoose";
 import { AdminSettings } from "@/models/AdminSettings";
+import { getCairoNowParts } from "./time/cairoTime";
+
+export { getCairoNowParts } from "./time/cairoTime";
 
 export interface CancellationTier {
   startTime: string; // "17:00"
@@ -62,36 +65,6 @@ export async function getAdminSettings(): Promise<SettingsResult> {
   } catch {
     return DEFAULT_ADMIN_SETTINGS;
   }
-}
-
-/**
- * Returns current date string ("YYYY-MM-DD") and time string ("HH:MM") in Cairo local time.
- */
-export function getCairoNowParts(nowDate: Date = new Date()): {
-  dateStr: string;
-  timeStr: string;
-} {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Africa/Cairo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-
-  const parts = formatter.formatToParts(nowDate);
-  const map: Record<string, string> = {};
-  for (const p of parts) {
-    map[p.type] = p.value;
-  }
-
-  const dateStr = `${map.year}-${map.month}-${map.day}`;
-  const hour = map.hour === "24" ? "00" : map.hour;
-  const timeStr = `${hour}:${map.minute}`;
-
-  return { dateStr, timeStr };
 }
 
 /**

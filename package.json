@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --import ./tests/register-next-server-hook.mjs --test tests/*.test.mjs",
     "seed:stations": "node scripts/seed-stations.cjs",
     "seed:prod-data": "node scripts/seed-prod-data.cjs",
     "migrate:public-numbers": "node scripts/backfill-public-numbers.cjs",

@@ -126,7 +126,7 @@ export default async function NotificationsPage() {
             description={translate(locale, "notifications.empty_description")}
             action={
               <Link
-                href="/my-requests"
+                href="/my-trips"
                 style={{
                   display: "inline-block",
                   padding: "12px 24px",
@@ -137,7 +137,7 @@ export default async function NotificationsPage() {
                   textDecoration: "none",
                 }}
               >
-                {translate(locale, "notifications.view_requests")}
+                {translate(locale, "my_trips.title")}
               </Link>
             }
           />

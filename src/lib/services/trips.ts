@@ -6,6 +6,7 @@ import { Request as RequestModel } from "@/models/Request";
 import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
 import { Rating } from "@/models/Rating";
+import { Payment } from "@/models/Payment";
 import type {
   BookingStatus,
   PaymentStatus,
@@ -13,6 +14,8 @@ import type {
   TripListRow,
 } from "@/types/booking";
 import type { GeoPoint, StationSelection } from "@/types/geo";
+import { getCairoNowParts, hasPastPickup } from "@/lib/time/cairoTime";
+import { buildHistoryTripMatch } from "@/lib/tripHistoryFilters.ts";
 
 export interface StationOption extends StationSelection {
   distanceKm: number;
@@ -173,19 +176,24 @@ export interface StationOption extends StationSelection {
   walkingMin: number;
 }
 
-const STATUS_GROUPS: Record<string, BookingStatus[]> = {
+type StatusGroup = "pending_payment" | "upcoming" | "ongoing" | "previous";
+
+const STATUS_GROUPS = {
   pending_payment: ["pending_payment"],
   upcoming: ["submitted", "confirmed"],
   ongoing: ["active", "matched"],
   previous: ["completed", "cancelled", "time_out", "nomatch"],
-};
+} satisfies Record<StatusGroup, BookingStatus[]>;
 
 export interface ListUserTripsOptions {
   page: number;
   pageSize?: number;
+  groupByRequest?: boolean;
+  fetchAll?: boolean;
+  tripNumber?: number;
   paymentStatus?: PaymentStatus;
   vehicleType?: string;
-  statusGroup?: "previous" | "ongoing" | "upcoming" | "pending_payment";
+  statusGroup?: StatusGroup;
   dateFrom?: string;
   dateTo?: string;
 }
@@ -325,16 +333,29 @@ export async function listUserTrips(
   {
     page,
     pageSize = 12,
+    groupByRequest = false,
+    fetchAll = false,
+    tripNumber,
     paymentStatus,
     vehicleType,
     statusGroup,
     dateFrom,
     dateTo,
   }: ListUserTripsOptions,
-): Promise<{ rows: TripListRow[]; total: number; page: number }> {
+): Promise<{
+  rows: TripListRow[];
+  total: number;
+  page: number;
+  totalRequests?: number;
+}> {
   await connectDB();
 
   const tripMatch: Record<string, unknown> = {
+    ...buildHistoryTripMatch(userId, {
+      tripNumber,
+      from: groupByRequest && tripNumber != null ? undefined : dateFrom,
+      to: groupByRequest && tripNumber != null ? undefined : dateTo,
+    }),
     userId: new Types.ObjectId(userId),
   };
   if (paymentStatus) tripMatch.paymentStatus = paymentStatus;
@@ -342,40 +363,82 @@ export async function listUserTrips(
   if (statusGroup && STATUS_GROUPS[statusGroup]) {
     tripMatch.status = { $in: STATUS_GROUPS[statusGroup] };
   }
-  if (dateFrom || dateTo) {
-    const dateCond: Record<string, string> = {};
-    if (dateFrom) dateCond.$gte = dateFrom;
-    dateCond.$lte = dateTo || dateFrom!;
-    tripMatch.date = dateCond;
-  }
 
-  const [total, rawTrips] = await Promise.all([
-    Trip.countDocuments(tripMatch),
-    Trip.find(tripMatch)
-      .sort({ date: 1, cycleIndex: 1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .lean<
-        {
-          _id: unknown;
-          tripNumber: number;
-          requestId: unknown;
-          driverId?: unknown;
-          date: string;
-          paymentStatus: string;
-          status: string;
-          vehicleType: string;
-          pickup: GeoPoint;
-          dropoff: GeoPoint;
-          pickupTime: string;
-          arrivalTime: string;
-          priceEgp: number;
-          distanceKm: number;
-          durationMinutes: number;
-          createdAt: Date | string;
-        }[]
-      >(),
-  ]);
+  type UserTripListDocument = {
+    _id: unknown;
+    tripNumber: number;
+    requestId: unknown;
+    driverId?: unknown;
+    date: string;
+    paymentStatus: string;
+    status: string;
+    vehicleType: string;
+    pickup: GeoPoint;
+    dropoff: GeoPoint;
+    pickupTime: string;
+    arrivalTime: string;
+    priceEgp: number;
+    distanceKm: number;
+    durationMinutes: number;
+    createdAt: Date | string;
+    cancelledBy?: string;
+    cancelReason?: string;
+    cancellation?: {
+      refundStatus?: string;
+      refundAmount?: number;
+      reason?: string;
+    } | null;
+  };
+
+  let total: number;
+  let totalRequests: number | undefined;
+  let rawTrips: UserTripListDocument[];
+  if (groupByRequest) {
+    const [matchedTripCount, matchingRequestIds] = await Promise.all([
+      Trip.countDocuments(tripMatch),
+      Trip.distinct("requestId", tripMatch),
+    ]);
+    total = matchedTripCount;
+    let scopedRequestIds = matchingRequestIds;
+    if (tripNumber != null && (dateFrom || dateTo)) {
+      const dateMatch = {
+        ...buildHistoryTripMatch(userId, { from: dateFrom, to: dateTo }),
+        userId: new Types.ObjectId(userId),
+      };
+      const dateRequestIds = await Trip.distinct("requestId", dateMatch);
+      const dateRequestIdSet = new Set(dateRequestIds.map(String));
+      scopedRequestIds = matchingRequestIds.filter((requestId) =>
+        dateRequestIdSet.has(String(requestId)),
+      );
+    }
+    totalRequests = scopedRequestIds.length;
+    const requestQuery = RequestModel.find({
+      _id: { $in: scopedRequestIds },
+      userId: new Types.ObjectId(userId),
+    })
+      .select("_id")
+      .sort({ createdAt: -1 });
+    if (!fetchAll) requestQuery.skip((page - 1) * pageSize).limit(pageSize);
+    const requestPage = await requestQuery.lean<{ _id: unknown }[]>();
+    const pageRequestIds = requestPage.map((request) => request._id);
+    rawTrips = pageRequestIds.length
+      ? await Trip.find({
+          userId: new Types.ObjectId(userId),
+          requestId: { $in: pageRequestIds },
+        })
+          .sort({ date: 1, cycleIndex: 1 })
+          .lean<UserTripListDocument[]>()
+      : [];
+  } else {
+    const tripsQuery = Trip.find(tripMatch).sort({ date: 1, cycleIndex: 1 });
+    if (!fetchAll) tripsQuery.skip((page - 1) * pageSize).limit(pageSize);
+    const [tripCount, trips] = await Promise.all([
+      Trip.countDocuments(tripMatch),
+      tripsQuery.lean<UserTripListDocument[]>(),
+    ]);
+    total = tripCount;
+    rawTrips = trips;
+  }
 
   const driverIds = Array.from(
     new Set(
@@ -399,12 +462,38 @@ export async function listUserTrips(
   const requestIds = Array.from(
     new Set(rawTrips.map((t) => String(t.requestId))),
   );
-  const requests = await RequestModel.find({ _id: { $in: requestIds } })
-    .select("amountEgp")
-    .lean<{ _id: unknown; amountEgp: number }[]>();
+  const requests = await RequestModel.find({
+    _id: { $in: requestIds },
+    userId: new Types.ObjectId(userId),
+  })
+    .select("amountEgp status paymentStatus rejectionReason reviewedAt")
+    .lean<
+      {
+        _id: unknown;
+        amountEgp: number;
+        status: BookingStatus;
+        paymentStatus: PaymentStatus;
+        rejectionReason?: string | null;
+        reviewedAt?: Date | null;
+      }[]
+    >();
   const amountByRequestId = new Map(
     requests.map((r) => [String(r._id), r.amountEgp]),
   );
+  const requestById = new Map(requests.map((request) => [String(request._id), request]));
+  const requestTrips = await Trip.find({ requestId: { $in: requestIds } })
+    .select("requestId date pickupTime")
+    .lean<{ requestId: unknown; date: string; pickupTime: string }[]>();
+  const nowCairo = getCairoNowParts();
+  const hasPastTripByRequestId = new Map<string, boolean>();
+  for (const trip of requestTrips) {
+    const requestId = String(trip.requestId);
+    if (
+      hasPastPickup([{ date: trip.date, pickupTime: trip.pickupTime }], nowCairo)
+    ) {
+      hasPastTripByRequestId.set(requestId, true);
+    }
+  }
 
   const completedTripIds = rawTrips
     .filter((trip) => trip.status === "completed")
@@ -423,11 +512,15 @@ export async function listUserTrips(
 
   return {
     total,
+    ...(totalRequests !== undefined ? { totalRequests } : {}),
     page,
-    rows: rawTrips.map((trip) => ({
+    rows: rawTrips.map((trip) => {
+      const requestId = String(trip.requestId);
+      const parentRequest = requestById.get(requestId);
+      return {
       id: String(trip._id),
       tripNumber: trip.tripNumber,
-      requestId: String(trip.requestId),
+      requestId,
       date: trip.date,
       paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
       status: (trip.status as BookingStatus) ?? "pending_payment",
@@ -448,7 +541,15 @@ export async function listUserTrips(
       distanceKm: trip.distanceKm,
       durationMinutes: trip.durationMinutes,
       bookingAmountEgp:
-        amountByRequestId.get(String(trip.requestId)) ?? trip.priceEgp,
+        amountByRequestId.get(requestId) ?? trip.priceEgp,
+      parentRequestStatus: parentRequest?.status,
+      parentPaymentStatus: parentRequest?.paymentStatus,
+      rejectionReason: parentRequest?.rejectionReason ?? null,
+      reviewedAt: parentRequest?.reviewedAt?.toISOString() ?? null,
+      hasPastTrip: hasPastTripByRequestId.get(requestId) ?? false,
+      cancelledBy: trip.cancelledBy,
+      cancelReason: trip.cancelReason,
+      cancellation: trip.cancellation,
       createdAt:
         trip.createdAt instanceof Date
           ? trip.createdAt.toISOString()
@@ -457,7 +558,8 @@ export async function listUserTrips(
         ? (assignedDriverById.get(String(trip.driverId)) ?? null)
         : null,
       rating: ratingByTripId.get(String(trip._id)) ?? null,
-    })),
+      };
+    }),
   };
 }
 
@@ -465,6 +567,21 @@ export interface UserTripDetail {
   id: string;
   tripNumber: number;
   requestId: string;
+  otherTrips?: { id: string; date: string }[];
+  requestAmountEgp?: number;
+  paymentBreakdown?: { walletAmountEgp: number; gatewayAmountEgp: number } | null;
+  parentRequestStatus?: BookingStatus;
+  parentPaymentStatus?: PaymentStatus;
+  rejectionReason?: string | null;
+  reviewedAt?: string | null;
+  hasPastTrip?: boolean;
+  cancelledBy?: string;
+  cancelReason?: string;
+  cancellation?: {
+    refundStatus?: string;
+    refundAmount?: number;
+    reason?: string;
+  } | null;
   date: string;
   cycleIndex: number;
   pickup: GeoPoint;
@@ -552,10 +669,26 @@ export async function getDriverTrip(
     }[];
     paymentStatus: string;
     status: string;
+    cancelledBy?: string;
+    cancelReason?: string;
+    cancellation?: {
+      refundStatus?: string;
+      refundAmount?: number;
+      reason?: string;
+    } | null;
     createdAt: Date | string;
   }>();
 
   if (!trip) return null;
+
+  const parentRequest = await RequestModel.findById(trip.requestId)
+    .select("amountEgp status paymentStatus rejectionReason")
+    .lean<{
+      amountEgp: number;
+      status: BookingStatus;
+      paymentStatus: PaymentStatus;
+      rejectionReason?: string | null;
+    } | null>();
 
   const assignedDriver = trip.driverId
     ? await buildAssignedDriver(trip.driverId)
@@ -565,6 +698,10 @@ export async function getDriverTrip(
     ...trip,
     id: String(trip._id),
     requestId: String(trip.requestId),
+    requestAmountEgp: parentRequest?.amountEgp,
+    parentRequestStatus: parentRequest?.status,
+    parentPaymentStatus: parentRequest?.paymentStatus,
+    rejectionReason: parentRequest?.rejectionReason ?? null,
     paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
     pickupStationOptions: trip.pickupStationOptions ?? [],
     dropoffStationOptions: trip.dropoffStationOptions ?? [],
@@ -579,6 +716,7 @@ export async function getDriverTrip(
 export async function getUserTrip(
   userId: string,
   tripId: string,
+  includeSiblingTrips = false,
 ): Promise<UserTripDetail | null> {
   if (!Types.ObjectId.isValid(tripId)) return null;
 
@@ -625,10 +763,59 @@ export async function getUserTrip(
     }[];
     paymentStatus: string;
     status: string;
+    cancelledBy?: string;
+    cancelReason?: string;
+    cancellation?: {
+      refundStatus?: string;
+      refundAmount?: number;
+      reason?: string;
+    } | null;
     createdAt: Date | string;
   }>();
 
   if (!trip) return null;
+
+  const parentRequest = includeSiblingTrips
+    ? await RequestModel.findOne({
+        _id: trip.requestId,
+        userId: new Types.ObjectId(userId),
+      })
+        .select("amountEgp status paymentStatus rejectionReason reviewedAt")
+        .lean<{
+          amountEgp: number;
+          status: BookingStatus;
+          paymentStatus: PaymentStatus;
+          rejectionReason?: string | null;
+          reviewedAt?: Date | null;
+        } | null>()
+    : null;
+  const requestTrips = includeSiblingTrips
+    ? await Trip.find({
+        requestId: trip.requestId,
+        userId: new Types.ObjectId(userId),
+      })
+        .select("_id date pickupTime cycleIndex")
+        .sort({ date: 1, cycleIndex: 1 })
+        .lean<{
+          _id: unknown;
+          date: string;
+          pickupTime: string;
+          cycleIndex: number;
+        }[]>()
+    : [];
+  const paymentBreakdown = includeSiblingTrips
+    ? await Payment.findOne({
+        bookingId: trip.requestId,
+        userId: new Types.ObjectId(userId),
+      })
+        .select("walletAmountEgp gatewayAmountEgp")
+        .sort({ createdAt: -1 })
+        .lean<{ walletAmountEgp: number; gatewayAmountEgp: number } | null>()
+    : null;
+  const hasPastTrip = hasPastPickup(requestTrips, getCairoNowParts());
+  const otherTrips = requestTrips.filter(
+    (requestTrip) => String(requestTrip._id) !== String(trip._id),
+  );
 
   const assignedDriver = trip.driverId
     ? await buildAssignedDriver(trip.driverId)
@@ -650,6 +837,17 @@ export async function getUserTrip(
     ...trip,
     id: String(trip._id),
     requestId: String(trip.requestId),
+    requestAmountEgp: parentRequest?.amountEgp,
+    paymentBreakdown,
+    parentRequestStatus: parentRequest?.status,
+    parentPaymentStatus: parentRequest?.paymentStatus,
+    rejectionReason: parentRequest?.rejectionReason ?? null,
+    reviewedAt: parentRequest?.reviewedAt?.toISOString() ?? null,
+    hasPastTrip,
+    otherTrips: otherTrips.map((otherTrip) => ({
+      id: String(otherTrip._id),
+      date: otherTrip.date,
+    })),
     seatNumbers: trip.seatNumbers ?? [],
     rideId: trip.rideId ? String(trip.rideId) : undefined,
     rideDetails,
