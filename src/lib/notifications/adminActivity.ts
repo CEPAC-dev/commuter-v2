@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { AdminActivityNotification } from "@/models/AdminActivityNotification";
 import { Trip } from "@/models/Trip";
+import { Request } from "@/models/Request";
 import { User } from "@/models/User";
 import { AdminReferralUsage } from "@/models/AdminReferralUsage";
 import { sendPushPayloadToUser } from "@/lib/notifications/webPush";
@@ -18,6 +19,7 @@ async function notifyAdmins(input: {
   eventType:
     | "paid_trip_created"
     | "completed_paid_trip"
+    | "waiting_list_trip_created"
     | "admin_campaign_claim";
   dedupeKey: string;
   title: string;
@@ -137,6 +139,59 @@ export async function notifyAdminsOfPaidTrip(tripId: string) {
     });
   } catch (error) {
     console.error("Admin paid-trip alert creation failed:", error);
+  }
+}
+
+export async function notifyAdminsOfWaitingListTrip(tripId: string) {
+  try {
+    if (!Types.ObjectId.isValid(tripId)) return;
+    const trip = await Trip.findOne({
+      _id: tripId,
+      status: "pending_payment",
+      paymentStatus: "pending",
+    })
+      .select(
+        "_id tripNumber requestId userId date pickup dropoff priceEgp vehicleType",
+      )
+      .lean();
+    if (!trip) return;
+
+    const request = await Request.findOne({
+      _id: trip.requestId,
+      status: "waiting_list",
+    })
+      .select("_id")
+      .lean();
+    if (!request) return;
+
+    const user = await User.findById(trip.userId)
+      .select("name userNumber phone email")
+      .lean();
+    const userName = user?.name ?? "Unknown user";
+    await notifyAdmins({
+      eventType: "waiting_list_trip_created",
+      dedupeKey: `trip:${String(trip._id)}:waiting_list_created`,
+      title: `New waiting-list trip #${trip.tripNumber}`,
+      body: `${userName} submitted a trip that needs waiting-list review.`,
+      data: {
+        tripId: String(trip._id),
+        tripNumber: trip.tripNumber,
+        requestId: String(request._id),
+        userId: String(trip.userId),
+        userName,
+        userNumber: user?.userNumber ?? null,
+        phone: user?.phone ?? "",
+        email: user?.email ?? "",
+        date: trip.date,
+        priceEgp: trip.priceEgp,
+        vehicleType: trip.vehicleType,
+        pickup: trip.pickup?.address ?? "",
+        dropoff: trip.dropoff?.address ?? "",
+        href: "/admin/waiting-list",
+      },
+    });
+  } catch (error) {
+    console.error("Admin waiting-list trip alert creation failed:", error);
   }
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Bell,
@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Info,
   Megaphone,
+  MessageCircle,
   Pencil,
   Plus,
   Send,
@@ -19,6 +20,7 @@ interface Recipient {
   id: string;
   name: string;
   email?: string;
+  phone?: string;
   role: "passenger" | "driver";
   createdAt: string;
 }
@@ -35,6 +37,25 @@ interface NotificationTemplate {
   linkUrl: string;
   linkLabel: string;
   linkLabelAr: string;
+}
+
+interface BroadcastStatusItem {
+  id: string;
+  title: string;
+  body: string;
+  source: "broadcast" | "activity";
+  createdAt: string;
+  recipient: {
+    id: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    role?: "passenger" | "driver" | "admin";
+  };
+  status: "pending" | "delivered" | "seen" | "read";
+  deliveredAt?: string | null;
+  seenAt?: string | null;
+  readAt?: string | null;
 }
 
 const ICON_OPTIONS = [
@@ -67,14 +88,25 @@ const STYLE_OPTIONS = [
   { value: "urgent", label: "Urgent", color: "#B42318", background: "#FFF0EF" },
 ] as const;
 
+function buildWhatsAppLink(phone?: string) {
+  if (!phone) return "";
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return "";
+  return `https://wa.me/${digits}`;
+}
+
 export default function NotificationCenter({
   recipients,
   initialTemplates,
+  initialBroadcasts = [],
 }: {
   recipients: Recipient[];
   initialTemplates: NotificationTemplate[];
+  initialBroadcasts?: BroadcastStatusItem[];
 }) {
   const [templates, setTemplates] = useState(initialTemplates);
+  const [broadcasts, setBroadcasts] =
+    useState<BroadcastStatusItem[]>(initialBroadcasts);
   const [templateId, setTemplateId] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [audience, setAudience] = useState("all");
@@ -86,6 +118,18 @@ export default function NotificationCenter({
   const [message, setMessage] = useState("");
   const [titleAr, setTitleAr] = useState("");
   const [messageAr, setMessageAr] = useState("");
+  const [historyFilters, setHistoryFilters] = useState({
+    status: "all",
+    role: "all",
+    q: "",
+    page: 1,
+  });
+  const [historyMeta, setHistoryMeta] = useState({
+    total: 0,
+    page: 1,
+    pageSize: 5,
+    totalPages: 1,
+  });
   const [icon, setIcon] = useState("bell");
   const [style, setStyle] = useState("info");
   const [linkUrl, setLinkUrl] = useState("");
@@ -115,6 +159,57 @@ export default function NotificationCenter({
   const selectedTemplate = templates.find(
     (template) => template.id === templateId,
   );
+
+  async function refreshBroadcasts() {
+    try {
+      const params = new URLSearchParams({
+        limit: "5",
+        page: String(historyFilters.page),
+      });
+      if (historyFilters.status !== "all")
+        params.set("status", historyFilters.status);
+      if (historyFilters.role !== "all")
+        params.set("role", historyFilters.role);
+      if (historyFilters.q.trim()) params.set("q", historyFilters.q.trim());
+      const response = await fetch(
+        `/api/admin/notifications?${params.toString()}`,
+        {
+          cache: "no-store",
+        },
+      );
+      if (!response.ok) return;
+      const result = await response.json();
+      const next = Array.isArray(result.data) ? result.data : [];
+      setBroadcasts(
+        next.filter((item: BroadcastStatusItem) => item.source === "broadcast"),
+      );
+      setHistoryMeta({
+        total: Number(result.meta?.total ?? next.length),
+        page: Number(result.meta?.page ?? historyFilters.page),
+        pageSize: Number(result.meta?.pageSize ?? 5),
+        totalPages: Number(result.meta?.totalPages ?? 1),
+      });
+    } catch (error) {
+      console.error("Failed to refresh admin notifications:", error);
+    }
+  }
+
+  const applyHistoryFilters = (next: Partial<typeof historyFilters>) => {
+    setHistoryFilters((current) => ({
+      ...current,
+      ...next,
+      page: next.page ?? 1,
+    }));
+  };
+
+  useEffect(() => {
+    void refreshBroadcasts();
+  }, [
+    historyFilters.status,
+    historyFilters.role,
+    historyFilters.page,
+    historyFilters.q,
+  ]);
 
   function applyTemplate(id: string) {
     const template = templates.find((item) => item.id === id);
@@ -262,6 +357,7 @@ export default function NotificationCenter({
         type: "success",
         text: `Notification sent to ${result.sent} user${result.sent === 1 ? "" : "s"}.`,
       });
+      await refreshBroadcasts();
       setTitle("");
       setMessage("");
       setLinkUrl("");
@@ -693,6 +789,126 @@ export default function NotificationCenter({
         </div>
       </form>
 
+      <div
+        className="admin-notification-panel"
+        style={{ marginTop: 18, marginBottom: 12 }}
+      >
+        <div className="admin-notification-panel-title">
+          <Bell size={16} /> Recent sends
+        </div>
+        <div className="admin-notification-history-toolbar">
+          <input
+            value={historyFilters.q}
+            onChange={(event) =>
+              applyHistoryFilters({ q: event.target.value, page: 1 })
+            }
+            placeholder="Search by name, email, phone"
+            aria-label="Search recent sends"
+          />
+          <select
+            value={historyFilters.status}
+            onChange={(event) =>
+              applyHistoryFilters({ status: event.target.value, page: 1 })
+            }
+            aria-label="Filter recent sends by status"
+          >
+            <option value="all">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="delivered">Delivered</option>
+            <option value="seen">Seen</option>
+            <option value="read">Read</option>
+          </select>
+          <select
+            value={historyFilters.role}
+            onChange={(event) =>
+              applyHistoryFilters({ role: event.target.value, page: 1 })
+            }
+            aria-label="Filter recent sends by role"
+          >
+            <option value="all">All roles</option>
+            <option value="passenger">Passengers</option>
+            <option value="driver">Drivers</option>
+          </select>
+        </div>
+        {broadcasts.length === 0 ? (
+          <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}>
+            No broadcasts match your filters yet.
+          </p>
+        ) : (
+          <>
+            <div className="admin-notification-history-list">
+              {broadcasts.map((item) => {
+                const whatsappHref = buildWhatsAppLink(item.recipient.phone);
+                return (
+                  <div
+                    key={item.id}
+                    className="admin-notification-history-item"
+                  >
+                    <div className="admin-notification-history-copy">
+                      <strong>{item.title}</strong>
+                      <small>{item.body}</small>
+                      <span>
+                        {item.recipient.name} · {item.recipient.role ?? "user"}
+                      </span>
+                      <time>{new Date(item.createdAt).toLocaleString()}</time>
+                    </div>
+                    <div className="admin-notification-history-meta">
+                      <span
+                        className={`admin-notification-status ${item.status}`}
+                      >
+                        {item.status}
+                      </span>
+                      {whatsappHref ? (
+                        <a
+                          href={whatsappHref}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="admin-notification-whatsapp"
+                          aria-label={`WhatsApp ${item.recipient.name}`}
+                          title={`Chat on WhatsApp with ${item.recipient.name}`}
+                        >
+                          <MessageCircle size={15} />
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="admin-notification-pagination">
+              <button
+                type="button"
+                onClick={() =>
+                  applyHistoryFilters({
+                    page: Math.max(1, historyFilters.page - 1),
+                  })
+                }
+                disabled={historyFilters.page <= 1}
+              >
+                Previous
+              </button>
+              <span>
+                Page {historyMeta.page} of {historyMeta.totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  applyHistoryFilters({
+                    page: Math.min(
+                      historyMeta.totalPages,
+                      historyFilters.page + 1,
+                    ),
+                  })
+                }
+                disabled={historyFilters.page >= historyMeta.totalPages}
+              >
+                Next
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
       <style>{`
         .admin-notification-panel { background: #fff; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 18px; display: grid; gap: 13px; }
         .admin-notification-panel-title { display: flex; align-items: center; gap: 7px; color: var(--color-primary); font-size: 14px; font-weight: 800; }
@@ -715,6 +931,24 @@ export default function NotificationCenter({
         .admin-notification-recipient small { color: var(--color-muted); font-size: 11px; }
         .admin-notification-submit { border: 0; border-radius: 9px; background: var(--color-primary); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
         .admin-notification-submit:disabled { opacity: .5; cursor: not-allowed; }
+        .admin-notification-history-toolbar { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(120px, 0.7fr) minmax(120px, 0.7fr); gap: 8px; }
+        .admin-notification-history-toolbar input, .admin-notification-history-toolbar select { width: 100%; box-sizing: border-box; min-height: 38px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; color: var(--color-primary); font: inherit; font-size: 12px; padding: 0 10px; }
+        .admin-notification-history-list { display: grid; gap: 10px; }
+        .admin-notification-history-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 12px; border: 1px solid var(--color-border); border-radius: 10px; background: #fafbfc; }
+        .admin-notification-history-copy { display: grid; gap: 4px; min-width: 0; }
+        .admin-notification-history-copy strong { color: var(--color-primary); font-size: 13px; }
+        .admin-notification-history-copy small, .admin-notification-history-copy span, .admin-notification-history-copy time { color: var(--color-muted); font-size: 11px; }
+        .admin-notification-history-copy small { display: block; max-width: 100%; overflow-wrap: anywhere; }
+        .admin-notification-history-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .admin-notification-status { display: inline-flex; align-items: center; justify-content: center; min-width: 72px; padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; text-transform: capitalize; }
+        .admin-notification-status.pending { background: #fff3db; color: #a15c00; }
+        .admin-notification-status.delivered { background: #eaf3ff; color: #0b59b5; }
+        .admin-notification-status.seen, .admin-notification-status.read { background: #e8f8f1; color: #087f5b; }
+        .admin-notification-whatsapp { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #dffae9; color: #0a9b5f; }
+        .admin-notification-pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+        .admin-notification-pagination button { border: 1px solid var(--color-border); background: #fff; color: var(--color-primary); border-radius: 8px; min-height: 34px; padding: 0 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+        .admin-notification-pagination button:disabled { opacity: .45; cursor: not-allowed; }
+        .admin-notification-pagination span { color: var(--color-muted); font-size: 12px; }
         .admin-notification-template-select { min-width: 0; border: 1px solid var(--color-border); border-radius: 8px; padding: 10px 11px; background: #fff; color: var(--color-primary); font: inherit; font-size: 13px; }
         .admin-notification-icon-button { width: 38px; height: 38px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; color: var(--color-primary); display: grid; place-items: center; cursor: pointer; }
         .admin-notification-icon-button:hover { border-color: var(--color-secondary); color: var(--color-secondary); }

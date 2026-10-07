@@ -7,5 +7,5 @@ export const dynamic = "force-dynamic";
 export default async function AdminAlertsPage() {
   const session = await getSession();
   if (!session || session.role !== "admin") redirect("/admin/signup");
-  return <AdminActivityFeed />;
+  redirect("/admin/notifications");
 }

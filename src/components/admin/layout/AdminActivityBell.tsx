@@ -7,6 +7,7 @@ import {
   Check,
   ChevronRight,
   CircleDollarSign,
+  ClipboardList,
   Route,
   Smartphone,
   UserRound,
@@ -18,6 +19,7 @@ type AdminActivityItem = {
   eventType:
     | "paid_trip_created"
     | "completed_paid_trip"
+    | "waiting_list_trip_created"
     | "admin_campaign_claim";
   title: string;
   body: string;
@@ -41,6 +43,7 @@ function decodeVapidKey(value: string): ArrayBuffer {
 }
 
 function eventIcon(eventType: AdminActivityItem["eventType"]) {
+  if (eventType === "waiting_list_trip_created") return ClipboardList;
   return eventType === "completed_paid_trip" ? Route : CircleDollarSign;
 }
 

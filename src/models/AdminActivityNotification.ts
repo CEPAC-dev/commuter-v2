@@ -9,6 +9,7 @@ const AdminActivityNotificationSchema = new Schema(
       enum: [
         "paid_trip_created",
         "completed_paid_trip",
+        "waiting_list_trip_created",
         "admin_campaign_claim",
       ],
       index: true,

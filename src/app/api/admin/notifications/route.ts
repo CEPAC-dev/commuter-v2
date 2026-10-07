@@ -3,12 +3,27 @@ import { isValidObjectId, Types } from "mongoose";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Notification } from "@/models/Notification";
+import { AdminActivityNotification } from "@/models/AdminActivityNotification";
 import { User } from "@/models/User";
 import { sendPushToUserNotification } from "@/lib/notifications/webPush";
 
 const RECIPIENT_ROLES = new Set(["passenger", "driver"]);
 const ICONS = new Set(["bell", "info", "megaphone", "check", "alert"]);
 const STYLES = new Set(["info", "success", "warning", "urgent"]);
+
+function getBroadcastStatus(item: {
+  deliveryStatus?: string | null;
+  deliveredAt?: Date | null;
+  seenAt?: Date | null;
+  isRead?: boolean;
+}) {
+  if (item.isRead) return "read";
+  if (item.seenAt) return "seen";
+  if (item.deliveredAt || item.deliveryStatus === "delivered")
+    return "delivered";
+  if (item.deliveryStatus === "seen") return "seen";
+  return item.deliveryStatus ?? "pending";
+}
 
 type Audience = "all" | "passengers" | "drivers" | "created" | "selected";
 
@@ -33,6 +48,139 @@ function normalisePath(value: unknown) {
   } catch {
     return null;
   }
+}
+
+export async function GET(req: NextRequest) {
+  const auth = await adminAuth();
+  if (!auth.authorized) return auth.response;
+
+  const page = Math.max(
+    1,
+    Number.parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10) || 1,
+  );
+  const pageSize = Math.min(
+    Math.max(
+      1,
+      Number.parseInt(req.nextUrl.searchParams.get("limit") ?? "5", 10) || 5,
+    ),
+    25,
+  );
+  const status = (req.nextUrl.searchParams.get("status") ?? "all").trim();
+  const role = (req.nextUrl.searchParams.get("role") ?? "all").trim();
+  const query = (req.nextUrl.searchParams.get("q") ?? "").trim().slice(0, 80);
+
+  await connectDB();
+
+  const userQuery: Record<string, unknown> = {
+    role: { $in: ["passenger", "driver"] },
+  };
+  if (role !== "all" && (role === "passenger" || role === "driver")) {
+    userQuery.role = role;
+  }
+  if (query) {
+    const matcher = new RegExp(
+      query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "i",
+    );
+    userQuery.$or = [{ name: matcher }, { email: matcher }, { phone: matcher }];
+  }
+  const matchingUsers = await User.find(userQuery).select("_id").lean();
+  const matchingUserIds = matchingUsers.map((user) => user._id);
+
+  const baseFilter: Record<string, unknown> = {
+    type: "admin_broadcast",
+    userId: matchingUserIds.length ? { $in: matchingUserIds } : { $in: [] },
+  };
+
+  if (status !== "all") {
+    const statusPredicate: Record<string, unknown> = {};
+    switch (status) {
+      case "pending":
+        statusPredicate.$or = [
+          { deliveryStatus: "pending" },
+          { deliveredAt: null, seenAt: null, isRead: false },
+        ];
+        break;
+      case "delivered":
+        statusPredicate.$or = [
+          { deliveryStatus: "delivered" },
+          { deliveredAt: { $ne: null }, seenAt: null, isRead: false },
+        ];
+        break;
+      case "seen":
+        statusPredicate.$or = [
+          { deliveryStatus: "seen" },
+          { seenAt: { $ne: null }, isRead: false },
+        ];
+        break;
+      case "read":
+        statusPredicate.isRead = true;
+        break;
+      default:
+        break;
+    }
+    Object.assign(baseFilter, statusPredicate);
+  }
+
+  const total = await Notification.countDocuments(baseFilter);
+  const broadcasts = await Notification.find(baseFilter)
+    .populate("userId", "name email phone role")
+    .sort({ sentAt: -1, createdAt: -1 })
+    .skip((page - 1) * pageSize)
+    .limit(pageSize)
+    .lean();
+
+  const data = broadcasts.map((item) => {
+    const user = item.userId as {
+      _id?: unknown;
+      name?: string;
+      email?: string;
+      phone?: string;
+      role?: string;
+    } | null;
+    const recipient = user
+      ? {
+          id: String(user._id ?? item.userId),
+          name: user.name ?? "Unknown user",
+          email: user.email ?? undefined,
+          phone: user.phone ?? undefined,
+          role: (user.role as "passenger" | "driver") ?? "passenger",
+        }
+      : {
+          id: String(item.userId ?? "unknown"),
+          name: "Unknown user",
+          role: "passenger" as const,
+        };
+    return {
+      id: String(item._id),
+      source: "broadcast",
+      title: item.title,
+      body: item.body,
+      message: item.body,
+      createdAt: item.sentAt ?? item.createdAt ?? new Date(),
+      recipient,
+      isRead: Boolean(item.isRead),
+      readAt: item.readAt?.toISOString?.() ?? null,
+      seenAt: item.seenAt?.toISOString?.() ?? null,
+      deliveredAt: item.deliveredAt?.toISOString?.() ?? null,
+      status: getBroadcastStatus(item),
+    };
+  });
+
+  return NextResponse.json({
+    success: true,
+    data,
+    meta: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      unreadCount: await Notification.countDocuments({
+        type: "admin_broadcast",
+        isRead: false,
+      }),
+    },
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -200,6 +348,12 @@ export async function POST(req: NextRequest) {
     titleAr,
     bodyAr: messageAr,
     data,
+    sentAt: new Date(),
+    deliveryStatus: "delivered",
+    deliveredAt: new Date(),
+    seenAt: null,
+    isRead: false,
+    readAt: null,
   }));
 
   const inserted = await Notification.insertMany(docs);

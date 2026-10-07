@@ -35,6 +35,7 @@ import {
   createNotification,
   createNotifications,
 } from "@/lib/notifications/createNotification";
+import { notifyAdminsOfWaitingListTrip } from "@/lib/notifications/adminActivity";
 import {
   buildWaitingListCreatedAdminNotifications,
   getSharedRideWaitingListEnabled,
@@ -702,6 +703,9 @@ export async function POST(req: NextRequest) {
     const representativeTripId = tripIds[0];
 
     if (isWaitingListRequest) {
+      await Promise.all(
+        tripIds.map((tripId) => notifyAdminsOfWaitingListTrip(tripId)),
+      );
       try {
         const admins = await User.find({ role: "admin" }).select("_id").lean();
         const firstTrip = serverTrips[0];

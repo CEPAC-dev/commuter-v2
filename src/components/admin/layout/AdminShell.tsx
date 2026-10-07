@@ -24,7 +24,6 @@ import {
   X,
 } from "lucide-react";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
-import NotificationCenter from "@/components/layout/NotificationCenter";
 import AdminActivityBell from "@/components/admin/layout/AdminActivityBell";
 import type { RegionSlug } from "@/lib/config/regions";
 
@@ -50,7 +49,7 @@ const sections = [
   },
   {
     href: "/admin/alerts",
-    label: "Activity alerts",
+    label: "Notifications",
     icon: Bell,
     statKey: null,
   },
@@ -367,11 +366,6 @@ export default function AdminShell({
             <div
               id="admin-page-actions"
               className="admin-topbar-actions admin-page-action-slot"
-            />
-            <NotificationCenter
-              color="var(--color-primary)"
-              buttonBackground="var(--color-primary-tint)"
-              seeAllHref="/admin/notifications"
             />
             <AdminActivityBell />
             <AdminLogoutButton />
