@@ -15,6 +15,7 @@ import {
   buildPendingRequestExpiryFilter,
   buildPendingTripExpiryFilter,
 } from "@/lib/pendingRequestHardening";
+import { expireStandaloneTrips } from "@/lib/services/standaloneTripExpiry";
 import { getCairoNowParts } from "@/lib/cancellationPolicy";
 import { hasPastTrip as hasPastPickupTime } from "@/lib/admin/waitingList";
 
@@ -29,16 +30,17 @@ export async function expireStaleForUser(userId: string): Promise<void> {
     .select("_id")
     .lean<{ _id: Types.ObjectId }[]>();
   const requestIds = expiringRequests.map((request) => request._id);
-  if (requestIds.length === 0) return;
-
-  await Request.updateMany(
-    { _id: { $in: requestIds }, ...expireFilter },
-    { $set: { status: "time_out", paymentStatus: "expired" } },
-  );
-  await Trip.updateMany(
-    buildPendingTripExpiryFilter(requestIds),
-    { $set: { status: "time_out", paymentStatus: "expired" } },
-  );
+  if (requestIds.length > 0) {
+    await Request.updateMany(
+      { _id: { $in: requestIds }, ...expireFilter },
+      { $set: { status: "time_out", paymentStatus: "expired" } },
+    );
+    await Trip.updateMany(
+      buildPendingTripExpiryFilter(requestIds),
+      { $set: { status: "time_out", paymentStatus: "expired" } },
+    );
+  }
+  await expireStandaloneTrips(userId);
 }
 
 export async function expireStaleRequest(
@@ -46,6 +48,7 @@ export async function expireStaleRequest(
   userId: string,
 ): Promise<void> {
   await connectDB();
+  await expireStandaloneTrips(userId);
 
   const cutoff = new Date(Date.now() - EXPIRY_MS);
   const expireFilter = buildPendingRequestExpiryFilter(cutoff, userId);

@@ -427,7 +427,7 @@ export default function CreateClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dates: selectedDates,
+          date: selectedDates[0],
           note: bookingNote,
           promoCode: promoCodeDraft.trim() || null,
           trips: trips.map((t) => ({
@@ -481,7 +481,11 @@ export default function CreateClient({
                   end: data.conflict.window.end,
                 },
               })
-            : (data.error ?? t("create.booking_create_failed")),
+            : data.error === "MULTIPLE_DATES_NOT_SUPPORTED"
+              ? t("errors.MULTIPLE_DATES_NOT_SUPPORTED")
+              : data.error === "MULTIPLE_TRIPS_NOT_SUPPORTED"
+                ? t("errors.MULTIPLE_TRIPS_NOT_SUPPORTED")
+                : (data.error ?? t("create.booking_create_failed")),
         );
         return null;
       }
@@ -496,18 +500,21 @@ export default function CreateClient({
 
       if (
         typeof data.bookingId !== "string" ||
+        typeof data.tripId !== "string" ||
+        data.bookingId !== data.tripId ||
         !Number.isFinite(data.amountEgp) ||
         !Array.isArray(data.tripIds) ||
-        typeof data.tripIds[0] !== "string"
+        data.tripIds.length !== 1 ||
+        data.tripIds[0] !== data.tripId
       ) {
         setSubmitError(t("create.booking_create_failed"));
         return null;
       }
       const booking = {
         id: data.bookingId,
-        representativeTripId: data.tripIds[0] as string,
+        representativeTripId: data.tripId as string,
         amountEgp: data.amountEgp,
-        waitingList: data.waitingList === true,
+        waitingList: data.waitlist === true || data.waitingList === true,
       };
       setCreatedBooking(booking);
       return booking;
@@ -714,13 +721,6 @@ export default function CreateClient({
       return remaining;
     });
   }, []);
-
-  function addTrip() {
-    const nextTrip = defaultTrip(null, null);
-    setTrips((prev) => [...prev, nextTrip]);
-    setTripSteps((prev) => ({ ...prev, [nextTrip.id]: "vehicle" }));
-    setCollapsedTrips((prev) => ({ ...prev, [nextTrip.id]: false }));
-  }
 
   const stepLabels: Record<BookingStep, string> = {
     vehicle: t("create.vehicle_type"),
@@ -1101,9 +1101,9 @@ export default function CreateClient({
                 </h1>
               </div>
 
-              {/* Request-level dates: shared by every trip in this booking. */}
+              {/* One selected date for this Trip. */}
               <section
-                aria-label={t("create.request_dates")}
+                aria-label={t("create.trip_date")}
                 style={{
                   background: "#ffffff",
                   border: "1.5px solid rgb(200, 232, 228)",
@@ -1135,7 +1135,7 @@ export default function CreateClient({
                     textAlign: "start",
                   }}
                 >
-                  <span>{t("create.request_dates")}</span>
+                  <span>{t("create.trip_date")}</span>
                   <span
                     aria-hidden="true"
                     className="create-request-dates-toggle"
@@ -1165,6 +1165,7 @@ export default function CreateClient({
                     <DatePicker
                       value={selectedDates}
                       onChange={setSelectedDates}
+                      singleSelect
                     />
                   </div>
                 </div>
@@ -1446,44 +1447,6 @@ export default function CreateClient({
                   );
                 })}
               </div>
-
-              {/* Add trip */}
-              {trips.length < 3 &&
-                trips.at(-1) &&
-                getTripStep(trips.at(-1)!.id) === "passengers" && (
-                  <button
-                    type="button"
-                    onClick={addTrip}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      width: "100%",
-                      height: 48,
-                      background: "transparent",
-                      border: "2px dashed #d0d8e0",
-                      borderRadius: 12,
-                      cursor: "pointer",
-                      color: "#5A6A7A",
-                      fontSize: 14,
-                      fontWeight: 600,
-                      fontFamily: "inherit",
-                      transition: "border-color 0.15s, color 0.15s",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = "#00C2A8";
-                      e.currentTarget.style.color = "#00C2A8";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = "#d0d8e0";
-                      e.currentTarget.style.color = "#5A6A7A";
-                    }}
-                  >
-                    <Plus size={16} aria-hidden="true" />
-                    {t("create.add_another_trip")}
-                  </button>
-                )}
 
               {/* Validation error */}
               {validationError && (
@@ -2530,7 +2493,7 @@ export default function CreateClient({
                   lineHeight: 1.5,
                 }}
               >
-                {t("request_status.waiting_payment_explanation")}
+                {t("create.trip_waitlist_confirmation")}
               </p>
               <Link
                 href={`/my-trips/${requestSentTripId}`}

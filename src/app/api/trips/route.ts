@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
-import { Request } from "@/models/Request";
 import { AdminSettings } from "@/models/AdminSettings";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
@@ -43,10 +42,14 @@ import {
 } from "@/lib/notifications/createNotification";
 import { notifyAdminsOfWaitingListTrip } from "@/lib/notifications/adminActivity";
 import {
-  buildWaitingListCreatedAdminNotifications,
+  buildWaitingListCreatedTripAdminNotifications,
   getSharedRideWaitingListEnabled,
   shouldCreateWaitingListRequest,
 } from "@/lib/admin/waitingList";
+import {
+  getInitialTripBookingState,
+  getMultiTripBookingError,
+} from "@/lib/tripBooking";
 import mongoose, { Types } from "mongoose";
 import type { Document } from "mongodb";
 import {
@@ -169,7 +172,11 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(rawDates) || rawDates.length === 0) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
   }
-  const dates = Array.from(new Set(rawDates)).slice(0, 7).sort();
+  const multipleDateError = getMultiTripBookingError(rawDates.length, 0);
+  if (multipleDateError) {
+    return NextResponse.json({ error: multipleDateError }, { status: 400 });
+  }
+  const dates = Array.from(new Set(rawDates)).sort();
   for (const d of dates) {
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d) || !isDateInWindow(d)) {
       return NextResponse.json(
@@ -178,8 +185,12 @@ export async function POST(req: NextRequest) {
       );
     }
   }
-  if (!Array.isArray(trips) || trips.length === 0 || trips.length > 10) {
+  if (!Array.isArray(trips) || trips.length === 0) {
     return NextResponse.json({ error: "Invalid trips" }, { status: 400 });
+  }
+  const multipleTripError = getMultiTripBookingError(dates.length, trips.length);
+  if (multipleTripError) {
+    return NextResponse.json({ error: multipleTripError }, { status: 400 });
   }
 
   for (const trip of trips) {
@@ -670,26 +681,22 @@ export async function POST(req: NextRequest) {
   const sharedRideWaitingListEnabled = getSharedRideWaitingListEnabled(
     settings?.sharedRideWaitingListEnabled,
   );
-  const isWaitingListRequest = shouldCreateWaitingListRequest(
+  const isWaitingListTrip = shouldCreateWaitingListRequest(
     hasSharedRide,
     sharedRideWaitingListEnabled,
   );
-  let createdRequestId: Types.ObjectId | null = null;
 
   try {
-    const requestId = new Types.ObjectId();
-    createdRequestId = requestId;
-
     const tripDocuments = await Promise.all(
       pricedTripInstances.map(async (instance) => ({
         _id: instance.id,
         tripNumber: await nextSequence("tripNumber"),
-        requestId,
         regionCode: userRegion,
         userId: new Types.ObjectId(userId),
         date: instance.date,
         cycleIndex: instance.cycleIndex,
         ...instance.trip,
+        ...(note ? { note } : {}),
         basePriceEgp: instance.basePriceEgp,
         priceEgp: instance.priceEgp,
         ...(instance.promoApply && {
@@ -698,8 +705,7 @@ export async function POST(req: NextRequest) {
           promoDiscountValue: instance.promoApply.discountValue,
           promoDiscountAmountEgp: instance.promoDiscountAmountEgp,
         }),
-        paymentStatus: "pending",
-        status: "pending_payment",
+        ...getInitialTripBookingState(isWaitingListTrip),
       })),
     );
 
@@ -764,22 +770,6 @@ export async function POST(req: NextRequest) {
           submittedWindows.push({ ...candidate, status: "pending_payment" });
         }
 
-        await Request.create(
-          [
-            {
-              _id: requestId,
-              userId: new Types.ObjectId(userId),
-              regionCode: userRegion,
-              tripIds: tripInstances.map((instance) => instance.id),
-              dates,
-              amountEgp,
-              note,
-              paymentStatus: "pending",
-              status: isWaitingListRequest ? "waiting_list" : "pending_payment",
-            },
-          ],
-          { session: dbSession },
-        );
         await Trip.insertMany(tripDocuments, { session: dbSession });
       });
     } finally {
@@ -789,50 +779,63 @@ export async function POST(req: NextRequest) {
     const tripIds = tripDocuments.map((trip) => String(trip._id));
     const representativeTripId = tripIds[0];
 
-    if (isWaitingListRequest) {
-      await Promise.all(
-        tripIds.map((tripId) => notifyAdminsOfWaitingListTrip(tripId)),
-      );
+    if (isWaitingListTrip) {
       try {
+        await Promise.all(
+          tripIds.map((tripId) => notifyAdminsOfWaitingListTrip(tripId)),
+        );
         const admins = await User.find({ role: "admin" }).select("_id").lean();
         const firstTrip = serverTrips[0];
         await createNotifications(
-          buildWaitingListCreatedAdminNotifications({
+          buildWaitingListCreatedTripAdminNotifications({
             adminIds: admins.map((admin) => String(admin._id)),
-            bookingId: String(requestId),
+            tripId: representativeTripId,
             routeSummary: `${firstTrip.pickup.address} → ${firstTrip.dropoff.address}`,
             date: tripInstances[0].date,
           }),
         );
       } catch (error) {
         console.error(
-          `[Waiting list] Admin notification failed for request ${String(requestId)}:`,
+          `[Waiting list] Admin notification failed for trip ${representativeTripId}:`,
           error,
         );
       }
-    } else {
+    }
+    try {
       await createNotification({
         userId,
         type: "request_created",
-        title: "Trip request received",
-        body: `Your trip request for ${dates.length} day${dates.length > 1 ? "s" : ""} is ready for payment.`,
+        title: isWaitingListTrip
+          ? "Shared-ride trip received"
+          : "Trip ready for payment",
+        body: isWaitingListTrip
+          ? `Your shared-ride trip for ${dates[0]} is waiting for review.`
+          : `Your trip for ${dates[0]} is ready for payment.`,
         data: {
-          bookingId: String(requestId),
+          bookingId: representativeTripId,
           tripId: representativeTripId,
           linkUrl: `/my-trips/${representativeTripId}`,
           amountEgp,
+          waitlist: isWaitingListTrip,
         },
       });
+    } catch (error) {
+      console.error(
+        `[Trip booking] Passenger notification failed for trip ${representativeTripId}:`,
+        error,
+      );
     }
 
     return NextResponse.json(
       {
-        bookingId: String(requestId),
+        tripId: representativeTripId,
+        bookingId: representativeTripId,
         tripIds,
         amountEgp,
-        ...(isWaitingListRequest
+        waitlist: isWaitingListTrip,
+        waitingList: isWaitingListTrip,
+        ...(isWaitingListTrip
           ? {
-              waitingList: true,
               status: "waiting_list",
               requiresPayment: false,
             }
@@ -849,9 +852,6 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     );
   } catch (err) {
-    if (createdRequestId) {
-      await Request.deleteOne({ _id: createdRequestId });
-    }
     await Promise.all(
       successfulPromoReservations.map((reservation) =>
         rollbackPromoCodeUsage(reservation.usageId, reservation.promoCodeId),
@@ -863,7 +863,7 @@ export async function POST(req: NextRequest) {
         { status: 409 },
       );
     }
-    console.error("Trip fan-out failed — request rolled back:", err);
+    console.error("Trip booking failed:", err);
     return NextResponse.json(
       { error: "Failed to create trips" },
       { status: 500 },
