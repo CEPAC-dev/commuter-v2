@@ -11,12 +11,21 @@ import {
   releaseReservation,
 } from "@/lib/wallet/wallet";
 import { createNotification } from "@/lib/notifications/createNotification";
-import { syncPaidTripsForRequest } from "@/lib/notifications/adminActivity";
+import {
+  notifyAdminsOfPaidTrip,
+  syncPaidTripsForRequest,
+} from "@/lib/notifications/adminActivity";
 import { Types } from "mongoose";
 import { validateMutationRequest } from "@/lib/security/request";
 import { buildSettlementRequestFilter } from "@/lib/pendingRequestHardening";
 import { getCairoNowParts } from "@/lib/cancellationPolicy";
 import { hasPastTrip } from "@/lib/admin/waitingList";
+import {
+  isApprovedTripPickupPast,
+  isStandaloneTripPayable,
+  resolvePayableBooking,
+} from "@/lib/payments/resolveBooking";
+import { settleTripOnce } from "@/lib/payments/tripSettlement";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
@@ -51,33 +60,53 @@ export async function POST(req: NextRequest) {
 
   await connectDB();
 
-  const booking = await Request.findOne({
-    _id: bookingId,
-    userId: new Types.ObjectId(session.userId),
-    paymentStatus: { $in: ["pending", "failed"] },
-  });
+  const resolved = await resolvePayableBooking(bookingId, session.userId);
 
-  if (!booking)
+  if (
+    !resolved ||
+    (resolved.kind === "request" &&
+      !["pending", "failed"].includes(resolved.paymentStatus))
+  )
     return NextResponse.json(
       { error: "Request not found or already paid." },
       { status: 404 },
     );
 
-  if (booking.status === "waiting_list") {
+  const booking = resolved.doc;
+  const bookingObjectId = new Types.ObjectId(bookingId);
+
+  if (resolved.kind === "trip" && !isStandaloneTripPayable(resolved)) {
+    const error =
+      resolved.status === "waiting_list"
+        ? "This trip is waiting for admin approval and cannot be paid yet."
+        : resolved.status === "rejected"
+          ? "This trip was rejected and cannot be paid."
+          : resolved.status === "cancelled" || resolved.status === "time_out"
+            ? "This trip is no longer payable."
+            : resolved.paymentStatus === "paid"
+              ? "This trip has already been paid."
+              : "This trip is not ready for payment.";
+    return NextResponse.json(
+      { errorCode: "TRIP_NOT_PAYABLE", error },
+      { status: 409 },
+    );
+  }
+
+  if (resolved.kind === "request" && resolved.status === "waiting_list") {
     return NextResponse.json(
       { error: "This shared-ride request is waiting for admin approval." },
       { status: 409 },
     );
   }
 
-  if (booking.status === "rejected") {
+  if (resolved.kind === "request" && resolved.status === "rejected") {
     return NextResponse.json(
       { error: "This shared-ride request was rejected and cannot be paid." },
       { status: 409 },
     );
   }
 
-  if (booking.status === "approved") {
+  if (resolved.kind === "request" && resolved.status === "approved") {
     const trips = await Trip.find({ requestId: booking._id })
       .select("date pickupTime")
       .lean<{ date: string; pickupTime: string }[]>();
@@ -91,8 +120,27 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+  if (
+    resolved.kind === "trip" &&
+    isApprovedTripPickupPast(
+      {
+        status: resolved.status,
+        date: booking.date,
+        pickupTime: booking.pickupTime,
+      },
+      getCairoNowParts(),
+    )
+  ) {
+    return NextResponse.json(
+      {
+        errorCode: "APPROVED_TRIP_IN_PAST",
+        error: "This request has a trip whose pickup time has passed. Please book again.",
+      },
+      { status: 409 },
+    );
+  }
 
-  const totalEgp = Number(booking.amountEgp);
+  const totalEgp = Number(resolved.amountEgp);
   if (!Number.isFinite(totalEgp) || totalEgp < 0)
     return NextResponse.json(
       { error: "Invalid booking amount." },
@@ -197,6 +245,118 @@ export async function POST(req: NextRequest) {
 
   // ── Wallet-only fast path (no Kashier call) ──
   if (gatewayAmount === 0) {
+    if (resolved.kind === "trip") {
+      const settlement = await settleTripOnce<ReturnType<typeof Trip.hydrate>>(
+        () =>
+          Trip.findOneAndUpdate(
+            {
+              _id: bookingObjectId,
+              requestId: null,
+              status: { $in: ["pending_payment", "approved"] },
+              paymentStatus: { $ne: "paid" },
+            },
+            {
+              $set: {
+                paymentStatus: "paid",
+                status: "submitted",
+                paidAt: new Date(),
+              },
+            },
+            { returnDocument: "after" },
+          ),
+        async () =>
+          Trip.findById(bookingObjectId)
+            .select("paymentStatus status")
+            .lean<{ paymentStatus: string; status: string } | null>(),
+        async (settledTrip) => {
+          const captured = reservationTxId
+            ? await captureReservation(reservationTxId, {
+                description: `Payment for trip ${booking._id}`,
+                paymentId: String(payment._id),
+                bookingId: String(booking._id),
+              })
+            : null;
+          if (walletAmount > 0 && captured === null) return false;
+
+          await Payment.updateOne(
+            { _id: payment._id },
+            {
+              $set: {
+                walletStatus: "captured",
+                overallStatus: "paid",
+                paidAt: new Date(),
+              },
+              $push: {
+                timeline: [
+                  { event: "wallet_captured" },
+                  { event: "trip_paid" },
+                ],
+              },
+            },
+          );
+          await notifyAdminsOfPaidTrip(String(settledTrip._id));
+          await createNotification({
+            userId: session.userId,
+            type: "payment_paid",
+            title: "Payment completed",
+            body: "Your trip payment was successful.",
+            data: {
+              tripId: String(settledTrip._id),
+              linkUrl: `/my-trips/${settledTrip._id}`,
+              paymentId: String(payment._id),
+            },
+          });
+        },
+      );
+
+      if (
+        settlement === "already_paid" ||
+        settlement === "blocked" ||
+        settlement === "missing"
+      ) {
+        if (reservationTxId) {
+          await releaseReservation(reservationTxId, {
+            description: `Released — trip is no longer payable`,
+            paymentId: String(payment._id),
+            bookingId: String(booking._id),
+          });
+        }
+        await Payment.updateOne(
+          { _id: payment._id },
+          {
+            $set: {
+              overallStatus: "cancelled",
+              walletStatus: walletAmount > 0 ? "released" : "none",
+            },
+            $push: { timeline: { event: "trip_not_payable" } },
+          },
+        );
+        return NextResponse.json(
+          { errorCode: "TRIP_NOT_PAYABLE", error: "This trip is no longer payable." },
+          { status: 409 },
+        );
+      }
+      if (settlement === "incomplete") {
+        await Payment.updateOne(
+          { _id: payment._id },
+          {
+            $set: { overallStatus: "failed" },
+            $push: { timeline: { event: "wallet_capture_failed" } },
+          },
+        );
+        return NextResponse.json(
+          { error: "Wallet capture failed." },
+          { status: 500 },
+        );
+      }
+
+      return NextResponse.json({
+        walletOnly: true,
+        paymentId: String(payment._id),
+        redirect: `/checkout/callback?bookingId=${bookingId}&paymentId=${payment._id}`,
+      });
+    }
+
     const captured = reservationTxId
       ? await captureReservation(reservationTxId, {
           description: `Payment for booking ${booking._id}`,
@@ -432,21 +592,36 @@ export async function POST(req: NextRequest) {
   );
 
   // Keep booking-level Kashier hints for legacy readers.
-  await Request.findByIdAndUpdate(bookingId, {
-    kashierSessionId,
-    kashierOrderId: String(payment._id),
-  });
+  if (resolved.kind === "request") {
+    await Request.findByIdAndUpdate(bookingId, {
+      kashierSessionId,
+      kashierOrderId: String(payment._id),
+    });
+  } else {
+    await Trip.updateOne(
+      { _id: bookingObjectId, requestId: null },
+      {
+        $set: {
+          kashierSessionId,
+          kashierOrderId: String(payment._id),
+        },
+      },
+    );
+  }
 
-  const representativeTripId = booking.tripIds?.[0]
-    ? String(booking.tripIds[0])
-    : String(
+  const representativeTripId =
+    resolved.kind === "trip"
+      ? String(booking._id)
+      : booking.tripIds?.[0]
+        ? String(booking.tripIds[0])
+        : String(
         (
           await Trip.findOne({ requestId: booking._id })
             .sort({ date: 1, cycleIndex: 1 })
             .select("_id")
             .lean<{ _id: Types.ObjectId } | null>()
         )?._id ?? "",
-      );
+          );
 
   await createNotification({
     userId: session.userId,

@@ -1,14 +1,14 @@
 import "server-only";
 import { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
-import { Request } from "@/models/Request";
-import type { BookingStatus, PaymentStatus } from "@/types/booking";
+import type { BookingStatus, PaymentStatus, TripStatus } from "@/types/booking";
+import { resolvePayableBooking } from "@/lib/payments/resolveBooking";
 
 export interface BookingStatusDetail {
   id: string;
   paymentStatus: PaymentStatus;
   amountEgp: number;
-  status: BookingStatus;
+  status: BookingStatus | TripStatus;
   dates: string[];
 }
 
@@ -19,25 +19,17 @@ export async function getBookingStatus(
   if (!Types.ObjectId.isValid(bookingId)) return null;
 
   await connectDB();
-  const booking = await Request.findOne({
-    _id: bookingId,
-    userId: new Types.ObjectId(userId),
-  })
-    .select("paymentStatus amountEgp status dates")
-    .lean<{
-      _id: unknown;
-      paymentStatus: string;
-      amountEgp: number;
-      status: string;
-      dates: string[];
-    }>();
+  const booking = await resolvePayableBooking(bookingId, userId);
   if (!booking) return null;
 
   return {
-    id: String(booking._id),
+    id: String(booking.doc._id),
     paymentStatus: (booking.paymentStatus as PaymentStatus) ?? "pending",
     amountEgp: booking.amountEgp,
-    status: booking.status as BookingStatus,
-    dates: booking.dates ?? [],
+    status: booking.status as BookingStatus | TripStatus,
+    dates:
+      booking.kind === "trip"
+        ? [booking.doc.date]
+        : booking.doc.dates ?? [],
   };
 }

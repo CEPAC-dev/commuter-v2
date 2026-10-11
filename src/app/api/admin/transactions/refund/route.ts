@@ -10,6 +10,8 @@ import {
   refundKashierPayment,
   resolveKashierRefundOrderId,
 } from "@/lib/payments/kashier";
+import { resolvePayableBooking } from "@/lib/payments/resolveBooking";
+import { fullyRefundedTripUpdate } from "@/lib/payments/tripSettlement";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { Types } from "mongoose";
@@ -67,8 +69,30 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
 
+  // This is an admin lookup: omit userId intentionally. Request-backed
+  // Payments continue to resolve through their Request id.
+  const payableBooking = await resolvePayableBooking(String(payment.bookingId));
+  if (!payableBooking)
+    return NextResponse.json(
+      { error: "Payment booking not found" },
+      { status: 404 },
+    );
+  const tripBookingScope =
+    payableBooking.kind === "trip"
+      ? { _id: payment.bookingId, requestId: null }
+      : { requestId: payment.bookingId };
+  if (
+    payableBooking.kind === "trip" &&
+    String(payableBooking.doc._id) !== tripId
+  ) {
+    return NextResponse.json(
+      { error: "Trip does not belong to this payment" },
+      { status: 409 },
+    );
+  }
+
   const unresolvedGatewayRefund = await Trip.exists({
-    requestId: payment.bookingId,
+    ...tripBookingScope,
     "adminRefund.paymentId": payment._id,
     $or: [
       {
@@ -120,7 +144,9 @@ export async function POST(req: NextRequest) {
   const eligibleStatuses = ["submitted", "matched", "nomatch"];
   const tripRefundFilter = {
     _id: tripId,
-    requestId: payment.bookingId,
+    ...(payableBooking.kind === "trip"
+      ? { requestId: null }
+      : { requestId: payment.bookingId }),
     status: { $in: eligibleStatuses },
     $or: [
       { adminRefund: null },
@@ -429,6 +455,10 @@ export async function POST(req: NextRequest) {
   const confirmedRefundEgp = walletRefundEgp + confirmedGatewayRefundEgp;
   const newRefundedTotal = alreadyRefunded + confirmedRefundEgp;
   const fullyRefunded = amountEgp > 0 && newRefundedTotal >= payment.totalEgp;
+  const fullTripUpdate =
+    payableBooking.kind === "trip" && amountEgp > 0
+      ? fullyRefundedTripUpdate(newRefundedTotal, Number(trip.priceEgp))
+      : null;
 
   const update: Record<string, unknown> =
     confirmedRefundEgp > 0
@@ -491,7 +521,7 @@ export async function POST(req: NextRequest) {
       $push: { timeline: { $each: timelineEvents } },
     },
   );
-  if (fullyRefunded) {
+  if (fullyRefunded && payableBooking.kind === "request") {
     await Request.updateOne(
       { _id: payment.bookingId },
       { $set: { paymentStatus: "refunded" } },
@@ -507,7 +537,9 @@ export async function POST(req: NextRequest) {
           : gatewayRefundFailed
             ? "failed"
             : "completed",
-        ...(!gatewayRefundFailed && !gatewayRefundPending
+        ...(!gatewayRefundFailed &&
+        !gatewayRefundPending &&
+        (payableBooking.kind === "request" || fullTripUpdate)
           ? { status: "refunded" }
           : {}),
         ...(!gatewayRefundPending
@@ -535,7 +567,11 @@ export async function POST(req: NextRequest) {
                   ? "Kashier returned an existing refund reference; reconcile the recorded result before retrying"
                   : "Kashier refund outcome is unconfirmed; verify before retrying",
               }
-            : { paymentStatus: "refunded" }),
+            : payableBooking.kind === "request"
+              ? { paymentStatus: "refunded" }
+              : fullTripUpdate
+                ? fullTripUpdate
+                : {}),
         "adminRefund.retryAllowed": gatewayRefundRetrySafe,
       },
     },
