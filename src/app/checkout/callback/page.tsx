@@ -8,6 +8,7 @@ import { verifyAndSettleBooking } from "@/lib/payments/kashier";
 
 interface SearchParams {
   bookingId?: string;
+  paymentId?: string;
   status?: string; // Kashier adds: SUCCESS | FAILURE
 }
 
@@ -24,7 +25,7 @@ export default async function CallbackPage({
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const { bookingId, status: kashierStatus } = await searchParams;
+  const { bookingId, paymentId, status: kashierStatus } = await searchParams;
 
   if (!bookingId || !Types.ObjectId.isValid(bookingId)) {
     redirect("/my-trips");
@@ -34,7 +35,7 @@ export default async function CallbackPage({
   // Skip when booking is already paid (e.g. wallet-only path with no Kashier session).
   const prelim = await getBookingStatus(session.userId, bookingId);
   if (prelim && prelim.paymentStatus !== "paid") {
-    await verifyAndSettleBooking(bookingId, session.userId);
+    await verifyAndSettleBooking(bookingId, session.userId, paymentId);
   }
 
   const booking = await getBookingStatus(session.userId, bookingId);

@@ -13,14 +13,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let bookingId: string;
+  let paymentId: string | undefined;
   try {
-    ({ bookingId } = await req.json());
+    ({ bookingId, paymentId } = await req.json());
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
   if (typeof bookingId !== "string" || !Types.ObjectId.isValid(bookingId))
     return NextResponse.json({ error: "Invalid bookingId" }, { status: 400 });
 
-  const paymentStatus = await verifyAndSettleBooking(bookingId, session.userId);
+  const paymentStatus = await verifyAndSettleBooking(
+    bookingId,
+    session.userId,
+    paymentId,
+  );
   return NextResponse.json({ paymentStatus });
 }

@@ -14,6 +14,13 @@ const {
 const { buildSettlementRequestFilter } = await import(
   "../src/lib/pendingRequestHardening.ts"
 );
+const {
+  canTripTakePaymentFailure,
+  isInFlightPaymentStatus,
+  runStandalonePaymentFailure,
+  runStandaloneSettlementSteps,
+  shouldResetFailedTripForRetry,
+} = await import("../src/lib/payments/settlementAttempt.ts");
 
 test("standalone pending-payment or approved trips with pending or failed payment are payable", () => {
   assert.equal(
@@ -232,4 +239,188 @@ test("full Trip refunds set both Trip statuses; partial refunds do not", () => {
     paymentStatus: "refunded",
   });
   assert.equal(fullyRefundedTripUpdate(374, 375), null);
+});
+
+test("failed standalone payment retry resets only an unpaid pending or approved Trip", () => {
+  assert.equal(shouldResetFailedTripForRetry("pending_payment", "failed"), true);
+  assert.equal(shouldResetFailedTripForRetry("approved", "failed"), true);
+  assert.equal(shouldResetFailedTripForRetry("waiting_list", "failed"), false);
+  assert.equal(shouldResetFailedTripForRetry("submitted", "failed"), false);
+  assert.equal(shouldResetFailedTripForRetry("approved", "paid"), false);
+});
+
+test("late failure from an older attempt cannot fail a retrying Trip", () => {
+  const oldPayment = { overallStatus: "failed" };
+  const retryPayment = { overallStatus: "kashier_pending" };
+  const trip = { status: "approved", paymentStatus: "pending" };
+
+  assert.equal(isInFlightPaymentStatus(oldPayment.overallStatus), false);
+  assert.equal(isInFlightPaymentStatus(retryPayment.overallStatus), true);
+  assert.equal(canTripTakePaymentFailure(trip.status, trip.paymentStatus), true);
+  assert.equal(canTripTakePaymentFailure("submitted", "paid"), false);
+});
+
+test("failure racing a successful claim does not release or fail either record", async () => {
+  const state = {
+    tripStatus: "submitted",
+    tripPaymentStatus: "paid",
+    paymentStatus: "paid",
+    reservationStatus: "captured",
+  };
+  let released = false;
+  let tripFailed = false;
+  let timelineWritten = false;
+
+  const result = await runStandalonePaymentFailure({
+    paymentInFlight: isInFlightPaymentStatus(state.paymentStatus),
+    tripStatus: state.tripStatus,
+    tripPaymentStatus: state.tripPaymentStatus,
+    markPaymentFailed: async () => {
+      state.paymentStatus = "failed";
+      return true;
+    },
+    releaseWallet: async () => {
+      released = true;
+      state.reservationStatus = "released";
+    },
+    hasOtherInFlightPayment: async () => false,
+    markTripFailed: async () => {
+      tripFailed = true;
+    },
+    recordIgnored: async () => {
+      timelineWritten = true;
+    },
+  });
+
+  assert.equal(result, "ignored");
+  assert.equal(timelineWritten, true);
+  assert.equal(released, false);
+  assert.equal(tripFailed, false);
+  assert.equal(state.paymentStatus, "paid");
+  assert.equal(state.reservationStatus, "captured");
+});
+
+test("failure only marks a Trip failed when no newer Payment is in flight", async () => {
+  const state = { paymentStatus: "kashier_pending", tripPaymentStatus: "pending" };
+  let released = false;
+  let tripFailed = false;
+  const result = await runStandalonePaymentFailure({
+    paymentInFlight: true,
+    tripStatus: "approved",
+    tripPaymentStatus: "pending",
+    markPaymentFailed: async () => {
+      state.paymentStatus = "failed";
+      return true;
+    },
+    releaseWallet: async () => {
+      released = true;
+    },
+    hasOtherInFlightPayment: async () => true,
+    markTripFailed: async () => {
+      tripFailed = true;
+      state.tripPaymentStatus = "failed";
+    },
+    recordIgnored: async () => {},
+  });
+
+  assert.equal(result, "failed");
+  assert.equal(released, true);
+  assert.equal(tripFailed, false);
+  assert.equal(state.tripPaymentStatus, "pending");
+});
+
+test("settlement transaction rolls back each failing step and replays without double capture", async () => {
+  for (const failAfter of ["capture", "payment", "ledger"]) {
+    const state = {
+      tripStatus: "approved",
+      tripPaymentStatus: "pending",
+      paymentStatus: "kashier_pending",
+      reservationStatus: "pending",
+      captureCount: 0,
+      ledgerCount: 0,
+    };
+
+    const runTransaction = async (failurePoint) => {
+      const before = structuredClone(state);
+      try {
+        state.tripStatus = "submitted";
+        state.tripPaymentStatus = "paid";
+        await runStandaloneSettlementSteps({
+          captureWallet: async () => {
+            if (state.reservationStatus === "pending") {
+              state.reservationStatus = "captured";
+              state.captureCount += 1;
+            }
+            if (failurePoint === "capture") throw new Error("capture boundary");
+          },
+          markPaymentPaid: async () => {
+            state.paymentStatus = "paid";
+            if (failurePoint === "payment") throw new Error("payment boundary");
+          },
+          writeGatewayLedger: async () => {
+            if (state.ledgerCount === 0) state.ledgerCount += 1;
+            if (failurePoint === "ledger") throw new Error("ledger boundary");
+          },
+        });
+      } catch {
+        Object.assign(state, before);
+        throw new Error("transaction aborted");
+      }
+    };
+
+    await assert.rejects(runTransaction(failAfter), /transaction aborted/);
+    assert.equal(state.tripPaymentStatus, "pending");
+    assert.equal(state.paymentStatus, "kashier_pending");
+    assert.equal(state.reservationStatus, "pending");
+    assert.equal(state.ledgerCount, 0);
+
+    await runTransaction(null);
+    assert.equal(state.tripPaymentStatus, "paid");
+    assert.equal(state.paymentStatus, "paid");
+    assert.equal(state.reservationStatus, "captured");
+    assert.equal(state.captureCount, 1);
+    assert.equal(state.ledgerCount, 1);
+  }
+});
+
+test("webhook and callback settlement share replay-safe finalization steps", async () => {
+  for (const source of ["webhook", "callback"]) {
+    const state = {
+      tripStatus: "approved",
+      tripPaymentStatus: "failed",
+      paymentStatus: "failed",
+      captured: false,
+      ledgerWritten: false,
+    };
+    assert.equal(
+      shouldResetFailedTripForRetry(state.tripStatus, state.tripPaymentStatus),
+      true,
+    );
+    state.tripPaymentStatus = "pending";
+    state.paymentStatus = "kashier_pending";
+
+    const settle = async () => {
+      if (state.paymentStatus === "paid") return "already_paid";
+      state.tripStatus = "submitted";
+      state.tripPaymentStatus = "paid";
+      await runStandaloneSettlementSteps({
+        captureWallet: async () => {
+          state.captured = true;
+        },
+        markPaymentPaid: async () => {
+          state.paymentStatus = "paid";
+        },
+        writeGatewayLedger: async () => {
+          state.ledgerWritten = true;
+        },
+      });
+      return "settled";
+    };
+
+    assert.equal(await settle(), "settled", source);
+    assert.equal(await settle(), "already_paid", source);
+    assert.equal(state.tripPaymentStatus, "paid");
+    assert.equal(state.captured, true);
+    assert.equal(state.ledgerWritten, true);
+  }
 });

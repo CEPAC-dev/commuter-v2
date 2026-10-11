@@ -15,7 +15,7 @@ import {
   notifyAdminsOfPaidTrip,
   syncPaidTripsForRequest,
 } from "@/lib/notifications/adminActivity";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { validateMutationRequest } from "@/lib/security/request";
 import { buildSettlementRequestFilter } from "@/lib/pendingRequestHardening";
 import { getCairoNowParts } from "@/lib/cancellationPolicy";
@@ -25,7 +25,8 @@ import {
   isStandaloneTripPayable,
   resolvePayableBooking,
 } from "@/lib/payments/resolveBooking";
-import { settleTripOnce } from "@/lib/payments/tripSettlement";
+import { settleStandaloneTripPayment } from "@/lib/payments/standaloneTripSettlement";
+import { shouldResetFailedTripForRetry } from "@/lib/payments/settlementAttempt";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
@@ -164,8 +165,9 @@ export async function POST(req: NextRequest) {
   // partial index on {bookingId, overallStatus:active} rejects a second
   // concurrent attempt instead of creating a parallel reservation/charge.
   let payment;
+  let retryTripResetFailed = false;
   try {
-    payment = await Payment.create({
+    const paymentData = {
       userId: new Types.ObjectId(session.userId),
       bookingId: booking._id,
       totalEgp,
@@ -180,7 +182,45 @@ export async function POST(req: NextRequest) {
           detail: `Total ${totalEgp} EGP (wallet ${walletAmount}, gateway ${gatewayAmount})`,
         },
       ],
-    });
+    };
+    if (
+      resolved.kind === "trip" &&
+      shouldResetFailedTripForRetry(resolved.status, resolved.paymentStatus)
+    ) {
+      const dbSession = await mongoose.startSession();
+      try {
+        await dbSession.withTransaction(async () => {
+          retryTripResetFailed = false;
+          const reset = await Trip.updateOne(
+            {
+              _id: bookingObjectId,
+              requestId: null,
+              status: { $in: ["pending_payment", "approved"] },
+              paymentStatus: "failed",
+            },
+            { $set: { paymentStatus: "pending" } },
+            { session: dbSession },
+          );
+          if (reset.matchedCount !== 1) {
+            retryTripResetFailed = true;
+            return;
+          }
+          [payment] = await Payment.create([paymentData], {
+            session: dbSession,
+          });
+        });
+      } finally {
+        await dbSession.endSession();
+      }
+      if (retryTripResetFailed) {
+        return NextResponse.json(
+          { error: "This trip changed while creating the payment session." },
+          { status: 409 },
+        );
+      }
+    } else {
+      payment = await Payment.create(paymentData);
+    }
   } catch (err) {
     if (
       typeof err === "object" &&
@@ -246,67 +286,9 @@ export async function POST(req: NextRequest) {
   // ── Wallet-only fast path (no Kashier call) ──
   if (gatewayAmount === 0) {
     if (resolved.kind === "trip") {
-      const settlement = await settleTripOnce<ReturnType<typeof Trip.hydrate>>(
-        () =>
-          Trip.findOneAndUpdate(
-            {
-              _id: bookingObjectId,
-              requestId: null,
-              status: { $in: ["pending_payment", "approved"] },
-              paymentStatus: { $ne: "paid" },
-            },
-            {
-              $set: {
-                paymentStatus: "paid",
-                status: "submitted",
-                paidAt: new Date(),
-              },
-            },
-            { returnDocument: "after" },
-          ),
-        async () =>
-          Trip.findById(bookingObjectId)
-            .select("paymentStatus status")
-            .lean<{ paymentStatus: string; status: string } | null>(),
-        async (settledTrip) => {
-          const captured = reservationTxId
-            ? await captureReservation(reservationTxId, {
-                description: `Payment for trip ${booking._id}`,
-                paymentId: String(payment._id),
-                bookingId: String(booking._id),
-              })
-            : null;
-          if (walletAmount > 0 && captured === null) return false;
-
-          await Payment.updateOne(
-            { _id: payment._id },
-            {
-              $set: {
-                walletStatus: "captured",
-                overallStatus: "paid",
-                paidAt: new Date(),
-              },
-              $push: {
-                timeline: [
-                  { event: "wallet_captured" },
-                  { event: "trip_paid" },
-                ],
-              },
-            },
-          );
-          await notifyAdminsOfPaidTrip(String(settledTrip._id));
-          await createNotification({
-            userId: session.userId,
-            type: "payment_paid",
-            title: "Payment completed",
-            body: "Your trip payment was successful.",
-            data: {
-              tripId: String(settledTrip._id),
-              linkUrl: `/my-trips/${settledTrip._id}`,
-              paymentId: String(payment._id),
-            },
-          });
-        },
+      const settlement = await settleStandaloneTripPayment(
+        String(booking._id),
+        String(payment._id),
       );
 
       if (
@@ -336,9 +318,19 @@ export async function POST(req: NextRequest) {
           { status: 409 },
         );
       }
-      if (settlement === "incomplete") {
+      if (settlement === "capture_failed") {
+        if (reservationTxId) {
+          await releaseReservation(reservationTxId, {
+            description: `Released — wallet capture failed`,
+            paymentId: String(payment._id),
+            bookingId: String(booking._id),
+          });
+        }
         await Payment.updateOne(
-          { _id: payment._id },
+          {
+            _id: payment._id,
+            overallStatus: { $in: ["created", "wallet_reserved"] },
+          },
           {
             $set: { overallStatus: "failed" },
             $push: { timeline: { event: "wallet_capture_failed" } },
@@ -348,6 +340,20 @@ export async function POST(req: NextRequest) {
           { error: "Wallet capture failed." },
           { status: 500 },
         );
+      }
+      if (settlement === "settled") {
+        await notifyAdminsOfPaidTrip(String(booking._id));
+        await createNotification({
+          userId: session.userId,
+          type: "payment_paid",
+          title: "Payment completed",
+          body: "Your trip payment was successful.",
+          data: {
+            tripId: String(booking._id),
+            linkUrl: `/my-trips/${booking._id}`,
+            paymentId: String(payment._id),
+          },
+        });
       }
 
       return NextResponse.json({

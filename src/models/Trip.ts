@@ -187,6 +187,11 @@ const TripSchema = new Schema(
       default: [],
     },
     paidAt: { type: Date, required: false },
+    settlementPaymentId: {
+      type: Types.ObjectId,
+      ref: "Payment",
+      required: false,
+    },
     extraPassengers: { type: Number, default: 0, min: 0, max: 9 },
     passengers: { type: [PassengerDetailSchema], default: [] },
     numberOfPassengers: { type: Number, default: 1, min: 1 },
