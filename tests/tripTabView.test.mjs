@@ -6,11 +6,11 @@ const now = new Date("2026-10-03T09:00:00.000Z");
 
 test("All keeps pending trip rows individual while Pending groups a Request once", () => {
   const rows = [
-    { id: "p1", requestId: "pending-1", status: "pending_payment", parentRequestStatus: "approved", date: "2026-10-04", pickupTime: "09:00" },
-    { id: "p2", requestId: "pending-1", status: "pending_payment", parentRequestStatus: "approved", date: "2026-10-05", pickupTime: "09:00" },
-    { id: "u1", requestId: "paid-1", status: "submitted", parentRequestStatus: "submitted", date: "2026-10-06", pickupTime: "09:00" },
-    { id: "o1", requestId: "paid-2", status: "active", parentRequestStatus: "active", date: "2026-10-07", pickupTime: "09:00" },
-    { id: "h1", requestId: "old-1", status: "completed", parentRequestStatus: "submitted", date: "2026-10-01", pickupTime: "09:00" },
+    { id: "p1", requestId: "pending-1", isStandalone: false, status: "pending_payment", parentRequestStatus: "approved", date: "2026-10-04", pickupTime: "09:00" },
+    { id: "p2", requestId: "pending-1", isStandalone: false, status: "pending_payment", parentRequestStatus: "approved", date: "2026-10-05", pickupTime: "09:00" },
+    { id: "u1", requestId: "paid-1", isStandalone: false, status: "submitted", parentRequestStatus: "submitted", date: "2026-10-06", pickupTime: "09:00" },
+    { id: "o1", requestId: "paid-2", isStandalone: false, status: "active", parentRequestStatus: "active", date: "2026-10-07", pickupTime: "09:00" },
+    { id: "h1", requestId: "old-1", isStandalone: false, status: "completed", parentRequestStatus: "submitted", date: "2026-10-01", pickupTime: "09:00" },
   ];
   const view = buildTripTabView(rows, "all", now);
   assert.deepEqual(view.counts, { all: 4, pending: 1, upcoming: 1, ongoing: 1 });
@@ -23,12 +23,24 @@ test("All keeps pending trip rows individual while Pending groups a Request once
 
 test("pending tab contains only grouped unpaid Requests", () => {
   const rows = [
-    { id: "a", requestId: "request", status: "pending_payment", parentRequestStatus: "waiting_list", date: "2026-10-04", pickupTime: "09:00" },
-    { id: "b", requestId: "request", status: "pending_payment", parentRequestStatus: "waiting_list", date: "2026-10-05", pickupTime: "09:00" },
+    { id: "a", requestId: "request", isStandalone: false, status: "pending_payment", parentRequestStatus: "waiting_list", date: "2026-10-04", pickupTime: "09:00" },
+    { id: "b", requestId: "request", isStandalone: false, status: "pending_payment", parentRequestStatus: "waiting_list", date: "2026-10-05", pickupTime: "09:00" },
   ];
   const view = buildTripTabView(rows, "pending", now);
   assert.equal(view.counts.pending, 1);
   assert.equal(view.items.length, 1);
   assert.equal(view.items[0].kind, "request");
   assert.equal(view.items[0].trips.length, 2);
+});
+
+test("standalone pending Trips stay as individual rows and retain one pay action per trip", () => {
+  const rows = [
+    { id: "wait", requestId: "wait", isStandalone: true, status: "waiting_list", paymentStatus: "pending", date: "2026-10-04", pickupTime: "09:00" },
+    { id: "approved", requestId: "approved", isStandalone: true, status: "approved", paymentStatus: "failed", date: "2026-10-05", pickupTime: "09:00" },
+    { id: "pending", requestId: "pending", isStandalone: true, status: "pending_payment", paymentStatus: "pending", date: "2026-10-06", pickupTime: "09:00" },
+  ];
+  const view = buildTripTabView(rows, "pending", now);
+  assert.equal(view.counts.pending, 3);
+  assert.deepEqual(view.items.map((item) => item.kind), ["trip", "trip", "trip"]);
+  assert.deepEqual(view.items.map((item) => item.trip.id), ["wait", "approved", "pending"]);
 });

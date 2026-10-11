@@ -245,6 +245,8 @@ export async function listDriverTrips(
           date: string;
           paymentStatus: string;
           status: string;
+          rejectionReason?: string | null;
+          reviewedAt?: Date | string | null;
           vehicleType: string;
           pickup: GeoPoint;
           dropoff: GeoPoint;
@@ -296,6 +298,7 @@ export async function listDriverTrips(
       id: String(trip._id),
       tripNumber: trip.tripNumber,
       requestId: trip.requestId ? String(trip.requestId) : String(trip._id),
+      isStandalone: trip.requestId == null,
       date: trip.date,
       paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
       status: (trip.status as BookingStatus) ?? "pending_payment",
@@ -376,6 +379,8 @@ export async function listUserTrips(
     date: string;
     paymentStatus: string;
     status: string;
+    rejectionReason?: string | null;
+    reviewedAt?: Date | string | null;
     vehicleType: string;
     pickup: GeoPoint;
     dropoff: GeoPoint;
@@ -591,11 +596,13 @@ export async function listUserTrips(
       const requestId = trip.requestId
         ? String(trip.requestId)
         : String(trip._id);
+      const isStandalone = trip.requestId == null;
       const parentRequest = requestById.get(requestId);
       return {
       id: String(trip._id),
       tripNumber: trip.tripNumber,
       requestId,
+      isStandalone,
       date: trip.date,
       paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
       status: (trip.status as BookingStatus) ?? "pending_payment",
@@ -620,8 +627,14 @@ export async function listUserTrips(
         trip.priceEgp,
       parentRequestStatus: parentRequest?.status,
       parentPaymentStatus: parentRequest?.paymentStatus,
-      rejectionReason: parentRequest?.rejectionReason ?? null,
-      reviewedAt: parentRequest?.reviewedAt?.toISOString() ?? null,
+      rejectionReason: isStandalone
+        ? trip.rejectionReason ?? null
+        : parentRequest?.rejectionReason ?? null,
+      reviewedAt: isStandalone
+        ? trip.reviewedAt instanceof Date
+          ? trip.reviewedAt.toISOString()
+          : trip.reviewedAt ?? null
+        : parentRequest?.reviewedAt?.toISOString() ?? null,
       hasPastTrip: trip.requestId
         ? hasPastTripByRequestId.get(requestId) ?? false
         : hasPastPickup(
@@ -648,6 +661,7 @@ export interface UserTripDetail {
   id: string;
   tripNumber: number;
   requestId: string;
+  isStandalone: boolean;
   otherTrips?: { id: string; date: string }[];
   requestAmountEgp?: number;
   paymentBreakdown?: { walletAmountEgp: number; gatewayAmountEgp: number } | null;
@@ -750,6 +764,8 @@ export async function getDriverTrip(
     }[];
     paymentStatus: string;
     status: string;
+    rejectionReason?: string | null;
+    reviewedAt?: Date | string | null;
     cancelledBy?: string;
     cancelReason?: string;
     cancellation?: {
@@ -781,10 +797,18 @@ export async function getDriverTrip(
     ...trip,
     id: String(trip._id),
     requestId: trip.requestId ? String(trip.requestId) : String(trip._id),
+    isStandalone: trip.requestId == null,
     requestAmountEgp: parentRequest?.amountEgp ?? trip.priceEgp,
     parentRequestStatus: parentRequest?.status,
     parentPaymentStatus: parentRequest?.paymentStatus,
-    rejectionReason: parentRequest?.rejectionReason ?? null,
+    rejectionReason:
+      (trip.requestId ? parentRequest?.rejectionReason : trip.rejectionReason) ??
+      null,
+    reviewedAt: trip.requestId
+      ? null
+      : trip.reviewedAt instanceof Date
+        ? trip.reviewedAt.toISOString()
+        : trip.reviewedAt ?? null,
     paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
     pickupStationOptions: trip.pickupStationOptions ?? [],
     dropoffStationOptions: trip.dropoffStationOptions ?? [],
@@ -846,6 +870,8 @@ export async function getUserTrip(
     }[];
     paymentStatus: string;
     status: string;
+    rejectionReason?: string | null;
+    reviewedAt?: Date | string | null;
     cancelledBy?: string;
     cancelReason?: string;
     cancellation?: {
@@ -925,12 +951,19 @@ export async function getUserTrip(
     ...trip,
     id: String(trip._id),
     requestId: trip.requestId ? String(trip.requestId) : String(trip._id),
+    isStandalone: trip.requestId == null,
     requestAmountEgp: parentRequest?.amountEgp ?? trip.priceEgp,
     paymentBreakdown,
     parentRequestStatus: parentRequest?.status,
     parentPaymentStatus: parentRequest?.paymentStatus,
-    rejectionReason: parentRequest?.rejectionReason ?? null,
-    reviewedAt: parentRequest?.reviewedAt?.toISOString() ?? null,
+    rejectionReason: trip.requestId
+      ? parentRequest?.rejectionReason ?? null
+      : trip.rejectionReason ?? null,
+    reviewedAt: trip.requestId
+      ? parentRequest?.reviewedAt?.toISOString() ?? null
+      : trip.reviewedAt instanceof Date
+        ? trip.reviewedAt.toISOString()
+        : trip.reviewedAt ?? null,
     hasPastTrip,
     otherTrips: otherTrips.map((otherTrip) => ({
       id: String(otherTrip._id),

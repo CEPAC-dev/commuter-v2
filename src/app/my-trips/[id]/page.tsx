@@ -89,11 +89,42 @@ function TripActions({
   isDriver: boolean;
 }) {
   if (isDriver) return null;
+  if (trip.isStandalone) {
+    return (
+      <div style={{ display: "grid", gap: 8 }}>
+        {displayStatus.canPay && (
+          <ContinueCheckoutButton
+            bookingId={trip.id}
+            amountEgp={trip.priceEgp}
+            walletBalance={walletBalance}
+          />
+        )}
+        {displayStatus.canCancel && (
+          <CancelTripModal
+            tripId={trip.id}
+            tripNumber={trip.tripNumber}
+            date={trip.date}
+            priceEgp={trip.priceEgp}
+            status={trip.status}
+            isStandalone
+            paymentStatus={trip.paymentStatus}
+          />
+        )}
+        {displayStatus.canRate && (
+          <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />
+        )}
+      </div>
+    );
+  }
   if (displayStatus.canPay) {
     return (
       <ContinueCheckoutButton
-        bookingId={trip.requestId}
-        amountEgp={trip.requestAmountEgp ?? trip.priceEgp}
+        bookingId={trip.isStandalone ? trip.id : trip.requestId}
+        amountEgp={
+          trip.isStandalone
+            ? trip.priceEgp
+            : trip.requestAmountEgp ?? trip.priceEgp
+        }
         walletBalance={walletBalance}
       />
     );
@@ -106,6 +137,8 @@ function TripActions({
         date={trip.date}
         priceEgp={trip.priceEgp}
         status={trip.status}
+        isStandalone={false}
+        paymentStatus={trip.paymentStatus}
       />
     );
   }
@@ -603,7 +636,10 @@ export default async function TripDetailPage({
                     bg={{ neutral: "#EEF2F2", warning: "#FFF3E0", success: "#E8F5E9", danger: "#FFEBEE", info: "#E2F8F5" }[displayStatus.tone]}
                     color={{ neutral: "#526262", warning: "#8B4A08", success: "#166B48", danger: "#8F2D28", info: "#006D60" }[displayStatus.tone]}
                   />
-                  {!rejectionDisplay.showReasonCard && trip.parentRequestStatus !== "waiting_list" && (
+                  {!rejectionDisplay.showReasonCard &&
+                    (trip.isStandalone
+                      ? trip.status !== "waiting_list"
+                      : trip.parentRequestStatus !== "waiting_list") && (
                     <Pill
                       label={translate(locale, `payments.${parentPaymentStatus}`)}
                       bg={PAY_PILL[parentPaymentStatus]?.bg ?? PAY_PILL.pending.bg}

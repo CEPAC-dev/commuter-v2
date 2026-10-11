@@ -884,7 +884,11 @@ export default async function MyTripsPage({
   ).size;
   const approvalRequestCount = new Set(
     allPassengerTrips
-      .filter((trip) => trip.parentRequestStatus === "waiting_list")
+      .filter((trip) =>
+        trip.isStandalone
+          ? trip.status === "waiting_list"
+          : trip.parentRequestStatus === "waiting_list",
+      )
       .map((trip) => trip.requestId),
   ).size;
 
@@ -1857,8 +1861,12 @@ export default async function MyTripsPage({
                     const trip = item.data;
                     const vLabel = descriptionForVehicle(locale, trip.vehicleType);
                     const displayRequest = {
-                      status: trip.parentRequestStatus ?? trip.status,
-                      paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
+                      status: trip.isStandalone
+                        ? trip.status
+                        : trip.parentRequestStatus ?? trip.status,
+                      paymentStatus: trip.isStandalone
+                        ? trip.paymentStatus
+                        : trip.parentPaymentStatus ?? trip.paymentStatus,
                       hasPastTrip: trip.hasPastTrip,
                       rejectionReason: trip.rejectionReason,
                     };
@@ -2136,12 +2144,24 @@ export default async function MyTripsPage({
                               date={trip.date}
                               priceEgp={trip.priceEgp}
                               status={trip.status}
+                              isStandalone={trip.isStandalone}
+                              paymentStatus={trip.paymentStatus}
                             />
                           </div>
                         )}
                         {!isDriver && needsPayment && (
                           <div style={{ padding: "0 18px 16px" }}>
-                            <ContinueCheckoutButton bookingId={trip.requestId} amountEgp={trip.bookingAmountEgp} walletBalance={walletBalance} />
+                            <ContinueCheckoutButton
+                              bookingId={
+                                trip.isStandalone ? trip.id : trip.requestId
+                              }
+                              amountEgp={
+                                trip.isStandalone
+                                  ? trip.priceEgp
+                                  : trip.bookingAmountEgp
+                              }
+                              walletBalance={walletBalance}
+                            />
                           </div>
                         )}
                         {!isDriver && displayStatus.canRate && (

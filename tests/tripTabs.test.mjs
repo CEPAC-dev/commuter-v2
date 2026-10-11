@@ -102,6 +102,56 @@ test("unknown status values safely fall into history", () => {
   );
 });
 
+test("standalone Trip statuses map directly to passenger tabs", () => {
+  const expected = {
+    pending_payment: "pending",
+    waiting_list: "pending",
+    approved: "pending",
+    submitted: "upcoming",
+    matched: "upcoming",
+    confirmed: "upcoming",
+    nomatch: "upcoming",
+    active: "ongoing",
+    rejected: "history",
+    time_out: "history",
+    cancelled: "history",
+    completed: "history",
+    refunded: "history",
+  };
+  for (const [status, tab] of Object.entries(expected)) {
+    assert.equal(
+      getTripTab({
+        trip: {
+          isStandalone: true,
+          status,
+          paymentStatus: "pending",
+          date: "2026-10-05",
+          pickupTime: "09:00",
+        },
+        now,
+      }),
+      tab,
+      status,
+    );
+  }
+});
+
+test("standalone approved unpaid trips stay pending even after pickup time", () => {
+  assert.equal(
+    getTripTab({
+      trip: {
+        isStandalone: true,
+        status: "approved",
+        paymentStatus: "pending",
+        date: "2026-10-02",
+        pickupTime: "09:00",
+      },
+      now,
+    }),
+    "pending",
+  );
+});
+
 test("all pickup-time consumers agree for past, future, now, and multi-day fixtures", () => {
   const nowParts = getCairoNowParts(now);
   const fixtures = [

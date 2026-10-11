@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useClientLocale } from "@/lib/locale.client";
+import { getStandaloneTripCancellationMode } from "@/lib/standaloneTripCancellation";
 import {
   XCircle,
   AlertTriangle,
@@ -31,6 +32,8 @@ interface CancelTripModalProps {
   date: string;
   priceEgp: number;
   status: string;
+  isStandalone?: boolean;
+  paymentStatus?: string;
   onCancelled?: () => void;
 }
 
@@ -40,6 +43,8 @@ export default function CancelTripModal({
   date,
   priceEgp,
   status,
+  isStandalone = false,
+  paymentStatus = "pending",
   onCancelled,
 }: CancelTripModalProps) {
   const router = useRouter();
@@ -51,6 +56,13 @@ export default function CancelTripModal({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const unpaidStandalone =
+    isStandalone &&
+    getStandaloneTripCancellationMode({
+      id: tripId,
+      status,
+      paymentStatus,
+    }).kind === "unpaid";
 
   // Exclude cancelled and completed trips
   if (status === "cancelled" || status === "completed" || status === "time_out") {
@@ -170,7 +182,9 @@ export default function CancelTripModal({
                 <div className="py-8 flex flex-col items-center justify-center text-slate-400 gap-2">
                   <Loader2 className="w-6 h-6 animate-spin text-[#00C2A8]" />
                   <span className="text-xs font-medium">
-                    Calculating cancellation policy & refund...
+                    {unpaidStandalone
+                      ? "Loading cancellation options..."
+                      : "Calculating cancellation policy & refund..."}
                   </span>
                 </div>
               ) : evaluation ? (
@@ -187,8 +201,25 @@ export default function CancelTripModal({
                     </div>
                   </div>
 
-                  {/* Policy evaluation details */}
-                  {!evaluation.allowed ? (
+                  {unpaidStandalone ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        No payment has been taken. Cancelling will end this trip.
+                      </p>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Cancellation Reason (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                          placeholder="e.g. Schedule changed, emergency"
+                          className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#00C2A8]"
+                        />
+                      </div>
+                    </div>
+                  ) : !evaluation.allowed ? (
                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
                       <div className="flex items-center gap-2 text-amber-800 font-bold text-xs">
                         <AlertTriangle className="w-4 h-4 text-amber-600" />

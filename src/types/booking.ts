@@ -113,6 +113,7 @@ export interface TripListRow {
   id: string;
   tripNumber: number;
   requestId: string;
+  isStandalone: boolean;
   date: string;
   paymentStatus: PaymentStatus;
   status: TripStatus;

@@ -104,7 +104,7 @@ export default async function CallbackPage({
               Payment confirmed!
             </h1>
             <p style={{ fontSize: 15, color: "#5A6A7A", margin: "0 0 8px" }}>
-              Your request for{" "}
+              Your trip for{" "}
               <strong style={{ color: "#0B1E3D" }}>{datesLabel}</strong> is
               confirmed.
             </p>
@@ -147,7 +147,7 @@ export default async function CallbackPage({
               }}
             >
               Your payment is being verified. This usually takes a few seconds.
-              Check <strong>My requests</strong> for the updated status.
+              Check <strong>My trips</strong> for the updated status.
             </p>
           </>
         )}

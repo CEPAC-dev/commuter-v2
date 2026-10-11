@@ -3,7 +3,9 @@ import { getTripTab, type TripTab } from "./tripTabs.ts";
 export type TripTabRow = {
   id: string;
   requestId: string;
+  isStandalone?: boolean;
   status: string;
+  paymentStatus?: string;
   date: string;
   pickupTime: string;
   parentRequestStatus?: string | null;
@@ -25,6 +27,7 @@ export function buildTripTabView<T extends TripTabRow>(
   items: TripTabItem<T>[];
 } {
   const pendingByRequest = new Map<string, T[]>();
+  const pendingStandalone: T[] = [];
   const upcoming: T[] = [];
   const ongoing: T[] = [];
 
@@ -38,6 +41,10 @@ export function buildTripTabView<T extends TripTabRow>(
       now,
     });
     if (tab === "pending") {
+      if (row.isStandalone) {
+        pendingStandalone.push(row);
+        continue;
+      }
       const requestTrips = pendingByRequest.get(row.requestId) ?? [];
       requestTrips.push(row);
       pendingByRequest.set(row.requestId, requestTrips);
@@ -57,6 +64,14 @@ export function buildTripTabView<T extends TripTabRow>(
       trips,
     }),
   );
+  pendingItems.push(
+    ...pendingStandalone.map((trip) => ({
+      kind: "trip" as const,
+      date: trip.date,
+      trip,
+    })),
+  );
+  pendingItems.sort((left, right) => left.date.localeCompare(right.date));
   const upcomingItems = upcoming.map((trip) => ({
     kind: "trip" as const,
     date: trip.date,
@@ -67,7 +82,10 @@ export function buildTripTabView<T extends TripTabRow>(
     date: trip.date,
     trip,
   }));
-  const allPendingTrips = Array.from(pendingByRequest.values()).flat().map((trip) => ({
+  const allPendingTrips = [
+    ...Array.from(pendingByRequest.values()).flat(),
+    ...pendingStandalone,
+  ].map((trip) => ({
     kind: "trip" as const,
     date: trip.date,
     trip,
