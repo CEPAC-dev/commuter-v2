@@ -10,6 +10,7 @@ import {
   buildPendingRequestExpiryFilter,
   buildPendingTripExpiryFilter,
 } from "@/lib/pendingRequestHardening";
+import { isAuthorizedExpiryRequest } from "@/lib/phase8bGuards";
 
 const EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -19,12 +20,22 @@ const EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
  *
  * Protected by an optional CRON_SECRET env var.
  * Set Authorization: Bearer <CRON_SECRET> when calling from a cron service.
- * If CRON_SECRET is unset the endpoint is open (fine for private/internal use).
+ * Production requests fail closed when CRON_SECRET is missing.
  */
 export async function POST(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
+  const auth = req.headers.get("authorization") ?? "";
+  if (!isAuthorizedExpiryRequest(secret, process.env.NODE_ENV === "production", auth)) {
+    return NextResponse.json(
+      {
+        error: secret
+          ? "Unauthorized"
+          : "CRON_SECRET is required in production.",
+      },
+      { status: secret ? 401 : 500 },
+    );
+  }
   if (secret) {
-    const auth = req.headers.get("authorization") ?? "";
     if (auth !== `Bearer ${secret}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

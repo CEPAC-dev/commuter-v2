@@ -25,10 +25,40 @@ export async function GET(
 
   await connectDB();
 
-  const tx = await WalletTransaction.findById(id).lean<Record<
-    string,
-    unknown
-  > | null>();
+  const walletTransaction = await WalletTransaction.findById(id).lean<
+    Record<string, unknown> | null
+  >();
+  const paymentCandidate = walletTransaction
+    ? null
+    : await Payment.findById(id).lean<Record<string, unknown> | null>();
+  const paymentTimeline = paymentCandidate?.timeline as
+    | { event?: string }[]
+    | undefined;
+  const paymentForId = paymentTimeline?.some((event) =>
+    ["blocked_trip_payment_webhook", "blocked_trip_payment_callback"].includes(
+      event.event ?? "",
+    ),
+  )
+    ? paymentCandidate
+    : null;
+  const tx =
+    walletTransaction ??
+    (paymentForId
+      ? ({
+          _id: paymentForId._id,
+          type: "kashier_payment",
+          status: "completed",
+          amountEgp: paymentForId.gatewayAmountEgp,
+          description: "Kashier charge reported after the trip became unavailable.",
+          balanceAfterEgp: null,
+          createdAt: paymentForId.createdAt,
+          kashierOrderId: paymentForId.kashierOrderId,
+          kashierTransactionIds: paymentForId.kashierTransactionIds,
+          userId: paymentForId.userId,
+          bookingId: paymentForId.bookingId,
+          paymentId: paymentForId._id,
+        } as Record<string, unknown>)
+      : null);
   if (!tx) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // This admin detail lookup intentionally skips userId. Standalone Trips
@@ -163,6 +193,13 @@ export async function GET(
           kashierOrderId: payment.kashierOrderId ?? null,
           kashierTransactionIds: payment.kashierTransactionIds ?? [],
           kashierRefundIds: payment.kashierRefundIds ?? [],
+          lateGatewayCharge: (payment.timeline as {
+            event?: string;
+          }[] | undefined)?.some((event) =>
+            ["blocked_trip_payment_webhook", "blocked_trip_payment_callback"].includes(
+              event.event ?? "",
+            ),
+          ) ?? false,
         }
       : null,
     ledger: siblings.map((s) => ({

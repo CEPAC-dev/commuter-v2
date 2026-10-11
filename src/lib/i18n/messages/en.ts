@@ -354,6 +354,10 @@ export const en = {
     "A booking can only include one trip date.",
   "errors.MULTIPLE_TRIPS_NOT_SUPPORTED":
     "A booking can only include one trip.",
+  "errors.INVALID_TRIP_COUNT":
+    "A booking must contain exactly one trip. Remove the return trip or choose one date.",
+  "errors.BOOKING_BUSY":
+    "Bookings are busy right now. Please wait a moment and try again.",
   "errors.REQUEST_NOT_CANCELLABLE":
     "Trips in waiting or rejected requests cannot be cancelled individually.",
   "errors.TRIP_NOT_PAID":

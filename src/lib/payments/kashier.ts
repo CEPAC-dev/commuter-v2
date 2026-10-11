@@ -2,6 +2,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import {
+  notifyAdminsOfLateTripPayment,
   notifyAdminsOfPaidTrip,
   syncPaidTripsForRequest,
 } from "@/lib/notifications/adminActivity";
@@ -341,13 +342,6 @@ async function verifyAndSettleStandaloneTrip(
     trip.paymentStatus !== "paid"
   )
     return "pending";
-  if (isTripSettlementBlocked(trip.status)) {
-    console.warn(
-      `[Payment] Refusing settlement for blocked trip ${String(trip._id)} (${trip.status})`,
-    );
-    return "pending";
-  }
-
   const paymentQuery = paymentId
     ? Payment.findOne({ _id: paymentId, bookingId: trip._id })
     : Payment.findOne({
@@ -355,6 +349,44 @@ async function verifyAndSettleStandaloneTrip(
         overallStatus: { $in: ["created", "wallet_reserved", "kashier_pending"] },
       }).sort({ createdAt: -1 });
   const payment = await paymentQuery;
+
+  if (isTripSettlementBlocked(trip.status)) {
+    console.warn(
+      `[Payment] Refusing settlement for blocked trip ${String(trip._id)} (${trip.status})`,
+    );
+    if (payment?.gatewayAmountEgp && payment.kashierSessionId) {
+      const gatewayOutcome = await queryKashierStatus(payment.kashierSessionId);
+      if (gatewayOutcome === "paid") {
+        const blockedPaymentDetails = {
+          tripId: String(trip._id),
+          paymentId: String(payment._id),
+          tripStatus: trip.status,
+        };
+        console.warn(
+          "[Payment] Callback found a gateway charge for a blocked Trip",
+          blockedPaymentDetails,
+        );
+        await Payment.updateOne(
+          { _id: payment._id },
+          {
+            $push: {
+              timeline: {
+                event: "blocked_trip_payment_callback",
+                detail: `Trip ${String(trip._id)} is ${trip.status}.`,
+                actor: "kashier",
+                meta: blockedPaymentDetails,
+              },
+            },
+          },
+        );
+        await notifyAdminsOfLateTripPayment(
+          String(payment._id),
+          String(trip._id),
+        );
+      }
+    }
+    return "pending";
+  }
 
   if (!payment) {
     if (trip.paymentStatus === "paid") return "paid";

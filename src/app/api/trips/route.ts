@@ -59,6 +59,11 @@ import {
   rollbackPromoCodeUsage,
   type PromoDiscountType,
 } from "@/lib/promoCode";
+import {
+  getSingleTripPayloadError,
+  isTransientBookingConflict,
+  spacingLockUpsertFields,
+} from "@/lib/phase8bGuards";
 
 function stationPayload(
   station: Pick<GeoStation, "id" | "lat" | "lng" | "name" | "regionCode">,
@@ -587,6 +592,15 @@ export async function POST(req: NextRequest) {
       trip,
     })),
   );
+  if (getSingleTripPayloadError(tripInstances.length)) {
+    return NextResponse.json(
+      {
+        errorCode: "INVALID_TRIP_COUNT",
+        error: "INVALID_TRIP_COUNT",
+      },
+      { status: 400 },
+    );
+  }
 
   const promoApplies: Array<{
     success: boolean;
@@ -714,12 +728,20 @@ export async function POST(req: NextRequest) {
     const spacingLockCollection = db.collection<TripSpacingLockDocument>(
       "trip_spacing_locks",
     );
+    await spacingLockCollection.createIndex(
+      { updatedAt: 1 },
+      {
+        expireAfterSeconds: 30 * 24 * 60 * 60,
+        name: "trip_spacing_locks_updatedAt_ttl",
+      },
+    );
     const spacingLockIds = dates.map((date) => `${userId}:${date}`);
     for (const lockId of spacingLockIds) {
       try {
+        const now = new Date();
         await spacingLockCollection.updateOne(
           { _id: lockId },
-          { $setOnInsert: { createdAt: new Date() } },
+          { $setOnInsert: spacingLockUpsertFields(now) },
           { upsert: true },
         );
       } catch (error) {
@@ -735,7 +757,12 @@ export async function POST(req: NextRequest) {
         for (const lockId of spacingLockIds) {
           const lockUpdate = await spacingLockCollection.updateOne(
             { _id: lockId },
-            { $inc: { revision: 1 }, $set: { updatedAt: new Date() } },
+            {
+              $inc: { revision: 1 },
+              $set: {
+                updatedAt: new Date(),
+              },
+            },
             { session: dbSession },
           );
           if (lockUpdate.matchedCount !== 1) {
@@ -861,6 +888,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "TRIP_SPACING_CONFLICT", conflict: err.conflict },
         { status: 409 },
+      );
+    }
+    if (isTransientBookingConflict(err)) {
+      return NextResponse.json(
+        {
+          errorCode: "BOOKING_BUSY",
+          error: "BOOKING_BUSY",
+        },
+        { status: 503, headers: { "Retry-After": "2" } },
       );
     }
     console.error("Trip booking failed:", err);

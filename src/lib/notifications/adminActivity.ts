@@ -1,10 +1,12 @@
 import { Types } from "mongoose";
 import { AdminActivityNotification } from "@/models/AdminActivityNotification";
+import { Payment } from "@/models/Payment";
 import { Trip } from "@/models/Trip";
 import { Request } from "@/models/Request";
 import { User } from "@/models/User";
 import { AdminReferralUsage } from "@/models/AdminReferralUsage";
 import { sendPushPayloadToUser } from "@/lib/notifications/webPush";
+import { latePaymentDedupeKey } from "@/lib/phase8bGuards";
 
 function isDuplicateKeyError(error: unknown) {
   return Boolean(
@@ -20,7 +22,8 @@ async function notifyAdmins(input: {
     | "paid_trip_created"
     | "completed_paid_trip"
     | "waiting_list_trip_created"
-    | "admin_campaign_claim";
+    | "admin_campaign_claim"
+    | "late_gateway_payment";
   dedupeKey: string;
   title: string;
   body: string;
@@ -139,6 +142,58 @@ export async function notifyAdminsOfPaidTrip(tripId: string) {
     });
   } catch (error) {
     console.error("Admin paid-trip alert creation failed:", error);
+  }
+}
+
+export async function notifyAdminsOfLateTripPayment(
+  paymentId: string,
+  tripId: string,
+) {
+  try {
+    if (
+      !Types.ObjectId.isValid(paymentId) ||
+      !Types.ObjectId.isValid(tripId)
+    )
+      return;
+    const [payment, trip] = await Promise.all([
+      Payment.findById(paymentId)
+        .select("userId gatewayAmountEgp kashierOrderId")
+        .lean(),
+      Trip.findOne({
+        _id: tripId,
+        status: { $in: ["cancelled", "time_out", "rejected"] },
+      })
+        .select("_id tripNumber userId status")
+        .lean(),
+    ]);
+    if (!payment || !trip) return;
+
+    const user = await User.findById(trip.userId)
+      .select("name userNumber phone email")
+      .lean();
+    const userName = user?.name ?? "Unknown user";
+    const gatewayAmountEgp = Number(payment.gatewayAmountEgp ?? 0);
+    await notifyAdmins({
+      eventType: "late_gateway_payment",
+      dedupeKey: latePaymentDedupeKey(paymentId),
+      title: `Late gateway charge for trip #${trip.tripNumber}`,
+      body: `${userName} was charged ${gatewayAmountEgp} EGP after the trip became ${trip.status}.`,
+      data: {
+        paymentId,
+        tripId,
+        tripNumber: trip.tripNumber,
+        tripStatus: trip.status,
+        userId: String(trip.userId),
+        userName,
+        userNumber: user?.userNumber ?? null,
+        email: user?.email ?? "",
+        gatewayAmountEgp,
+        kashierOrderId: payment.kashierOrderId ?? null,
+        href: `/admin/transactions/${paymentId}`,
+      },
+    });
+  } catch (error) {
+    console.error("Admin late-payment alert creation failed:", error);
   }
 }
 

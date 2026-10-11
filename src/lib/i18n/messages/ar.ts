@@ -349,6 +349,10 @@ export const ar: Record<MessageKey, string> = {
     "يمكن أن يتضمن الحجز تاريخ رحلة واحدًا فقط.",
   "errors.MULTIPLE_TRIPS_NOT_SUPPORTED":
     "يمكن أن يتضمن الحجز رحلة واحدة فقط.",
+  "errors.INVALID_TRIP_COUNT":
+    "يجب أن يحتوي الحجز على رحلة واحدة فقط. احذف رحلة العودة أو اختر تاريخًا واحدًا.",
+  "errors.BOOKING_BUSY":
+    "الحجوزات مشغولة حاليًا. انتظر قليلًا ثم حاول مرة أخرى.",
   "errors.REQUEST_NOT_CANCELLABLE":
     "لا يمكن إلغاء رحلة واحدة من طلب بانتظار الموافقة أو تم رفضه.",
   "errors.TRIP_NOT_PAID": "الرحلة دي لسه مدفوعتش، فمش ممكن تلغيها.",

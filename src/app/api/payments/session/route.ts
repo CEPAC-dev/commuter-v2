@@ -27,6 +27,7 @@ import {
 } from "@/lib/payments/resolveBooking";
 import { settleStandaloneTripPayment } from "@/lib/payments/standaloneTripSettlement";
 import { shouldResetFailedTripForRetry } from "@/lib/payments/settlementAttempt";
+import { safeKashierErrorFields } from "@/lib/phase8bGuards";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
@@ -165,7 +166,7 @@ export async function POST(req: NextRequest) {
   // partial index on {bookingId, overallStatus:active} rejects a second
   // concurrent attempt instead of creating a parallel reservation/charge.
   let payment;
-  let retryTripResetFailed = false;
+  let tripChangedDuringSessionCreation = false;
   try {
     const paymentData = {
       userId: new Types.ObjectId(session.userId),
@@ -183,26 +184,35 @@ export async function POST(req: NextRequest) {
         },
       ],
     };
-    if (
-      resolved.kind === "trip" &&
-      shouldResetFailedTripForRetry(resolved.status, resolved.paymentStatus)
-    ) {
+    if (resolved.kind === "trip") {
       const dbSession = await mongoose.startSession();
       try {
         await dbSession.withTransaction(async () => {
-          retryTripResetFailed = false;
+          tripChangedDuringSessionCreation = false;
+          const now = new Date();
+          const paymentStatus = resolved.paymentStatus;
           const reset = await Trip.updateOne(
             {
               _id: bookingObjectId,
               requestId: null,
               status: { $in: ["pending_payment", "approved"] },
-              paymentStatus: "failed",
+              paymentStatus: { $in: ["pending", "failed"] },
             },
-            { $set: { paymentStatus: "pending" } },
+            {
+              $set: {
+                updatedAt: now,
+                ...(shouldResetFailedTripForRetry(
+                  resolved.status,
+                  paymentStatus,
+                )
+                  ? { paymentStatus: "pending" }
+                  : {}),
+              },
+            },
             { session: dbSession },
           );
           if (reset.matchedCount !== 1) {
-            retryTripResetFailed = true;
+            tripChangedDuringSessionCreation = true;
             return;
           }
           [payment] = await Payment.create([paymentData], {
@@ -212,7 +222,7 @@ export async function POST(req: NextRequest) {
       } finally {
         await dbSession.endSession();
       }
-      if (retryTripResetFailed) {
+      if (tripChangedDuringSessionCreation) {
         return NextResponse.json(
           { error: "This trip changed while creating the payment session." },
           { status: 409 },
@@ -505,7 +515,10 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(kashierBody),
     });
   } catch (err) {
-    console.error("Kashier fetch error:", err);
+    console.error(
+      "Kashier session request failed:",
+      err instanceof Error ? err.name : "UnknownError",
+    );
     if (reservationTxId) {
       await releaseReservation(reservationTxId, {
         description: `Released — gateway unreachable`,
@@ -535,11 +548,7 @@ export async function POST(req: NextRequest) {
   try {
     kashierData = JSON.parse(kashierText) as Record<string, unknown>;
   } catch {
-    console.error(
-      "Kashier non-JSON response",
-      kashierRes.status,
-      kashierText.substring(0, 200),
-    );
+    console.error("Kashier non-JSON response", kashierRes.status);
     if (reservationTxId) {
       await releaseReservation(reservationTxId, {
         description: `Released — gateway error`,
@@ -554,7 +563,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (!kashierRes.ok || !kashierData?.sessionUrl) {
-    console.error("Kashier session error:", kashierRes.status, kashierData);
+    console.error(
+      "Kashier session error:",
+      kashierRes.status,
+      safeKashierErrorFields(kashierData ?? {}),
+    );
     if (reservationTxId) {
       await releaseReservation(reservationTxId, {
         description: `Released — gateway rejected session`,

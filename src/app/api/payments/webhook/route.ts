@@ -17,6 +17,7 @@ import { queryKashierPayoutStatus } from "@/lib/payments/kashierPayout";
 import { createNotification } from "@/lib/notifications/createNotification";
 import {
   notifyAdminsOfPaidTrip,
+  notifyAdminsOfLateTripPayment,
   syncPaidTripsForRequest,
 } from "@/lib/notifications/adminActivity";
 import {
@@ -387,6 +388,12 @@ export async function POST(req: NextRequest) {
               },
             },
           );
+          if (paid) {
+            await notifyAdminsOfLateTripPayment(
+              String(payment._id),
+              blockedTripDetails.tripId,
+            );
+          }
         }
         console.warn(
           `[Payment] Refusing webhook settlement for blocked booking ${String(payment.bookingId)} (${mixedBooking?.status ?? "not found"})`,

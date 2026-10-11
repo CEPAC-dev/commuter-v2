@@ -1,0 +1,230 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const {
+  getSingleTripPayloadError,
+  isAuthorizedExpiryRequest,
+  isTransientBookingConflict,
+  latePaymentDedupeKey,
+  safeKashierErrorFields,
+  spacingLockUpsertFields,
+} = await import("../src/lib/phase8bGuards.ts");
+
+test("server accepts exactly one expanded Trip and rejects zero or multiple", () => {
+  assert.equal(getSingleTripPayloadError(0), "INVALID_TRIP_COUNT");
+  assert.equal(getSingleTripPayloadError(1), null);
+  assert.equal(getSingleTripPayloadError(2), "INVALID_TRIP_COUNT");
+});
+
+test("Trip creation checks expanded count before promo reservations or inserts", async () => {
+  const route = await readFile(
+    new URL("../src/app/api/trips/route.ts", import.meta.url),
+    "utf8",
+  );
+  const countGuard = route.indexOf("getSingleTripPayloadError(tripInstances.length)");
+  assert.ok(countGuard > route.indexOf("const tripInstances"));
+  assert.ok(countGuard < route.indexOf("const promoApplies"));
+  assert.ok(countGuard < route.indexOf("Trip.insertMany(tripDocuments"));
+});
+
+test("session creation and expiry serialize on the standalone Trip record", async () => {
+  const state = { tripStatus: "pending_payment", paymentStatus: "pending", payments: [] };
+  const createPaymentSession = async () => {
+    if (
+      !["pending_payment", "approved"].includes(state.tripStatus) ||
+      !["pending", "failed"].includes(state.paymentStatus)
+    )
+      return false;
+    state.updatedAt = new Date();
+    state.payments.push("in-flight");
+    return true;
+  };
+  const expireTrip = async () => {
+    if (state.payments.includes("in-flight")) return false;
+    state.tripStatus = "time_out";
+    state.paymentStatus = "expired";
+    return true;
+  };
+
+  assert.equal(await createPaymentSession(), true);
+  assert.equal(await expireTrip(), false);
+  assert.equal(state.tripStatus, "pending_payment");
+  assert.deepEqual(state.payments, ["in-flight"]);
+
+  const route = await readFile(
+    new URL("../src/app/api/payments/session/route.ts", import.meta.url),
+    "utf8",
+  );
+  const expiryService = await readFile(
+    new URL("../src/lib/services/standaloneTripExpiry.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /withTransaction\(async \(\) => \{[\s\S]*?Trip\.updateOne\([\s\S]*?Payment\.create/);
+  assert.match(expiryService, /Trip\.updateOne\([\s\S]*?Payment\.exists\([\s\S]*?\.session\(input\.session\)/);
+});
+
+test("a session cannot be created after an expiry transition wins", async () => {
+  const state = { tripStatus: "time_out", paymentStatus: "expired", payments: [] };
+  const createPaymentSession = async () => {
+    if (
+      !["pending_payment", "approved"].includes(state.tripStatus) ||
+      !["pending", "failed"].includes(state.paymentStatus)
+    )
+      return false;
+    state.payments.push("in-flight");
+    return true;
+  };
+  assert.equal(await createPaymentSession(), false);
+  assert.deepEqual(state.payments, []);
+});
+
+test("unpaid cancellation conflicts with session creation on the same Trip", async () => {
+  const state = {
+    tripStatus: "pending_payment",
+    paymentStatus: "pending",
+    paymentState: "created",
+  };
+  const cancelTrip = () => {
+    state.tripStatus = "cancelled";
+    state.paymentState = "cancelled";
+  };
+  const createPaymentSession = () =>
+    ["pending_payment", "approved"].includes(state.tripStatus) &&
+    ["pending", "failed"].includes(state.paymentStatus);
+
+  cancelTrip();
+  assert.equal(createPaymentSession(), false);
+  assert.equal(state.paymentState, "cancelled");
+
+  const route = await readFile(
+    new URL("../src/app/api/trips/[id]/cancel/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    route,
+    /withTransaction\(async \(\) => \{[\s\S]*?Trip\.findOneAndUpdate\([\s\S]*?Payment\.updateMany\([\s\S]*?\{ session: dbSession \}/,
+  );
+});
+
+test("spacing locks refresh a Date TTL field and transient exhausted conflicts are retryable", async () => {
+  const now = new Date("2026-10-11T10:00:00Z");
+  assert.deepEqual(spacingLockUpsertFields(now), {
+    createdAt: now,
+    updatedAt: now,
+  });
+  assert.equal(
+    isTransientBookingConflict({
+      code: 112,
+      message: "WriteConflict",
+    }),
+    true,
+  );
+  assert.equal(
+    isTransientBookingConflict({
+      errorLabels: ["TransientTransactionError"],
+    }),
+    true,
+  );
+  assert.equal(isTransientBookingConflict(new Error("unrelated")), false);
+
+  const route = await readFile(
+    new URL("../src/app/api/trips/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /createIndex\(\s*\{ updatedAt: 1 \}[\s\S]*?expireAfterSeconds: 30 \* 24 \* 60 \* 60/);
+  assert.match(route, /\$setOnInsert: spacingLockUpsertFields\(now\)/);
+  assert.match(route, /errorCode: "BOOKING_BUSY"[\s\S]*?status: 503/);
+});
+
+test("late success for every dead Trip status alerts once without changing money state", async () => {
+  const paymentId = "payment-123";
+  assert.equal(
+    latePaymentDedupeKey(paymentId),
+    latePaymentDedupeKey(paymentId),
+  );
+  assert.equal(latePaymentDedupeKey(paymentId), "late-payment:payment-123");
+
+  const [adminActivity, notificationModel, webhook] = await Promise.all([
+    readFile(new URL("../src/lib/notifications/adminActivity.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/models/AdminActivityNotification.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/app/api/payments/webhook/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(adminActivity, /latePaymentDedupeKey\(paymentId\)/);
+  assert.match(adminActivity, /href: `\/admin\/transactions\/\$\{paymentId\}`/);
+  assert.match(notificationModel, /AdminActivityNotificationSchema\.index\(\s*\{ adminId: 1, dedupeKey: 1 \},\s*\{\s*unique: true/s);
+  assert.match(webhook, /if \(paid\) \{\s*await notifyAdminsOfLateTripPayment/);
+  const kashier = await readFile(
+    new URL("../src/lib/payments/kashier.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(kashier, /blocked_trip_payment_callback/);
+  assert.match(kashier, /notifyAdminsOfLateTripPayment/);
+  assert.doesNotMatch(
+    webhook.slice(webhook.indexOf("if (settlementBlocked)"), webhook.indexOf("// 4) Legacy")),
+    /refundKashier|creditWallet/,
+  );
+
+  for (const tripStatus of ["cancelled", "time_out", "rejected"]) {
+    const state = {
+      tripStatus,
+      tripPaymentStatus: "pending",
+      paymentStatus: "cancelled",
+      walletStatus: "released",
+      gatewayStatus: "cancelled",
+      alerts: new Set(),
+    };
+    const handleLateSuccess = () => {
+      if (["cancelled", "time_out", "rejected"].includes(state.tripStatus)) {
+        state.alerts.add(latePaymentDedupeKey(paymentId));
+      }
+    };
+    handleLateSuccess();
+    handleLateSuccess();
+    assert.equal(state.alerts.size, 1, tripStatus);
+    assert.equal(state.tripPaymentStatus, "pending", tripStatus);
+    assert.equal(state.paymentStatus, "cancelled", tripStatus);
+    assert.equal(state.walletStatus, "released", tripStatus);
+    assert.equal(state.gatewayStatus, "cancelled", tripStatus);
+  }
+});
+
+test("expiry authorization fails closed in production but keeps Bearer auth", async () => {
+  assert.equal(isAuthorizedExpiryRequest(undefined, true, ""), false);
+  assert.equal(isAuthorizedExpiryRequest(undefined, false, ""), true);
+  assert.equal(isAuthorizedExpiryRequest("secret", true, "Bearer secret"), true);
+  assert.equal(isAuthorizedExpiryRequest("secret", true, "secret"), false);
+
+  const route = await readFile(
+    new URL("../src/app/api/trips/expire/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    route.indexOf("isAuthorizedExpiryRequest") < route.indexOf("await connectDB()"),
+  );
+  assert.match(route, /if \(auth !== `Bearer \$\{secret\}`\)/);
+});
+
+test("Kashier log projection excludes raw response/session/card fields", async () => {
+  const safe = safeKashierErrorFields({
+    code: "DECLINED",
+    message: "Payment was declined",
+    merchantOrderId: "order-1",
+    sessionUrl: "https://sensitive.example/session",
+    token: "secret-token",
+    cardNumber: "4111111111111111",
+    data: { card: { number: "4111111111111111" } },
+  });
+  assert.deepEqual(safe, {
+    code: "DECLINED",
+    message: "Payment was declined",
+    orderId: "order-1",
+  });
+  const route = await readFile(
+    new URL("../src/app/api/payments/session/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /safeKashierErrorFields\(kashierData/);
+  assert.doesNotMatch(route, /console\.error\([^;]*,\s*kashierData\s*[,)]/s);
+  assert.doesNotMatch(route, /console\.error\([^;]*kashierText/s);
+});

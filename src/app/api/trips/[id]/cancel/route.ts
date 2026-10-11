@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
+import { Payment } from "@/models/Payment";
 import { Request } from "@/models/Request";
 import { RefundRequest } from "@/models/RefundRequest";
 import { Ride } from "@/models/Ride";
@@ -243,6 +244,37 @@ export async function POST(
                   { new: true, session: dbSession },
                 );
                 if (updatedTrip) {
+                  await Payment.updateMany(
+                    {
+                      bookingId: trip._id,
+                      overallStatus: {
+                        $in: ["created", "wallet_reserved", "kashier_pending"],
+                      },
+                    },
+                    {
+                      $set: {
+                        overallStatus: "cancelled",
+                      },
+                      $push: {
+                        timeline: {
+                          event: "trip_cancelled",
+                          detail:
+                            "Standalone trip cancelled before payment completed.",
+                          actor: "system",
+                        },
+                      },
+                    },
+                    { session: dbSession },
+                  );
+                  await Payment.updateMany(
+                    {
+                      bookingId: trip._id,
+                      overallStatus: "cancelled",
+                      gatewayStatus: "pending",
+                    },
+                    { $set: { gatewayStatus: "cancelled" } },
+                    { session: dbSession },
+                  );
                   await releasePromoCodeUsageForTrip(
                     String(trip._id),
                     dbSession,

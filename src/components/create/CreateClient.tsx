@@ -485,7 +485,11 @@ export default function CreateClient({
               ? t("errors.MULTIPLE_DATES_NOT_SUPPORTED")
               : data.error === "MULTIPLE_TRIPS_NOT_SUPPORTED"
                 ? t("errors.MULTIPLE_TRIPS_NOT_SUPPORTED")
-                : (data.error ?? t("create.booking_create_failed")),
+                : data.errorCode === "BOOKING_BUSY"
+                  ? t("errors.BOOKING_BUSY")
+                  : data.error === "INVALID_TRIP_COUNT"
+                    ? t("errors.INVALID_TRIP_COUNT")
+                    : (data.error ?? t("create.booking_create_failed")),
         );
         return null;
       }
@@ -577,10 +581,10 @@ export default function CreateClient({
       }
       navigating = true;
       if (payData.walletOnly && payData.redirect) {
-        window.location.href = payData.redirect;
+        window.location.assign(payData.redirect);
         return;
       }
-      window.location.href = payData.sessionUrl;
+      window.location.assign(payData.sessionUrl);
     } catch {
       setSubmitError(t("create.network_error_retry"));
     } finally {

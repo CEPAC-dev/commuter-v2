@@ -18,6 +18,37 @@ const ACTIVE_PAYMENT_STATUSES = [
   "wallet_reserved",
   "kashier_pending",
 ] as const;
+const RECENT_PAYMENT_MS = 30 * 60 * 1000;
+
+class RecentPaymentFound extends Error {}
+
+async function expireTripInTransaction(input: {
+  session: mongoose.ClientSession;
+  filter: Record<string, unknown>;
+  tripId: string;
+  userId?: string;
+}): Promise<boolean> {
+  const updated = await Trip.updateOne(
+    input.filter,
+    { $set: { status: "time_out", paymentStatus: "expired" } },
+    { session: input.session },
+  );
+  if (updated.modifiedCount !== 1) return false;
+
+  const recentPayment = await Payment.exists({
+    bookingId: new Types.ObjectId(input.tripId),
+    overallStatus: { $in: ACTIVE_PAYMENT_STATUSES },
+    $or: [
+      { createdAt: { $gte: new Date(Date.now() - RECENT_PAYMENT_MS) } },
+      { updatedAt: { $gte: new Date(Date.now() - RECENT_PAYMENT_MS) } },
+    ],
+    ...userFilter(input.userId),
+  }).session(input.session);
+  if (recentPayment) throw new RecentPaymentFound();
+
+  await releasePromoCodeUsageForTrip(input.tripId, input.session);
+  return true;
+}
 
 interface TripCandidateDocument {
   _id: Types.ObjectId;
@@ -112,22 +143,26 @@ const mongoExpiryStore: StandaloneTripExpiryStore = {
     const session = await mongoose.startSession();
     try {
       let expired = false;
-      await session.withTransaction(async () => {
-        const result = await Trip.updateOne(
-          {
-            _id: new Types.ObjectId(id),
-            requestId: null,
-            status: "pending_payment",
-            paymentStatus: { $in: UNPAID_STATUSES },
-            createdAt: { $lte: cutoff },
-            ...userFilter(userId),
-          },
-          { $set: { status: "time_out", paymentStatus: "expired" } },
-          { session },
-        );
-        expired = result.modifiedCount === 1;
-        if (expired) await releasePromoCodeUsageForTrip(id, session);
-      });
+      try {
+        await session.withTransaction(async () => {
+          expired = false;
+          expired = await expireTripInTransaction({
+            session,
+            tripId: id,
+            userId,
+            filter: {
+              _id: new Types.ObjectId(id),
+              requestId: null,
+              status: "pending_payment",
+              paymentStatus: { $in: UNPAID_STATUSES },
+              createdAt: { $lte: cutoff },
+              ...userFilter(userId),
+            },
+          });
+        });
+      } catch (error) {
+        if (!(error instanceof RecentPaymentFound)) throw error;
+      }
       return expired;
     } finally {
       await session.endSession();
@@ -138,25 +173,29 @@ const mongoExpiryStore: StandaloneTripExpiryStore = {
     const session = await mongoose.startSession();
     try {
       let expired = false;
-      await session.withTransaction(async () => {
-        const result = await Trip.updateOne(
-          {
-            _id: new Types.ObjectId(id),
-            requestId: null,
-            status: "approved",
-            paymentStatus: { $in: UNPAID_STATUSES },
-            $or: [
-              { date: { $lt: now.dateStr } },
-              { date: now.dateStr, pickupTime: { $lt: now.timeStr } },
-            ],
-            ...userFilter(userId),
-          },
-          { $set: { status: "time_out", paymentStatus: "expired" } },
-          { session },
-        );
-        expired = result.modifiedCount === 1;
-        if (expired) await releasePromoCodeUsageForTrip(id, session);
-      });
+      try {
+        await session.withTransaction(async () => {
+          expired = false;
+          expired = await expireTripInTransaction({
+            session,
+            tripId: id,
+            userId,
+            filter: {
+              _id: new Types.ObjectId(id),
+              requestId: null,
+              status: "approved",
+              paymentStatus: { $in: UNPAID_STATUSES },
+              $or: [
+                { date: { $lt: now.dateStr } },
+                { date: now.dateStr, pickupTime: { $lt: now.timeStr } },
+              ],
+              ...userFilter(userId),
+            },
+          });
+        });
+      } catch (error) {
+        if (!(error instanceof RecentPaymentFound)) throw error;
+      }
       return expired;
     } finally {
       await session.endSession();
