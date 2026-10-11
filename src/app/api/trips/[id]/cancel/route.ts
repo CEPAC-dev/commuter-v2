@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
@@ -8,6 +9,14 @@ import { Ride } from "@/models/Ride";
 import { Log } from "@/models/Log";
 import { evaluateTripCancellation } from "@/lib/passengerCancellationPolicy";
 import { wasMoneyTaken } from "@/lib/requestPaymentState";
+import {
+  buildPassengerTripCancellationFilter,
+  getStandaloneTripCancellationMode,
+  isStandaloneTripForCancellation,
+  runStandaloneTripCancellation,
+} from "@/lib/standaloneTripCancellation";
+import { cancelStandaloneTripPayments } from "@/lib/services/standaloneTripExpiry";
+import { releasePromoCodeUsageForTrip } from "@/lib/promoCode";
 
 const REQUEST_NOT_CANCELLABLE = "REQUEST_NOT_CANCELLABLE";
 
@@ -49,13 +58,51 @@ export async function GET(
     const { id } = await params;
     await connectDB();
 
-    const trip = await Trip.findOne({
-      _id: id,
-      userId: session.userId,
-    }).lean();
+    const trip = await Trip.findOne(
+      buildPassengerTripCancellationFilter(id, session.userId),
+    ).lean();
 
     if (!trip) {
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    }
+
+    if (isStandaloneTripForCancellation(trip)) {
+      const mode = getStandaloneTripCancellationMode({
+        id: String(trip._id),
+        status: trip.status,
+        paymentStatus: trip.paymentStatus,
+      });
+      if (mode.kind === "blocked") {
+        return NextResponse.json(
+          { errorCode: mode.errorCode, error: mode.error },
+          { status: mode.httpStatus },
+        );
+      }
+
+      const policyEvaluation = await evaluateTripCancellation(
+        trip.date,
+        trip.priceEgp,
+      );
+      const evaluation = mode.kind === "unpaid"
+        ? {
+            ...policyEvaluation,
+            allowed: true,
+            refundPercent: 0,
+            penaltyPercent: 0,
+            refundAmount: 0,
+            retainedAmount: 0,
+          }
+        : policyEvaluation;
+
+      return NextResponse.json({
+        success: true,
+        tripId: trip._id,
+        tripNumber: trip.tripNumber,
+        date: trip.date,
+        priceEgp: trip.priceEgp,
+        status: trip.status,
+        evaluation,
+      });
     }
 
     const parentConflict = await getParentCancellationConflict(trip.requestId);
@@ -99,80 +146,242 @@ export async function POST(
 
     await connectDB();
 
-    const trip = await Trip.findOne({
-      _id: id,
-      userId: session.userId,
-    });
+    const trip = await Trip.findOne(
+      buildPassengerTripCancellationFilter(id, session.userId),
+    );
 
     if (!trip) {
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
     }
 
-    const parentConflict = await getParentCancellationConflict(trip.requestId);
-    if (parentConflict) return parentConflict;
+    let evaluation: Awaited<ReturnType<typeof evaluateTripCancellation>>;
+    let refundAmount: number;
+    let retainedAmount: number;
+    let refundStatus: "pending" | "none";
+    const cancelledAt = new Date();
+    const standaloneCancellation = isStandaloneTripForCancellation(trip);
 
-    if (trip.status === "cancelled") {
-      return NextResponse.json(
-        { error: "This trip is already cancelled" },
-        { status: 400 },
+    if (standaloneCancellation) {
+      const standaloneTrip = {
+        id: String(trip._id),
+        status: trip.status,
+        paymentStatus: trip.paymentStatus,
+      };
+      const mode = getStandaloneTripCancellationMode(standaloneTrip);
+      if (mode.kind === "blocked") {
+        return NextResponse.json(
+          { errorCode: mode.errorCode, error: mode.error },
+          { status: mode.httpStatus },
+        );
+      }
+
+      const policyEvaluation = await evaluateTripCancellation(
+        trip.date,
+        trip.priceEgp,
       );
-    }
-
-    if (trip.status === "completed") {
-      return NextResponse.json(
-        { error: "Completed trips cannot be cancelled" },
-        { status: 400 },
-      );
-    }
-
-    const evaluation = await evaluateTripCancellation(
-      trip.date,
-      trip.priceEgp,
-    );
-
-    if (!evaluation.allowed) {
-      return NextResponse.json(
-        {
-          error:
-            evaluation.message ||
-            "Cancellation is not allowed for this trip at the current time",
-          evaluation,
-        },
-        { status: 400 },
-      );
-    }
-
-    const refundAmount = evaluation.refundAmount;
-    const retainedAmount = evaluation.retainedAmount;
-    const refundStatus = refundAmount > 0 ? "pending" : "none";
-
-    trip.status = "cancelled";
-    trip.cancelledBy = "passenger";
-    trip.cancelReason = reason;
-    trip.cancellation = {
-      cancelledAt: new Date(),
-      tierLabel: evaluation.tierLabel,
-      refundPercent: evaluation.refundPercent,
-      penaltyPercent: evaluation.penaltyPercent,
-      refundAmount,
-      retainedAmount,
-      refundStatus,
-      reason,
-    };
-
-    if (refundAmount > 0) {
-      await RefundRequest.create({
-        tripId: trip._id,
-        passengerId: session.userId,
-        requestedAt: new Date(),
+      if (mode.kind === "paid" && !policyEvaluation.allowed) {
+        return NextResponse.json(
+          {
+            error:
+              policyEvaluation.message ||
+              "Cancellation is not allowed for this trip at the current time",
+            evaluation: policyEvaluation,
+          },
+          { status: 400 },
+        );
+      }
+      evaluation = mode.kind === "unpaid"
+        ? {
+            ...policyEvaluation,
+            allowed: true,
+            refundPercent: 0,
+            penaltyPercent: 0,
+            refundAmount: 0,
+            retainedAmount: 0,
+          }
+        : policyEvaluation;
+      refundAmount = evaluation.refundAmount;
+      retainedAmount = evaluation.retainedAmount;
+      refundStatus = refundAmount > 0 ? "pending" : "none";
+      const cancellation = {
+        cancelledAt,
+        tierLabel: evaluation.tierLabel,
+        refundPercent: evaluation.refundPercent,
+        penaltyPercent: evaluation.penaltyPercent,
         refundAmount,
         retainedAmount,
-        tier: evaluation.tierLabel,
-        status: "pending",
+        refundStatus,
+        reason,
+      };
+
+      const cancellationResult = await runStandaloneTripCancellation({
+        trip: standaloneTrip,
+        reason,
+        evaluation,
+        store: {
+          async cancelUnpaidTrip(expectedTrip) {
+            const dbSession = await mongoose.startSession();
+            let updatedTrip: typeof trip | null = null;
+            try {
+              await dbSession.withTransaction(async () => {
+                updatedTrip = await Trip.findOneAndUpdate(
+                  {
+                    _id: trip._id,
+                    userId: session.userId,
+                    requestId: null,
+                    status: expectedTrip.status,
+                    paymentStatus: expectedTrip.paymentStatus,
+                  },
+                  {
+                    $set: {
+                      status: "cancelled",
+                      cancelledBy: "passenger",
+                      cancelReason: reason,
+                      cancellation,
+                    },
+                  },
+                  { new: true, session: dbSession },
+                );
+                if (updatedTrip) {
+                  await releasePromoCodeUsageForTrip(
+                    String(trip._id),
+                    dbSession,
+                  );
+                }
+              });
+              return updatedTrip;
+            } finally {
+              await dbSession.endSession();
+            }
+          },
+          async cancelPaidTrip(expectedTrip, _reason, paidEvaluation) {
+            const dbSession = await mongoose.startSession();
+            let updatedTrip: typeof trip | null = null;
+            try {
+              await dbSession.withTransaction(async () => {
+                updatedTrip = await Trip.findOneAndUpdate(
+                  {
+                    _id: trip._id,
+                    userId: session.userId,
+                    requestId: null,
+                    status: expectedTrip.status,
+                    paymentStatus: "paid",
+                  },
+                  {
+                    $set: {
+                      status: "cancelled",
+                      cancelledBy: "passenger",
+                      cancelReason: reason,
+                      cancellation,
+                    },
+                  },
+                  { new: true, session: dbSession },
+                );
+                if (!updatedTrip) return;
+                if (paidEvaluation.refundAmount > 0) {
+                  await RefundRequest.create(
+                    [
+                      {
+                        tripId: trip._id,
+                        passengerId: session.userId,
+                        requestedAt: cancelledAt,
+                        refundAmount: paidEvaluation.refundAmount,
+                        retainedAmount: paidEvaluation.retainedAmount,
+                        tier: paidEvaluation.tierLabel,
+                        status: "pending",
+                      },
+                    ],
+                    { session: dbSession },
+                  );
+                }
+              });
+              return updatedTrip;
+            } finally {
+              await dbSession.endSession();
+            }
+          },
+        },
+        async cancelPayments(tripId) {
+          await cancelStandaloneTripPayments(tripId);
+        },
       });
+      if (!cancellationResult.ok) {
+        return NextResponse.json(
+          {
+            errorCode: cancellationResult.errorCode,
+            error: cancellationResult.error,
+          },
+          { status: cancellationResult.httpStatus },
+        );
+      }
+
+      trip.status = "cancelled";
+      trip.cancelledBy = "passenger";
+      trip.cancelReason = reason;
+      trip.cancellation = cancellation;
+    } else {
+      const parentConflict = await getParentCancellationConflict(trip.requestId);
+      if (parentConflict) return parentConflict;
+
+      if (trip.status === "cancelled") {
+        return NextResponse.json(
+          { error: "This trip is already cancelled" },
+          { status: 400 },
+        );
+      }
+
+      if (trip.status === "completed") {
+        return NextResponse.json(
+          { error: "Completed trips cannot be cancelled" },
+          { status: 400 },
+        );
+      }
+
+      evaluation = await evaluateTripCancellation(trip.date, trip.priceEgp);
+      if (!evaluation.allowed) {
+        return NextResponse.json(
+          {
+            error:
+              evaluation.message ||
+              "Cancellation is not allowed for this trip at the current time",
+            evaluation,
+          },
+          { status: 400 },
+        );
+      }
+
+      refundAmount = evaluation.refundAmount;
+      retainedAmount = evaluation.retainedAmount;
+      refundStatus = refundAmount > 0 ? "pending" : "none";
+      trip.status = "cancelled";
+      trip.cancelledBy = "passenger";
+      trip.cancelReason = reason;
+      trip.cancellation = {
+        cancelledAt,
+        tierLabel: evaluation.tierLabel,
+        refundPercent: evaluation.refundPercent,
+        penaltyPercent: evaluation.penaltyPercent,
+        refundAmount,
+        retainedAmount,
+        refundStatus,
+        reason,
+      };
+
+      if (refundAmount > 0) {
+        await RefundRequest.create({
+          tripId: trip._id,
+          passengerId: session.userId,
+          requestedAt: cancelledAt,
+          refundAmount,
+          retainedAmount,
+          tier: evaluation.tierLabel,
+          status: "pending",
+        });
+      }
+
     }
 
-    // Unassign from Ride if matched
+    // Unassign from Ride if matched.
     if (trip.rideId) {
       try {
         const ride = await Ride.findById(trip.rideId);
@@ -194,7 +403,7 @@ export async function POST(
       }
     }
 
-    await trip.save();
+    if (!standaloneCancellation) await trip.save();
 
     // Log cancellation event
     try {

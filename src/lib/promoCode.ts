@@ -1,10 +1,11 @@
 import "server-only";
 import { randomBytes } from "crypto";
-import { Types } from "mongoose";
+import mongoose, { Types, type ClientSession } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import { isPromoCodeExpired } from "@/lib/promoCodeShared";
 import { PromoCode } from "@/models/PromoCode";
 import { PromoCodeUsage } from "@/models/PromoCodeUsage";
+import { releasePromoUsageForTripWith } from "@/lib/promoUsageRelease";
 
 const PROMO_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_CODE_ATTEMPTS = 10;
@@ -198,4 +199,59 @@ export async function rollbackPromoCodeUsage(
     { _id: promoCodeId, usedCount: { $gt: 0 } },
     { $inc: { usedCount: -1 } },
   );
+}
+
+async function releasePromoCodeUsageInSession(
+  tripId: Types.ObjectId,
+  session: ClientSession,
+): Promise<number> {
+  return releasePromoUsageForTripWith(
+    {
+      async findUsageForTrip(id) {
+        const usages = await PromoCodeUsage.find({ trip: new Types.ObjectId(id) })
+          .select("_id promoCode")
+          .session(session)
+          .lean<{ _id: Types.ObjectId; promoCode: Types.ObjectId }[]>();
+        return usages.map((usage) => ({
+          id: String(usage._id),
+          promoCodeId: String(usage.promoCode),
+        }));
+      },
+      async deleteUsage(id) {
+        const result = await PromoCodeUsage.deleteOne(
+          { _id: new Types.ObjectId(id), trip: tripId },
+          { session },
+        );
+        return result.deletedCount === 1;
+      },
+      async decrementUsedCount(promoCodeId) {
+        await PromoCode.updateOne(
+          { _id: new Types.ObjectId(promoCodeId), usedCount: { $gt: 0 } },
+          { $inc: { usedCount: -1 } },
+          { session },
+        );
+      },
+    },
+    String(tripId),
+  );
+}
+
+export async function releasePromoCodeUsageForTrip(
+  tripId: string | Types.ObjectId,
+  session?: ClientSession,
+): Promise<number> {
+  await connectDB();
+  const normalizedId = new Types.ObjectId(tripId);
+  if (session) return releasePromoCodeUsageInSession(normalizedId, session);
+
+  const dbSession = await mongoose.startSession();
+  let released = 0;
+  try {
+    await dbSession.withTransaction(async () => {
+      released = await releasePromoCodeUsageInSession(normalizedId, dbSession);
+    });
+    return released;
+  } finally {
+    await dbSession.endSession();
+  }
 }
