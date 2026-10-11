@@ -662,6 +662,11 @@ export const ar: Record<MessageKey, string> = {
     "يجب أن يكون وقت الركوب  بين الساعة 6 صباحًا و12 منتصف الليل (اليوم التالي). يرجى اختيار وقت صحيح.",
   "create.must_be_after_previous_trip":
     "يجب أن يكون بعد {time} — وقت انتهاء الرحلة السابقة.",
+  "create.trip_spacing_conflict":
+    "فترة الوصول قريبة جدًا من رحلة أخرى بتاريخ {date} ({window}). اختر موعدًا آخر.",
+  "create.spacing_check_loading": "جارٍ التحقق من رحلاتك الأخرى في هذا التاريخ…",
+  "create.spacing_check_failed":
+    "تعذر التحقق من رحلاتك الأخرى. حاول مرة أخرى قبل الحجز.",
   "create.route_drive_details": "{distance} كم · {duration} دقيقة قيادة",
   "create.decrease_passengers_aria": "إنقاص عدد الركاب",
   "create.increase_passengers_aria": "زيادة عدد الركاب",

@@ -120,6 +120,11 @@ export default function CreateClient({
     earliestBookingDate(),
   ]);
   const [trips, setTrips] = useState<TripData[]>([]);
+  const [existingTripsByDate, setExistingTripsByDate] = useState<
+    Record<string, TripSpacingWindow[]>
+  >({});
+  const [spacingCheckLoading, setSpacingCheckLoading] = useState(true);
+  const [spacingCheckFailed, setSpacingCheckFailed] = useState(false);
   const [tripSteps, setTripSteps] = useState<Record<string, BookingStep>>({});
   const [collapsedTrips, setCollapsedTrips] = useState<Record<string, boolean>>(
     {},
@@ -182,6 +187,51 @@ export default function CreateClient({
     startHeightVh: MOBILE_DRAWER_DEFAULT_VH,
   });
   const { t, locale } = useClientLocale();
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadExistingTrips() {
+      setSpacingCheckLoading(true);
+      setSpacingCheckFailed(false);
+      if (selectedDates.length === 0) {
+        setExistingTripsByDate({});
+        setSpacingCheckLoading(false);
+        return;
+      }
+
+      try {
+        const results = await Promise.all(
+          selectedDates.map(async (date) => {
+            const response = await fetch(
+              `/api/trips/spacing?date=${encodeURIComponent(date)}`,
+              { cache: "no-store", signal: controller.signal },
+            );
+            if (!response.ok) {
+              throw new Error(
+                `Trip-spacing lookup failed with status ${response.status}`,
+              );
+            }
+            const result = (await response.json()) as {
+              data: TripSpacingWindow[];
+            };
+            return [date, result.data] as const;
+          }),
+        );
+        if (controller.signal.aborted) return;
+        setExistingTripsByDate(Object.fromEntries(results));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("Failed to load existing trip arrival windows:", error);
+        setSpacingCheckFailed(true);
+      } finally {
+        if (!controller.signal.aborted) setSpacingCheckLoading(false);
+      }
+    }
+
+    void loadExistingTrips();
+    return () => controller.abort();
+  }, [selectedDates]);
 
   // Hydrate from store after mount (avoid SSR mismatch)
   useEffect(() => {
@@ -417,7 +467,22 @@ export default function CreateClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        setSubmitError(data.error ?? t("create.booking_create_failed"));
+        setSubmitError(
+          data.error === "TRIP_SPACING_CONFLICT" &&
+            typeof data.conflict?.date === "string" &&
+            typeof data.conflict?.arrivalTime === "string" &&
+            typeof data.conflict?.window?.start === "string" &&
+            typeof data.conflict?.window?.end === "string"
+            ? formatSpacingConflict({
+                date: data.conflict.date,
+                arrivalTime: data.conflict.arrivalTime,
+                window: {
+                  start: data.conflict.window.start,
+                  end: data.conflict.window.end,
+                },
+              })
+            : (data.error ?? t("create.booking_create_failed")),
+        );
         return null;
       }
 
@@ -756,6 +821,41 @@ export default function CreateClient({
     ["--drawer-height-vh" as string]: String(drawerHeightVh),
   } as React.CSSProperties;
 
+  function getSpacingConflict(
+    arrivalTime: string,
+    excludeTripId?: string,
+  ): SpacingConflict | null {
+    for (const date of selectedDates) {
+      const otherSubmissionTrips = trips
+        .filter(
+          (trip) => trip.id !== excludeTripId && Boolean(trip.arrivalTime),
+        )
+        .map((trip) => ({
+          date,
+          arrivalTime: trip.arrivalTime,
+          status: "pending_payment",
+        }));
+      const conflict = findSpacingConflict(
+        { date, arrivalTime },
+        [...(existingTripsByDate[date] ?? []), ...otherSubmissionTrips],
+      );
+      if (conflict) return conflict;
+    }
+    return null;
+  }
+
+  function formatSpacingConflict(conflict: SpacingConflict): string {
+    return t("create.trip_spacing_conflict")
+      .replace("{date}", conflict.date)
+      .replace(
+        "{window}",
+        `${formatTime(locale, conflict.window.start)}–${formatTime(
+          locale,
+          conflict.window.end,
+        )}`,
+      );
+  }
+
   // Validate all trips before preview
   function validate(): string | null {
     if (selectedDates.length === 0) return t("create.select_at_least_one_date");
@@ -838,6 +938,15 @@ export default function CreateClient({
         }
       }
     }
+
+    if (spacingCheckLoading) return t("create.spacing_check_loading");
+    if (spacingCheckFailed) return t("create.spacing_check_failed");
+    for (const trip of trips) {
+      if (!trip.arrivalTime) continue;
+      const conflict = getSpacingConflict(trip.arrivalTime, trip.id);
+      if (conflict) return formatSpacingConflict(conflict);
+    }
+
     return null;
   }
 
@@ -1060,6 +1169,16 @@ export default function CreateClient({
                   </div>
                 </div>
               </section>
+              {spacingCheckLoading && (
+                <p role="status" style={{ fontSize: 13, color: "#5A6A7A" }}>
+                  {t("create.spacing_check_loading")}
+                </p>
+              )}
+              {spacingCheckFailed && (
+                <p role="alert" style={{ fontSize: 13, color: "#e74c3c" }}>
+                  {t("create.spacing_check_failed")}
+                </p>
+              )}
 
               {/* Trip cycles */}
               <div
@@ -1098,6 +1217,36 @@ export default function CreateClient({
                     !!prevTrip &&
                     !prevTrip.returnTrip &&
                     !!(prevTrip.pickup && prevTrip.dropoff);
+                  const blockedArrivalTimes =
+                    spacingCheckLoading || spacingCheckFailed
+                      ? []
+                      : getDayHalfHourSlots()
+                          .filter((slot) =>
+                            selectedDates.some((date) => {
+                              const otherSubmissionTrips = trips
+                                .filter(
+                                  (otherTrip) =>
+                                    otherTrip.id !== trip.id &&
+                                    Boolean(otherTrip.arrivalTime),
+                                )
+                                .map((otherTrip) => ({
+                                  date,
+                                  arrivalTime: otherTrip.arrivalTime,
+                                  status: "pending_payment",
+                                }));
+                              return hasSpacingConflict(
+                                { date, arrivalTime: slot.value },
+                                [
+                                  ...(existingTripsByDate[date] ?? []),
+                                  ...otherSubmissionTrips,
+                                ],
+                              );
+                            }),
+                          )
+                          .map((slot) => slot.value);
+                  const spacingConflict = trip.arrivalTime
+                    ? getSpacingConflict(trip.arrivalTime, trip.id)
+                    : null;
                   return (
                     <TripCycle
                       key={trip.id}
@@ -1119,6 +1268,8 @@ export default function CreateClient({
                       }
                       stations={stations}
                       minArrivalTime={minArrivalTime}
+                      blockedArrivalTimes={blockedArrivalTimes}
+                      spacingConflict={spacingConflict}
                       vehiclesMap={vehiclesMap ?? undefined}
                       vehicleList={vehicleList}
                       disabledVehicleKeys={vehicleList
@@ -2930,7 +3081,18 @@ export default function CreateClient({
 /* ── Helpers local to this file ── */
 import { VEHICLE_LIST, VEHICLES } from "@/lib/config/vehicles";
 import { formatDisplayName } from "@/lib/nominatim";
-import { toMinutes, toHHMM, pickupWindowRange } from "@/lib/time/pickupWindow";
+import {
+  getDayHalfHourSlots,
+  toMinutes,
+  toHHMM,
+  pickupWindowRange,
+} from "@/lib/time/pickupWindow";
+import {
+  findSpacingConflict,
+  hasSpacingConflict,
+  type SpacingConflict,
+  type TripSpacingWindow,
+} from "@/lib/validation/tripSpacing";
 
 function VEHICLE_LIST_LABEL(key: string, t: (key: string) => string) {
   const translated = t(`vehicles.${key}`);

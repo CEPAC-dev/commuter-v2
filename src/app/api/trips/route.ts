@@ -21,6 +21,12 @@ import {
   snapToArrivalSlotMidpoint,
   toMinutes,
 } from "@/lib/time/pickupWindow";
+import {
+  findSpacingConflict,
+  HOLDING_TRIP_STATUSES,
+  type SpacingConflict,
+  type TripSpacingWindow,
+} from "@/lib/validation/tripSpacing";
 import { getVehicles } from "@/lib/db/getVehicles";
 import {
   findNearestStations,
@@ -42,6 +48,7 @@ import {
   shouldCreateWaitingListRequest,
 } from "@/lib/admin/waitingList";
 import mongoose, { Types } from "mongoose";
+import type { Document } from "mongodb";
 import {
   applyPromoCodeToTrip,
   computePromoDiscountedPrice,
@@ -69,6 +76,28 @@ const PAYMENT_STATUSES = new Set<PaymentStatus>([
   "refunded",
   "expired",
 ]);
+
+class TripSpacingConflictError extends Error {
+  constructor(readonly conflict: SpacingConflict) {
+    super("Trip arrival window conflicts with another trip");
+  }
+}
+
+interface TripSpacingLockDocument extends Document {
+  _id: string;
+  createdAt?: Date;
+  revision?: number;
+  updatedAt?: Date;
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === 11000
+  );
+}
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -674,9 +703,67 @@ export async function POST(req: NextRequest) {
       })),
     );
 
+    const db = mongoose.connection.db;
+    if (!db) throw new Error("Database connection is unavailable");
+    const spacingLockCollection = db.collection<TripSpacingLockDocument>(
+      "trip_spacing_locks",
+    );
+    const spacingLockIds = dates.map((date) => `${userId}:${date}`);
+    for (const lockId of spacingLockIds) {
+      try {
+        await spacingLockCollection.updateOne(
+          { _id: lockId },
+          { $setOnInsert: { createdAt: new Date() } },
+          { upsert: true },
+        );
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) throw error;
+        const lock = await spacingLockCollection.findOne({ _id: lockId });
+        if (!lock) throw error;
+      }
+    }
+
     const dbSession = await mongoose.startSession();
     try {
       await dbSession.withTransaction(async () => {
+        for (const lockId of spacingLockIds) {
+          const lockUpdate = await spacingLockCollection.updateOne(
+            { _id: lockId },
+            { $inc: { revision: 1 }, $set: { updatedAt: new Date() } },
+            { session: dbSession },
+          );
+          if (lockUpdate.matchedCount !== 1) {
+            throw new Error(`Trip-spacing lock is missing: ${lockId}`);
+          }
+        }
+
+        const existingTrips = await Trip.find({
+          userId: new Types.ObjectId(userId),
+          date: { $in: dates },
+          status: { $in: HOLDING_TRIP_STATUSES },
+        })
+          .select("date arrivalTime status requestId")
+          .session(dbSession)
+          .lean();
+        const existingWindows: TripSpacingWindow[] = existingTrips.map(
+          (trip) => ({
+            date: trip.date,
+            arrivalTime: trip.arrivalTime,
+            status: trip.status,
+            requestId: trip.requestId ? String(trip.requestId) : null,
+          }),
+        );
+        const submittedWindows: TripSpacingWindow[] = [];
+        for (const trip of tripDocuments) {
+          const candidate = { date: trip.date, arrivalTime: trip.arrivalTime };
+          const conflict = findSpacingConflict(candidate, [
+            ...existingWindows,
+            ...submittedWindows,
+          ]);
+          if (conflict) throw new TripSpacingConflictError(conflict);
+          submittedWindows.push({ ...candidate, status: "pending_payment" });
+        }
+
         await Request.create(
           [
             {
@@ -770,6 +857,12 @@ export async function POST(req: NextRequest) {
         rollbackPromoCodeUsage(reservation.usageId, reservation.promoCodeId),
       ),
     );
+    if (err instanceof TripSpacingConflictError) {
+      return NextResponse.json(
+        { error: "TRIP_SPACING_CONFLICT", conflict: err.conflict },
+        { status: 409 },
+      );
+    }
     console.error("Trip fan-out failed — request rolled back:", err);
     return NextResponse.json(
       { error: "Failed to create trips" },

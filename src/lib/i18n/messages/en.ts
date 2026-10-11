@@ -671,6 +671,11 @@ export const en = {
     "Pickup time must be between 06:00 AM and 12:00 AM (next day). Please reselect a valid time.",
   "create.must_be_after_previous_trip":
     "Must be after {time} — when the previous trip ends.",
+  "create.trip_spacing_conflict":
+    "This arrival window is too close to another trip on {date} ({window}). Choose another slot.",
+  "create.spacing_check_loading": "Checking your other trips for this date…",
+  "create.spacing_check_failed":
+    "Could not check your other trips. Please try again before booking.",
   "create.route_drive_details": "{distance} km · {duration} min drive",
   "create.decrease_passengers_aria": "Decrease passengers",
   "create.increase_passengers_aria": "Increase passengers",

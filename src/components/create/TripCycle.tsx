@@ -39,6 +39,7 @@ import {
   pickupWindowRange,
   toMinutes,
 } from "@/lib/time/pickupWindow";
+import type { SpacingConflict } from "@/lib/validation/tripSpacing";
 import { fetchRoadRoutes } from "@/lib/osrm";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import type { RegionCode } from "@/lib/config/regions";
@@ -193,6 +194,8 @@ interface Props {
   savedAddresses?: SavedAddress[];
   stations?: Station[];
   minArrivalTime?: string | null; // earliest valid arrival for this trip
+  blockedArrivalTimes?: readonly string[];
+  spacingConflict?: SpacingConflict | null;
   onAddressSaved?: (saved: SavedAddress) => void;
   vehiclesMap?: Record<VehicleKey, VehicleConfig>; // DB-hydrated vehicle config (falls back to static seed)
   vehicleList?: VehicleConfig[]; // DB-hydrated vehicle list for the select options
@@ -499,6 +502,8 @@ export default function TripCycle({
   savedAddresses = [],
   stations = [],
   minArrivalTime,
+  blockedArrivalTimes = [],
+  spacingConflict = null,
   onAddressSaved,
   vehiclesMap,
   vehicleList,
@@ -1175,6 +1180,17 @@ export default function TripCycle({
     minArrivalTime &&
     toMinutes(data.arrivalTime) <= toMinutes(minArrivalTime)
   );
+  const spacingConflictMessage = spacingConflict
+    ? t("create.trip_spacing_conflict")
+        .replace("{date}", spacingConflict.date)
+        .replace(
+          "{window}",
+          `${formatTime(locale, spacingConflict.window.start)}–${formatTime(
+            locale,
+            spacingConflict.window.end,
+          )}`,
+        )
+    : null;
 
   const locationError: string | null = (() => {
     if (!data.pickup || !data.dropoff) return null;
@@ -1935,7 +1951,11 @@ export default function TripCycle({
                           {t("create.arrival_time_label")}
                         </option>
                         {arrivalPeriodSlots.map((slot) => (
-                          <option key={slot.start} value={slot.value}>
+                          <option
+                            key={slot.start}
+                            value={slot.value}
+                            disabled={blockedArrivalTimes.includes(slot.value)}
+                          >
                             {formatHourMinuteRange(locale, slot)}
                           </option>
                         ))}
@@ -1951,6 +1971,18 @@ export default function TripCycle({
                         }}
                       >
                         ⚠ {timeError}
+                      </p>
+                    )}
+                    {spacingConflictMessage && (
+                      <p
+                        role="alert"
+                        style={{
+                          fontSize: 12,
+                          color: "#e74c3c",
+                          margin: "5px 0 0",
+                        }}
+                      >
+                        {spacingConflictMessage}
                       </p>
                     )}
                     {arrivalTooEarly && minArrivalTime ? (
