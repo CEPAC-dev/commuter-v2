@@ -87,6 +87,7 @@ export interface TripData {
   routeCoordinates: [number, number][] | null;
   routeLegs: RouteLeg[];
   extraPassengers: number;
+  sameGenderPreference: boolean;
   numberOfPassengers: number;
   stops: StopPoint[];
   returnTrip?: boolean; // UI flag — reverse of source trip
@@ -204,6 +205,10 @@ interface Props {
   onToggleCollapsed?: () => void;
   beforeFields?: React.ReactNode;
   afterFields?: React.ReactNode;
+  userGender: "male" | "female" | null;
+  genderSaving: boolean;
+  genderError: string;
+  onGenderChange: (gender: "male" | "female") => void;
 }
 
 function pickBtnStyle(active: boolean): React.CSSProperties {
@@ -510,12 +515,17 @@ export default function TripCycle({
   onToggleCollapsed,
   beforeFields,
   afterFields,
+  userGender,
+  genderSaving,
+  genderError,
+  onGenderChange,
 }: Props) {
   const [routeLoading, setRouteLoading] = useState(false);
   const [stopError, setStopError] = useState("");
   const [timeError, setTimeError] = useState<string | null>(null);
   const [locating, setLocating] = useState<"pickup" | "dropoff" | null>(null);
   const [arrivalPeriod, setArrivalPeriod] = useState<"AM" | "PM">("AM");
+  const [extraPassengersEnabled, setExtraPassengersEnabled] = useState(false);
   const { t, locale } = useClientLocale();
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
@@ -605,6 +615,7 @@ export default function TripCycle({
         walkingMinToStation: null,
         walkingMinFromStation: null,
         passengers: [],
+        sameGenderPreference: false,
         numberOfPassengers: 1,
         stops: [],
         baseDistanceKm: null,
@@ -630,6 +641,7 @@ export default function TripCycle({
         walkingMinToStation: null,
         walkingMinFromStation: null,
         passengers: [],
+        sameGenderPreference: false,
         numberOfPassengers: 1,
         stops: [],
         baseDistanceKm: null,
@@ -1310,6 +1322,82 @@ export default function TripCycle({
             numberOfPassengers: data.numberOfPassengers ?? 1,
             vehiclesMap: vMap,
           });
+
+  const genderPreferenceSection = (
+    <div
+      style={{
+        marginBottom: 14,
+        padding: "12px 14px",
+        border: "1px solid rgb(200, 232, 228)",
+        borderRadius: 10,
+      }}
+    >
+      <label
+        htmlFor={`same-gender-${data.id}`}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 9,
+          cursor: "pointer",
+          color: "#0B1E3D",
+          fontSize: 14,
+          fontWeight: 600,
+        }}
+      >
+        <input
+          id={`same-gender-${data.id}`}
+          type="checkbox"
+          checked={data.sameGenderPreference}
+          onChange={(event) =>
+            onChange({
+              ...data,
+              sameGenderPreference: event.currentTarget.checked,
+            })
+          }
+          style={{ accentColor: "#00C2A8", width: 16, height: 16 }}
+        />
+        {t("create.same_gender_preference")}
+      </label>
+      {data.sameGenderPreference && !userGender && (
+        <div style={{ marginTop: 12 }}>
+          <label htmlFor={`gender-${data.id}`} style={labelStyle}>
+            {t("create.select_gender")} *
+          </label>
+          <select
+            id={`gender-${data.id}`}
+            required
+            value=""
+            disabled={genderSaving}
+            onChange={(event) => {
+              if (
+                event.currentTarget.value === "male" ||
+                event.currentTarget.value === "female"
+              ) {
+                onGenderChange(event.currentTarget.value);
+              }
+            }}
+            style={{ ...timeInputStyle, width: "100%" }}
+          >
+            <option value="" disabled>
+              {t("create.select_gender")}
+            </option>
+            <option value="male">{t("gender.male")}</option>
+            <option value="female">{t("gender.female")}</option>
+          </select>
+          {genderSaving && (
+            <p role="status" style={{ fontSize: 12, color: "#5A6A7A" }}>
+              {t("create.saving_gender")}
+            </p>
+          )}
+          {genderError && (
+            <p role="alert" style={{ fontSize: 12, color: "#e74c3c" }}>
+              {genderError}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -2079,275 +2167,334 @@ export default function TripCycle({
                   hidden={stage !== "passengers"}
                   style={{ display: "contents" }}
                 >
+                  {genderPreferenceSection}
                   {/* Extra passengers */}
-                  <div>
-                    <label style={labelStyle}>
+                  <div
+                    style={{
+                      marginBottom: 14,
+                      padding: "12px 14px",
+                      border: "1px solid rgb(200, 232, 228)",
+                      borderRadius: 10,
+                    }}
+                  >
+                    <label
+                      htmlFor={`extra-passengers-toggle-${data.id}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 9,
+                        cursor: "pointer",
+                        color: "rgb(11, 30, 61)",
+                        fontSize: 14,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <input
+                        id={`extra-passengers-toggle-${data.id}`}
+                        type="checkbox"
+                        checked={extraPassengersEnabled}
+                        aria-controls={`extra-passengers-${data.id}`}
+                        onChange={(event) => {
+                          const enabled = event.currentTarget.checked;
+                          setExtraPassengersEnabled(enabled);
+                          if (!enabled) {
+                            onChange({
+                              ...data,
+                              extraPassengers: 0,
+                              passengers: [],
+                            });
+                          }
+                        }}
+                        style={{
+                          accentColor: "#00C2A8",
+                          width: 16,
+                          height: 16,
+                        }}
+                      />
                       {t("create.extra_passengers")}
                     </label>
                     <div
-                      style={{ display: "flex", alignItems: "center", gap: 12 }}
+                      id={`extra-passengers-${data.id}`}
+                      hidden={!extraPassengersEnabled}
+                      style={{
+                        marginTop: 10,
+                        display: "flex",
+                      }}
                     >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextPassengers = (data.passengers ?? []).slice(
-                            0,
-                            -1,
-                          );
-                          onChange({
-                            ...data,
-                            extraPassengers: nextPassengers.length,
-                            passengers: nextPassengers,
-                          });
-                        }}
-                        disabled={(data.extraPassengers ?? 0) <= 0}
-                        aria-label={t("create.decrease_passengers_aria")}
+                      <div
                         style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 5,
-                          border: "1.5px solid rgb(200, 232, 228)",
-                          background: "#f8f9fa",
-                          cursor:
-                            (data.extraPassengers ?? 0) <= 0
-                              ? "not-allowed"
-                              : "pointer",
-                          fontSize: 20,
-                          color: "#0B1E3D",
-                          fontFamily: "inherit",
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "center",
+                          gap: 12,
                         }}
                       >
-                        −
-                      </button>
-                      <span
-                        style={{
-                          fontSize: 18,
-                          fontWeight: 700,
-                          color: "#0B1E3D",
-                          minWidth: 24,
-                          textAlign: "center",
-                        }}
-                      >
-                        {data.extraPassengers ?? 0}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (
-                            (data.extraPassengers ?? 0) >=
-                            maxExtraPassengers(data.vehicleType)
-                          )
-                            return;
-                          const nextPassengers = [
-                            ...(data.passengers ?? []),
-                            {
-                              id: Math.random().toString(36).slice(2, 9),
-                              sameAsMain: true,
-                              pickup: null,
-                              dropoff: null,
-                            },
-                          ];
-                          onChange({
-                            ...data,
-                            extraPassengers: nextPassengers.length,
-                            passengers: nextPassengers,
-                          });
-                        }}
-                        disabled={
-                          (data.extraPassengers ?? 0) >=
-                          maxExtraPassengers(data.vehicleType)
-                        }
-                        aria-label={t("create.increase_passengers_aria")}
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 10,
-                          border: "1.5px solid rgb(200, 232, 228)",
-                          background: "#f8f9fa",
-                          cursor:
-                            (data.extraPassengers ?? 0) >=
-                            maxExtraPassengers(data.vehicleType)
-                              ? "not-allowed"
-                              : "pointer",
-                          fontSize: 20,
-                          color: "#0B1E3D",
-                          fontFamily: "inherit",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        +
-                      </button>
-                      <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                        {t("create.you_plus_passengers").replace(
-                          "{n}",
-                          String(data.extraPassengers ?? 0),
-                        )}
-                      </span>
-                    </div>
-
-                    {/* Per-passenger pickup/dropoff choice — private vehicles only */}
-                    {!isSharedVehicle(data.vehicleType) &&
-                      (data.passengers ?? []).map((p, idx) => (
-                        <div
-                          key={p.id}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextPassengers = (
+                              data.passengers ?? []
+                            ).slice(0, -1);
+                            onChange({
+                              ...data,
+                              extraPassengers: nextPassengers.length,
+                              passengers: nextPassengers,
+                            });
+                          }}
+                          disabled={(data.extraPassengers ?? 0) <= 0}
+                          aria-label={t("create.decrease_passengers_aria")}
                           style={{
-                            marginTop: 10,
-                            padding: "10px 12px",
-                            background: "#f8f9fa",
+                            width: 40,
+                            height: 40,
                             borderRadius: 5,
                             border: "1.5px solid rgb(200, 232, 228)",
+                            background: "#f8f9fa",
+                            cursor:
+                              (data.extraPassengers ?? 0) <= 0
+                                ? "not-allowed"
+                                : "pointer",
+                            fontSize: 20,
+                            color: "#0B1E3D",
+                            fontFamily: "inherit",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
                           }}
                         >
-                          <span
+                          −
+                        </button>
+                        <span
+                          style={{
+                            fontSize: 18,
+                            fontWeight: 700,
+                            color: "#0B1E3D",
+                            minWidth: 24,
+                            textAlign: "center",
+                          }}
+                        >
+                          {data.extraPassengers ?? 0}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              (data.extraPassengers ?? 0) >=
+                              maxExtraPassengers(data.vehicleType)
+                            )
+                              return;
+                            const nextPassengers = [
+                              ...(data.passengers ?? []),
+                              {
+                                id: Math.random().toString(36).slice(2, 9),
+                                sameAsMain: true,
+                                pickup: null,
+                                dropoff: null,
+                              },
+                            ];
+                            onChange({
+                              ...data,
+                              extraPassengers: nextPassengers.length,
+                              passengers: nextPassengers,
+                            });
+                          }}
+                          disabled={
+                            (data.extraPassengers ?? 0) >=
+                            maxExtraPassengers(data.vehicleType)
+                          }
+                          aria-label={t("create.increase_passengers_aria")}
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 10,
+                            border: "1.5px solid rgb(200, 232, 228)",
+                            background: "#f8f9fa",
+                            cursor:
+                              (data.extraPassengers ?? 0) >=
+                              maxExtraPassengers(data.vehicleType)
+                                ? "not-allowed"
+                                : "pointer",
+                            fontSize: 20,
+                            color: "#0B1E3D",
+                            fontFamily: "inherit",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          +
+                        </button>
+                        <span style={{ fontSize: 12, color: "#5A6A7A" }}>
+                          {t("create.you_plus_passengers").replace(
+                            "{n}",
+                            String(data.extraPassengers ?? 0),
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Per-passenger pickup/dropoff choice — private vehicles only */}
+                      {!isSharedVehicle(data.vehicleType) &&
+                        (data.passengers ?? []).map((p, idx) => (
+                          <div
+                            key={p.id}
                             style={{
-                              fontSize: 12,
-                              fontWeight: 700,
-                              color: "#0B1E3D",
-                              display: "block",
-                              marginBottom: 6,
+                              marginTop: 10,
+                              padding: "10px 12px",
+                              background: "#f8f9fa",
+                              borderRadius: 5,
+                              border: "1.5px solid rgb(200, 232, 228)",
                             }}
                           >
-                            {t("create.passenger_label").replace(
-                              "{n}",
-                              String(idx + 1),
-                            )}
-                          </span>
-                          <div
-                            style={{ display: "flex", gap: 8, marginBottom: 8 }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                updatePassenger(p.id, {
-                                  sameAsMain: true,
-                                  pickup: null,
-                                  dropoff: null,
-                                })
-                              }
-                              style={pickBtnStyle(p.sameAsMain)}
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: "#0B1E3D",
+                                display: "block",
+                                marginBottom: 6,
+                              }}
                             >
-                              {t("create.same_as_main")}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                updatePassenger(p.id, { sameAsMain: false })
-                              }
-                              style={pickBtnStyle(!p.sameAsMain)}
-                            >
-                              {t("create.different_points")}
-                            </button>
-                          </div>
-                          {!p.sameAsMain && (
+                              {t("create.passenger_label").replace(
+                                "{n}",
+                                String(idx + 1),
+                              )}
+                            </span>
                             <div
                               style={{
                                 display: "flex",
-                                flexDirection: "column",
                                 gap: 8,
+                                marginBottom: 8,
                               }}
                             >
-                              <div>
-                                <AddressInput
-                                  id={`pax-${p.id}-pickup`}
-                                  placeholder={t(
-                                    "create.passenger_pickup_address",
-                                  )}
-                                  label={t("create.passenger_pickup_address")}
-                                  value={p.pickup}
-                                  onChange={(pt) =>
-                                    updatePassenger(p.id, { pickup: pt })
-                                  }
-                                  iconColor="#00C2A8"
-                                  savedAddresses={savedAddresses}
-                                />
-                                {data.pickup && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      updatePassenger(p.id, {
-                                        pickup: data.pickup,
-                                      })
-                                    }
-                                    style={{
-                                      marginTop: 4,
-                                      fontSize: 11,
-                                      fontWeight: 600,
-                                      fontFamily: "inherit",
-                                      background: "none",
-                                      border: "none",
-                                      cursor: "pointer",
-                                      color: "#0B1E3D",
-                                      padding: 0,
-                                    }}
-                                  >
-                                    {t("create.use_main_pickup_location")}
-                                  </button>
-                                )}
-                              </div>
-                              <div>
-                                <AddressInput
-                                  id={`pax-${p.id}-dropoff`}
-                                  placeholder={t(
-                                    "create.passenger_dropoff_address",
-                                  )}
-                                  label={t("create.passenger_dropoff_address")}
-                                  value={p.dropoff}
-                                  onChange={(pt) =>
-                                    updatePassenger(p.id, { dropoff: pt })
-                                  }
-                                  iconColor="#00C2A8"
-                                  savedAddresses={savedAddresses}
-                                />
-                                {data.dropoff && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      updatePassenger(p.id, {
-                                        dropoff: data.dropoff,
-                                      })
-                                    }
-                                    style={{
-                                      marginTop: 4,
-                                      fontSize: 11,
-                                      fontWeight: 600,
-                                      fontFamily: "inherit",
-                                      background: "none",
-                                      border: "none",
-                                      cursor: "pointer",
-                                      color: "#00897B",
-                                      padding: 0,
-                                    }}
-                                  >
-                                    {t("create.use_main_dropoff_location")}
-                                  </button>
-                                )}
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updatePassenger(p.id, {
+                                    sameAsMain: true,
+                                    pickup: null,
+                                    dropoff: null,
+                                  })
+                                }
+                                style={pickBtnStyle(p.sameAsMain)}
+                              >
+                                {t("create.same_as_main")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updatePassenger(p.id, { sameAsMain: false })
+                                }
+                                style={pickBtnStyle(!p.sameAsMain)}
+                              >
+                                {t("create.different_points")}
+                              </button>
                             </div>
-                          )}
-                        </div>
-                      ))}
+                            {!p.sameAsMain && (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 8,
+                                }}
+                              >
+                                <div>
+                                  <AddressInput
+                                    id={`pax-${p.id}-pickup`}
+                                    placeholder={t(
+                                      "create.passenger_pickup_address",
+                                    )}
+                                    label={t("create.passenger_pickup_address")}
+                                    value={p.pickup}
+                                    onChange={(pt) =>
+                                      updatePassenger(p.id, { pickup: pt })
+                                    }
+                                    iconColor="#00C2A8"
+                                    savedAddresses={savedAddresses}
+                                  />
+                                  {data.pickup && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updatePassenger(p.id, {
+                                          pickup: data.pickup,
+                                        })
+                                      }
+                                      style={{
+                                        marginTop: 4,
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        fontFamily: "inherit",
+                                        background: "none",
+                                        border: "none",
+                                        cursor: "pointer",
+                                        color: "#0B1E3D",
+                                        padding: 0,
+                                      }}
+                                    >
+                                      {t("create.use_main_pickup_location")}
+                                    </button>
+                                  )}
+                                </div>
+                                <div>
+                                  <AddressInput
+                                    id={`pax-${p.id}-dropoff`}
+                                    placeholder={t(
+                                      "create.passenger_dropoff_address",
+                                    )}
+                                    label={t(
+                                      "create.passenger_dropoff_address",
+                                    )}
+                                    value={p.dropoff}
+                                    onChange={(pt) =>
+                                      updatePassenger(p.id, { dropoff: pt })
+                                    }
+                                    iconColor="#00C2A8"
+                                    savedAddresses={savedAddresses}
+                                  />
+                                  {data.dropoff && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updatePassenger(p.id, {
+                                          dropoff: data.dropoff,
+                                        })
+                                      }
+                                      style={{
+                                        marginTop: 4,
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        fontFamily: "inherit",
+                                        background: "none",
+                                        border: "none",
+                                        cursor: "pointer",
+                                        color: "#00897B",
+                                        padding: 0,
+                                      }}
+                                    >
+                                      {t("create.use_main_dropoff_location")}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
 
-                    {detourExceeded && (
-                      <div
-                        role="alert"
-                        style={{
-                          fontSize: 13,
-                          color: "#e74c3c",
-                          background: "rgba(231,76,60,0.07)",
-                          border: "1px solid rgba(231,76,60,0.2)",
-                          borderRadius: 5,
-                          padding: "8px 12px",
-                          marginTop: 10,
-                        }}
-                      >
-                        ⚠ {t("create.passenger_detour_exceeded")}
-                      </div>
-                    )}
+                      {detourExceeded && (
+                        <div
+                          role="alert"
+                          style={{
+                            fontSize: 13,
+                            color: "#e74c3c",
+                            background: "rgba(231,76,60,0.07)",
+                            border: "1px solid rgba(231,76,60,0.2)",
+                            borderRadius: 5,
+                            padding: "8px 12px",
+                            marginTop: 10,
+                          }}
+                        >
+                          ⚠ {t("create.passenger_detour_exceeded")}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </>
@@ -2743,6 +2890,7 @@ export default function TripCycle({
                   hidden={stage !== "passengers"}
                   style={{ display: "contents" }}
                 >
+                  {genderPreferenceSection}
                   <div>
                     <label style={labelStyle}>
                       {t("create.number_of_passengers")}

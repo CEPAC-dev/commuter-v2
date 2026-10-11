@@ -32,6 +32,7 @@ type WaitingListTrip = {
   arrivalTime: string;
   vehicleType: string;
   numberOfPassengers: number;
+  preferedGender: "male" | "female" | null;
   fare: number;
 };
 
@@ -412,6 +413,7 @@ export default function WaitingListClient() {
                         <span><b>{t("admin.waiting_list.pickup_time")}:</b> {trip.pickupTime}</span>
                         <span><b>{t("admin.waiting_list.arrival_time")}:</b> {trip.arrivalTime}</span>
                         <span><b>{t("admin.waiting_list.passengers")}:</b> {trip.numberOfPassengers}</span>
+                        <span><b>{t("admin.waiting_list.gender_preference")}:</b> {trip.preferedGender ? t(`gender.${trip.preferedGender}`) : t("admin.waiting_list.no_gender_preference")}</span>
                         <span><b>{t("admin.waiting_list.fare")}:</b> {formatEgp(locale, trip.fare)}</span>
                       </div>
                     </div>

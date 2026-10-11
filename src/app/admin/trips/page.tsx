@@ -17,6 +17,7 @@ import {
 import AdminDateRangeCalendar from "@/components/admin/AdminDateRangeCalendar";
 import AdminTripMap, { type TripMapPoint } from "@/components/admin/AdminTripMap";
 import { AdminPageHeader } from "@/components/admin/layout";
+import { useClientLocale } from "@/lib/locale.client";
 
 interface DriverOption {
   _id: string;
@@ -32,6 +33,7 @@ interface TripRow {
   date: string;
   pickupTime: string;
   arrivalTime: string;
+  preferedGender?: "male" | "female" | null;
   createdAt?: string;
   pickup?: { address?: string; lat?: number; lng?: number } | null;
   dropoff?: { address?: string; lat?: number; lng?: number } | null;
@@ -207,6 +209,7 @@ function renderDetailValue(value: unknown): string {
 }
 
 export default function AdminTripsPage() {
+  const { t } = useClientLocale();
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -1054,6 +1057,11 @@ export default function AdminTripsPage() {
                               ? `User #${trip.userId.userNumber}`
                               : (trip.userId?.email ?? "—")}
                           </div>
+                          {trip.preferedGender ? (
+                            <div style={{ fontSize: 11, color: "var(--color-secondary-deep)", marginTop: 2 }}>
+                              {t("admin.trip.gender_preference")}: {t(`gender.${trip.preferedGender}`)}
+                            </div>
+                          ) : null}
                         </td>
                         <td>
                           <div className="addr-cell" title={trip.pickup?.address ?? undefined}>
@@ -1417,8 +1425,17 @@ export default function AdminTripsPage() {
                         .filter(([key]) => !DETAIL_HIDDEN_KEYS.has(key))
                         .map(([key, value]) => (
                           <div className="detail-item" key={key}>
-                            <span className="k">{titleize(key)}</span>
-                            <span className="v">{renderDetailValue(value)}</span>
+                            <span className="k">
+                              {key === "preferedGender"
+                                ? t("admin.trip.gender_preference")
+                                : titleize(key)}
+                            </span>
+                            <span className="v">
+                              {key === "preferedGender" &&
+                              (value === "male" || value === "female")
+                                ? t(`gender.${value}`)
+                                : renderDetailValue(value)}
+                            </span>
                           </div>
                         ))}
                     </div>
