@@ -64,6 +64,7 @@ import {
   isTransientBookingConflict,
   spacingLockUpsertFields,
 } from "@/lib/phase8bGuards";
+import { ensureTripSpacingLockTtlIndex } from "@/lib/tripSpacingLockIndex";
 
 function stationPayload(
   station: Pick<GeoStation, "id" | "lat" | "lng" | "name" | "regionCode">,
@@ -728,13 +729,7 @@ export async function POST(req: NextRequest) {
     const spacingLockCollection = db.collection<TripSpacingLockDocument>(
       "trip_spacing_locks",
     );
-    await spacingLockCollection.createIndex(
-      { updatedAt: 1 },
-      {
-        expireAfterSeconds: 30 * 24 * 60 * 60,
-        name: "trip_spacing_locks_updatedAt_ttl",
-      },
-    );
+    await ensureTripSpacingLockTtlIndex(spacingLockCollection);
     const spacingLockIds = dates.map((date) => `${userId}:${date}`);
     for (const lockId of spacingLockIds) {
       try {

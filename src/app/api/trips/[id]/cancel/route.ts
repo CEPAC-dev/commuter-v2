@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Trip } from "@/models/Trip";
 import { Payment } from "@/models/Payment";
+import { WalletTransaction } from "@/models/WalletTransaction";
 import { Request } from "@/models/Request";
 import { RefundRequest } from "@/models/RefundRequest";
 import { Ride } from "@/models/Ride";
@@ -18,6 +19,7 @@ import {
 } from "@/lib/standaloneTripCancellation";
 import { cancelStandaloneTripPayments } from "@/lib/services/standaloneTripExpiry";
 import { releasePromoCodeUsageForTrip } from "@/lib/promoCode";
+import { releaseReservation } from "@/lib/wallet/wallet";
 
 const REQUEST_NOT_CANCELLABLE = "REQUEST_NOT_CANCELLABLE";
 
@@ -244,37 +246,74 @@ export async function POST(
                   { new: true, session: dbSession },
                 );
                 if (updatedTrip) {
-                  await Payment.updateMany(
-                    {
-                      bookingId: trip._id,
-                      overallStatus: {
-                        $in: ["created", "wallet_reserved", "kashier_pending"],
-                      },
+                  const activePayments = await Payment.find({
+                    bookingId: trip._id,
+                    overallStatus: {
+                      $in: ["created", "wallet_reserved", "kashier_pending"],
                     },
-                    {
-                      $set: {
-                        overallStatus: "cancelled",
-                      },
-                      $push: {
-                        timeline: {
-                          event: "trip_cancelled",
-                          detail:
-                            "Standalone trip cancelled before payment completed.",
-                          actor: "system",
+                  })
+                    .select("_id walletStatus walletReservationTxId gatewayStatus")
+                    .session(dbSession)
+                    .lean<
+                      {
+                        _id: Types.ObjectId;
+                        walletStatus: string;
+                        walletReservationTxId?: Types.ObjectId | null;
+                        gatewayStatus: string;
+                      }[]
+                    >();
+                  for (const payment of activePayments) {
+                    let walletStatus = payment.walletStatus;
+                    if (walletStatus === "reserved") {
+                      const reservation = payment.walletReservationTxId
+                        ? { _id: payment.walletReservationTxId }
+                        : await WalletTransaction.findOne({
+                            paymentId: payment._id,
+                            type: "payment_reserved",
+                            status: "pending",
+                          })
+                            .select("_id")
+                            .session(dbSession)
+                            .lean<{ _id: Types.ObjectId } | null>();
+                      if (reservation) {
+                        await releaseReservation(String(reservation._id), {
+                          description: `Released — trip ${String(trip._id)} cancelled before payment.`,
+                          paymentId: String(payment._id),
+                          bookingId: String(trip._id),
+                          session: dbSession,
+                        });
+                        walletStatus = "released";
+                      } else {
+                        walletStatus = "none";
+                      }
+                    }
+                    await Payment.updateOne(
+                      {
+                        _id: payment._id,
+                        overallStatus: {
+                          $in: ["created", "wallet_reserved", "kashier_pending"],
                         },
                       },
-                    },
-                    { session: dbSession },
-                  );
-                  await Payment.updateMany(
-                    {
-                      bookingId: trip._id,
-                      overallStatus: "cancelled",
-                      gatewayStatus: "pending",
-                    },
-                    { $set: { gatewayStatus: "cancelled" } },
-                    { session: dbSession },
-                  );
+                      {
+                        $set: {
+                          overallStatus: "cancelled",
+                          walletStatus,
+                          ...(payment.gatewayStatus === "pending"
+                            ? { gatewayStatus: "cancelled" }
+                            : {}),
+                        },
+                        $push: {
+                          timeline: {
+                            event: "trip_cancelled",
+                            detail:
+                              "Standalone trip cancelled before payment completed.",
+                            actor: "system",
+                          },
+                        },
+                      },
+                      { session: dbSession },
+                    );
+                  }
                   await releasePromoCodeUsageForTrip(
                     String(trip._id),
                     dbSession,

@@ -28,11 +28,124 @@ import {
 import { settleStandaloneTripPayment } from "@/lib/payments/standaloneTripSettlement";
 import { shouldResetFailedTripForRetry } from "@/lib/payments/settlementAttempt";
 import { safeKashierErrorFields } from "@/lib/phase8bGuards";
+import { isProduction } from "@/lib/environment";
+import {
+  canContinueStandaloneTripPayment,
+  formatKashierAmount,
+  splitTripPaymentAmount,
+  validatePaymentAppUrl,
+} from "@/lib/payments/sessionGuards";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
     ? "https://api.kashier.io/v3/payment/sessions"
     : "https://test-api.kashier.io/v3/payment/sessions";
+const ACTIVE_PAYMENT_STATUSES = [
+  "created",
+  "wallet_reserved",
+  "kashier_pending",
+] as const;
+const ACTIVE_PAYMENT_STATUS_SET = new Set<string>(ACTIVE_PAYMENT_STATUSES);
+
+async function tripPaymentCanContinue(
+  tripId: Types.ObjectId,
+  paymentId: Types.ObjectId,
+  localReservationTxId?: string | null,
+): Promise<boolean> {
+  const [trip, payment] = await Promise.all([
+    Trip.findOne({ _id: tripId, requestId: null })
+      .select("status paymentStatus")
+      .lean<{ status: string; paymentStatus: string } | null>(),
+    Payment.findOne({ _id: paymentId, bookingId: tripId })
+      .select(
+        "overallStatus walletStatus walletReservationTxId gatewayStatus",
+      )
+      .lean<{
+        overallStatus: string;
+        walletStatus: string;
+        walletReservationTxId?: Types.ObjectId | null;
+        gatewayStatus: string;
+      } | null>(),
+  ]);
+
+  if (
+    payment &&
+    trip &&
+    canContinueStandaloneTripPayment({
+      tripStatus: trip.status,
+      tripPaymentStatus: trip.paymentStatus,
+      paymentStatus: payment.overallStatus,
+    })
+  ) {
+    return true;
+  }
+  if (!payment) {
+    if (localReservationTxId) {
+      await releaseReservation(localReservationTxId, {
+        description: `Released — trip ${String(tripId)} is no longer payable.`,
+        paymentId: String(paymentId),
+        bookingId: String(tripId),
+      });
+    }
+    return false;
+  }
+
+  let walletStatus = payment.walletStatus;
+  let released = false;
+  const reservationTxId =
+    localReservationTxId ??
+    (walletStatus === "reserved" && payment.walletReservationTxId
+      ? String(payment.walletReservationTxId)
+      : null);
+  if (reservationTxId) {
+    released = await releaseReservation(
+      reservationTxId,
+      {
+        description: `Released — trip ${String(tripId)} is no longer payable.`,
+        paymentId: String(paymentId),
+        bookingId: String(tripId),
+      },
+    );
+    if (released) walletStatus = "released";
+  }
+  const setCancelled = {
+    overallStatus: "cancelled",
+    walletStatus,
+    ...(payment.gatewayStatus === "pending"
+      ? { gatewayStatus: "cancelled" }
+      : {}),
+  };
+  if (ACTIVE_PAYMENT_STATUS_SET.has(payment.overallStatus)) {
+    await Payment.updateOne(
+      { _id: paymentId, overallStatus: { $in: ACTIVE_PAYMENT_STATUSES } },
+      {
+        $set: setCancelled,
+        $push: { timeline: { event: "trip_not_payable" } },
+      },
+    );
+  } else if (
+    payment.overallStatus === "cancelled" &&
+    released &&
+    payment.walletStatus !== "released"
+  ) {
+    await Payment.updateOne(
+      {
+        _id: paymentId,
+        overallStatus: "cancelled",
+        walletStatus: payment.walletStatus,
+      },
+      { $set: { walletStatus: "released" } },
+    );
+  }
+  return false;
+}
+
+function tripNotPayableResponse() {
+  return NextResponse.json(
+    { errorCode: "TRIP_NOT_PAYABLE", error: "This trip is no longer payable." },
+    { status: 409 },
+  );
+}
 
 /**
  * Create a mixed-payment session for a booking. Server computes the
@@ -142,7 +255,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const totalEgp = Number(resolved.amountEgp);
+  let totalEgp = Number(resolved.amountEgp);
   if (!Number.isFinite(totalEgp) || totalEgp < 0)
     return NextResponse.json(
       { error: "Invalid booking amount." },
@@ -151,15 +264,45 @@ export async function POST(req: NextRequest) {
 
   // ── Server-side split (NEVER trust client) ──
   let walletAmount = 0;
+  let availableWalletEgp = 0;
   if (useWallet) {
     const wallet = await getOrCreateWallet(session.userId);
-    const available = Math.max(
+    availableWalletEgp = Math.max(
       0,
       (wallet.balanceEgp ?? 0) - (wallet.reservedBalanceEgp ?? 0),
     );
-    walletAmount = Math.min(totalEgp, available);
+    walletAmount = Math.min(totalEgp, availableWalletEgp);
+  }
+  if (resolved.kind === "trip") {
+    const split = splitTripPaymentAmount(
+      totalEgp,
+      availableWalletEgp,
+      useWallet,
+    );
+    totalEgp = split.totalEgp;
+    walletAmount = split.walletAmountEgp;
   }
   const gatewayAmount = totalEgp - walletAmount;
+  let tripAppUrl: string | null = null;
+  if (resolved.kind === "trip" && gatewayAmount > 0) {
+    const validation = validatePaymentAppUrl(
+      process.env.APP_URL,
+      isProduction,
+    );
+    if (!validation.valid) {
+      console.error("Invalid APP_URL for Kashier session", {
+        host: validation.host,
+      });
+      return NextResponse.json(
+        {
+          errorCode: "INVALID_APP_URL",
+          error: "APP_URL must be an absolute public URL for payment checkout.",
+        },
+        { status: 500 },
+      );
+    }
+    tripAppUrl = validation.baseUrl;
+  }
 
   // ── Create Payment aggregate ──
   // Guard against double-checkout races (two tabs, double-click): the unique
@@ -174,7 +317,12 @@ export async function POST(req: NextRequest) {
       totalEgp,
       walletAmountEgp: walletAmount,
       gatewayAmountEgp: gatewayAmount,
-      walletStatus: walletAmount > 0 ? "reserved" : "none",
+      walletStatus:
+        resolved.kind === "trip"
+          ? "none"
+          : walletAmount > 0
+            ? "reserved"
+            : "none",
       gatewayStatus: gatewayAmount > 0 ? "pending" : "none",
       overallStatus: "created",
       timeline: [
@@ -255,17 +403,47 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
+  if (
+    resolved.kind === "trip" &&
+    !(await tripPaymentCanContinue(bookingObjectId, payment._id))
+  ) {
+    return tripNotPayableResponse();
+  }
+
   // ── Wallet reservation (if any) ──
   let reservationTxId: string | null = null;
   if (walletAmount > 0) {
+    if (
+      resolved.kind === "trip" &&
+      !(await tripPaymentCanContinue(
+        bookingObjectId,
+        payment._id,
+      ))
+    ) {
+      return tripNotPayableResponse();
+    }
     const reserved = await reserveWallet(session.userId, walletAmount, {
       description: `Reserved for booking ${booking._id}`,
       paymentId: String(payment._id),
       bookingId: String(booking._id),
     });
     if (!reserved) {
+      if (
+        resolved.kind === "trip" &&
+        !(await tripPaymentCanContinue(
+          bookingObjectId,
+          payment._id,
+        ))
+      ) {
+        return tripNotPayableResponse();
+      }
       await Payment.updateOne(
-        { _id: payment._id },
+        resolved.kind === "trip"
+          ? {
+              _id: payment._id,
+              overallStatus: { $in: ACTIVE_PAYMENT_STATUSES },
+            }
+          : { _id: payment._id },
         {
           $set: { overallStatus: "failed", walletStatus: "none" },
           $push: { timeline: { event: "wallet_reservation_failed" } },
@@ -279,18 +457,33 @@ export async function POST(req: NextRequest) {
       );
     }
     reservationTxId = reserved.transactionId;
-    await Payment.updateOne(
-      { _id: payment._id },
+    const reservationTransition = await Payment.updateOne(
+      resolved.kind === "trip"
+        ? { _id: payment._id, overallStatus: "created" }
+        : { _id: payment._id },
       {
         $set: {
           walletReservationTxId: new Types.ObjectId(reservationTxId),
           overallStatus: "wallet_reserved",
+          walletStatus: "reserved",
         },
         $push: {
           timeline: { event: "wallet_reserved", detail: `${walletAmount} EGP` },
         },
       },
     );
+    if (
+      resolved.kind === "trip" &&
+      reservationTransition.modifiedCount !== 1
+    ) {
+      await releaseReservation(reservationTxId, {
+        description: `Released — trip ${String(booking._id)} is no longer payable.`,
+        paymentId: String(payment._id),
+        bookingId: String(booking._id),
+      });
+      await tripPaymentCanContinue(bookingObjectId, payment._id);
+      return tripNotPayableResponse();
+    }
   }
 
   // ── Wallet-only fast path (no Kashier call) ──
@@ -314,7 +507,10 @@ export async function POST(req: NextRequest) {
           });
         }
         await Payment.updateOne(
-          { _id: payment._id },
+          {
+            _id: payment._id,
+            overallStatus: { $in: ACTIVE_PAYMENT_STATUSES },
+          },
           {
             $set: {
               overallStatus: "cancelled",
@@ -462,7 +658,12 @@ export async function POST(req: NextRequest) {
       });
     }
     await Payment.updateOne(
-      { _id: payment._id },
+      resolved.kind === "trip"
+        ? {
+            _id: payment._id,
+            overallStatus: { $in: ACTIVE_PAYMENT_STATUSES },
+          }
+        : { _id: payment._id },
       {
         $set: {
           overallStatus: "failed",
@@ -478,10 +679,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const appUrl = process.env.APP_URL?.replace(/\/+$/, "");
+  const appUrl =
+    tripAppUrl ?? process.env.APP_URL?.replace(/\/+$/, "");
   if (!appUrl) {
+    if (resolved.kind === "request") {
+      return NextResponse.json(
+        { error: "APP_URL is not configured on the server." },
+        { status: 500 },
+      );
+    }
     return NextResponse.json(
-      { error: "APP_URL is not configured on the server." },
+      {
+        errorCode: "INVALID_APP_URL",
+        error: "APP_URL must be an absolute public URL for payment checkout.",
+      },
       { status: 500 },
     );
   }
@@ -490,7 +701,10 @@ export async function POST(req: NextRequest) {
   const kashierBody = {
     merchantOrderId: String(payment._id),
     merchantId: process.env.KASHIER_MERCHANT_ID!,
-    amount: String(gatewayAmount),
+    amount:
+      resolved.kind === "trip"
+        ? formatKashierAmount(gatewayAmount)
+        : String(gatewayAmount),
     currency: "EGP",
     paymentType: "credit",
     type: "one-time",
@@ -502,6 +716,17 @@ export async function POST(req: NextRequest) {
     merchantRedirect: `${appUrl}/checkout/callback?bookingId=${bookingId}&paymentId=${payment._id}`,
     serverWebhook: `${appUrl}/api/payments/webhook`,
   };
+
+  if (
+    resolved.kind === "trip" &&
+    !(await tripPaymentCanContinue(
+      bookingObjectId,
+      payment._id,
+      reservationTxId,
+    ))
+  ) {
+    return tripNotPayableResponse();
+  }
 
   let kashierRes: Response;
   try {
@@ -527,7 +752,12 @@ export async function POST(req: NextRequest) {
       });
     }
     await Payment.updateOne(
-      { _id: payment._id },
+      resolved.kind === "trip"
+        ? {
+            _id: payment._id,
+            overallStatus: { $in: ACTIVE_PAYMENT_STATUSES },
+          }
+        : { _id: payment._id },
       {
         $set: {
           overallStatus: "failed",
@@ -556,6 +786,22 @@ export async function POST(req: NextRequest) {
         bookingId: String(booking._id),
       });
     }
+    if (resolved.kind === "trip") {
+      await Payment.updateOne(
+        {
+          _id: payment._id,
+          overallStatus: { $in: ACTIVE_PAYMENT_STATUSES },
+        },
+        {
+          $set: {
+            overallStatus: "failed",
+            walletStatus: walletAmount > 0 ? "released" : "none",
+            gatewayStatus: "failed",
+          },
+          $push: { timeline: { event: "kashier_invalid_response" } },
+        },
+      );
+    }
     return NextResponse.json(
       { error: "Payment gateway returned non-JSON response" },
       { status: 502 },
@@ -576,7 +822,12 @@ export async function POST(req: NextRequest) {
       });
     }
     await Payment.updateOne(
-      { _id: payment._id },
+      resolved.kind === "trip"
+        ? {
+            _id: payment._id,
+            overallStatus: { $in: ACTIVE_PAYMENT_STATUSES },
+          }
+        : { _id: payment._id },
       {
         $set: {
           overallStatus: "failed",
@@ -593,8 +844,13 @@ export async function POST(req: NextRequest) {
   }
 
   const kashierSessionId = String(kashierData._id ?? "");
-  await Payment.updateOne(
-    { _id: payment._id },
+  const sessionTransition = await Payment.updateOne(
+    resolved.kind === "trip"
+      ? {
+          _id: payment._id,
+          overallStatus: { $in: ["created", "wallet_reserved"] },
+        }
+      : { _id: payment._id },
     {
       $set: {
         kashierSessionId,
@@ -609,6 +865,20 @@ export async function POST(req: NextRequest) {
       },
     },
   );
+  if (
+    resolved.kind === "trip" &&
+    sessionTransition.modifiedCount !== 1
+  ) {
+    if (reservationTxId) {
+      await releaseReservation(reservationTxId, {
+        description: `Released — trip ${String(booking._id)} is no longer payable.`,
+        paymentId: String(payment._id),
+        bookingId: String(booking._id),
+      });
+    }
+    await tripPaymentCanContinue(bookingObjectId, payment._id);
+    return tripNotPayableResponse();
+  }
 
   // Keep booking-level Kashier hints for legacy readers.
   if (resolved.kind === "request") {
@@ -618,7 +888,12 @@ export async function POST(req: NextRequest) {
     });
   } else {
     await Trip.updateOne(
-      { _id: bookingObjectId, requestId: null },
+      {
+        _id: bookingObjectId,
+        requestId: null,
+        status: { $in: ["pending_payment", "approved"] },
+        paymentStatus: { $in: ["pending", "failed"] },
+      },
       {
         $set: {
           kashierSessionId,

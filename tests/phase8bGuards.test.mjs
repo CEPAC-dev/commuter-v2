@@ -10,6 +10,15 @@ const {
   safeKashierErrorFields,
   spacingLockUpsertFields,
 } = await import("../src/lib/phase8bGuards.ts");
+const {
+  canContinueStandaloneTripPayment,
+  formatKashierAmount,
+  splitTripPaymentAmount,
+  validatePaymentAppUrl,
+} = await import("../src/lib/payments/sessionGuards.ts");
+const { ensureTripSpacingLockTtlIndex } = await import(
+  "../src/lib/tripSpacingLockIndex.ts"
+);
 
 test("server accepts exactly one expanded Trip and rejects zero or multiple", () => {
   assert.equal(getSingleTripPayloadError(0), "INVALID_TRIP_COUNT");
@@ -61,6 +70,18 @@ test("session creation and expiry serialize on the standalone Trip record", asyn
     "utf8",
   );
   assert.match(route, /withTransaction\(async \(\) => \{[\s\S]*?Trip\.updateOne\([\s\S]*?Payment\.create/);
+  assert.ok(
+    route.indexOf("tripPaymentCanContinue(bookingObjectId, payment._id)") >
+      route.indexOf("withTransaction"),
+  );
+  assert.ok(
+    route.indexOf("tripPaymentCanContinue(bookingObjectId, payment._id)") <
+      route.indexOf("reserveWallet(session.userId"),
+  );
+  assert.ok(
+    route.indexOf("tripPaymentCanContinue(bookingObjectId, payment._id)") <
+      route.indexOf("fetch(KASHIER_URL"),
+  );
   assert.match(expiryService, /Trip\.updateOne\([\s\S]*?Payment\.exists\([\s\S]*?\.session\(input\.session\)/);
 });
 
@@ -103,11 +124,66 @@ test("unpaid cancellation conflicts with session creation on the same Trip", asy
   );
   assert.match(
     route,
-    /withTransaction\(async \(\) => \{[\s\S]*?Trip\.findOneAndUpdate\([\s\S]*?Payment\.updateMany\([\s\S]*?\{ session: dbSession \}/,
+    /withTransaction\(async \(\) => \{[\s\S]*?Trip\.findOneAndUpdate\([\s\S]*?releaseReservation\([\s\S]*?session: dbSession[\s\S]*?Payment\.updateOne\(/,
   );
 });
 
-test("spacing locks refresh a Date TTL field and transient exhausted conflicts are retryable", async () => {
+test("session cancellation checkpoint prevents reservation and gateway creation", async () => {
+  const beforeReservation = {
+    tripStatus: "pending_payment",
+    tripPaymentStatus: "pending",
+    paymentStatus: "created",
+    reservations: 0,
+    gatewaySessions: 0,
+  };
+  beforeReservation.tripStatus = "cancelled";
+  beforeReservation.paymentStatus = "cancelled";
+  if (
+    canContinueStandaloneTripPayment({
+      tripStatus: beforeReservation.tripStatus,
+      tripPaymentStatus: beforeReservation.tripPaymentStatus,
+      paymentStatus: beforeReservation.paymentStatus,
+    })
+  ) {
+    beforeReservation.reservations += 1;
+    beforeReservation.gatewaySessions += 1;
+  }
+  assert.equal(beforeReservation.reservations, 0);
+  assert.equal(beforeReservation.gatewaySessions, 0);
+  assert.equal(beforeReservation.paymentStatus, "cancelled");
+
+  const beforeGateway = {
+    tripStatus: "cancelled",
+    tripPaymentStatus: "pending",
+    paymentStatus: "cancelled",
+    walletReservedEgp: 37.3,
+    gatewaySessions: 0,
+  };
+  beforeGateway.walletReservedEgp = 0;
+  if (
+    canContinueStandaloneTripPayment({
+      tripStatus: beforeGateway.tripStatus,
+      tripPaymentStatus: beforeGateway.tripPaymentStatus,
+      paymentStatus: beforeGateway.paymentStatus,
+    })
+  ) {
+    beforeGateway.gatewaySessions += 1;
+  }
+  assert.equal(beforeGateway.walletReservedEgp, 0);
+  assert.equal(beforeGateway.gatewaySessions, 0);
+  assert.equal(beforeGateway.paymentStatus, "cancelled");
+
+  const route = await readFile(
+    new URL("../src/app/api/payments/session/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    route,
+    /overallStatus: "created"[\s\S]*?overallStatus: \{ \$in: \["created", "wallet_reserved"\] \}/,
+  );
+});
+
+test("spacing locks refresh a Date TTL field and transaction conflicts are classified", async () => {
   const now = new Date("2026-10-11T10:00:00Z");
   assert.deepEqual(spacingLockUpsertFields(now), {
     createdAt: now,
@@ -126,15 +202,102 @@ test("spacing locks refresh a Date TTL field and transient exhausted conflicts a
     }),
     true,
   );
+  assert.equal(
+    isTransientBookingConflict({
+      errorLabels: ["UnknownTransactionCommitResult"],
+    }),
+    true,
+  );
+  assert.equal(
+    isTransientBookingConflict({
+      code: 251,
+      errorLabels: ["TransientTransactionError"],
+    }),
+    true,
+  );
+  assert.equal(
+    isTransientBookingConflict({ code: 251, message: "NoSuchTransaction" }),
+    false,
+  );
+  assert.equal(
+    isTransientBookingConflict({
+      code: 251,
+      errorLabels: ["NonTransientTransactionError"],
+    }),
+    false,
+  );
   assert.equal(isTransientBookingConflict(new Error("unrelated")), false);
 
   const route = await readFile(
     new URL("../src/app/api/trips/route.ts", import.meta.url),
     "utf8",
   );
-  assert.match(route, /createIndex\(\s*\{ updatedAt: 1 \}[\s\S]*?expireAfterSeconds: 30 \* 24 \* 60 \* 60/);
+  assert.doesNotMatch(route, /createIndex\(/);
+  assert.match(route, /ensureTripSpacingLockTtlIndex\(spacingLockCollection\)/);
   assert.match(route, /\$setOnInsert: spacingLockUpsertFields\(now\)/);
   assert.match(route, /errorCode: "BOOKING_BUSY"[\s\S]*?status: 503/);
+
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  let attempts = 0;
+  try {
+    await ensureTripSpacingLockTtlIndex({
+      createIndex: async () => {
+        attempts += 1;
+        throw new Error("permission denied");
+      },
+    });
+    await ensureTripSpacingLockTtlIndex({
+      createIndex: async () => {
+        attempts += 1;
+      },
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(attempts, 1);
+  assert.equal(warnings.length, 1);
+});
+
+test("Trip session amounts use integer piasters and Kashier-safe formatting", () => {
+  const split = splitTripPaymentAmount(150, 37.3, true);
+  assert.deepEqual(split, {
+    totalEgp: 150,
+    walletAmountEgp: 37.3,
+    gatewayAmountEgp: 112.7,
+  });
+  assert.equal(split.walletAmountEgp + split.gatewayAmountEgp, split.totalEgp);
+  assert.equal(formatKashierAmount(split.gatewayAmountEgp), "112.7");
+  assert.equal(formatKashierAmount(150), "150");
+});
+
+test("APP_URL validation accepts local development and rejects unsafe production hosts", () => {
+  assert.equal(
+    validatePaymentAppUrl("http://localhost:3000", false).valid,
+    true,
+  );
+  assert.equal(
+    validatePaymentAppUrl("https://commuter.example", true).valid,
+    true,
+  );
+  assert.equal(
+    validatePaymentAppUrl("http://commuter.example", true).valid,
+    false,
+  );
+  for (const url of [
+    "https://localhost",
+    "https://127.0.0.1",
+    "https://10.0.0.8",
+    "https://172.20.0.1",
+    "https://192.168.1.1",
+    "https://[::1]",
+    "https://[::ffff:7f00:1]",
+    "/checkout/callback",
+    undefined,
+  ]) {
+    assert.equal(validatePaymentAppUrl(url, true).valid, false, String(url));
+  }
 });
 
 test("late success for every dead Trip status alerts once without changing money state", async () => {
@@ -154,6 +317,13 @@ test("late success for every dead Trip status alerts once without changing money
   assert.match(adminActivity, /href: `\/admin\/transactions\/\$\{paymentId\}`/);
   assert.match(notificationModel, /AdminActivityNotificationSchema\.index\(\s*\{ adminId: 1, dedupeKey: 1 \},\s*\{\s*unique: true/s);
   assert.match(webhook, /if \(paid\) \{\s*await notifyAdminsOfLateTripPayment/);
+  const tripPaymentStart = webhook.indexOf("// 3) Mixed-payment Payment doc");
+  const duplicateBranchStart = webhook.indexOf("if (!claimed)", tripPaymentStart);
+  const duplicateBranchEnd = webhook.indexOf("const mixedBooking", duplicateBranchStart);
+  assert.match(
+    webhook.slice(duplicateBranchStart, duplicateBranchEnd),
+    /duplicatePayment[\s\S]*?notifyAdminsOfLateTripPayment/,
+  );
   const kashier = await readFile(
     new URL("../src/lib/payments/kashier.ts", import.meta.url),
     "utf8",
@@ -220,6 +390,17 @@ test("Kashier log projection excludes raw response/session/card fields", async (
     message: "Payment was declined",
     orderId: "order-1",
   });
+  const unknownShape = safeKashierErrorFields({
+    requestId: "must-not-be-logged",
+    unexpectedField: "sensitive-value",
+  });
+  assert.deepEqual(unknownShape, {
+    responseKeys: ["requestId", "unexpectedField"],
+  });
+  assert.doesNotMatch(
+    JSON.stringify(unknownShape),
+    /must-not-be-logged|sensitive-value/,
+  );
   const route = await readFile(
     new URL("../src/app/api/payments/session/route.ts", import.meta.url),
     "utf8",

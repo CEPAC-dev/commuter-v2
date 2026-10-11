@@ -347,6 +347,25 @@ export async function POST(req: NextRequest) {
         { $addToSet: { kashierTransactionIds: transactionId } },
       );
       if (!claimed) {
+        const duplicatePayment = await Payment.exists({
+          _id: payment._id,
+          kashierTransactionIds: transactionId,
+        });
+        if (duplicatePayment && paid) {
+          const duplicateBooking = await resolvePayableBooking(
+            String(payment.bookingId),
+            String(payment.userId),
+          );
+          if (
+            duplicateBooking?.kind === "trip" &&
+            isTripSettlementBlocked(duplicateBooking.status)
+          ) {
+            await notifyAdminsOfLateTripPayment(
+              String(payment._id),
+              String(duplicateBooking.doc._id),
+            );
+          }
+        }
         return NextResponse.json(
           { error: "Transaction already processed" },
           { status: 400 },

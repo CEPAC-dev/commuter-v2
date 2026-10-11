@@ -24,6 +24,21 @@ function amount(value: number): number {
   return value;
 }
 
+function reservationAmount(value: number): number {
+  const piasters = Math.round(value * 100);
+  if (
+    !Number.isFinite(value) ||
+    !Number.isSafeInteger(piasters) ||
+    piasters <= 0 ||
+    piasters > MAX_WALLET_AMOUNT_EGP * 100 ||
+    Math.abs(value * 100 - piasters) > 1e-7
+  )
+    throw new RangeError(
+      "Wallet reservation must be a positive amount with at most two decimals.",
+    );
+  return piasters / 100;
+}
+
 function description(value: string): string {
   if (typeof value !== "string") throw new TypeError("Invalid description");
   const normalized = value.normalize("NFKC").trim();
@@ -416,7 +431,7 @@ export async function reserveWallet(
 ): Promise<{ transactionId: string; availableEgp: number } | null> {
   await connectDB();
   const uid = objectId(userId, "userId");
-  const safeAmount = amount(amountEgp);
+  const safeAmount = reservationAmount(amountEgp);
   const safeDescription = description(opts.description);
   const paymentId = objectId(opts.paymentId, "paymentId");
   const bookingId = opts.bookingId
