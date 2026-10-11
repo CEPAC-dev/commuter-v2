@@ -48,7 +48,7 @@ export async function GET(
     tx.bookingId
       ? Trip.find({ requestId: tx.bookingId })
           .select(
-            "tripNumber date cycleIndex pickup.address dropoff.address vehicleType rideType pickupTime arrivalTime priceEgp paymentStatus status cancellation adminRefund",
+            "tripNumber date cycleIndex pickup.address dropoff.address vehicleType rideType pickupTime arrivalTime priceEgp preferedGender paymentStatus status cancellation adminRefund",
           )
           .sort({ date: 1, cycleIndex: 1 })
           .lean<Record<string, unknown>[]>()
@@ -132,6 +132,7 @@ export async function GET(
       pickupTime: trip.pickupTime,
       arrivalTime: trip.arrivalTime,
       priceEgp: trip.priceEgp,
+      preferedGender: trip.preferedGender ?? null,
       paymentStatus: trip.paymentStatus,
       status: trip.status,
       cancellation: trip.cancellation ?? null,

@@ -69,7 +69,18 @@ test('passenger projection and response mapping exclude sensitive fields', () =>
   const mapped = mapWaitingListRequest({
     request: { _id: 'request-id', createdAt: '2026-09-28T12:00:00.000Z', amountEgp: 100, note: 'note' },
     passenger: { name: 'Passenger', phone: '0100', email: 'passenger@example.com', password: 'secret', wallet: { balanceEgp: 500 } },
-    trips: [],
+    trips: [
+      {
+        _id: 'trip-id',
+        date: '2026-10-11',
+        pickupTime: '09:00',
+        arrivalTime: '10:00',
+        vehicleType: 'shared_car',
+        numberOfPassengers: 1,
+        preferedGender: 'female',
+        priceEgp: 100,
+      },
+    ],
     promoCodes: [],
     hasPastTrip: false,
   });
@@ -81,6 +92,7 @@ test('passenger projection and response mapping exclude sensitive fields', () =>
   assert.equal('password' in mapped.passenger, false);
   assert.equal('wallet' in mapped.passenger, false);
   assert.equal(mapped.hasPastTrip, false);
+  assert.equal(mapped.trips[0].preferedGender, 'female');
 });
 
 test('promo release grouping is empty when a request has no promo usage', () => {

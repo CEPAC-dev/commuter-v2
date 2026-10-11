@@ -7,6 +7,12 @@ import { User } from "@/models/User";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { Types } from "mongoose";
+import {
+  escapeRegexLiteral,
+  isReferralDescriptionCategory,
+  referralDescriptionPattern,
+  type ReferralDescriptionCategory,
+} from "@/lib/admin/transactionDescriptionFilters";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,6 +23,8 @@ export interface TxFilters {
   search?: string;
   status?: string[];
   type?: string[];
+  descriptionCategory?: ReferralDescriptionCategory;
+  descriptionSearch?: string;
   paymentMethod?: "wallet" | "kashier" | "mixed" | null;
   dateFrom?: Date | null;
   dateTo?: Date | null;
@@ -38,10 +46,15 @@ export function parseFilters(sp: URLSearchParams): TxFilters {
     return Number.isNaN(d.getTime()) ? null : d;
   };
   const many = (key: string) => sp.getAll(key).filter(Boolean);
+  const rawDescriptionCategory = sp.get("descriptionCategory");
   return {
     search: sp.get("search")?.trim() || undefined,
     status: many("status"),
     type: many("type"),
+    descriptionCategory: isReferralDescriptionCategory(rawDescriptionCategory)
+      ? rawDescriptionCategory
+      : undefined,
+    descriptionSearch: sp.get("descriptionSearch")?.trim() || undefined,
     paymentMethod:
       (sp.get("paymentMethod") as TxFilters["paymentMethod"]) || null,
     dateFrom: parseDate(sp.get("dateFrom")),
@@ -58,7 +71,9 @@ export async function buildTxQuery(
 ): Promise<Record<string, unknown>> {
   const q: Record<string, unknown> = {};
   if (f.status && f.status.length) q.status = { $in: f.status };
-  if (f.type && f.type.length) q.type = { $in: f.type };
+  const typeConstraints: string[][] = [];
+  if (f.type?.length) typeConstraints.push(f.type);
+  if (f.descriptionCategory) typeConstraints.push(["referral_bonus"]);
   if (f.userId && Types.ObjectId.isValid(f.userId))
     q.userId = new Types.ObjectId(f.userId);
   if (f.bookingId && Types.ObjectId.isValid(f.bookingId))
@@ -105,33 +120,54 @@ export async function buildTxQuery(
     }
     q.$or = or;
   }
+  const descriptionFilters: Record<string, unknown>[] = [];
+  if (f.descriptionCategory) {
+    descriptionFilters.push({
+      description: referralDescriptionPattern(f.descriptionCategory),
+    });
+  }
+  if (f.descriptionSearch) {
+    const escapedSearch = escapeRegexLiteral(f.descriptionSearch);
+    descriptionFilters.push({
+      description: { $regex: escapedSearch, $options: "i" },
+    });
+  }
+  if (descriptionFilters.length) {
+    q.$and = [
+      ...((q.$and as Record<string, unknown>[] | undefined) ?? []),
+      ...descriptionFilters,
+    ];
+  }
   if (f.paymentMethod) {
     // Wallet method = ledger types that mutate wallet directly; Kashier method
     // = topup/withdrawal/gateway-linked; mixed = payment_reserved/captured/released with paymentId.
     if (f.paymentMethod === "wallet") {
-      q.type = {
-        $in: [
-          "payment",
-          "refund",
-          "earning",
-          "referral_bonus",
-          "payment_captured",
-          "payment_released",
-          "payment_reserved",
-        ],
-      };
+      typeConstraints.push([
+        "payment",
+        "refund",
+        "earning",
+        "referral_bonus",
+        "payment_captured",
+        "payment_released",
+        "payment_reserved",
+      ]);
     } else if (f.paymentMethod === "kashier") {
-      q.type = {
-        $in: [
-          "topup",
-          "withdrawal",
-          "kashier_payment",
-          "payment_refund_partial",
-        ],
-      };
+      typeConstraints.push([
+        "topup",
+        "withdrawal",
+        "kashier_payment",
+        "payment_refund_partial",
+      ]);
     } else if (f.paymentMethod === "mixed") {
       q.paymentId = { $exists: true, $ne: null };
     }
+  }
+  if (typeConstraints.length) {
+    const [first, ...remaining] = typeConstraints;
+    const allowedTypes = first.filter((type) =>
+      remaining.every((constraint) => constraint.includes(type)),
+    );
+    q.type = { $in: allowedTypes };
   }
   return q;
 }

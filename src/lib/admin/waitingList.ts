@@ -231,6 +231,7 @@ export function mapWaitingListRequest(input: {
       arrivalTime: trip.arrivalTime,
       vehicleType: trip.vehicleType,
       numberOfPassengers: trip.numberOfPassengers,
+      preferedGender: trip.preferedGender ?? null,
       fare: trip.priceEgp,
     })),
   };

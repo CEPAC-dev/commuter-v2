@@ -14,6 +14,7 @@ import {
   User,
   LogOut,
   LogIn,
+  Download,
   CalendarPlus,
   CalendarClock,
   Inbox,
@@ -26,6 +27,10 @@ import NotificationCenter from "@/components/layout/NotificationCenter";
 
 type Variant = "landing" | "app";
 type Role = "passenger" | "driver" | "admin";
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
 
 interface Props {
   authed: boolean;
@@ -67,6 +72,10 @@ export default function AppHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(
+    null,
+  );
+  const [appInstalled, setAppInstalled] = useState(false);
   const headerRef = useRef<HTMLElement | null>(null);
 
   function toggleLocale() {
@@ -103,6 +112,30 @@ export default function AppHeader({
     };
   }, []);
 
+  useEffect(() => {
+    const onBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+    const onAppInstalled = () => {
+      setAppInstalled(true);
+      setInstallPrompt(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker
+        .register("/service-worker.js")
+        .catch(() => {});
+    }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, []);
+
   // Solid (app) headers are always dark; landing is transparent until scrolled.
   const solid = !isLanding || scrolled;
   const barBg = isLanding
@@ -122,6 +155,23 @@ export default function AppHeader({
     } finally {
       router.replace("/login");
     }
+  }
+
+  async function handleInstallApp() {
+    if (!installPrompt) {
+      const instructions = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+        ? "To install Commuter, tap Share, then choose Add to Home Screen."
+        : /Android/i.test(navigator.userAgent)
+          ? "To install Commuter, open your browser menu and choose Install app or Add to Home screen."
+          : "To install Commuter, use your browser's Install app option in the address bar or menu.";
+      window.alert(instructions);
+      return;
+    }
+
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    setInstallPrompt(null);
+    if (choice.outcome === "accepted") setAppInstalled(true);
   }
 
   function isActive(href: string) {
@@ -270,6 +320,33 @@ export default function AppHeader({
             minWidth: authed ? 260 : 200,
           }}
         >
+          {!appInstalled && (
+            <button
+              type="button"
+              onClick={() => void handleInstallApp()}
+              aria-label="Install Commuter"
+              title="Install Commuter"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 38,
+                height: 38,
+                padding: 0,
+                color: fg,
+                background: "transparent",
+                border: `1.5px solid ${
+                  isLanding && !scrolled
+                    ? "rgba(255,255,255,0.5)"
+                    : "rgba(255,255,255,0.25)"
+                }`,
+                borderRadius: 8,
+                cursor: "pointer",
+              }}
+            >
+              <Download size={17} aria-hidden="true" />
+            </button>
+          )}
           {authed && role !== "admin" && (
             <NotificationCenter color={fg} buttonBackground={subtleBg} />
           )}

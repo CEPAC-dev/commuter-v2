@@ -53,6 +53,8 @@ import { MapSearchProvider } from "@/lib/MapSearchContext";
 
 interface Props {
   userEmail: string;
+  userName: string;
+  userGender: "male" | "female" | null;
   region?: RegionCode;
   mapSettings: MapSettings;
   onAddressSaved?: (saved: SavedAddress) => void;
@@ -79,6 +81,7 @@ function defaultTrip(
     routeCoordinates: null,
     routeLegs: [],
     extraPassengers: 0,
+    sameGenderPreference: false,
     numberOfPassengers: 1,
     stops: [],
     pickupStation: null,
@@ -110,6 +113,8 @@ function clampDrawerHeight(vh: number): number {
 
 export default function CreateClient({
   userEmail,
+  userName,
+  userGender: initialUserGender,
   region = DEFAULT_REGION,
   mapSettings,
 }: Props) {
@@ -182,6 +187,32 @@ export default function CreateClient({
     startHeightVh: MOBILE_DRAWER_DEFAULT_VH,
   });
   const { t, locale } = useClientLocale();
+  const [userGender, setUserGender] = useState<"male" | "female" | null>(
+    initialUserGender,
+  );
+  const [genderSaving, setGenderSaving] = useState(false);
+  const [genderSaveError, setGenderSaveError] = useState("");
+
+  async function saveUserGender(gender: "male" | "female") {
+    setGenderSaving(true);
+    setGenderSaveError("");
+    try {
+      const response = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: userName, gender }),
+      });
+      if (!response.ok) {
+        setGenderSaveError(t("create.gender_save_failed"));
+        return;
+      }
+      setUserGender(gender);
+    } catch {
+      setGenderSaveError(t("create.gender_save_failed"));
+    } finally {
+      setGenderSaving(false);
+    }
+  }
 
   // Hydrate from store after mount (avoid SSR mismatch)
   useEffect(() => {
@@ -393,6 +424,7 @@ export default function CreateClient({
               passengers: leg.passengers,
             })),
             extraPassengers: t.extraPassengers,
+            sameGenderPreference: t.sameGenderPreference,
             passengers: t.passengers,
             numberOfPassengers: t.numberOfPassengers,
             priceEgp: getTripPriceForSubmission(t),
@@ -661,7 +693,7 @@ export default function CreateClient({
     vehicle: t("create.vehicle_type"),
     locations: t("create.step_pickup_dropoff_locations"),
     timing: t("create.step_pickup_dropoff_time"),
-    passengers: t("create.number_of_passengers"),
+    passengers: t("create.passengers_step_title"),
   };
 
   function getTripStep(tripId: string): BookingStep {
@@ -769,6 +801,9 @@ export default function CreateClient({
       const vehicle =
         vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType];
       const isPrivate = vehicle.ride === "private";
+      if (trip.sameGenderPreference && !userGender) {
+        return t("create.gender_required");
+      }
 
       if (isPrivate) {
         if (!trip.pickupTime)
@@ -1128,6 +1163,10 @@ export default function CreateClient({
                         handleTripStopErrorChange(trip.id, error)
                       }
                       stage={bookingStep}
+                      userGender={userGender}
+                      genderSaving={genderSaving}
+                      genderError={genderSaveError}
+                      onGenderChange={saveUserGender}
                       collapsed={Boolean(collapsedTrips[trip.id])}
                       onToggleCollapsed={() =>
                         setCollapsedTrips((prev) => ({

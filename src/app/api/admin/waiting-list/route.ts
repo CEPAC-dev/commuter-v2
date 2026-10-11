@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   const requestIds = requests.map((request) => request._id);
   const trips = requestIds.length
     ? await Trip.find({ requestId: { $in: requestIds } })
-        .select("_id requestId date pickup dropoff pickupTime arrivalTime vehicleType numberOfPassengers priceEgp appliedPromoCode")
+        .select("_id requestId date pickup dropoff pickupTime arrivalTime vehicleType numberOfPassengers preferedGender priceEgp appliedPromoCode")
         .sort({ date: 1, cycleIndex: 1 })
         .lean()
     : [];

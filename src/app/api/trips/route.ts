@@ -200,6 +200,7 @@ export async function POST(req: NextRequest) {
     durationMinutes: number;
     priceEgp: number;
     extraPassengers: number;
+    preferedGender: "male" | "female" | null;
     numberOfPassengers: number;
     stops: StopInput[];
     passengers: {
@@ -215,8 +216,38 @@ export async function POST(req: NextRequest) {
     walkingMinFromStation?: number;
   }
 
+  const currentUser = await User.findById(userId)
+    .select("gender")
+    .lean<{ gender?: "male" | "female" | null } | null>();
+  if (!currentUser) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+  const currentUserGender =
+    currentUser.gender === "male" || currentUser.gender === "female"
+      ? currentUser.gender
+      : null;
+
   const serverTrips: ServerTrip[] = [];
   for (const t of trips) {
+    if (
+      t.sameGenderPreference !== undefined &&
+      typeof t.sameGenderPreference !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "Invalid sameGenderPreference" },
+        { status: 400 },
+      );
+    }
+    if (t.sameGenderPreference && !currentUserGender) {
+      return NextResponse.json(
+        { error: "Select your gender before requesting a same-gender ride." },
+        { status: 400 },
+      );
+    }
+    const preferedGender = t.sameGenderPreference
+      ? currentUserGender
+      : null;
+
     // Validate required fields
     if (!t.pickup?.address || !t.dropoff?.address) {
       return NextResponse.json(
@@ -407,6 +438,7 @@ export async function POST(req: NextRequest) {
         durationMinutes: Math.round(Number(t.durationMinutes)),
         priceEgp,
         extraPassengers: 0,
+        preferedGender,
         numberOfPassengers,
         stops,
         passengers: serverPassengers,
@@ -527,6 +559,7 @@ export async function POST(req: NextRequest) {
       durationMinutes: Math.round(Number(t.durationMinutes)),
       priceEgp,
       extraPassengers,
+      preferedGender,
       numberOfPassengers: 1,
       stops: [],
       passengers: [],

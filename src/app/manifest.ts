@@ -12,8 +12,8 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#0B1E3D",
     icons: [
       {
-        src: "/assets/images/commuterLogo.png",
-        sizes: "any",
+        src: "/assets/images/commuterLogo2.png",
+        sizes: "1024x1024",
         type: "image/png",
         purpose: "any",
       },

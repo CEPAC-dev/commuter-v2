@@ -9,6 +9,7 @@ import {
   AdminPageHeader,
   AdminStatusBadge,
 } from "@/components/admin/layout";
+import { useClientLocale } from "@/lib/i18n/client";
 
 interface DetailData {
   transaction: {
@@ -49,6 +50,7 @@ interface DetailData {
     pickupTime: string;
     arrivalTime: string;
     priceEgp: number;
+    preferedGender: "male" | "female" | null;
     paymentStatus: string;
     status: string;
     cancellation: { refundAmount?: number; refundStatus?: string } | null;
@@ -98,6 +100,7 @@ export default function TransactionDetailClient({
   id: string;
   canRefund: boolean;
 }) {
+  const { t } = useClientLocale();
   const [data, setData] = useState<DetailData | null>(null);
   const [error, setError] = useState("");
   const [selectedTripId, setSelectedTripId] = useState("");
@@ -420,6 +423,9 @@ export default function TransactionDetailClient({
               >
                 {trip.vehicleType} · pickup {trip.pickupTime} · arrival{" "}
                 {trip.arrivalTime} · {trip.paymentStatus} / {trip.status}
+                {trip.preferedGender
+                  ? ` · ${t("admin.trip.gender_preference")}: ${t(`gender.${trip.preferedGender}`)}`
+                  : ""}
                 {trip.cancellation
                   ? ` · refund ${trip.cancellation.refundAmount ?? 0} EGP (${trip.cancellation.refundStatus ?? "pending"})`
                   : ""}

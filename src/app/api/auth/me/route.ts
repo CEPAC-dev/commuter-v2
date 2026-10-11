@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
 
     const userUpdate: Record<string, unknown> = { name: safeName };
-    if (session.role !== "driver" && passengerGender !== undefined) {
+    if (passengerGender !== undefined) {
       if (passengerGender !== "male" && passengerGender !== "female") {
         return NextResponse.json({ error: "Invalid gender." }, { status: 400 });
       }

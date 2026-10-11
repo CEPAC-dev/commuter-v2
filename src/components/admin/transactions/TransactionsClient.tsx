@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import TransactionsChart from "./TransactionsChart";
+import { useClientLocale } from "@/lib/i18n/client";
 import {
   AdminCard,
   AdminEmptyState,
@@ -81,9 +82,12 @@ export default function TransactionsClient({
   canReports: boolean;
 }) {
   void _canRefund;
+  const { t } = useClientLocale();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [descriptionCategory, setDescriptionCategory] = useState("");
+  const [descriptionSearch, setDescriptionSearch] = useState("");
   const [method, setMethod] = useState<"" | "wallet" | "kashier" | "mixed">("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -104,6 +108,8 @@ export default function TransactionsClient({
     if (search) p.set("search", search);
     for (const s of statusFilter) p.append("status", s);
     for (const t of typeFilter) p.append("type", t);
+    if (descriptionCategory) p.set("descriptionCategory", descriptionCategory);
+    if (descriptionSearch) p.set("descriptionSearch", descriptionSearch);
     if (method) p.set("paymentMethod", method);
     if (dateFrom) p.set("dateFrom", dateFrom);
     if (dateTo) p.set("dateTo", dateTo);
@@ -116,6 +122,8 @@ export default function TransactionsClient({
     search,
     statusFilter,
     typeFilter,
+    descriptionCategory,
+    descriptionSearch,
     method,
     dateFrom,
     dateTo,
@@ -393,6 +401,77 @@ export default function TransactionsClient({
               selected={typeFilter}
               onToggle={(v) => toggle(typeFilter, setTypeFilter, v)}
             />
+            <label style={{ display: "grid", gap: 4 }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "var(--color-muted)",
+                  textTransform: "uppercase",
+                }}
+              >
+                {t("admin.transactions.description_category")}
+              </span>
+              <select
+                value={descriptionCategory}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setDescriptionCategory(value);
+                  if (value) {
+                    setTypeFilter((current) =>
+                      current.includes("referral_bonus")
+                        ? current
+                        : [...current, "referral_bonus"],
+                    );
+                  }
+                  setPage(1);
+                }}
+                style={{
+                  padding: "6px 10px",
+                  border: "1.5px solid var(--color-border)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                }}
+              >
+                <option value="">{t("admin.transactions.any_description")}</option>
+                <option value="referrer_bonus">
+                  {t("admin.transactions.referrer_bonus")}
+                </option>
+                <option value="welcome_referral_bonus">
+                  {t("admin.transactions.welcome_referral_bonus")}
+                </option>
+                <option value="admin_referral_welcome_bonus">
+                  {t("admin.transactions.admin_referral_welcome_bonus")}
+                </option>
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "var(--color-muted)",
+                  textTransform: "uppercase",
+                }}
+              >
+                {t("admin.transactions.description_contains")}
+              </span>
+              <input
+                type="search"
+                value={descriptionSearch}
+                onChange={(event) => {
+                  setDescriptionSearch(event.target.value);
+                  setPage(1);
+                }}
+                placeholder={t("admin.transactions.description_contains")}
+                style={{
+                  padding: "6px 10px",
+                  border: "1.5px solid var(--color-border)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                }}
+              />
+            </label>
             <div>
               <div
                 style={{

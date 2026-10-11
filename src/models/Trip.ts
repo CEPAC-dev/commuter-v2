@@ -165,6 +165,11 @@ const TripSchema = new Schema(
       default: null,
     },
     extraPassengers: { type: Number, default: 0, min: 0, max: 9 },
+    preferedGender: {
+      type: String,
+      enum: ["male", "female", null],
+      default: null,
+    },
     passengers: { type: [PassengerDetailSchema], default: [] },
     numberOfPassengers: { type: Number, default: 1, min: 1 },
     stops: { type: [StopSchema], default: [] },
@@ -284,5 +289,10 @@ export type TripDoc = InferSchemaType<typeof TripSchema>;
 const existingTripModel = models.Trip;
 if (existingTripModel && !existingTripModel.schema.path("regionCode")) {
   existingTripModel.schema.add({ regionCode: TripSchema.obj.regionCode });
+}
+if (existingTripModel && !existingTripModel.schema.path("preferedGender")) {
+  existingTripModel.schema.add({
+    preferedGender: TripSchema.obj.preferedGender,
+  });
 }
 export const Trip = existingTripModel || model("Trip", TripSchema);

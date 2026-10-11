@@ -33,6 +33,7 @@ export interface TripInput {
   routeLegs?: RouteLegInput[];
   priceEgp: number;
   extraPassengers?: number;
+  sameGenderPreference?: boolean;
   passengers?: PassengerInput[];
   numberOfPassengers?: number;
   stops?: StopInput[];
