@@ -57,7 +57,10 @@ function isPrivateIpv4(host: string): boolean {
 }
 
 function isPrivateAddress(host: string): boolean {
-  const normalized = host.replace(/^\[|\]$/g, "").toLowerCase();
+  const normalized = host
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.$/, "")
+    .toLowerCase();
   if (isPrivateIpv4(normalized)) return true;
   if (normalized.includes(":")) {
     const mappedIpv4 = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
@@ -96,14 +99,36 @@ export type PaymentAppUrlValidation =
   | { valid: true; baseUrl: string; host: string }
   | { valid: false; host: string | null };
 
+export interface PaymentAppUrlEnvironment {
+  nodeEnv?: string;
+  appEnv?: string;
+  kashierMode?: string;
+}
+
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.replace(/^\[|\]$/g, "").toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1"
+  );
+}
+
 export function validatePaymentAppUrl(
   value: string | undefined,
-  isProduction: boolean,
+  environment: PaymentAppUrlEnvironment,
 ): PaymentAppUrlValidation {
   if (!value) return { valid: false, host: null };
   try {
     const parsed = new URL(value);
     const host = parsed.host || null;
+    const isProduction =
+      environment.nodeEnv?.toLowerCase() === "production" ||
+      environment.appEnv?.toLowerCase() === "production";
+    const allowLocal =
+      !isProduction &&
+      environment.kashierMode === "test" &&
+      isLoopbackHost(parsed.hostname);
     if (
       !host ||
       !["http:", "https:"].includes(parsed.protocol) ||
@@ -111,8 +136,10 @@ export function validatePaymentAppUrl(
       parsed.password ||
       parsed.search ||
       parsed.hash ||
-      (isProduction &&
-        (parsed.protocol !== "https:" || isPrivateAddress(parsed.hostname)))
+      value.includes("?") ||
+      value.includes("#") ||
+      (!allowLocal && parsed.protocol !== "https:") ||
+      (!allowLocal && isPrivateAddress(parsed.hostname))
     ) {
       return { valid: false, host };
     }

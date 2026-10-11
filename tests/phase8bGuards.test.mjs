@@ -272,21 +272,67 @@ test("Trip session amounts use integer piasters and Kashier-safe formatting", ()
   assert.equal(formatKashierAmount(150), "150");
 });
 
-test("APP_URL validation accepts local development and rejects unsafe production hosts", () => {
+test("APP_URL validation permits loopback only in non-production test mode", () => {
+  const developmentTest = {
+    nodeEnv: "development",
+    appEnv: "development",
+    kashierMode: "test",
+  };
+  const developmentLive = {
+    ...developmentTest,
+    kashierMode: "live",
+  };
+  const productionTest = {
+    nodeEnv: "production",
+    kashierMode: "test",
+  };
+
   assert.equal(
-    validatePaymentAppUrl("http://localhost:3000", false).valid,
+    validatePaymentAppUrl("http://localhost:3000", developmentTest).valid,
     true,
   );
   assert.equal(
-    validatePaymentAppUrl("https://commuter.example", true).valid,
+    validatePaymentAppUrl("http://127.0.0.1:3000", developmentTest).valid,
     true,
   );
   assert.equal(
-    validatePaymentAppUrl("http://commuter.example", true).valid,
+    validatePaymentAppUrl("http://[::1]:3000", developmentTest).valid,
+    true,
+  );
+  assert.equal(
+    validatePaymentAppUrl("http://localhost:3000", developmentLive).valid,
     false,
   );
+  assert.equal(
+    validatePaymentAppUrl("http://localhost:3000", productionTest).valid,
+    false,
+  );
+  assert.equal(
+    validatePaymentAppUrl("http://localhost:3000", {
+      ...productionTest,
+      appEnv: "development",
+    }).valid,
+    false,
+  );
+
+  for (const environment of [
+    developmentTest,
+    developmentLive,
+    productionTest,
+    { ...productionTest, appEnv: "development" },
+    { nodeEnv: "production", kashierMode: "live" },
+    { nodeEnv: "development", kashierMode: "test" },
+    { nodeEnv: "development", appEnv: "production", kashierMode: "test" },
+  ]) {
+    assert.equal(
+      validatePaymentAppUrl("https://commuter.example", environment).valid,
+      true,
+    );
+  }
+
   for (const url of [
     "https://localhost",
+    "https://localhost.",
     "https://127.0.0.1",
     "https://10.0.0.8",
     "https://172.20.0.1",
@@ -296,8 +342,45 @@ test("APP_URL validation accepts local development and rejects unsafe production
     "/checkout/callback",
     undefined,
   ]) {
-    assert.equal(validatePaymentAppUrl(url, true).valid, false, String(url));
+    assert.equal(
+      validatePaymentAppUrl(url, productionTest).valid,
+      false,
+      String(url),
+    );
   }
+  assert.equal(
+    validatePaymentAppUrl("ftp://localhost:3000", developmentTest).valid,
+    false,
+  );
+  assert.equal(
+    validatePaymentAppUrl("https://commuter.example?", productionTest).valid,
+    false,
+  );
+  assert.equal(
+    validatePaymentAppUrl("https://user:pass@commuter.example", productionTest)
+      .valid,
+    false,
+  );
+});
+
+test("all Kashier checkout session paths validate APP_URL", async () => {
+  const sessionRoute = await readFile(
+    new URL("../src/app/api/payments/session/route.ts", import.meta.url),
+    "utf8",
+  );
+  const topupRoute = await readFile(
+    new URL("../src/app/api/wallet/topup/route.ts", import.meta.url),
+    "utf8",
+  );
+  const gatewayValidation = sessionRoute.slice(
+    sessionRoute.indexOf("const gatewayAmount"),
+    sessionRoute.indexOf("// ── Create Payment aggregate ──"),
+  );
+
+  assert.match(gatewayValidation, /if \(gatewayAmount > 0\)/);
+  assert.match(gatewayValidation, /validatePaymentAppUrl\(/);
+  assert.doesNotMatch(gatewayValidation, /resolved\.kind === "trip"/);
+  assert.match(topupRoute, /validatePaymentAppUrl\(/);
 });
 
 test("late success for every dead Trip status alerts once without changing money state", async () => {

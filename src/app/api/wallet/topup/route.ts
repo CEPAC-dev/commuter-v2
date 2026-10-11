@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { Types } from "mongoose";
 import { validateMutationRequest } from "@/lib/security/request";
+import { validatePaymentAppUrl } from "@/lib/payments/sessionGuards";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
@@ -39,13 +40,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const appUrl = process.env.APP_URL?.replace(/\/+$/, "");
-  if (!appUrl) {
+  const validation = validatePaymentAppUrl(process.env.APP_URL, {
+    nodeEnv: process.env.NODE_ENV,
+    appEnv: process.env.APP_ENV,
+    kashierMode: process.env.KASHIER_MODE,
+  });
+  if (!validation.valid) {
+    console.error("Invalid APP_URL for Kashier top-up", {
+      host: validation.host,
+    });
     return NextResponse.json(
-      { error: "APP_URL is not configured on the server." },
+      {
+        errorCode: "INVALID_APP_URL",
+        error: "APP_URL must be an absolute public URL for payment checkout.",
+      },
       { status: 500 },
     );
   }
+  const appUrl = validation.baseUrl;
 
   await connectDB();
 

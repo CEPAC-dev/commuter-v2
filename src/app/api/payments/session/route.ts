@@ -28,7 +28,6 @@ import {
 import { settleStandaloneTripPayment } from "@/lib/payments/standaloneTripSettlement";
 import { shouldResetFailedTripForRetry } from "@/lib/payments/settlementAttempt";
 import { safeKashierErrorFields } from "@/lib/phase8bGuards";
-import { isProduction } from "@/lib/environment";
 import {
   canContinueStandaloneTripPayment,
   formatKashierAmount,
@@ -283,11 +282,15 @@ export async function POST(req: NextRequest) {
     walletAmount = split.walletAmountEgp;
   }
   const gatewayAmount = totalEgp - walletAmount;
-  let tripAppUrl: string | null = null;
-  if (resolved.kind === "trip" && gatewayAmount > 0) {
+  let appUrl: string | null = null;
+  if (gatewayAmount > 0) {
     const validation = validatePaymentAppUrl(
       process.env.APP_URL,
-      isProduction,
+      {
+        nodeEnv: process.env.NODE_ENV,
+        appEnv: process.env.APP_ENV,
+        kashierMode: process.env.KASHIER_MODE,
+      },
     );
     if (!validation.valid) {
       console.error("Invalid APP_URL for Kashier session", {
@@ -301,7 +304,7 @@ export async function POST(req: NextRequest) {
         { status: 500 },
       );
     }
-    tripAppUrl = validation.baseUrl;
+    appUrl = validation.baseUrl;
   }
 
   // ── Create Payment aggregate ──
@@ -679,23 +682,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const appUrl =
-    tripAppUrl ?? process.env.APP_URL?.replace(/\/+$/, "");
-  if (!appUrl) {
-    if (resolved.kind === "request") {
-      return NextResponse.json(
-        { error: "APP_URL is not configured on the server." },
-        { status: 500 },
-      );
-    }
-    return NextResponse.json(
-      {
-        errorCode: "INVALID_APP_URL",
-        error: "APP_URL must be an absolute public URL for payment checkout.",
-      },
-      { status: 500 },
-    );
-  }
   const expireAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
   const kashierBody = {
@@ -740,9 +726,17 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(kashierBody),
     });
   } catch (err) {
+    const cause = err instanceof Error ? err.cause : undefined;
+    const causeCode =
+      cause && typeof cause === "object" && "code" in cause
+        ? cause.code
+        : undefined;
     console.error(
       "Kashier session request failed:",
-      err instanceof Error ? err.name : "UnknownError",
+      {
+        name: err instanceof Error ? err.name : "UnknownError",
+        causeCode: typeof causeCode === "string" ? causeCode : undefined,
+      },
     );
     if (reservationTxId) {
       await releaseReservation(reservationTxId, {
