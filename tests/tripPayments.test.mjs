@@ -11,6 +11,9 @@ const {
   fullyRefundedTripUpdate,
   settleTripOnce,
 } = await import("../src/lib/payments/tripSettlement.ts");
+const { buildSettlementRequestFilter } = await import(
+  "../src/lib/pendingRequestHardening.ts"
+);
 
 test("standalone pending-payment or approved trips with pending or failed payment are payable", () => {
   assert.equal(
@@ -104,6 +107,31 @@ test("resolver excludes legacy child Trips and falls back to their Request", asy
   assert.equal(requestLookups, 1);
   assert.equal(resolved.kind, "request");
   assert.equal(resolved.amountEgp, 900);
+});
+
+test("legacy Request remains payable and can be conditionally settled", async () => {
+  const request = {
+    _id: "legacy-request",
+    amountEgp: 900,
+    paymentStatus: "pending",
+    status: "approved",
+  };
+  const resolved = await resolvePayableBookingWith(
+    async () => null,
+    async () => request,
+  );
+  assert.equal(resolved?.kind, "request");
+  assert.equal(resolved?.amountEgp, 900);
+
+  let paymentStatus = resolved?.paymentStatus;
+  const settlementFilter = buildSettlementRequestFilter(resolved.doc._id);
+  assert.equal(settlementFilter._id, request._id);
+  const settled =
+    settlementFilter.paymentStatus.$in.includes(paymentStatus) &&
+    !settlementFilter.status.$nin.includes(resolved.status);
+  assert.equal(settled, true);
+  paymentStatus = settled ? "paid" : paymentStatus;
+  assert.equal(paymentStatus, "paid");
 });
 
 test("standalone Trip resolver charges Trip.priceEgp and never loads Request", async () => {

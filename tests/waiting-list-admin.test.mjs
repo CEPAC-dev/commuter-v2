@@ -66,6 +66,25 @@ test('waiting-list transition is conditional on waiting_list', () => {
   );
 });
 
+test("legacy Request approval remains an allowed existing-record update", () => {
+  const filter = buildWaitingListTransitionFilter("legacy-request");
+  const update = buildWaitingListReviewUpdate(
+    "approve",
+    "admin-id",
+    new Date("2026-10-11T09:00:00.000Z"),
+  );
+  assert.deepEqual(filter, {
+    _id: "legacy-request",
+    status: "waiting_list",
+  });
+  assert.deepEqual(update.$set, {
+    status: "approved",
+    reviewedBy: "admin-id",
+    reviewedAt: new Date("2026-10-11T09:00:00.000Z"),
+  });
+  assert.equal(update.$set.paymentStatus, undefined);
+});
+
 test('standalone Trip review filter is atomic and approval unlocks payment only', () => {
   const filter = buildWaitingListTripTransitionFilter('trip-id');
   assert.deepEqual(filter, {

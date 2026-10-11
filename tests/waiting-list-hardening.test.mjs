@@ -17,6 +17,19 @@ test('pending request expiry filter is parent-status driven', () => {
   });
 });
 
+test('legacy Request expiry remains limited to unpaid pending-payment records', () => {
+  const filter = buildPendingRequestExpiryFilter(
+    new Date("2026-10-11T10:00:00.000Z"),
+    "passenger-id",
+  );
+  assert.deepEqual(filter, {
+    userId: "passenger-id",
+    status: "pending_payment",
+    paymentStatus: { $in: ["pending", "failed"] },
+    createdAt: { $lte: new Date("2026-10-11T10:00:00.000Z") },
+  });
+});
+
 test('trip expiry filter requires selected parent request ids and pending trip status', () => {
   assert.deepEqual(buildPendingTripExpiryFilter(['request-a', 'request-b']), {
     requestId: { $in: ['request-a', 'request-b'] },
