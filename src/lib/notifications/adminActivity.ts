@@ -147,7 +147,7 @@ export async function notifyAdminsOfWaitingListTrip(tripId: string) {
     if (!Types.ObjectId.isValid(tripId)) return;
     const trip = await Trip.findOne({
       _id: tripId,
-      status: "pending_payment",
+      status: { $in: ["pending_payment", "waiting_list"] },
       paymentStatus: "pending",
     })
       .select(
@@ -156,13 +156,19 @@ export async function notifyAdminsOfWaitingListTrip(tripId: string) {
       .lean();
     if (!trip) return;
 
-    const request = await Request.findOne({
-      _id: trip.requestId,
-      status: "waiting_list",
-    })
-      .select("_id")
-      .lean();
-    if (!request) return;
+    let requestId: string | null = null;
+    if (trip.requestId) {
+      const request = await Request.findOne({
+        _id: trip.requestId,
+        status: "waiting_list",
+      })
+        .select("_id")
+        .lean();
+      if (!request) return;
+      requestId = String(request._id);
+    } else if (trip.status !== "waiting_list") {
+      return;
+    }
 
     const user = await User.findById(trip.userId)
       .select("name userNumber phone email")
@@ -176,7 +182,7 @@ export async function notifyAdminsOfWaitingListTrip(tripId: string) {
       data: {
         tripId: String(trip._id),
         tripNumber: trip.tripNumber,
-        requestId: String(request._id),
+        ...(requestId ? { requestId } : { bookingId: String(trip._id) }),
         userId: String(trip.userId),
         userName,
         userNumber: user?.userNumber ?? null,
