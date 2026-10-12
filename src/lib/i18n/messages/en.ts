@@ -128,18 +128,39 @@ export const en = {
   "my_trips.track_short": "Track",
   "live_share.title": "Live location sharing",
   "live_share.share_button": "Share live location",
-  "live_share.consent_title": "Share your live trip?",
-  "live_share.consent_what":
-    "Your live location, trip status, pickup and drop-off, and the driver's first name, car model, color, and plate will be shared.",
-  "live_share.consent_who":
-    "Anyone with the link can see this information. Only send it to people you trust.",
-  "live_share.consent_duration":
-    "Sharing continues until the trip ends or you stop it, for up to 24 hours.",
-  "live_share.consent_storage":
-    "Only your latest position is stored, not a history. It is cleared when you stop sharing or the trip ends. If the link expires naturally, its data is deleted within 24 hours.",
+  "live_share.consent_title": "Share your live location",
+  "live_share.consent_intro": "Anyone with the link can see, without logging in:",
+  "live_share.consent_bullet_location":
+    "your live location on a map while sharing is on",
+  "live_share.consent_bullet_points": "your pickup and drop-off points",
+  "live_share.consent_bullet_driver":
+    "your driver's first name, and the car's make, model, colour and plate number",
+  "live_share.consent_body":
+    "The link works for up to 24 hours and stops showing your location when your trip ends or you tap Stop sharing. We keep only your latest location, not a history. It is removed when you stop sharing, and in any case within about 48 hours of creating the link. Share the link only with people you trust, because anyone who has it can open it. Keep your browser open so your phone can keep sending your location.",
+  "live_share.consent_checkbox":
+    "I understand and agree to share my live location through this link.",
   "live_share.share_message": "I'm sharing my live trip location with you: {url}",
-  "live_share.confirm": "Continue",
+  "live_share.confirm": "Start sharing",
   "live_share.cancel": "Cancel",
+  "privacy.notice": "Privacy notice",
+  "privacy.title": "Privacy notice: live location sharing",
+  "privacy.collect_heading": "What we collect:",
+  "privacy.collect_body":
+    "When you turn sharing on, your phone's browser sends your location every few seconds. We store only your latest position (coordinates, accuracy, direction and time), not a history of where you have been, plus how many times the link was opened and when it was last opened.",
+  "privacy.visibility_heading": "Who can see it:",
+  "privacy.visibility_body":
+    "Anyone who has your link, without logging in: your live location, your pickup and drop-off points, your driver's first name, and the car's make, model, colour and plate number. They cannot see your name, phone number or payment details.",
+  "privacy.retention_heading": "How long:",
+  "privacy.retention_body":
+    "The link works for up to 24 hours and stops showing your location when the trip ends or you tap Stop sharing. Your latest location is removed when sharing stops, and the sharing record is deleted automatically about 48 hours after you create the link (automatic cleanup can lag slightly).",
+  "privacy.providers_heading": "Service providers:",
+  "privacy.providers_body":
+    "The map is loaded from {MAP_PROVIDER_NAME} by the browser of whoever opens the link, so that provider can see their IP address and the area they view. The route is calculated by {ROUTING_PROVIDER_NAME}, which receives the pickup and drop-off coordinates.",
+  "privacy.choices_heading": "Your choices:",
+  "privacy.choices_body":
+    "Sharing is off unless you turn it on. We ask for your consent each time you create a link, and you can stop sharing at any time from the trip page.",
+  "privacy.contact_heading": "Contact:",
+  "privacy.contact_body": "{email}",
   "live_share.creating": "Creating link...",
   "live_share.loading": "Checking sharing status...",
   "live_share.load_error": "Couldn't check live sharing. Try again.",

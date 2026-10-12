@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Map as LeafletMap } from "leaflet";
 import { setLocaleCookie, useClientLocale } from "@/lib/locale.client";
@@ -792,6 +793,20 @@ export default function LiveLocationViewer({
             )}
           </>
         )}
+        <Link
+          href="/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "inline-block",
+            marginTop: 16,
+            color: "#007A6A",
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          {t("privacy.notice")}
+        </Link>
       </section>
     </main>
   );

@@ -209,4 +209,6 @@ test("viewer page and component only read public projection fields", async () =>
     /\b(?:passengerName|passengerId|phone|email|paymentStatus|paymentData|nationalId|payout|userId|_id)\b/,
   );
   assert.doesNotMatch(source, /localStorage|sessionStorage|console\.(?:log|warn|error)/);
+  assert.match(component, /href="\/privacy"[\s\S]*?target="_blank"[\s\S]*?rel="noopener noreferrer"/);
+  assert.doesNotMatch(component, /href=\{[^}]*token/);
 });

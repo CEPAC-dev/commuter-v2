@@ -2302,6 +2302,15 @@ export default function CreateClient({
                     >
                       {t("create.terms_link_text")}
                     </Link>{" "}
+                    ·{" "}
+                    <Link
+                      href="/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#00C2A8", fontWeight: 700 }}
+                    >
+                      {t("privacy.notice")}
+                    </Link>{" "}
                     {t("create.terms_agree_suffix")}
                   </span>
                 </label>

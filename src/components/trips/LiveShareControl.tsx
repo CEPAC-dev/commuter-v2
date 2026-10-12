@@ -7,6 +7,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import Link from "next/link";
 import { Copy, MapPin, Share2 } from "lucide-react";
 import { useClientLocale } from "@/lib/locale.client";
 import type { Locale } from "@/lib/i18n/config";
@@ -84,6 +85,7 @@ export default function LiveShareControl({
   const [senderStage, setSenderStage] = useState<SenderStage>("waiting");
   const [share, setShare] = useState<ShareDetails | null>(null);
   const [dialog, setDialog] = useState<DialogStage>(null);
+  const [consentChecked, setConsentChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [controlError, setControlError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -277,6 +279,7 @@ export default function LiveShareControl({
 
   function beginCreate() {
     setControlError(null);
+    setConsentChecked(false);
     dialogOpenerRef.current = document.activeElement as HTMLElement | null;
     setDialog("consent");
   }
@@ -830,10 +833,37 @@ export default function LiveShareControl({
             </h2>
             {dialog === "consent" ? (
               <div style={{ display: "grid", gap: 10, fontSize: 14, lineHeight: 1.55 }}>
-                <p style={{ margin: 0 }}>{t("live_share.consent_what")}</p>
-                <p style={{ margin: 0 }}>{t("live_share.consent_who")}</p>
-                <p style={{ margin: 0 }}>{t("live_share.consent_duration")}</p>
-                <p style={{ margin: 0 }}>{t("live_share.consent_storage")}</p>
+                <p style={{ margin: 0 }}>{t("live_share.consent_intro")}</p>
+                <ul style={{ margin: 0, paddingInlineStart: 22 }}>
+                  <li>{t("live_share.consent_bullet_location")}</li>
+                  <li>{t("live_share.consent_bullet_points")}</li>
+                  <li>{t("live_share.consent_bullet_driver")}</li>
+                </ul>
+                <p style={{ margin: 0 }}>{t("live_share.consent_body")}</p>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 8,
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={consentChecked}
+                    onChange={(event) => setConsentChecked(event.target.checked)}
+                    style={{ marginTop: 4, accentColor: "#00A88F" }}
+                  />
+                  <span>{t("live_share.consent_checkbox")}</span>
+                </label>
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "#007A6A", fontWeight: 700 }}
+                >
+                  {t("privacy.notice")}
+                </Link>
               </div>
             ) : (
               <p style={{ margin: "0 0 16px", fontSize: 14, lineHeight: 1.55 }}>
@@ -844,7 +874,7 @@ export default function LiveShareControl({
               <button
                 ref={dialogActionRef}
                 type="button"
-                disabled={busy || stopping}
+                disabled={busy || stopping || (dialog === "consent" && !consentChecked)}
                 onClick={() => {
                   if (dialog === "consent") void confirmConsent();
                   else void stopSender();

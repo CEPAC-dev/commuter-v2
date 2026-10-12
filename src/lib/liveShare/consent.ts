@@ -1,4 +1,4 @@
-export const LIVE_SHARE_CONSENT_VERSION = "2026-10-v1";
+export const LIVE_SHARE_CONSENT_VERSION = "2026-10-v2";
 
 export type LiveShareConsentResult =
   | {

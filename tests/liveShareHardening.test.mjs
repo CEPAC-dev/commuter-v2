@@ -12,6 +12,11 @@ const { buildLocationUpdateFilter } = await import(
   "../src/lib/liveShare/locationFilter.ts"
 );
 const { resolveLiveTileUrl } = await import("../src/lib/liveShare/tileUrl.ts");
+const { buildLiveSharePrivacyContactParagraph } = await import(
+  "../src/lib/legal/liveSharePrivacy.ts"
+);
+const { en } = await import("../src/lib/i18n/messages/en.ts");
+const { ar } = await import("../src/lib/i18n/messages/ar.ts");
 
 test("live tile URLs require HTTPS and all tile placeholders", () => {
   const fallback = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -50,7 +55,7 @@ test("new shares require current explicit consent and return fields for storage"
     {
       valid: true,
       consentAt: acceptedAt,
-      consentVersion: "2026-10-v1",
+      consentVersion: "2026-10-v2",
     },
   );
 
@@ -71,6 +76,32 @@ test("new shares require current explicit consent and return fields for storage"
   assert.match(model, /consentAt:\s*\{\s*type:\s*Date,\s*required:\s*true\s*\}/);
   assert.match(model, /consentVersion:\s*\{\s*type:\s*String,\s*required:\s*true\s*\}/);
   assert.doesNotMatch(control, /localStorage|commuter-live-share-consent/);
+});
+
+test("privacy and consent translations have matching keys and no bracket placeholders", () => {
+  const englishKeys = Object.keys(en).filter(
+    (key) => key.startsWith("live_share.consent_") || key.startsWith("privacy."),
+  );
+  const arabicKeys = Object.keys(ar).filter(
+    (key) => key.startsWith("live_share.consent_") || key.startsWith("privacy."),
+  );
+  assert.deepEqual(arabicKeys.sort(), englishKeys.sort());
+  assert.ok(englishKeys.length > 0);
+  for (const key of englishKeys) {
+    assert.equal(en[key].includes("["), false, `${key} English`);
+    assert.equal(ar[key].includes("["), false, `${key} Arabic`);
+  }
+});
+
+test("consent version is current and privacy contact section is optional", async () => {
+  assert.equal(LIVE_SHARE_CONSENT_VERSION, "2026-10-v2");
+  assert.equal(buildLiveSharePrivacyContactParagraph(undefined), null);
+  assert.equal(buildLiveSharePrivacyContactParagraph("   "), null);
+  assert.deepEqual(buildLiveSharePrivacyContactParagraph("help@example.com"), {
+    headingKey: "privacy.contact_heading",
+    bodyKey: "privacy.contact_body",
+    email: "help@example.com",
+  });
 });
 
 test("duplicate active-share key races recover an active share or return conflict", async () => {
