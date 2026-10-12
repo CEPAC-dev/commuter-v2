@@ -1,6 +1,82 @@
 import type { MessageKey } from "./en";
 
 export const ar: Record<MessageKey, string> = {
+  "admin.station_suggestions.title": "اقتراحات المحطات",
+  "admin.station_suggestions.subtitle":
+    "راجع مواقع المحطات المقترحة وأضف المحطات الموافق عليها إلى المنطقة الحالية.",
+  "admin.station_suggestions.search_label": "البحث في اقتراحات المحطات",
+  "admin.station_suggestions.search_placeholder":
+    "ابحث برقم الطلب أو مقدم الطلب أو الهاتف أو البريد أو الوصف",
+  "admin.station_suggestions.filter_label": "تصفية حسب الحالة",
+  "admin.station_suggestions.status_all": "كل الحالات",
+  "admin.station_suggestions.status_pending": "بانتظار المراجعة",
+  "admin.station_suggestions.status_processing": "قيد المعالجة",
+  "admin.station_suggestions.status_approved": "تمت الموافقة",
+  "admin.station_suggestions.status_rejected": "مرفوض",
+  "admin.station_suggestions.request_number": "رقم الطلب",
+  "admin.station_suggestions.requester": "مقدم الطلب",
+  "admin.station_suggestions.user_code": "رمز المستخدم",
+  "admin.station_suggestions.location_type": "نوع النقطة",
+  "admin.station_suggestions.pickup": "ركوب",
+  "admin.station_suggestions.dropoff": "نزول",
+  "admin.station_suggestions.description": "وصف المحطة",
+  "admin.station_suggestions.status": "الحالة",
+  "admin.station_suggestions.submitted": "تاريخ الإرسال",
+  "admin.station_suggestions.actions": "الإجراءات",
+  "admin.station_suggestions.view_details": "عرض التفاصيل",
+  "admin.station_suggestions.loading": "جارٍ تحميل الطلبات…",
+  "admin.station_suggestions.load_error": "تعذر تحميل اقتراحات المحطات.",
+  "admin.station_suggestions.review_error": "تعذرت مراجعة هذا الطلب.",
+  "admin.station_suggestions.empty": "لا توجد اقتراحات تطابق هذه التصفية.",
+  "admin.station_suggestions.result_count": "{count} طلب",
+  "admin.station_suggestions.page_of": "الصفحة {page} من {pages}",
+  "admin.station_suggestions.previous": "السابق",
+  "admin.station_suggestions.next": "التالي",
+  "admin.station_suggestions.details_title": "الطلب رقم {requestNumber}",
+  "admin.station_suggestions.target_location": "نقطة الركوب أو النزول المحددة",
+  "admin.station_suggestions.suggested_station": "موقع المحطة المقترح",
+  "admin.station_suggestions.rejection_reason": "السبب (اختياري)",
+  "admin.station_suggestions.approve": "موافقة",
+  "admin.station_suggestions.reject": "رفض",
+  "admin.station_suggestions.approval_title": "إضافة المحطة والموافقة",
+  "admin.station_suggestions.rejection_title": "رفض اقتراح المحطة",
+  "admin.station_suggestions.station_form_intro":
+    "راجع بيانات المحطة. الإحداثيات معبأة مسبقًا من الاقتراح.",
+  "admin.station_suggestions.station_name": "اسم المحطة",
+  "admin.station_suggestions.station_direction": "الاتجاه",
+  "admin.station_suggestions.station_zones": "المناطق",
+  "admin.station_suggestions.station_landmark": "علامة مميزة",
+  "admin.station_suggestions.station_type": "نوع المحطة",
+  "admin.station_suggestions.station_type_option_1": "١",
+  "admin.station_suggestions.station_type_option_2": "٢",
+  "admin.station_suggestions.station_type_option_3": "٣",
+  "admin.station_suggestions.latitude": "خط العرض",
+  "admin.station_suggestions.longitude": "خط الطول",
+  "admin.station_suggestions.adjust_location": "تعديل موقع المحطة",
+  "admin.station_suggestions.station_location_title": "موقع المحطة",
+  "admin.station_suggestions.location_adjustment_active":
+    "وضع التعديل مفعّل. انقر على منطقة مظللة لنقل العلامة.",
+  "admin.station_suggestions.location_adjustment_inactive":
+    "فعّل وضع التعديل لاختيار نقطة أخرى على الخريطة.",
+  "admin.station_suggestions.location_zones_unavailable":
+    "لا تتوفر حدود لمناطق خدمة نشطة.",
+  "admin.station_suggestions.zone_map_legend": "منطقة الخدمة",
+  "admin.station_suggestions.station_map_legend": "موقع المحطة",
+  "admin.station_suggestions.location_map_prompt":
+    "انقر داخل إحدى مناطق الخدمة المحددة لنقل علامة المحطة.",
+  "admin.station_suggestions.location_map_aria": "خريطة لتعديل موقع المحطة",
+  "admin.station_suggestions.location_map_loading": "جارٍ تحميل مناطق الخدمة النشطة…",
+  "admin.station_suggestions.location_map_error":
+    "تعذر تحميل خريطة مناطق الخدمة. يرجى المحاولة مرة أخرى.",
+  "admin.station_suggestions.location_outside_zones":
+    "اختر نقطة داخل إحدى مناطق الخدمة النشطة.",
+  "admin.station_suggestions.use_location": "استخدام هذا الموقع",
+  "admin.station_suggestions.create_and_approve": "إضافة المحطة والموافقة",
+  "admin.station_suggestions.confirm_rejection": "تأكيد الرفض",
+  "admin.station_suggestions.cancel": "إلغاء",
+  "admin.station_suggestions.close": "إغلاق",
+  "admin.station_suggestions.approved": "تمت إضافة المحطة والموافقة على الطلب.",
+  "admin.station_suggestions.rejected": "تم رفض الطلب وإبلاغ مقدم الطلب.",
   "driver.completed": "مكتملة",
   "driver.ongoing": "جارية",
   "driver.upcoming": "قادمة",
@@ -625,6 +701,38 @@ export const ar: Record<MessageKey, string> = {
   "create.pick_from_map": "تحديد من الخريطة",
   "create.click_map": "انقر على الخريطة…",
   "create.station": "محطة",
+  "create.station_suggestion_add_button": "إضافة اقتراح محطة جديدة",
+  "create.station_suggestion_title": "اقتراح محطة جديدة",
+  "create.station_suggestion_map_prompt":
+    "اختر موقع المحطة المقترح داخل إحدى مناطق الخدمة المحددة. تظهر نقطة الركوب أو النزول كمرجع.",
+  "create.station_suggestion_zones_loading":
+    "جارٍ تحميل مناطق الخدمة النشطة. يرجى الانتظار قبل تحديد نقطة.",
+  "create.station_suggestion_zones_unavailable":
+    "لا توجد مناطق خدمة نشطة متاحة لاقتراح المحطات في هذه المنطقة.",
+  "create.station_suggestion_outside_zone":
+    "اختر نقطة داخل إحدى مناطق الخدمة النشطة المحددة.",
+  "create.station_suggestion_zone_label": "المنطقة",
+  "create.station_suggestion_target": "الموقع المحدد",
+  "create.station_suggestion_pin": "موقع المحطة المقترح",
+  "create.station_suggestion_map_aria": "خريطة لاختيار موقع المحطة",
+  "create.station_suggestion_map_hint":
+    "انقر داخل إحدى مناطق الخدمة المحددة لاختيار موقع المحطة المقترح. انقر مجددًا لتعديله.",
+  "create.station_suggestion_point_selected":
+    "تم تحديد موقع المحطة. انقر على موقع آخر لتعديله.",
+  "create.station_suggestion_map_error":
+    "تعذر تحميل الخريطة. أغلق النافذة وحاول مرة أخرى.",
+  "create.station_suggestion_pick_point_error":
+    "يرجى تحديد موقع المحطة المقترح على الخريطة.",
+  "create.station_suggestion_description": "وصف المحطة",
+  "create.station_suggestion_description_error":
+    "أدخل وصفًا لا يقل عن 3 أحرف.",
+  "create.station_suggestion_submit": "إرسال الطلب",
+  "create.station_suggestion_submit_error":
+    "تعذر إرسال الطلب. يرجى المحاولة مرة أخرى.",
+  "create.station_suggestion_success":
+    "تم إرسال طلب اقتراح المحطة رقم {requestNumber} لمراجعته من فريق العمليات.",
+  "create.cancel": "إلغاء",
+  "create.close": "إغلاق",
   "create.pickup_station_for_trip": "محطة الركوب  للرحلة {tripNumber}",
   "create.dropoff_station_for_trip": "محطة النزول للرحلة {tripNumber}",
   "create.calculating_route": "جارٍ حساب المسار…",

@@ -15,8 +15,11 @@ import {
   ChevronRight,
 } from "lucide-react";
 import AdminDateRangeCalendar from "@/components/admin/AdminDateRangeCalendar";
-import AdminTripMap, { type TripMapPoint } from "@/components/admin/AdminTripMap";
+import AdminTripMap, {
+  type TripMapPoint,
+} from "@/components/admin/AdminTripMap";
 import { AdminPageHeader } from "@/components/admin/layout";
+import { isSharedVehicle } from "@/lib/geo/stations";
 import { useClientLocale } from "@/lib/locale.client";
 
 interface DriverOption {
@@ -59,11 +62,54 @@ interface TripRow {
   driverId?: { _id?: string; name?: string; phone?: string } | null;
 }
 
-type StationRef = { id?: number; name?: string; lat?: number; lng?: number };
+type StationRef = {
+  id?: number;
+  name?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+};
+type LocationRef = {
+  address?: string;
+  name?: string;
+  lat?: number;
+  lng?: number;
+} | null;
+
+function toTripMapPoint(
+  location: LocationRef | StationRef | undefined,
+  label: string,
+  kind: TripMapPoint["kind"],
+  order?: number,
+): TripMapPoint | null {
+  if (
+    location?.lat == null ||
+    location.lng == null ||
+    !Number.isFinite(location.lat) ||
+    !Number.isFinite(location.lng)
+  ) {
+    return null;
+  }
+
+  return {
+    lat: location.lat,
+    lng: location.lng,
+    label: location.address ?? location.name ?? label,
+    kind,
+    order,
+  };
+}
 
 type TripDetail = TripRow &
   Record<string, unknown> & {
-    stops?: unknown[];
+    vehicleType?: string;
+    routeCoordinates?: unknown;
+    stops?: { point?: LocationRef }[];
+    passengers?: {
+      sameAsMain?: boolean;
+      pickup?: LocationRef;
+      dropoff?: LocationRef;
+    }[];
     pickupStation?: StationRef | null;
     dropoffStation?: StationRef | null;
     requestId?: {
@@ -86,41 +132,93 @@ type PendingDelete = {
 
 type SearchMode = "tripNumber" | "userNumber";
 
-const SEARCH_MODES: { value: SearchMode; label: string; placeholder: string }[] = [
+const SEARCH_MODES: {
+  value: SearchMode;
+  label: string;
+  placeholder: string;
+}[] = [
   { value: "tripNumber", label: "Trip number", placeholder: "e.g. 1245" },
   { value: "userNumber", label: "User number", placeholder: "e.g. 87" },
 ];
 
 const PAGE_SIZE = 20;
 
-const STATUS_STYLES: Record<string, { bg: string; color: string; label?: string }> = {
-  pending_payment: { bg: "var(--color-warning-tint)", color: "var(--color-warning)", label: "Pending payment" },
-  submitted: { bg: "var(--color-secondary-tint)", color: "var(--color-secondary)" },
-  matched: { bg: "var(--color-secondary-tint)", color: "var(--color-secondary)" },
-  scheduled: { bg: "var(--color-secondary-tint)", color: "var(--color-secondary)" },
-  confirmed: { bg: "var(--color-secondary-tint)", color: "var(--color-secondary)" },
-  in_progress: { bg: "var(--color-warning-tint)", color: "var(--color-warning)", label: "In progress" },
+const STATUS_STYLES: Record<
+  string,
+  { bg: string; color: string; label?: string }
+> = {
+  pending_payment: {
+    bg: "var(--color-warning-tint)",
+    color: "var(--color-warning)",
+    label: "Pending payment",
+  },
+  submitted: {
+    bg: "var(--color-secondary-tint)",
+    color: "var(--color-secondary)",
+  },
+  matched: {
+    bg: "var(--color-secondary-tint)",
+    color: "var(--color-secondary)",
+  },
+  scheduled: {
+    bg: "var(--color-secondary-tint)",
+    color: "var(--color-secondary)",
+  },
+  confirmed: {
+    bg: "var(--color-secondary-tint)",
+    color: "var(--color-secondary)",
+  },
+  in_progress: {
+    bg: "var(--color-warning-tint)",
+    color: "var(--color-warning)",
+    label: "In progress",
+  },
   active: { bg: "var(--color-warning-tint)", color: "var(--color-warning)" },
   completed: { bg: "var(--color-primary-tint)", color: "var(--color-muted)" },
   cancelled: { bg: "var(--color-danger-tint)", color: "var(--color-danger)" },
-  time_out: { bg: "var(--color-danger-tint)", color: "var(--color-danger)", label: "Timed out" },
-  nomatch: { bg: "var(--color-danger-tint)", color: "var(--color-danger)", label: "No match" },
+  time_out: {
+    bg: "var(--color-danger-tint)",
+    color: "var(--color-danger)",
+    label: "Timed out",
+  },
+  nomatch: {
+    bg: "var(--color-danger-tint)",
+    color: "var(--color-danger)",
+    label: "No match",
+  },
 };
 
 function getStatusStyle(status: string) {
   const key = status?.toLowerCase().replace(/\s+/g, "_") ?? "";
-  return STATUS_STYLES[key] ?? { bg: "var(--color-primary-tint)", color: "var(--color-muted)" };
+  return (
+    STATUS_STYLES[key] ?? {
+      bg: "var(--color-primary-tint)",
+      color: "var(--color-muted)",
+    }
+  );
 }
 
 function getRequestStatusBadge(status?: string) {
   if (status === "waiting_list") {
-    return { label: "Waiting list", bg: "var(--color-warning-tint)", color: "var(--color-warning)" };
+    return {
+      label: "Waiting list",
+      bg: "var(--color-warning-tint)",
+      color: "var(--color-warning)",
+    };
   }
   if (status === "approved" || status === "pending_payment") {
-    return { label: "Pending payment", bg: "var(--color-warning-tint)", color: "var(--color-warning)" };
+    return {
+      label: "Pending payment",
+      bg: "var(--color-warning-tint)",
+      color: "var(--color-warning)",
+    };
   }
   if (status === "rejected") {
-    return { label: "Rejected", bg: "var(--color-danger-tint)", color: "var(--color-danger)" };
+    return {
+      label: "Rejected",
+      bg: "var(--color-danger-tint)",
+      color: "var(--color-danger)",
+    };
   }
   return null;
 }
@@ -128,7 +226,10 @@ function getRequestStatusBadge(status?: string) {
 function initials(name?: string) {
   if (!name) return "—";
   const parts = name.trim().split(/\s+/);
-  return parts.slice(0, 2).map((p) => p[0]?.toUpperCase()).join("");
+  return parts
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join("");
 }
 
 function formatCreatedAt(value?: string) {
@@ -136,8 +237,15 @@ function formatCreatedAt(value?: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return { date: "—", time: "" };
   return {
-    date: parsed.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" }),
-    time: parsed.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+    date: parsed.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    }),
+    time: parsed.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
   };
 }
 
@@ -152,7 +260,11 @@ function formatTripDay(date?: string) {
   const parsed = new Date(`${date}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return { pretty: date, weekday: "" };
   return {
-    pretty: parsed.toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" }),
+    pretty: parsed.toLocaleDateString(undefined, {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+    }),
     weekday: parsed.toLocaleDateString(undefined, { weekday: "long" }),
   };
 }
@@ -227,7 +339,9 @@ export default function AdminTripsPage() {
   });
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
+    null,
+  );
   const [password, setPassword] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -259,7 +373,10 @@ export default function AdminTripsPage() {
 
     const run = async () => {
       try {
-        const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: String(PAGE_SIZE),
+        });
         if (filters.q) {
           params.set("q", filters.q);
           params.set("searchBy", filters.searchBy);
@@ -397,7 +514,10 @@ export default function AdminTripsPage() {
     try {
       const res = await fetch("/api/admin/trips?action=by-ids", {
         method: "DELETE",
-        headers: { "Content-Type": "application/json", "x-admin-password": password },
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-password": password,
+        },
         body: JSON.stringify({ ids: pendingDelete.ids }),
       });
       const data = await res.json().catch(() => null);
@@ -409,7 +529,9 @@ export default function AdminTripsPage() {
       closeDeleteModal();
       refresh();
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete trips");
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete trips",
+      );
       setDeleting(false);
     }
   }
@@ -432,7 +554,9 @@ export default function AdminTripsPage() {
       if (!res.ok) throw new Error(data.error ?? "Failed to load drivers");
       setDrivers(data.drivers ?? []);
     } catch (err) {
-      setDriversError(err instanceof Error ? err.message : "Failed to load drivers");
+      setDriversError(
+        err instanceof Error ? err.message : "Failed to load drivers",
+      );
     } finally {
       setDriversLoading(false);
     }
@@ -453,7 +577,9 @@ export default function AdminTripsPage() {
       closeModal();
       refresh();
     } catch (err) {
-      setDriversError(err instanceof Error ? err.message : "Failed to assign driver");
+      setDriversError(
+        err instanceof Error ? err.message : "Failed to assign driver",
+      );
       setAssigningId(null);
     }
   }
@@ -473,41 +599,151 @@ export default function AdminTripsPage() {
 
   const mapPoints = useMemo<TripMapPoint[]>(() => {
     if (!detail) return [];
-    const candidates: (TripMapPoint | null)[] = [
-      detail.pickup?.lat != null && detail.pickup?.lng != null
-        ? {
-            lat: detail.pickup.lat,
-            lng: detail.pickup.lng,
-            label: detail.pickup.address ?? "Origin",
-            kind: "pickup",
-          }
-        : null,
-      detail.dropoff?.lat != null && detail.dropoff?.lng != null
-        ? {
-            lat: detail.dropoff.lat,
-            lng: detail.dropoff.lng,
-            label: detail.dropoff.address ?? "Destination",
-            kind: "dropoff",
-          }
-        : null,
-      detail.pickupStation?.lat != null && detail.pickupStation?.lng != null
-        ? {
-            lat: detail.pickupStation.lat,
-            lng: detail.pickupStation.lng,
-            label: detail.pickupStation.name ?? "Pickup station",
-            kind: "station",
-          }
-        : null,
-      detail.dropoffStation?.lat != null && detail.dropoffStation?.lng != null
-        ? {
-            lat: detail.dropoffStation.lat,
-            lng: detail.dropoffStation.lng,
-            label: detail.dropoffStation.name ?? "Dropoff station",
-            kind: "station",
-          }
-        : null,
+    const pickup = toTripMapPoint(detail.pickup, "Origin", "pickup");
+    const dropoff = toTripMapPoint(detail.dropoff, "Destination", "dropoff");
+    const pickupStation = toTripMapPoint(
+      detail.pickupStation,
+      "Pickup station",
+      "station",
+    );
+    const dropoffStation = toTripMapPoint(
+      detail.dropoffStation,
+      "Dropoff station",
+      "station",
+    );
+    const stopPoints = (detail.stops ?? []).flatMap((stop, index) => {
+      const point = toTripMapPoint(
+        stop.point,
+        `Stop ${index + 1}`,
+        "stop",
+        index + 1,
+      );
+      return point ? [point] : [];
+    });
+    const distinctPassengers = (detail.passengers ?? []).filter(
+      (passenger) =>
+        !passenger.sameAsMain && passenger.pickup && passenger.dropoff,
+    );
+    const passengerPoints = distinctPassengers.flatMap((passenger, index) => {
+      const passengerPickup = toTripMapPoint(
+        passenger.pickup,
+        `Passenger ${index + 1} pickup`,
+        "stop",
+      );
+      const passengerDropoff = toTripMapPoint(
+        passenger.dropoff,
+        `Passenger ${index + 1} dropoff`,
+        "stop",
+      );
+      return [passengerPickup, passengerDropoff].filter(
+        (point): point is TripMapPoint => point !== null,
+      );
+    });
+
+    return [
+      pickup,
+      dropoff,
+      pickupStation,
+      dropoffStation,
+      ...stopPoints,
+      ...passengerPoints,
+    ].filter((point): point is TripMapPoint => point !== null);
+  }, [detail]);
+
+  const mapRoutePoints = useMemo<TripMapPoint[]>(() => {
+    if (!detail) return [];
+    const pickup = toTripMapPoint(detail.pickup, "Origin", "pickup");
+    const dropoff = toTripMapPoint(detail.dropoff, "Destination", "dropoff");
+    if (!pickup || !dropoff) return [];
+
+    const shared = isSharedVehicle(detail.vehicleType ?? "");
+    const distinctPassengers = (detail.passengers ?? []).filter(
+      (passenger) =>
+        !passenger.sameAsMain && passenger.pickup && passenger.dropoff,
+    );
+    if (!shared && distinctPassengers.length > 0) {
+      const passengerPickups = distinctPassengers.flatMap(
+        (passenger, index) => {
+          const point = toTripMapPoint(
+            passenger.pickup,
+            `Passenger ${index + 1} pickup`,
+            "stop",
+          );
+          return point ? [point] : [];
+        },
+      );
+      const passengerDropoffs = distinctPassengers.flatMap(
+        (passenger, index) => {
+          const point = toTripMapPoint(
+            passenger.dropoff,
+            `Passenger ${index + 1} dropoff`,
+            "stop",
+          );
+          return point ? [point] : [];
+        },
+      );
+      return [pickup, ...passengerPickups, ...passengerDropoffs, dropoff];
+    }
+
+    const routeOrigin =
+      toTripMapPoint(detail.pickupStation, "Pickup station", "station") ??
+      pickup;
+    const routeDestination =
+      toTripMapPoint(detail.dropoffStation, "Dropoff station", "station") ??
+      dropoff;
+    const stops = shared
+      ? []
+      : (detail.stops ?? []).flatMap((stop, index) => {
+          const point = toTripMapPoint(stop.point, `Stop ${index + 1}`, "stop");
+          return point ? [point] : [];
+        });
+    return [routeOrigin, ...stops, routeDestination];
+  }, [detail]);
+
+  const walkingConnections = useMemo(() => {
+    if (
+      !detail ||
+      (!isSharedVehicle(detail.vehicleType ?? "") &&
+        (detail.passengers ?? []).some(
+          (passenger) =>
+            !passenger.sameAsMain && passenger.pickup && passenger.dropoff,
+        ))
+    ) {
+      return [];
+    }
+    const pickup = toTripMapPoint(detail.pickup, "Origin", "pickup");
+    const dropoff = toTripMapPoint(detail.dropoff, "Destination", "dropoff");
+    const pickupStation = toTripMapPoint(
+      detail.pickupStation,
+      "Pickup station",
+      "station",
+    );
+    const dropoffStation = toTripMapPoint(
+      detail.dropoffStation,
+      "Dropoff station",
+      "station",
+    );
+    return [
+      ...(pickup && pickupStation ? [{ from: pickup, to: pickupStation }] : []),
+      ...(dropoff && dropoffStation
+        ? [{ from: dropoffStation, to: dropoff }]
+        : []),
     ];
-    return candidates.filter((p): p is TripMapPoint => p !== null);
+  }, [detail]);
+
+  const mapRouteGeometry = useMemo<[number, number][] | undefined>(() => {
+    const coordinates = detail?.routeCoordinates;
+    if (!Array.isArray(coordinates)) return undefined;
+    const validCoordinates = coordinates.filter(
+      (coordinate): coordinate is [number, number] =>
+        Array.isArray(coordinate) &&
+        coordinate.length === 2 &&
+        typeof coordinate[0] === "number" &&
+        Number.isFinite(coordinate[0]) &&
+        typeof coordinate[1] === "number" &&
+        Number.isFinite(coordinate[1]),
+    );
+    return validCoordinates.length > 1 ? validCoordinates : undefined;
   }, [detail]);
 
   useEffect(() => {
@@ -518,7 +754,8 @@ export default function AdminTripsPage() {
       try {
         const res = await fetch(`/api/admin/trips/${detailId}`);
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to load trip details");
+        if (!res.ok)
+          throw new Error(data.error ?? "Failed to load trip details");
         if (!active) return;
         setDetail(data.trip ?? null);
         setDetailError(null);
@@ -850,34 +1087,77 @@ export default function AdminTripsPage() {
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
         <AdminPageHeader
           title="Trips"
-          description={loading ? "Loading the board…" : `${totalCount} trip${totalCount === 1 ? "" : "s"} match the current filters`}
+          description={
+            loading
+              ? "Loading the board…"
+              : `${totalCount} trip${totalCount === 1 ? "" : "s"} match the current filters`
+          }
           icon={Route}
           actions={
             <>
-            <Link
-              href="/admin/trips"
-              style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none", background: "var(--color-primary)", color: "var(--color-on-primary)" }}
-            >
-              Single Trips
-            </Link>
-            <Link
-              href="/admin/rides"
-              style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none", background: "var(--color-panel)", color: "var(--color-muted)", border: "1px solid var(--color-border)" }}
-            >
-              Matched Rides
-            </Link>
+              <Link
+                href="/admin/trips"
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: 10,
+                  fontWeight: 600,
+                  fontSize: 14,
+                  textDecoration: "none",
+                  background: "var(--color-primary)",
+                  color: "var(--color-on-primary)",
+                }}
+              >
+                Single Trips
+              </Link>
+              <Link
+                href="/admin/rides"
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: 10,
+                  fontWeight: 600,
+                  fontSize: 14,
+                  textDecoration: "none",
+                  background: "var(--color-panel)",
+                  color: "var(--color-muted)",
+                  border: "1px solid var(--color-border)",
+                }}
+              >
+                Matched Rides
+              </Link>
             </>
           }
         />
 
         {error ? (
-          <p role="alert" style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)", fontSize: 14 }}>
+          <p
+            role="alert"
+            style={{
+              marginBottom: 16,
+              padding: "12px 14px",
+              borderRadius: 10,
+              background: "var(--color-danger-tint)",
+              color: "var(--color-danger)",
+              border: "1px solid var(--color-danger)",
+              fontSize: 14,
+            }}
+          >
             {error}
           </p>
         ) : null}
 
         {notice ? (
-          <p role="status" style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 10, background: "var(--color-secondary-tint)", color: "var(--color-secondary)", border: "1px solid var(--color-secondary)", fontSize: 14 }}>
+          <p
+            role="status"
+            style={{
+              marginBottom: 16,
+              padding: "12px 14px",
+              borderRadius: 10,
+              background: "var(--color-secondary-tint)",
+              color: "var(--color-secondary)",
+              border: "1px solid var(--color-secondary)",
+              fontSize: 14,
+            }}
+          >
             {notice}
           </p>
         ) : null}
@@ -929,19 +1209,43 @@ export default function AdminTripsPage() {
               align="end"
             />
           </div>
-          <button type="button" onClick={resetFilters} className="action-btn ghost">
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="action-btn ghost"
+          >
             <RotateCcw size={14} /> Reset
           </button>
         </div>
 
-        <section style={{ borderRadius: "var(--radius-md)", background: "var(--color-panel)", border: "1px solid var(--color-border)", boxShadow: "0 10px 35px var(--color-shadow)", overflow: "hidden", borderTop: "3px solid var(--color-secondary)" }}>
+        <section
+          style={{
+            borderRadius: "var(--radius-md)",
+            background: "var(--color-panel)",
+            border: "1px solid var(--color-border)",
+            boxShadow: "0 10px 35px var(--color-shadow)",
+            overflow: "hidden",
+            borderTop: "3px solid var(--color-secondary)",
+          }}
+        >
           {selectedIds.length > 0 ? (
             <div className="bulk-bar">
-              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
-                {selectedIds.length} trip{selectedIds.length === 1 ? "" : "s"} selected
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--color-primary)",
+                }}
+              >
+                {selectedIds.length} trip{selectedIds.length === 1 ? "" : "s"}{" "}
+                selected
               </span>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button type="button" className="action-btn ghost" onClick={() => setSelectedIds([])}>
+                <button
+                  type="button"
+                  className="action-btn ghost"
+                  onClick={() => setSelectedIds([])}
+                >
                   Clear selection
                 </button>
                 <button
@@ -992,7 +1296,10 @@ export default function AdminTripsPage() {
                     <tr key={`skeleton-${i}`} className="skeleton-row">
                       {Array.from({ length: 12 }).map((__, j) => (
                         <td key={`skeleton-${i}-${j}`}>
-                          <div className="skeleton-bar" style={{ width: j === 0 ? 16 : 80 }} />
+                          <div
+                            className="skeleton-bar"
+                            style={{ width: j === 0 ? 16 : 80 }}
+                          />
                         </td>
                       ))}
                     </tr>
@@ -1000,17 +1307,47 @@ export default function AdminTripsPage() {
                 ) : trips.length === 0 ? (
                   <tr>
                     <td colSpan={12} style={{ padding: "56px 16px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
-                        <Inbox size={28} style={{ color: "var(--color-border)" }} />
-                        <p style={{ margin: 0, fontWeight: 600, color: "var(--color-primary)", fontSize: 15 }}>No trips found</p>
-                        <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}>Try clearing the filters or widening the date range.</p>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 10,
+                          textAlign: "center",
+                        }}
+                      >
+                        <Inbox
+                          size={28}
+                          style={{ color: "var(--color-border)" }}
+                        />
+                        <p
+                          style={{
+                            margin: 0,
+                            fontWeight: 600,
+                            color: "var(--color-primary)",
+                            fontSize: 15,
+                          }}
+                        >
+                          No trips found
+                        </p>
+                        <p
+                          style={{
+                            margin: 0,
+                            color: "var(--color-muted)",
+                            fontSize: 13,
+                          }}
+                        >
+                          Try clearing the filters or widening the date range.
+                        </p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   trips.map((trip) => {
                     const statusStyle = getStatusStyle(trip.status);
-                    const requestStatusStyle = getRequestStatusBadge(trip.requestId?.status);
+                    const requestStatusStyle = getRequestStatusBadge(
+                      trip.requestId?.status,
+                    );
                     const driverName = trip.driverId?.name;
                     const created = formatCreatedAt(trip.createdAt);
                     const tripDay = formatTripDay(trip.date);
@@ -1040,83 +1377,211 @@ export default function AdminTripsPage() {
                           />
                         </td>
                         <td>
-                          <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>
+                          <span
+                            className="mono"
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "var(--color-primary)",
+                            }}
+                          >
                             {tripLabel}
                           </span>
                         </td>
                         <td>
-                          <div style={{ fontSize: 13, color: "var(--color-primary)", fontWeight: 500 }}>{tripDay.pretty}</div>
-                          <div style={{ fontSize: 12, color: "var(--color-secondary-deep)", marginTop: 2, fontWeight: 600 }}>{tripDay.weekday}</div>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              color: "var(--color-primary)",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {tripDay.pretty}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "var(--color-secondary-deep)",
+                              marginTop: 2,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {tripDay.weekday}
+                          </div>
                         </td>
                         <td>
-                          <div style={{ fontSize: 13, color: "var(--color-primary)", fontWeight: 500 }}>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              color: "var(--color-primary)",
+                              fontWeight: 500,
+                            }}
+                          >
                             {trip.userId?.name ?? "Unknown user"}
                           </div>
-                          <div style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "var(--color-muted)",
+                              marginTop: 2,
+                            }}
+                          >
                             {trip.userId?.userNumber != null
                               ? `User #${trip.userId.userNumber}`
                               : (trip.userId?.email ?? "—")}
                           </div>
                           {trip.preferedGender ? (
-                            <div style={{ fontSize: 11, color: "var(--color-secondary-deep)", marginTop: 2 }}>
-                              {t("admin.trip.gender_preference")}: {t(`gender.${trip.preferedGender}`)}
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "var(--color-secondary-deep)",
+                                marginTop: 2,
+                              }}
+                            >
+                              {t("admin.trip.gender_preference")}:{" "}
+                              {t(`gender.${trip.preferedGender}`)}
                             </div>
                           ) : null}
                         </td>
                         <td>
-                          <div className="addr-cell" title={trip.pickup?.address ?? undefined}>
+                          <div
+                            className="addr-cell"
+                            title={trip.pickup?.address ?? undefined}
+                          >
                             <span className="dot" />
-                            <span className="txt">{trip.pickup?.address ?? "No pickup set"}</span>
+                            <span className="txt">
+                              {trip.pickup?.address ?? "No pickup set"}
+                            </span>
                           </div>
                         </td>
                         <td>
-                          <div className="addr-cell" title={trip.dropoff?.address ?? undefined}>
+                          <div
+                            className="addr-cell"
+                            title={trip.dropoff?.address ?? undefined}
+                          >
                             <span className="dot end" />
-                            <span className="txt">{trip.dropoff?.address ?? "No dropoff set"}</span>
+                            <span className="txt">
+                              {trip.dropoff?.address ?? "No dropoff set"}
+                            </span>
                           </div>
                         </td>
                         <td>
-                          <div style={{ fontSize: 13, color: "var(--color-primary)" }}>{created.date}</div>
-                          <div className="mono" style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>{created.time}</div>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              color: "var(--color-primary)",
+                            }}
+                          >
+                            {created.date}
+                          </div>
+                          <div
+                            className="mono"
+                            style={{
+                              fontSize: 12,
+                              color: "var(--color-muted)",
+                              marginTop: 2,
+                            }}
+                          >
+                            {created.time}
+                          </div>
                         </td>
                         <td>
-                          <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>{trip.pickupTime}</div>
+                          <div
+                            className="mono"
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "var(--color-primary)",
+                            }}
+                          >
+                            {trip.pickupTime}
+                          </div>
                         </td>
                         <td>
-                          <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)" }}>{trip.arrivalTime}</div>
+                          <div
+                            className="mono"
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "var(--color-primary)",
+                            }}
+                          >
+                            {trip.arrivalTime}
+                          </div>
                         </td>
                         <td>
-                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                            <span className="status-pill" style={{ background: statusStyle.bg, color: statusStyle.color }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 5,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <span
+                              className="status-pill"
+                              style={{
+                                background: statusStyle.bg,
+                                color: statusStyle.color,
+                              }}
+                            >
                               {statusStyle.label ?? trip.status}
                             </span>
                             {requestStatusStyle && (
-                              <span className="status-pill" style={{ background: requestStatusStyle.bg, color: requestStatusStyle.color }}>
+                              <span
+                                className="status-pill"
+                                style={{
+                                  background: requestStatusStyle.bg,
+                                  color: requestStatusStyle.color,
+                                }}
+                              >
                                 {requestStatusStyle.label}
                               </span>
                             )}
                           </div>
                         </td>
                         <td>
-                          <div className={`driver-chip ${driverName ? "" : "unassigned"}`}>
+                          <div
+                            className={`driver-chip ${driverName ? "" : "unassigned"}`}
+                          >
                             <span className="avatar">
-                              {driverName ? initials(driverName) : <MapPin size={12} />}
+                              {driverName ? (
+                                initials(driverName)
+                              ) : (
+                                <MapPin size={12} />
+                              )}
                             </span>
                             {driverName ? (
                               <span className="name">{driverName}</span>
                             ) : (
-                              <span className="unassigned-label">Unassigned</span>
+                              <span className="unassigned-label">
+                                Unassigned
+                              </span>
                             )}
                           </div>
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button type="button" onClick={() => void openAssignModal(trip._id)} className="action-btn assign">
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 8,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => void openAssignModal(trip._id)}
+                              className="action-btn assign"
+                            >
                               <UserPlus size={14} /> Assign
                             </button>
                             <button
                               type="button"
-                              onClick={() => setPendingDelete({ ids: [trip._id], label: `trip ${tripLabel}` })}
+                              onClick={() =>
+                                setPendingDelete({
+                                  ids: [trip._id],
+                                  label: `trip ${tripLabel}`,
+                                })
+                              }
                               className="action-btn delete"
                             >
                               <Trash2 size={14} /> Delete
@@ -1146,10 +1611,20 @@ export default function AdminTripsPage() {
               Page {page} of {totalPages}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" className="action-btn ghost" disabled={loading || page <= 1} onClick={() => goToPage(Math.max(1, page - 1))}>
+              <button
+                type="button"
+                className="action-btn ghost"
+                disabled={loading || page <= 1}
+                onClick={() => goToPage(Math.max(1, page - 1))}
+              >
                 <ChevronLeft size={14} /> Previous
               </button>
-              <button type="button" className="action-btn ghost" disabled={loading || page >= totalPages} onClick={() => goToPage(Math.min(totalPages, page + 1))}>
+              <button
+                type="button"
+                className="action-btn ghost"
+                disabled={loading || page >= totalPages}
+                onClick={() => goToPage(Math.min(totalPages, page + 1))}
+              >
                 Next <ChevronRight size={14} />
               </button>
             </div>
@@ -1160,7 +1635,11 @@ export default function AdminTripsPage() {
       {detailId ? (
         <div
           className="trips-board modal-overlay"
-          style={{ alignItems: "stretch", justifyContent: "flex-end", padding: 0 }}
+          style={{
+            alignItems: "stretch",
+            justifyContent: "flex-end",
+            padding: 0,
+          }}
           onClick={(e) => {
             if (e.target === e.currentTarget) closeDetail();
           }}
@@ -1183,14 +1662,38 @@ export default function AdminTripsPage() {
               }}
             >
               <div>
-                <p className="mono" style={{ margin: 0, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-secondary-deep)" }}>
+                <p
+                  className="mono"
+                  style={{
+                    margin: 0,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "var(--color-secondary-deep)",
+                  }}
+                >
                   Trip details
                 </p>
-                <h3 className="display" style={{ margin: "5px 0 0", fontSize: 20, fontWeight: 700, color: "var(--color-primary)" }}>
+                <h3
+                  className="display"
+                  style={{
+                    margin: "5px 0 0",
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: "var(--color-primary)",
+                  }}
+                >
                   {detail ? tripLabelOf(detail) : "Loading…"}
                 </h3>
                 {detail ? (
-                  <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--color-muted)" }}>
+                  <p
+                    style={{
+                      margin: "4px 0 0",
+                      fontSize: 13,
+                      color: "var(--color-muted)",
+                    }}
+                  >
                     {detail.date} · {detail.pickupTime} → {detail.arrivalTime}
                   </p>
                 ) : null}
@@ -1199,7 +1702,14 @@ export default function AdminTripsPage() {
                 type="button"
                 onClick={closeDetail}
                 aria-label="Close details"
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--color-muted)", padding: 4, flexShrink: 0 }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--color-muted)",
+                  padding: 4,
+                  flexShrink: 0,
+                }}
               >
                 <X size={20} />
               </button>
@@ -1207,25 +1717,65 @@ export default function AdminTripsPage() {
 
             <div className="detail-body">
               {detailLoading ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 10 }}
+                >
                   {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={`detail-skel-${i}`} className="skeleton-bar" style={{ height: 16 }} />
+                    <div
+                      key={`detail-skel-${i}`}
+                      className="skeleton-bar"
+                      style={{ height: 16 }}
+                    />
                   ))}
                 </div>
               ) : detailError ? (
-                <p role="alert" style={{ margin: 0, padding: "12px 14px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)", fontSize: 13 }}>
+                <p
+                  role="alert"
+                  style={{
+                    margin: 0,
+                    padding: "12px 14px",
+                    borderRadius: 10,
+                    background: "var(--color-danger-tint)",
+                    color: "var(--color-danger)",
+                    border: "1px solid var(--color-danger)",
+                    fontSize: 13,
+                  }}
+                >
                   {detailError}
                 </p>
               ) : detail ? (
                 <>
                   {mapPoints.length > 0 ? (
                     <div className="detail-section" style={{ padding: 12 }}>
-                      <AdminTripMap key={detail._id} points={mapPoints} />
-                      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, paddingInline: 4 }}>
-                        <span className="map-legend"><i style={{ background: "var(--color-secondary)" }} /> Origin</span>
-                        <span className="map-legend"><i style={{ background: "var(--color-primary)" }} /> Destination</span>
+                      <AdminTripMap
+                        key={detail._id}
+                        points={mapPoints}
+                        routePoints={mapRoutePoints}
+                        routeGeometry={mapRouteGeometry}
+                        walkingConnections={walkingConnections}
+                      />
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 14,
+                          flexWrap: "wrap",
+                          marginTop: 10,
+                          paddingInline: 4,
+                        }}
+                      >
+                        <span className="map-legend">
+                          <i style={{ background: "var(--color-secondary)" }} />{" "}
+                          Origin
+                        </span>
+                        <span className="map-legend">
+                          <i style={{ background: "var(--color-primary)" }} />{" "}
+                          Destination
+                        </span>
                         {detail.pickupStation || detail.dropoffStation ? (
-                          <span className="map-legend"><i style={{ background: "var(--color-accent)" }} /> Station</span>
+                          <span className="map-legend">
+                            <i style={{ background: "var(--color-accent)" }} />{" "}
+                            Station
+                          </span>
                         ) : null}
                       </div>
                     </div>
@@ -1236,11 +1786,15 @@ export default function AdminTripsPage() {
                     <div className="detail-grid">
                       <div className="detail-item">
                         <span className="k">Origin</span>
-                        <span className="v">{detail.pickup?.address ?? "—"}</span>
+                        <span className="v">
+                          {detail.pickup?.address ?? "—"}
+                        </span>
                       </div>
                       <div className="detail-item">
                         <span className="k">Destination</span>
-                        <span className="v">{detail.dropoff?.address ?? "—"}</span>
+                        <span className="v">
+                          {detail.dropoff?.address ?? "—"}
+                        </span>
                       </div>
                       <div className="detail-item">
                         <span className="k">Trip date</span>
@@ -1261,7 +1815,8 @@ export default function AdminTripsPage() {
                               color: getStatusStyle(detail.status).color,
                             }}
                           >
-                            {getStatusStyle(detail.status).label ?? detail.status}
+                            {getStatusStyle(detail.status).label ??
+                              detail.status}
                           </span>
                           {detailRequestBadge && (
                             <span
@@ -1299,8 +1854,16 @@ export default function AdminTripsPage() {
                       <div className="detail-item">
                         <span className="k">Last updated</span>
                         <span className="v">
-                          {formatCreatedAt(detail.updatedAt as string | undefined).date}{" "}
-                          {formatCreatedAt(detail.updatedAt as string | undefined).time}
+                          {
+                            formatCreatedAt(
+                              detail.updatedAt as string | undefined,
+                            ).date
+                          }{" "}
+                          {
+                            formatCreatedAt(
+                              detail.updatedAt as string | undefined,
+                            ).time
+                          }
                         </span>
                       </div>
                     </div>
@@ -1312,27 +1875,40 @@ export default function AdminTripsPage() {
                       <div className="detail-grid">
                         <div className="detail-item">
                           <span className="k">Pickup station name</span>
-                          <span className="v">{detail.pickupStation?.name ?? "—"}</span>
+                          <span className="v">
+                            {detail.pickupStation?.name ?? "—"}
+                          </span>
                         </div>
                         <div className="detail-item">
                           <span className="k">Pickup station number</span>
-                          <span className="v mono">{detail.pickupStation?.id ?? "—"}</span>
+                          <span className="v mono">
+                            {detail.pickupStation?.id ?? "—"}
+                          </span>
                         </div>
                         <div className="detail-item">
                           <span className="k">Dropoff station name</span>
-                          <span className="v">{detail.dropoffStation?.name ?? "—"}</span>
+                          <span className="v">
+                            {detail.dropoffStation?.name ?? "—"}
+                          </span>
                         </div>
                         <div className="detail-item">
                           <span className="k">Dropoff station number</span>
-                          <span className="v mono">{detail.dropoffStation?.id ?? "—"}</span>
+                          <span className="v mono">
+                            {detail.dropoffStation?.id ?? "—"}
+                          </span>
                         </div>
                         <div className="detail-item">
                           <span className="k">Walk to station</span>
-                          <span className="v">{renderDetailValue(detail.walkingMinToStation)} min</span>
+                          <span className="v">
+                            {renderDetailValue(detail.walkingMinToStation)} min
+                          </span>
                         </div>
                         <div className="detail-item">
                           <span className="k">Walk from station</span>
-                          <span className="v">{renderDetailValue(detail.walkingMinFromStation)} min</span>
+                          <span className="v">
+                            {renderDetailValue(detail.walkingMinFromStation)}{" "}
+                            min
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1367,11 +1943,15 @@ export default function AdminTripsPage() {
                     <div className="detail-grid">
                       <div className="detail-item">
                         <span className="k">Name</span>
-                        <span className="v">{detail.driverId?.name ?? "Unassigned"}</span>
+                        <span className="v">
+                          {detail.driverId?.name ?? "Unassigned"}
+                        </span>
                       </div>
                       <div className="detail-item">
                         <span className="k">Phone</span>
-                        <span className="v">{detail.driverId?.phone ?? "—"}</span>
+                        <span className="v">
+                          {detail.driverId?.phone ?? "—"}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1382,7 +1962,9 @@ export default function AdminTripsPage() {
                       <div className="detail-grid">
                         <div className="detail-item">
                           <span className="k">Trips in request</span>
-                          <span className="v">{detail.requestId.tripIds?.length ?? 0}</span>
+                          <span className="v">
+                            {detail.requestId.tripIds?.length ?? 0}
+                          </span>
                         </div>
                         <div className="detail-item">
                           <span className="k">Request total</span>
@@ -1394,13 +1976,20 @@ export default function AdminTripsPage() {
                         </div>
                         <div className="detail-item">
                           <span className="k">Payment status</span>
-                          <span className="v">{detail.requestId.paymentStatus ?? "—"}</span>
+                          <span className="v">
+                            {detail.requestId.paymentStatus ?? "—"}
+                          </span>
                         </div>
                         <div className="detail-item">
                           <span className="k">Request status</span>
-                          <span className="v">{detail.requestId.status ?? "—"}</span>
+                          <span className="v">
+                            {detail.requestId.status ?? "—"}
+                          </span>
                         </div>
-                        <div className="detail-item" style={{ gridColumn: "1 / -1" }}>
+                        <div
+                          className="detail-item"
+                          style={{ gridColumn: "1 / -1" }}
+                        >
                           <span className="k">Dates</span>
                           <span className="v">
                             {detail.requestId.dates?.length
@@ -1409,7 +1998,10 @@ export default function AdminTripsPage() {
                           </span>
                         </div>
                         {detail.requestId.note ? (
-                          <div className="detail-item" style={{ gridColumn: "1 / -1" }}>
+                          <div
+                            className="detail-item"
+                            style={{ gridColumn: "1 / -1" }}
+                          >
                             <span className="k">Note</span>
                             <span className="v">{detail.requestId.note}</span>
                           </div>
@@ -1502,16 +2094,52 @@ export default function AdminTripsPage() {
               void confirmDelete();
             }}
           >
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: "var(--color-danger-tint)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <ShieldAlert size={18} style={{ color: "var(--color-danger)" }} />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 12,
+                marginBottom: 14,
+              }}
+            >
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: "var(--color-danger-tint)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <ShieldAlert
+                  size={18}
+                  style={{ color: "var(--color-danger)" }}
+                />
               </div>
               <div>
-                <h3 className="display" style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--color-primary)" }}>
+                <h3
+                  className="display"
+                  style={{
+                    margin: 0,
+                    fontSize: 17,
+                    fontWeight: 700,
+                    color: "var(--color-primary)",
+                  }}
+                >
                   Delete {pendingDelete.label}
                 </h3>
-                <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--color-muted)" }}>
-                  This permanently removes the record from the database. Enter the admin password to confirm.
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    fontSize: 13,
+                    color: "var(--color-muted)",
+                  }}
+                >
+                  This permanently removes the record from the database. Enter
+                  the admin password to confirm.
                 </p>
               </div>
             </div>
@@ -1529,16 +2157,43 @@ export default function AdminTripsPage() {
             </label>
 
             {deleteError ? (
-              <p role="alert" style={{ margin: "12px 0 0", padding: "10px 12px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)", fontSize: 13 }}>
+              <p
+                role="alert"
+                style={{
+                  margin: "12px 0 0",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background: "var(--color-danger-tint)",
+                  color: "var(--color-danger)",
+                  border: "1px solid var(--color-danger)",
+                  fontSize: 13,
+                }}
+              >
                 {deleteError}
               </p>
             ) : null}
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
-              <button type="button" className="action-btn ghost" onClick={closeDeleteModal} disabled={deleting}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+                marginTop: 18,
+              }}
+            >
+              <button
+                type="button"
+                className="action-btn ghost"
+                onClick={closeDeleteModal}
+                disabled={deleting}
+              >
                 Cancel
               </button>
-              <button type="submit" className="action-btn solid-danger" disabled={deleting}>
+              <button
+                type="submit"
+                className="action-btn solid-danger"
+                disabled={deleting}
+              >
                 {deleting ? <span className="spinner" /> : <Trash2 size={14} />}
                 {deleting ? "Deleting…" : "Delete permanently"}
               </button>
@@ -1554,30 +2209,90 @@ export default function AdminTripsPage() {
             if (e.target === e.currentTarget) closeModal();
           }}
         >
-          <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Assign driver">
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
+          <div
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Assign driver"
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                marginBottom: 4,
+              }}
+            >
               <div>
-                <h3 className="display" style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--color-primary)" }}>Assign driver</h3>
+                <h3
+                  className="display"
+                  style={{
+                    margin: 0,
+                    fontSize: 17,
+                    fontWeight: 700,
+                    color: "var(--color-primary)",
+                  }}
+                >
+                  Assign driver
+                </h3>
                 {(() => {
                   const trip = trips.find((t) => t._id === modalTripId);
                   return trip ? (
-                    <p style={{ margin: "3px 0 0", fontSize: 13, color: "var(--color-muted)" }}>
-                      {trip.tripNumber != null ? `#${String(trip.tripNumber).padStart(3, "0")}` : ""} · {trip.date} · {trip.pickupTime}
+                    <p
+                      style={{
+                        margin: "3px 0 0",
+                        fontSize: 13,
+                        color: "var(--color-muted)",
+                      }}
+                    >
+                      {trip.tripNumber != null
+                        ? `#${String(trip.tripNumber).padStart(3, "0")}`
+                        : ""}{" "}
+                      · {trip.date} · {trip.pickupTime}
                     </p>
                   ) : null;
                 })()}
               </div>
-              <button type="button" onClick={closeModal} aria-label="Close" style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--color-muted)", padding: 4, flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={closeModal}
+                aria-label="Close"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--color-muted)",
+                  padding: 4,
+                  flexShrink: 0,
+                }}
+              >
                 <X size={18} />
               </button>
             </div>
 
-            <p style={{ margin: "6px 0 16px", fontSize: 13, color: "var(--color-muted)" }}>
+            <p
+              style={{
+                margin: "6px 0 16px",
+                fontSize: 13,
+                color: "var(--color-muted)",
+              }}
+            >
               Showing drivers available for this trip&apos;s date and time.
             </p>
 
             {driversError ? (
-              <p role="alert" style={{ margin: "0 0 14px", padding: "10px 12px", borderRadius: 10, background: "var(--color-danger-tint)", color: "var(--color-danger)", border: "1px solid var(--color-danger)", fontSize: 13 }}>
+              <p
+                role="alert"
+                style={{
+                  margin: "0 0 14px",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background: "var(--color-danger-tint)",
+                  color: "var(--color-danger)",
+                  border: "1px solid var(--color-danger)",
+                  fontSize: 13,
+                }}
+              >
                 {driversError}
               </p>
             ) : null}
@@ -1586,18 +2301,48 @@ export default function AdminTripsPage() {
               <div className="driver-list">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div key={`driver-skel-${i}`} className="modal-skel">
-                    <div className="skeleton-bar" style={{ width: 30, height: 30, borderRadius: "50%" }} />
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div
+                      className="skeleton-bar"
+                      style={{ width: 30, height: 30, borderRadius: "50%" }}
+                    />
+                    <div
+                      style={{
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
                       <div className="skeleton-bar" style={{ width: "50%" }} />
-                      <div className="skeleton-bar" style={{ width: "30%", height: 9 }} />
+                      <div
+                        className="skeleton-bar"
+                        style={{ width: "30%", height: 9 }}
+                      />
                     </div>
                   </div>
                 ))}
               </div>
             ) : drivers.length === 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "24px 8px", textAlign: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "24px 8px",
+                  textAlign: "center",
+                }}
+              >
                 <MapPin size={22} style={{ color: "var(--color-border)" }} />
-                <p style={{ margin: 0, fontSize: 14, color: "var(--color-muted)" }}>No drivers are available for this trip&apos;s date.</p>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 14,
+                    color: "var(--color-muted)",
+                  }}
+                >
+                  No drivers are available for this trip&apos;s date.
+                </p>
               </div>
             ) : (
               <div className="driver-list">
@@ -1606,25 +2351,77 @@ export default function AdminTripsPage() {
                   const isAssigning = assigningId === id;
                   return (
                     <button
-                      key={driver._id ? `${driver._id}-${index}` : `driver-${index}`}
+                      key={
+                        driver._id
+                          ? `${driver._id}-${index}`
+                          : `driver-${index}`
+                      }
                       type="button"
                       disabled={assigningId !== null}
                       onClick={() => void assignDriver(id)}
                       className="driver-row"
                     >
-                      <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                        <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--color-primary)", color: "var(--color-on-primary)", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          minWidth: 0,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: "50%",
+                            background: "var(--color-primary)",
+                            color: "var(--color-on-primary)",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
                           {initials(driver.name)}
                         </span>
                         <span style={{ minWidth: 0 }}>
-                          <strong style={{ color: "var(--color-primary)", fontSize: 14, display: "block" }}>{driver.name ?? "Driver"}</strong>
-                          <span style={{ color: "var(--color-muted)", fontSize: 12.5 }}>{driver.phone ?? "No phone on file"}</span>
+                          <strong
+                            style={{
+                              color: "var(--color-primary)",
+                              fontSize: 14,
+                              display: "block",
+                            }}
+                          >
+                            {driver.name ?? "Driver"}
+                          </strong>
+                          <span
+                            style={{
+                              color: "var(--color-muted)",
+                              fontSize: 12.5,
+                            }}
+                          >
+                            {driver.phone ?? "No phone on file"}
+                          </span>
                           {driver.startTime && driver.endTime ? (
-                            <span className="mono avail-chip">{driver.startTime}–{driver.endTime}</span>
+                            <span className="mono avail-chip">
+                              {driver.startTime}–{driver.endTime}
+                            </span>
                           ) : null}
                         </span>
                       </span>
-                      <span style={{ color: "var(--color-secondary-deep)", fontWeight: 700, fontSize: 13, flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span
+                        style={{
+                          color: "var(--color-secondary-deep)",
+                          fontWeight: 700,
+                          fontSize: 13,
+                          flexShrink: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
                         {isAssigning ? <span className="spinner" /> : null}
                         {isAssigning ? "Assigning…" : "Assign"}
                       </span>

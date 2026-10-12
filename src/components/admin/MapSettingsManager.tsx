@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Map as MapIcon, Search, SlidersHorizontal } from "lucide-react";
+import {
+  Check,
+  Map as MapIcon,
+  Plus,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { MapSearchProvider } from "@/lib/MapSearchContext";
 import { OSM_THEMES, type MapSettings } from "@/lib/config/mapSettings";
 import { REGION_LIST, type RegionCode } from "@/lib/config/regions";
@@ -21,14 +27,48 @@ const field: React.CSSProperties = {
   font: "inherit",
 };
 
+type ZoneOption = { id: string; name: string };
+
 export default function MapSettingsManager() {
   const [regionCode, setRegionCode] = useState<RegionCode>("EG-CAIRO");
   const [settings, setSettings] = useState<MapSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [zoneOptions, setZoneOptions] = useState<ZoneOption[]>([]);
+
+  useEffect(() => {
+    if (regionCode !== "EG-CAIRO") return;
+    let cancelled = false;
+    fetch("/geo/zone_polygon.geojson")
+      .then((response) => response.json())
+      .then(
+        (geojson: {
+          features?: Array<{
+            id?: string | number;
+            properties?: { NAME?: string };
+          }>;
+        }) => {
+          if (cancelled) return;
+          setZoneOptions(
+            (geojson.features ?? [])
+              .filter((feature) => feature.id != null)
+              .map((feature) => ({
+                id: String(feature.id),
+                name: feature.properties?.NAME || String(feature.id),
+              })),
+          );
+        },
+      )
+      .catch(() => {
+        if (!cancelled) setMessage("Could not load the service-zone list.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [regionCode]);
+
   useEffect(() => {
     let cancelled = false;
-    setSettings(null);
     fetch(`/api/admin/maps?regionCode=${regionCode}`)
       .then((r) => r.json())
       .then((json) => {
@@ -97,7 +137,7 @@ export default function MapSettingsManager() {
           </select>
         </label>
       </section>
-      {settings ? (
+      {settings?.regionCode === regionCode ? (
         <>
           <section className="map-settings-grid">
             <ProviderOption
@@ -293,6 +333,115 @@ export default function MapSettingsManager() {
             </p>
           </section>
 
+          <section className="map-settings-card">
+            <div>
+              <p className="map-settings-kicker">Station assignment</p>
+              <h2>Choose how locations use stations</h2>
+              <p>
+                Keep the existing vehicle-based behavior, or choose station
+                behavior by Cairo zone.
+              </p>
+            </div>
+            <div className="map-settings-grid">
+              <ProviderOption
+                active={settings.stationAssignmentMode === "shared-vehicles"}
+                title="Shared vehicles"
+                description="Shared vehicle types use nearby stations; other vehicles use the selected points directly."
+                onClick={() => set("stationAssignmentMode", "shared-vehicles")}
+              />
+              <ProviderOption
+                active={settings.stationAssignmentMode === "zones"}
+                title="Zones"
+                description="Each configured station zone uses nearby stations. Other locations use their selected points directly."
+                onClick={() => set("stationAssignmentMode", "zones")}
+              />
+            </div>
+            {regionCode === "EG-CAIRO" &&
+              settings.stationAssignmentMode === "zones" && (
+                <div style={{ display: "grid", gap: 12 }}>
+                  <p className="map-settings-note">
+                    Add each zone to one list. Zones not assigned to either list
+                    use the selected point directly. Zone assignments are
+                    exclusive.
+                  </p>
+                  <div className="map-settings-grid">
+                    <ZoneListEditor
+                      title="Use selected point directly"
+                      zoneOptions={zoneOptions}
+                      zoneIds={settings.directPointZoneIds}
+                      assignedIds={[
+                        ...settings.directPointZoneIds,
+                        ...settings.stationZoneIds,
+                      ]}
+                      onAdd={(zoneId) =>
+                        setSettings((current) =>
+                          current
+                            ? {
+                                ...current,
+                                directPointZoneIds: [
+                                  ...current.directPointZoneIds,
+                                  zoneId,
+                                ],
+                                stationZoneIds: current.stationZoneIds.filter(
+                                  (id) => id !== zoneId,
+                                ),
+                              }
+                            : current,
+                        )
+                      }
+                      onRemove={(zoneId) =>
+                        set(
+                          "directPointZoneIds",
+                          settings.directPointZoneIds.filter(
+                            (id) => id !== zoneId,
+                          ),
+                        )
+                      }
+                    />
+                    <ZoneListEditor
+                      title="Suggest nearby stations"
+                      zoneOptions={zoneOptions}
+                      zoneIds={settings.stationZoneIds}
+                      assignedIds={[
+                        ...settings.directPointZoneIds,
+                        ...settings.stationZoneIds,
+                      ]}
+                      onAdd={(zoneId) =>
+                        setSettings((current) =>
+                          current
+                            ? {
+                                ...current,
+                                stationZoneIds: [
+                                  ...current.stationZoneIds,
+                                  zoneId,
+                                ],
+                                directPointZoneIds:
+                                  current.directPointZoneIds.filter(
+                                    (id) => id !== zoneId,
+                                  ),
+                              }
+                            : current,
+                        )
+                      }
+                      onRemove={(zoneId) =>
+                        set(
+                          "stationZoneIds",
+                          settings.stationZoneIds.filter((id) => id !== zoneId),
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+            {regionCode !== "EG-CAIRO" &&
+              settings.stationAssignmentMode === "zones" && (
+                <p className="map-settings-note">
+                  Zone-based station assignment is available for Cairo, where
+                  the zone dataset is configured.
+                </p>
+              )}
+          </section>
+
           <section className="map-settings-preview">
             <div className="map-demo-copy">
               <p className="map-settings-kicker">
@@ -365,6 +514,139 @@ export default function MapSettingsManager() {
         <p className="map-settings-message">Loading map configuration…</p>
       )}
     </div>
+  );
+}
+
+function ZoneListEditor({
+  title,
+  zoneOptions,
+  zoneIds,
+  assignedIds,
+  onAdd,
+  onRemove,
+}: {
+  title: string;
+  zoneOptions: ZoneOption[];
+  zoneIds: string[];
+  assignedIds: string[];
+  onAdd: (zoneId: string) => void;
+  onRemove: (zoneId: string) => void;
+}) {
+  const [selectedZoneId, setSelectedZoneId] = useState("");
+  const availableOptions = zoneOptions.filter(
+    (zone) => !assignedIds.includes(zone.id),
+  );
+  const labelId = `zone-list-${title.replace(/\W+/g, "-").toLowerCase()}`;
+
+  return (
+    <section
+      aria-labelledby={labelId}
+      style={{
+        display: "grid",
+        alignContent: "start",
+        gap: 12,
+        padding: 16,
+        border: "1px solid var(--color-border)",
+        borderRadius: 12,
+        background: "var(--color-panel)",
+      }}
+    >
+      <h3 id={labelId} style={{ margin: 0, color: "var(--color-primary)" }}>
+        {title} <span>({zoneIds.length})</span>
+      </h3>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+        <select
+          aria-label={`Select zone for ${title}`}
+          value={selectedZoneId}
+          disabled={!availableOptions.length}
+          onChange={(event) => setSelectedZoneId(event.target.value)}
+          style={field}
+        >
+          <option value="">
+            {availableOptions.length ? "Choose a zone…" : "All zones assigned"}
+          </option>
+          {availableOptions.map((zone) => (
+            <option key={zone.id} value={zone.id}>
+              {zone.id} — {zone.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          aria-label={`Add zone to ${title}`}
+          disabled={!selectedZoneId}
+          onClick={() => {
+            onAdd(selectedZoneId);
+            setSelectedZoneId("");
+          }}
+          style={{
+            ...field,
+            width: 48,
+            padding: 0,
+            display: "grid",
+            placeItems: "center",
+            cursor: selectedZoneId ? "pointer" : "not-allowed",
+          }}
+        >
+          <Plus size={18} />
+        </button>
+      </div>
+      {zoneIds.length ? (
+        <ul
+          style={{
+            display: "grid",
+            gap: 8,
+            listStyle: "none",
+            padding: 0,
+            margin: 0,
+          }}
+        >
+          {zoneIds.map((zoneId) => {
+            const zone = zoneOptions.find((option) => option.id === zoneId);
+            return (
+              <li
+                key={zoneId}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  background: "rgba(11, 30, 61, 0.04)",
+                  color: "var(--color-primary)",
+                  fontSize: 13,
+                }}
+              >
+                <span>
+                  <strong>{zoneId}</strong>
+                  {zone ? ` — ${zone.name}` : ""}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${zoneId} from ${title}`}
+                  onClick={() => onRemove(zoneId)}
+                  style={{
+                    border: 0,
+                    background: "transparent",
+                    color: "var(--color-muted)",
+                    cursor: "pointer",
+                    minWidth: 36,
+                    minHeight: 36,
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="map-settings-note" style={{ margin: 0 }}>
+          No zones assigned.
+        </p>
+      )}
+    </section>
   );
 }
 

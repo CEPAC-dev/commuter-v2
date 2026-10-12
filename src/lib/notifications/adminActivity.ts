@@ -15,12 +15,13 @@ function isDuplicateKeyError(error: unknown) {
   );
 }
 
-async function notifyAdmins(input: {
+export async function notifyAdmins(input: {
   eventType:
     | "paid_trip_created"
     | "completed_paid_trip"
     | "waiting_list_trip_created"
-    | "admin_campaign_claim";
+    | "admin_campaign_claim"
+    | "station_suggestion_requested";
   dedupeKey: string;
   title: string;
   body: string;
