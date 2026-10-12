@@ -14,6 +14,13 @@ export class InvalidRequestGroupError extends RangeError {
   }
 }
 
+export class RequestGroupPromoError extends Error {
+  constructor(message: string) {
+    super(message || "Promo could not be applied to every Request child");
+    this.name = "RequestGroupPromoError";
+  }
+}
+
 export interface RequestGroupCreationStore<TSession, TDocument, TRequest>
   extends TripBatchCreationStore<TSession, TDocument> {
   saveRequest(session: TSession, request: TRequest): Promise<void>;
@@ -85,8 +92,13 @@ export async function createRequestGroupWith<
         store.countPendingUnpaid(session, userId),
       findSpacingWindows: (session, userId, dates) =>
         store.findSpacingWindows(session, userId, dates),
-      applyPromo: (session, userId, tripId) =>
-        store.applyPromo(session, userId, tripId),
+      async applyPromo(session, userId, tripId) {
+        const result = await store.applyPromo(session, userId, tripId);
+        if (input.promoCode && !result.success) {
+          throw new RequestGroupPromoError(result.message);
+        }
+        return result;
+      },
       async insert(session, documents) {
         const preparedCandidates = input.candidates.map((candidate) => {
           const prepared = preparedCandidatesById.get(candidate.id);

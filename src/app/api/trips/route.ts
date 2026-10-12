@@ -62,6 +62,7 @@ import {
 } from "@/lib/tripBatchCreation";
 import {
   createRequestGroupWith,
+  RequestGroupPromoError,
   saveRequestGroup,
 } from "@/lib/requestGroupCreation";
 import mongoose, { Types, type ClientSession } from "mongoose";
@@ -1069,6 +1070,15 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     );
   } catch (err) {
+    if (err instanceof RequestGroupPromoError) {
+      return NextResponse.json(
+        {
+          errorCode: "REQUEST_PROMO_UNAVAILABLE",
+          error: err.message,
+        },
+        { status: 409 },
+      );
+    }
     if (err instanceof TripBatchSpacingConflictError) {
       return NextResponse.json(
         { error: "TRIP_SPACING_CONFLICT", conflict: err.conflict },

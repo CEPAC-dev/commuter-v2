@@ -5,6 +5,7 @@ import { Types } from "mongoose";
 const {
   createRequestGroupWith,
   InvalidRequestGroupError,
+  RequestGroupPromoError,
   saveRequestGroup,
 } = await import("../src/lib/requestGroupCreation.ts");
 const { bookingWindow } = await import("../src/lib/time/bookingDates.ts");
@@ -322,6 +323,18 @@ test("promo is reserved and applied per child; an error on a later child rolls b
   assert.equal(failingStore.requests.length, 0);
   assert.equal(failingStore.trips.length, 0);
   assert.deepEqual(failingStore.promoUsages, []);
+
+  const unavailableStore = new MemoryGroupStore({ promoLimit: 1 });
+  await assert.rejects(
+    createRequestGroupWith(
+      unavailableStore,
+      makeGroupInput(dates, { promoCode: "SAVE" }),
+    ),
+    RequestGroupPromoError,
+  );
+  assert.equal(unavailableStore.requests.length, 0);
+  assert.equal(unavailableStore.trips.length, 0);
+  assert.deepEqual(unavailableStore.promoUsages, []);
 });
 
 test("a child insert failure rolls back the Request and all promo reservations", async () => {
