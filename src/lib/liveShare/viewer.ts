@@ -2,6 +2,10 @@ export const LIVE_VIEWER_POLL_INTERVAL_MS = 10_000;
 export const LIVE_VIEWER_RETRY_MAX_MS = 60_000;
 export const LIVE_VIEWER_STALE_AFTER_SECONDS = 45;
 
+export function isUnavailableLiveViewerStatus(status: number): boolean {
+  return status === 404;
+}
+
 export type LiveViewerState =
   | "loading"
   | "waiting"

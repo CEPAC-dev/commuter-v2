@@ -7,6 +7,7 @@ const {
   LIVE_VIEWER_RETRY_MAX_MS,
   deriveLiveViewerState,
   getLiveViewerPollDelayMs,
+  isUnavailableLiveViewerStatus,
   parsePublicLiveShare,
   retryAfterHeaderMs,
 } = await import("../src/lib/liveShare/viewer.ts");
@@ -116,6 +117,15 @@ test("Retry-After supports seconds and server dates using an injectable clock", 
     10_000,
   );
   assert.equal(retryAfterHeaderMs(null, 0), null);
+});
+
+test("HTTP 429 remains retryable and only 404 means unavailable", () => {
+  assert.equal(isUnavailableLiveViewerStatus(404), true);
+  assert.equal(isUnavailableLiveViewerStatus(429), false);
+  assert.equal(
+    getLiveViewerPollDelayMs({ failureCount: 1, retryAfterMs: 90_000 }),
+    LIVE_VIEWER_RETRY_MAX_MS,
+  );
 });
 
 test("public response validation requires the public API shape", () => {

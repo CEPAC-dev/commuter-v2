@@ -8,6 +8,7 @@ import { loadLeaflet, MAP_COLORS } from "@/lib/leaflet";
 import {
   deriveLiveViewerState,
   getLiveViewerPollDelayMs,
+  isUnavailableLiveViewerStatus,
   parsePublicLiveShare,
   retryAfterHeaderMs,
   type LiveViewerState,
@@ -158,7 +159,7 @@ export default function LiveLocationViewer({
       ) {
         return;
       }
-      if (response.status === 404) {
+      if (isUnavailableLiveViewerStatus(response.status)) {
         terminalRef.current = true;
         setState("unavailable");
         setConnectionProblem(false);

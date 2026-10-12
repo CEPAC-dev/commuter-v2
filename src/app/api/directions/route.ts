@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
+import { enforceRateLimit } from "@/lib/security/rateLimit";
 
 export interface DirectionsResult {
   coordinates: [number, number][];
@@ -497,6 +499,15 @@ export async function fetchDirections(
 }
 
 export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    const limited = await enforceRateLimit(req, "directions", {
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (limited) return limited;
+  }
+
   const origin = req.nextUrl.searchParams.get("origin");
   const dest = req.nextUrl.searchParams.get("dest");
   const wps = req.nextUrl.searchParams.get("waypoints");

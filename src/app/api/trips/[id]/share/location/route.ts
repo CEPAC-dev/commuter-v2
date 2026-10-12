@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { updateShareLocation, validateLocationInput } from "@/lib/liveShare/logic";
 import { buildLocationUpdateFilter } from "@/lib/liveShare/locationFilter";
+import { validateMutationRequest } from "@/lib/security/request";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { TripShare } from "@/models/TripShare";
@@ -16,7 +17,10 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
-export async function POST(request: Request, { params }: RouteContext) {
+export async function POST(request: NextRequest, { params }: RouteContext) {
+  const invalidRequest = validateMutationRequest(request);
+  if (invalidRequest) return invalidRequest;
+
   const session = await getSession();
   if (!session) return jsonError("Unauthorized", 401);
   if (session.role !== "passenger") return jsonError("Forbidden", 403);

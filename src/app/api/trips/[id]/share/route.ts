@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
+import { validateMutationRequest } from "@/lib/security/request";
 import {
   canShare,
   detectedTripEndAt,
@@ -47,7 +48,10 @@ async function loadRideStatus(rideId: unknown) {
   return Ride.findById(rideId).select("status updatedAt").lean();
 }
 
-export async function POST(request: Request, { params }: RouteContext) {
+export async function POST(request: NextRequest, { params }: RouteContext) {
+  const invalidRequest = validateMutationRequest(request);
+  if (invalidRequest) return invalidRequest;
+
   const session = await getSession();
   if (!session) return jsonError("Unauthorized", 401);
   if (session.role !== "passenger") return jsonError("Forbidden", 403);
@@ -262,7 +266,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: RouteContext) {
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
+  const invalidRequest = validateMutationRequest(request, { requireJson: false });
+  if (invalidRequest) return invalidRequest;
+
   const session = await getSession();
   if (!session) return jsonError("Unauthorized", 401);
   if (session.role !== "passenger") return jsonError("Forbidden", 403);
