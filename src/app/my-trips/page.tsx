@@ -35,6 +35,7 @@ import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import RateTripModal from "@/components/trips/RateTripModal";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 import CancelTripModal from "@/components/trips/CancelTripModal";
+import RequestGroupCancellationControls from "@/components/trips/RequestGroupCancellationControls";
 import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
 import { buildTripTabView, type TripTabKey } from "@/lib/tripTabView.ts";
 import { getNextTrip } from "@/lib/nextTrip.ts";
@@ -677,6 +678,21 @@ function RequestTripGroupCard({
           />
         </div>
       )}
+
+      {firstTrip.parentPaymentStatus === "pending" &&
+        ["pending_payment", "waiting_list", "approved"].includes(
+          firstTrip.parentRequestStatus ?? firstTrip.status,
+        ) && (
+          <RequestGroupCancellationControls
+            requestId={requestId}
+            trips={trips.map((trip) => ({
+              id: trip.id,
+              date: trip.date,
+              priceEgp: trip.priceEgp,
+            }))}
+            locale={locale}
+          />
+        )}
     </div>
   );
 }

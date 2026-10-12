@@ -23,6 +23,10 @@ import {
   releasePromoForRequest,
 } from "@/lib/promoCode";
 import { releaseReservation } from "@/lib/wallet/wallet";
+import {
+  cancelRequestDay,
+  RequestGroupCancellationError,
+} from "@/lib/requestGroupCancellation";
 
 const REQUEST_NOT_CANCELLABLE = "REQUEST_NOT_CANCELLABLE";
 
@@ -128,9 +132,12 @@ export async function GET(
       status: trip.status,
       evaluation,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error?.message || "Internal server error" },
+      {
+        error:
+          error instanceof Error ? error.message : "Internal server error",
+      },
       { status: 500 },
     );
   }
@@ -158,6 +165,31 @@ export async function POST(
 
     if (!trip) {
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    }
+
+    if (trip.requestId) {
+      const parent = await Request.findById(trip.requestId)
+        .select("paymentStatus")
+        .lean<{ paymentStatus?: string }>();
+      if (parent?.paymentStatus === "pending") {
+        try {
+          const result = await cancelRequestDay({
+            requestId: String(trip.requestId),
+            tripId: String(trip._id),
+            userId: session.userId,
+            reason,
+          });
+          return NextResponse.json({ success: true, ...result });
+        } catch (error) {
+          if (error instanceof RequestGroupCancellationError) {
+            return NextResponse.json(
+              { errorCode: error.code, error: error.message },
+              { status: error.code === "REQUEST_NOT_FOUND" ? 404 : 409 },
+            );
+          }
+          throw error;
+        }
+      }
     }
 
     let evaluation: Awaited<ReturnType<typeof evaluateTripCancellation>>;
@@ -462,7 +494,10 @@ export async function POST(
         if (ride) {
           if (Array.isArray(ride.passengers)) {
             ride.passengers = ride.passengers.filter(
-              (p: any) =>
+              (p: {
+                tripId?: { toString(): string } | string;
+                userId?: { toString(): string } | string;
+              }) =>
                 p.tripId?.toString() !== trip._id.toString() &&
                 p.userId?.toString() !== session.userId,
             );
@@ -526,10 +561,12 @@ export async function POST(
       cancellation: trip.cancellation,
       trip,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error processing trip cancellation:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to cancel trip" },
+      {
+        error: error instanceof Error ? error.message : "Failed to cancel trip",
+      },
       { status: 500 },
     );
   }

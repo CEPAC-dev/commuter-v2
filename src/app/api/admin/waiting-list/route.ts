@@ -68,7 +68,10 @@ export async function GET(req: NextRequest) {
     .filter((row) => row.kind === "request")
     .map((row) => row.record._id);
   const legacyTrips = selectedRequestIds.length
-    ? await Trip.find({ requestId: { $in: selectedRequestIds } })
+    ? await Trip.find({
+        requestId: { $in: selectedRequestIds },
+        status: { $ne: "cancelled" },
+      })
         .select("_id requestId date pickup dropoff pickupTime arrivalTime vehicleType numberOfPassengers priceEgp appliedPromoCode")
         .sort({ date: 1, cycleIndex: 1 })
         .lean()

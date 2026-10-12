@@ -22,6 +22,7 @@ import {
   isStandaloneTripPayable,
   resolvePayableBooking,
 } from "@/lib/payments/resolveBooking";
+import { getRequestPaymentSessionBlock } from "@/lib/payments/requestSessionEligibility";
 import { settleStandaloneTripPayment } from "@/lib/payments/standaloneTripSettlement";
 import { settleRequestPayment } from "@/lib/payments/requestSettlement";
 import { shouldResetFailedTripForRetry } from "@/lib/payments/settlementAttempt";
@@ -218,8 +219,39 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (resolved.kind === "request") {
+    const requestTrips = await Trip.find({ requestId: booking._id })
+      .select("status priceEgp")
+      .lean<{ status: string; priceEgp: number }[]>();
+    const block = getRequestPaymentSessionBlock(
+      {
+        status: resolved.status,
+        paymentStatus: resolved.paymentStatus,
+        amountEgp: Number(resolved.amountEgp),
+      },
+      requestTrips,
+    );
+    if (block) {
+      const message =
+        block === "REQUEST_CANCELLED"
+          ? "This Request has been cancelled and cannot be paid."
+          : block === "REQUEST_NO_REMAINING_TRIPS"
+            ? "This Request has no remaining trips to pay for."
+            : block === "REQUEST_AMOUNT_MISMATCH"
+              ? "The Request total changed. Refresh and try again."
+              : "This Request is not ready for payment.";
+      return NextResponse.json(
+        { errorCode: block, error: message },
+        { status: 409 },
+      );
+    }
+  }
+
   if (resolved.kind === "request" && resolved.status === "approved") {
-    const trips = await Trip.find({ requestId: booking._id })
+    const trips = await Trip.find({
+      requestId: booking._id,
+      status: { $ne: "cancelled" },
+    })
       .select("date pickupTime")
       .lean<{ date: string; pickupTime: string }[]>();
     if (hasPastTrip(trips, getCairoNowParts())) {
@@ -309,8 +341,12 @@ export async function POST(req: NextRequest) {
   // Guard against double-checkout races (two tabs, double-click): the unique
   // partial index on {bookingId, overallStatus:active} rejects a second
   // concurrent attempt instead of creating a parallel reservation/charge.
-  let payment;
+  let payment: InstanceType<typeof Payment> | undefined;
   let tripChangedDuringSessionCreation = false;
+  const requestSessionState: {
+    changed: boolean;
+    block: ReturnType<typeof getRequestPaymentSessionBlock> | "REQUEST_CHANGED" | null;
+  } = { changed: false, block: null };
   try {
     const paymentData = {
       userId: new Types.ObjectId(session.userId),
@@ -378,7 +414,82 @@ export async function POST(req: NextRequest) {
         );
       }
     } else {
-      payment = await Payment.create(paymentData);
+      const dbSession = await mongoose.startSession();
+      try {
+        await dbSession.withTransaction(async () => {
+          requestSessionState.changed = false;
+          requestSessionState.block = null;
+          const currentRequest = await Request.findOne({
+            _id: bookingObjectId,
+            userId: new Types.ObjectId(session.userId),
+          })
+            .select("status paymentStatus amountEgp")
+            .session(dbSession)
+            .lean<{
+              status: string;
+              paymentStatus: string;
+              amountEgp: number;
+            } | null>();
+          if (!currentRequest) {
+            requestSessionState.changed = true;
+            return;
+          }
+
+          const currentTrips = await Trip.find({
+            requestId: bookingObjectId,
+          })
+            .select("status priceEgp")
+            .session(dbSession)
+            .lean<{ status: string; priceEgp: number }[]>();
+          requestSessionState.block = getRequestPaymentSessionBlock(
+            currentRequest,
+            currentTrips,
+          );
+          if (
+            !requestSessionState.block &&
+            currentRequest.amountEgp !== Number(resolved.amountEgp)
+          ) {
+            requestSessionState.block = "REQUEST_AMOUNT_MISMATCH";
+          }
+          if (requestSessionState.block) return;
+
+          const requestLock = await Request.updateOne(
+            {
+              _id: bookingObjectId,
+              userId: new Types.ObjectId(session.userId),
+              status: currentRequest.status,
+              paymentStatus: currentRequest.paymentStatus,
+              amountEgp: currentRequest.amountEgp,
+            },
+            { $set: { updatedAt: new Date() } },
+            { session: dbSession },
+          );
+          if (requestLock.matchedCount !== 1) {
+            requestSessionState.changed = true;
+            return;
+          }
+          [payment] = await Payment.create([paymentData], {
+            session: dbSession,
+          });
+        });
+      } finally {
+        await dbSession.endSession();
+      }
+      if (requestSessionState.changed || requestSessionState.block) {
+        const code = requestSessionState.changed
+          ? "REQUEST_CHANGED"
+          : requestSessionState.block;
+        return NextResponse.json(
+          {
+            errorCode: code,
+            error:
+              code === "REQUEST_AMOUNT_MISMATCH"
+                ? "The Request total changed. Refresh and try again."
+                : "This Request changed while creating the payment session.",
+          },
+          { status: 409 },
+        );
+      }
     }
   } catch (err) {
     if (
@@ -402,6 +513,10 @@ export async function POST(req: NextRequest) {
       );
     }
     throw err;
+  }
+
+  if (!payment) {
+    throw new Error("Payment record was not created.");
   }
 
   if (

@@ -4,6 +4,8 @@ export interface RequestTripGroupable {
   isStandalone?: boolean;
   date: string;
   cycleIndex?: number;
+  status?: string;
+  parentPaymentStatus?: string;
 }
 
 /** Groups legacy Request-backed trips; standalone Trips remain individual rows. */
@@ -18,7 +20,11 @@ export function groupTripsByRequest<T extends RequestTripGroupable>(
   const tripsByRequest = new Map<string, T[]>();
   const standaloneTrips: T[] = [];
   for (const trip of trips) {
-    if (trip.isStandalone) {
+    if (
+      trip.isStandalone ||
+      trip.status === "cancelled" ||
+      trip.parentPaymentStatus === "paid"
+    ) {
       standaloneTrips.push(trip);
       continue;
     }

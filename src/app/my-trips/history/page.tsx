@@ -66,17 +66,15 @@ export default async function TripHistoryPage({
     trips: group.kind === "single" ? [group.trip] : group.trips,
   }));
   const filteredItems = historyItems
-    .filter(({ trips }) => {
+    .filter(({ kind, trips }) => {
       const first = trips[0];
       return matchesTripHistoryFilter(
         filter,
         {
-          status: first.isStandalone
+          status: kind === "trip"
             ? first.status
             : first.parentRequestStatus ?? first.status,
-          paymentStatus: first.isStandalone
-            ? first.paymentStatus
-            : first.parentPaymentStatus ?? first.paymentStatus,
+          paymentStatus: first.parentPaymentStatus ?? first.paymentStatus,
           rejectionReason: first.rejectionReason,
           hasPastTrip: first.hasPastTrip,
         },
