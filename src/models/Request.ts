@@ -73,9 +73,24 @@ if (existingRequestModel && !existingRequestModel.schema.path("regionCode")) {
 }
 
 const requestSchema = existingRequestModel?.schema ?? RequestSchema;
-requestSchema.pre("save", function (this: { isNew: boolean }) {
-  if (this.isNew) throw new Error(REQUEST_CREATION_DISABLED);
-});
+requestSchema.pre(
+  "save",
+  function (this: {
+    isNew: boolean;
+    $locals: Record<string, unknown>;
+    $session: () => unknown;
+  }) {
+    if (
+      this.isNew &&
+      !(
+        this.$locals.groupCreationApproved === true &&
+        this.$session()
+      )
+    ) {
+      throw new Error(REQUEST_CREATION_DISABLED);
+    }
+  },
+);
 requestSchema.pre("insertMany", function () {
   throw new Error(REQUEST_CREATION_DISABLED);
 });
