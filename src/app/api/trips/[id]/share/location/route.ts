@@ -5,6 +5,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { updateShareLocation, validateLocationInput } from "@/lib/liveShare/logic";
 import { buildLocationUpdateFilter } from "@/lib/liveShare/locationFilter";
 import { validateMutationRequest } from "@/lib/security/request";
+import { logLiveShareFailure } from "@/lib/liveShare/errors";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { TripShare } from "@/models/TripShare";
@@ -147,8 +148,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return jsonError("Trip is not eligible for live sharing.", 409);
     }
     return jsonError("Live share not found.", 404);
-  } catch {
-    console.error("[POST /api/trips/[id]/share/location] Location update failed.");
+  } catch (error) {
+    logLiveShareFailure("[POST /api/trips/[id]/share/location]", error);
     return jsonError("Unable to update live location.", 500);
   }
 }

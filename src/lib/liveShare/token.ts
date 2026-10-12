@@ -1,16 +1,24 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { LiveShareConfigError } from "./errors.ts";
 
 const SHARE_ID_PATTERN = /^[a-f\d]{24}$/i;
 const SIGNATURE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const TOKEN_PATTERN = /^([a-f\d]{24})\.([A-Za-z0-9_-]{43})$/i;
 
 function getSecret(secret = process.env.LIVE_SHARE_SECRET): string {
-  if (!secret?.trim() || secret.trim().length < 32) {
-    throw new Error(
-      "LIVE_SHARE_SECRET is not configured or is too short.",
-    );
+  const normalized = secret?.trim();
+  if (!normalized) throw new LiveShareConfigError("LIVE_SHARE_SECRET_MISSING");
+  if (
+    normalized.length >= 2 &&
+    ((normalized.startsWith('"') && normalized.endsWith('"')) ||
+      (normalized.startsWith("'") && normalized.endsWith("'")))
+  ) {
+    throw new LiveShareConfigError("LIVE_SHARE_SECRET_INVALID_FORMAT");
   }
-  return secret;
+  if (normalized.length < 32) {
+    throw new LiveShareConfigError("LIVE_SHARE_SECRET_TOO_SHORT");
+  }
+  return normalized;
 }
 
 export function assertLiveShareSecret(secret?: string): string {
@@ -25,7 +33,7 @@ function signatureFor(shareId: string, secret?: string): Buffer {
 
 export function createShareToken(shareId: string, secret?: string): string {
   if (!SHARE_ID_PATTERN.test(shareId)) {
-    throw new Error("Cannot create a live-share token for an invalid share id.");
+    throw new TypeError("Cannot create a live-share token for an invalid share id.");
   }
   return `${shareId}.${signatureFor(shareId, secret).toString("base64url")}`;
 }

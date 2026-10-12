@@ -6,6 +6,7 @@ import {
   readPublicShare,
 } from "@/lib/liveShare/public";
 import { assertLiveShareSecret, verifyShareToken } from "@/lib/liveShare/token";
+import { logLiveShareFailure } from "@/lib/liveShare/errors";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { TripShare } from "@/models/TripShare";
@@ -108,8 +109,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       },
     );
     return publicJson(result.body, result.status, result.headers);
-  } catch {
-    console.error("[GET /api/live/[token]] Public live-share request failed.");
+  } catch (error) {
+    logLiveShareFailure("[GET /api/live/[token]]", error);
     return publicJson({ error: "Unable to load live location." }, 500);
   }
 }

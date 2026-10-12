@@ -17,6 +17,7 @@ import {
 } from "@/lib/liveShare/logic";
 import { validateLiveShareConsent } from "@/lib/liveShare/consent";
 import { recoverDuplicateShare } from "@/lib/liveShare/duplicateShare";
+import { logLiveShareFailure } from "@/lib/liveShare/errors";
 import { assertLiveShareSecret, createShareToken } from "@/lib/liveShare/token";
 import { getLiveShareBaseUrl } from "@/lib/liveShare/url";
 import { Ride } from "@/models/Ride";
@@ -185,8 +186,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       },
       { status: 201 },
     );
-  } catch {
-    console.error("[POST /api/trips/[id]/share] Live-share request failed.");
+  } catch (error) {
+    logLiveShareFailure("[POST /api/trips/[id]/share]", error);
     return jsonError("Unable to create live sharing.", 500);
   }
 }
@@ -260,8 +261,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
         ? new Date(share.lastLocation.receivedAt).toISOString()
         : null,
     });
-  } catch {
-    console.error("[GET /api/trips/[id]/share] Live-share request failed.");
+  } catch (error) {
+    logLiveShareFailure("[GET /api/trips/[id]/share]", error);
     return jsonError("Unable to read live sharing.", 500);
   }
 }
@@ -315,8 +316,8 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       },
     );
     return NextResponse.json({ ok: true, revoked });
-  } catch {
-    console.error("[DELETE /api/trips/[id]/share] Live-share request failed.");
+  } catch (error) {
+    logLiveShareFailure("[DELETE /api/trips/[id]/share]", error);
     return jsonError("Unable to stop live sharing.", 500);
   }
 }
