@@ -7,6 +7,7 @@ import { User } from "@/models/User";
 import { AdminReferralUsage } from "@/models/AdminReferralUsage";
 import { sendPushPayloadToUser } from "@/lib/notifications/webPush";
 import { latePaymentDedupeKey } from "@/lib/phase8bGuards";
+import { waitingListTripBatchDedupeKey } from "@/lib/admin/waitingList";
 
 function isDuplicateKeyError(error: unknown) {
   return Boolean(
@@ -253,6 +254,42 @@ export async function notifyAdminsOfWaitingListTrip(tripId: string) {
     });
   } catch (error) {
     console.error("Admin waiting-list trip alert creation failed:", error);
+  }
+}
+
+export async function notifyAdminsOfWaitingListTripBatch(input: {
+  batchId: string;
+  userId: string;
+  tripCount: number;
+  date: string;
+  routeSummary: string;
+}) {
+  try {
+    if (!Types.ObjectId.isValid(input.userId)) return;
+    const user = await User.findById(input.userId)
+      .select("name userNumber phone email")
+      .lean();
+    const userName = user?.name ?? "Unknown user";
+    await notifyAdmins({
+      eventType: "waiting_list_trip_created",
+      dedupeKey: waitingListTripBatchDedupeKey(input.batchId),
+      title: `${input.tripCount} new waiting-list trips`,
+      body: `${userName} submitted ${input.tripCount} trips for waiting-list review.`,
+      data: {
+        batchId: input.batchId,
+        userId: input.userId,
+        userName,
+        userNumber: user?.userNumber ?? null,
+        phone: user?.phone ?? "",
+        email: user?.email ?? "",
+        date: input.date,
+        tripCount: input.tripCount,
+        routeSummary: input.routeSummary,
+        href: "/admin/waiting-list",
+      },
+    });
+  } catch (error) {
+    console.error("Admin waiting-list batch alert creation failed:", error);
   }
 }
 

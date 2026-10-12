@@ -356,6 +356,14 @@ export const en = {
     "A booking can only include one trip.",
   "errors.INVALID_TRIP_COUNT":
     "A booking must contain exactly one trip. Remove the return trip or choose one date.",
+  "errors.TOO_MANY_DATES":
+    "A booking can include up to 7 trip dates.",
+  "errors.DUPLICATE_DATES":
+    "A booking cannot include the same trip date more than once.",
+  "errors.MULTIPLE_CYCLES_NOT_SUPPORTED":
+    "A booking can include one trip definition across its selected dates.",
+  "errors.TOO_MANY_PENDING_TRIPS":
+    "You have too many unpaid trips. Complete or cancel a trip before booking more.",
   "errors.BOOKING_BUSY":
     "Bookings are busy right now. Please wait a moment and try again.",
   "errors.REQUEST_NOT_CANCELLABLE":

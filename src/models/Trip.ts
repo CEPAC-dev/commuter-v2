@@ -95,6 +95,7 @@ const TripSchema = new Schema(
       required: false,
       index: true,
     },
+    batchId: { type: String, required: false, index: true },
     regionCode: {
       type: String,
       enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],

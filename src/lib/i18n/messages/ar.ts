@@ -351,6 +351,14 @@ export const ar: Record<MessageKey, string> = {
     "يمكن أن يتضمن الحجز رحلة واحدة فقط.",
   "errors.INVALID_TRIP_COUNT":
     "يجب أن يحتوي الحجز على رحلة واحدة فقط. احذف رحلة العودة أو اختر تاريخًا واحدًا.",
+  "errors.TOO_MANY_DATES":
+    "يمكن أن يتضمن الحجز 7 تواريخ رحلات كحد أقصى.",
+  "errors.DUPLICATE_DATES":
+    "لا يمكن اختيار تاريخ الرحلة نفسه أكثر من مرة.",
+  "errors.MULTIPLE_CYCLES_NOT_SUPPORTED":
+    "يمكن للحجز أن يتضمن تعريف رحلة واحدًا على التواريخ المختارة.",
+  "errors.TOO_MANY_PENDING_TRIPS":
+    "لديك رحلات غير مدفوعة كثيرة. أكمل رحلة أو ألغها قبل حجز المزيد.",
   "errors.BOOKING_BUSY":
     "الحجوزات مشغولة حاليًا. انتظر قليلًا ثم حاول مرة أخرى.",
   "errors.REQUEST_NOT_CANCELLABLE":

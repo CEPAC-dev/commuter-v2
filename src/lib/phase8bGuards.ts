@@ -1,11 +1,3 @@
-export type SingleTripPayloadError = "INVALID_TRIP_COUNT";
-
-export function getSingleTripPayloadError(
-  tripInstanceCount: number,
-): SingleTripPayloadError | null {
-  return tripInstanceCount === 1 ? null : "INVALID_TRIP_COUNT";
-}
-
 export function isTransientBookingConflict(error: unknown): boolean {
   const chain: {
     code?: unknown;

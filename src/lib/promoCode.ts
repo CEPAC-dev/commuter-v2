@@ -116,6 +116,7 @@ export async function applyPromoCodeToTrip(
   code: string,
   userId: string,
   tripId: string,
+  session?: ClientSession,
 ): Promise<PromoCodeApplyResult> {
   await connectDB();
 
@@ -141,6 +142,7 @@ export async function applyPromoCodeToTrip(
     {
       returnDocument: "after",
       select: "_id discountType discountValue code expiresAt",
+      ...(session ? { session } : {}),
     },
   ).lean<{
     _id: Types.ObjectId;
@@ -159,6 +161,11 @@ export async function applyPromoCodeToTrip(
   }
 
   if (isPromoCodeExpired(promo.expiresAt)) {
+    await PromoCode.updateOne(
+      { _id: promo._id, usedCount: { $gt: 0 } },
+      { $inc: { usedCount: -1 } },
+      session ? { session } : {},
+    );
     return {
       success: false,
       message: "This code has expired.",
@@ -166,13 +173,18 @@ export async function applyPromoCodeToTrip(
     };
   }
 
-  const usage = await PromoCodeUsage.create({
-    promoCode: promo._id,
-    user: new Types.ObjectId(userId),
-    trip: new Types.ObjectId(tripId),
-    discountType: promo.discountType,
-    discountValue: promo.discountValue,
-  });
+  const [usage] = await PromoCodeUsage.create(
+    [
+      {
+        promoCode: promo._id,
+        user: new Types.ObjectId(userId),
+        trip: new Types.ObjectId(tripId),
+        discountType: promo.discountType,
+        discountValue: promo.discountValue,
+      },
+    ],
+    session ? { session } : {},
+  );
 
   return {
     success: true,

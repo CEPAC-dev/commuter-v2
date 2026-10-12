@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { AdminSettings } from "@/models/AdminSettings";
@@ -13,7 +14,7 @@ import {
   priceForSelectedDate,
 } from "@/lib/config/vehicles";
 import { resolveActiveRegion } from "@/lib/regions/resolveActiveRegion";
-import { isDateInWindow } from "@/lib/time/bookingDates";
+import { bookingWindow } from "@/lib/time/bookingDates";
 import {
   ARRIVAL_SLOT_END_MIN,
   ARRIVAL_SLOT_START_MIN,
@@ -21,10 +22,7 @@ import {
   toMinutes,
 } from "@/lib/time/pickupWindow";
 import {
-  findSpacingConflict,
   HOLDING_TRIP_STATUSES,
-  type SpacingConflict,
-  type TripSpacingWindow,
 } from "@/lib/validation/tripSpacing";
 import { getVehicles } from "@/lib/db/getVehicles";
 import {
@@ -40,31 +38,37 @@ import {
   createNotification,
   createNotifications,
 } from "@/lib/notifications/createNotification";
-import { notifyAdminsOfWaitingListTrip } from "@/lib/notifications/adminActivity";
 import {
-  buildWaitingListCreatedTripAdminNotifications,
   getSharedRideWaitingListEnabled,
   shouldCreateWaitingListRequest,
 } from "@/lib/admin/waitingList";
 import {
+  buildTripBatchResponse,
   getInitialTripBookingState,
-  getMultiTripBookingError,
+  getTripBatchDateValidationError,
+  getTripBatchPayloadError,
+  MAX_PENDING_UNPAID_TRIPS,
 } from "@/lib/tripBooking";
-import mongoose, { Types } from "mongoose";
+import {
+  createTripBatchWith,
+  TooManyPendingTripsError,
+  TripBatchSpacingConflictError,
+  type PreparedTripBatchCandidate,
+} from "@/lib/tripBatchCreation";
+import mongoose, { Types, type ClientSession } from "mongoose";
 import type { Document } from "mongodb";
 import {
   applyPromoCodeToTrip,
   computePromoDiscountedPrice,
   normalizePromoCode,
-  rollbackPromoCodeUsage,
-  type PromoDiscountType,
 } from "@/lib/promoCode";
 import {
-  getSingleTripPayloadError,
   isTransientBookingConflict,
   spacingLockUpsertFields,
 } from "@/lib/phase8bGuards";
 import { ensureTripSpacingLockTtlIndex } from "@/lib/tripSpacingLockIndex";
+import { notifyAdminsOfWaitingListTripBatch } from "@/lib/notifications/adminActivity";
+import { buildWaitingListCreatedTripBatchAdminNotifications } from "@/lib/admin/waitingList";
 
 function stationPayload(
   station: Pick<GeoStation, "id" | "lat" | "lng" | "name" | "regionCode">,
@@ -85,12 +89,6 @@ const PAYMENT_STATUSES = new Set<PaymentStatus>([
   "refunded",
   "expired",
 ]);
-
-class TripSpacingConflictError extends Error {
-  constructor(readonly conflict: SpacingConflict) {
-    super("Trip arrival window conflicts with another trip");
-  }
-}
 
 interface TripSpacingLockDocument extends Document {
   _id: string;
@@ -165,7 +163,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { trips } = body;
-  const rawDates = body.dates ?? (body.date ? [body.date] : []);
+  const rawDates: unknown = body.dates ?? (body.date ? [body.date] : []);
   const promoCodeInput =
     typeof body.promoCode === "string" ? body.promoCode : "";
   const promoCode = promoCodeInput.trim()
@@ -178,31 +176,58 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(rawDates) || rawDates.length === 0) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
   }
-  const multipleDateError = getMultiTripBookingError(rawDates.length, 0);
-  if (multipleDateError) {
-    return NextResponse.json({ error: multipleDateError }, { status: 400 });
+  if (rawDates.some((date) => typeof date !== "string")) {
+    return NextResponse.json({ error: "Invalid date" }, { status: 400 });
   }
-  const dates = Array.from(new Set(rawDates)).sort();
-  for (const d of dates) {
-    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d) || !isDateInWindow(d)) {
-      return NextResponse.json(
-        { error: `Invalid or out-of-window date: ${d}` },
-        { status: 400 },
-      );
-    }
+  const dateValidationError = getTripBatchDateValidationError(
+    rawDates as string[],
+    bookingWindow(),
+  );
+  if (dateValidationError?.code === "TOO_MANY_DATES") {
+    return NextResponse.json(
+      {
+        errorCode: dateValidationError.code,
+        error: dateValidationError.code,
+      },
+      { status: 400 },
+    );
   }
+  if (dateValidationError?.code === "DUPLICATE_DATES") {
+    return NextResponse.json(
+      { errorCode: "DUPLICATE_DATES", error: "DUPLICATE_DATES" },
+      { status: 400 },
+    );
+  }
+  if (dateValidationError?.code === "INVALID_DATE") {
+    return NextResponse.json(
+      { error: `Invalid or out-of-window date: ${dateValidationError.date}` },
+      { status: 400 },
+    );
+  }
+  const dates = [...(rawDates as string[])].sort();
   if (!Array.isArray(trips) || trips.length === 0) {
     return NextResponse.json({ error: "Invalid trips" }, { status: 400 });
   }
-  const multipleTripError = getMultiTripBookingError(dates.length, trips.length);
-  if (multipleTripError) {
-    return NextResponse.json({ error: multipleTripError }, { status: 400 });
+  const tripCountError = getTripBatchPayloadError(dates.length, trips.length);
+  if (tripCountError) {
+    return NextResponse.json(
+      { errorCode: tripCountError, error: tripCountError },
+      { status: 400 },
+    );
+  }
+  if (trips.length !== 1) {
+    return NextResponse.json({ error: "Invalid trips" }, { status: 400 });
   }
 
   for (const trip of trips) {
-    if (!Number.isFinite(trip.priceEgp) || trip.priceEgp < 0) {
+    if (
+      !Number.isFinite(trip.distanceKm) ||
+      trip.distanceKm < 0 ||
+      !Number.isFinite(trip.durationMinutes) ||
+      trip.durationMinutes < 0
+    ) {
       return NextResponse.json(
-        { error: "Invalid trip priceEgp" },
+        { error: "Invalid route data" },
         { status: 400 },
       );
     }
@@ -585,110 +610,24 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const tripInstances = dates.flatMap((date) =>
-    serverTrips.map((trip, cycleIndex) => ({
-      id: new Types.ObjectId(),
-      date,
-      cycleIndex,
-      trip,
-    })),
-  );
-  if (getSingleTripPayloadError(tripInstances.length)) {
-    return NextResponse.json(
-      {
-        errorCode: "INVALID_TRIP_COUNT",
-        error: "INVALID_TRIP_COUNT",
-      },
-      { status: 400 },
-    );
-  }
-
-  const promoApplies: Array<{
-    success: boolean;
-    discountType: PromoDiscountType;
-    discountValue: number;
-    promoCodeId: string;
-    usageId: string;
-  } | null> = tripInstances.map(() => null);
-  const successfulPromoReservations: Array<{
-    promoCodeId: string;
-    usageId: string;
-  }> = [];
-  let promoFailureMessage = "";
-
-  if (promoCode) {
-    for (let i = 0; i < tripInstances.length; i += 1) {
-      const appliedPromo = await applyPromoCodeToTrip(
-        promoCode,
-        userId,
-        String(tripInstances[i].id),
-      );
-      if (
-        appliedPromo.success &&
-        appliedPromo.discountType &&
-        typeof appliedPromo.discountValue === "number" &&
-        appliedPromo.promoCodeId &&
-        appliedPromo.usageId
-      ) {
-        promoApplies[i] = {
-          success: true,
-          discountType: appliedPromo.discountType,
-          discountValue: appliedPromo.discountValue,
-          promoCodeId: appliedPromo.promoCodeId,
-          usageId: appliedPromo.usageId,
-        };
-        successfulPromoReservations.push({
-          promoCodeId: appliedPromo.promoCodeId,
-          usageId: appliedPromo.usageId,
-        });
-      } else if (!promoFailureMessage) {
-        promoFailureMessage = appliedPromo.message;
-      }
-    }
-  }
-
-  const pricedTripInstances = tripInstances.map((instance, index) => {
-    const promoApply = promoApplies[index];
-    const basePriceEgp = priceForSelectedDate(
+  const batchId = randomUUID();
+  const tripInstances = dates.map((date) => ({
+    id: new Types.ObjectId(),
+    date,
+    cycleIndex: 0,
+    trip: serverTrips[0],
+  }));
+  const batchCandidates = tripInstances.map((instance) => ({
+    id: String(instance.id),
+    date: instance.date,
+    arrivalTime: instance.trip.arrivalTime,
+    basePriceEgp: priceForSelectedDate(
       instance.trip.priceEgp,
       instance.date,
       dates,
-    );
-    const priceAfterPromo = promoApply
-      ? Math.round(
-          computePromoDiscountedPrice(
-            basePriceEgp,
-            promoApply.discountType,
-            promoApply.discountValue,
-          ),
-        )
-      : basePriceEgp;
-    const promoDiscountAmountEgp = promoApply
-      ? Math.max(0, basePriceEgp - priceAfterPromo)
-      : 0;
-    const priceEgp = priceAfterPromo;
-    return {
-      ...instance,
-      basePriceEgp,
-      priceEgp,
-      promoApply,
-      promoDiscountAmountEgp,
-    };
-  });
-
-  const promoCodeAppliedTrips = pricedTripInstances.reduce(
-    (count, instance) => count + (instance.promoApply ? 1 : 0),
-    0,
-  );
-  const promoCodeApplied = promoCodeAppliedTrips > 0;
-  const promoCodePartiallyApplied =
-    promoCodeAppliedTrips > 0 && promoCodeAppliedTrips < tripInstances.length;
-  const promoCodeUnavailable = Boolean(promoCode) && !promoCodeApplied;
-
-  const amountEgp = pricedTripInstances.reduce(
-    (sum, instance) => sum + instance.priceEgp,
-    0,
-  );
+    ),
+    payload: instance,
+  }));
   const hasSharedRide = serverTrips.some((trip) => trip.rideType === "shared");
   const settings = await AdminSettings.findOne()
     .select("sharedRideWaitingListEnabled")
@@ -702,36 +641,17 @@ export async function POST(req: NextRequest) {
   );
 
   try {
-    const tripDocuments = await Promise.all(
-      pricedTripInstances.map(async (instance) => ({
-        _id: instance.id,
-        tripNumber: await nextSequence("tripNumber"),
-        regionCode: userRegion,
-        userId: new Types.ObjectId(userId),
-        date: instance.date,
-        cycleIndex: instance.cycleIndex,
-        ...instance.trip,
-        ...(note ? { note } : {}),
-        basePriceEgp: instance.basePriceEgp,
-        priceEgp: instance.priceEgp,
-        ...(instance.promoApply && {
-          appliedPromoCode: new Types.ObjectId(instance.promoApply.promoCodeId),
-          promoDiscountType: instance.promoApply.discountType,
-          promoDiscountValue: instance.promoApply.discountValue,
-          promoDiscountAmountEgp: instance.promoDiscountAmountEgp,
-        }),
-        ...getInitialTripBookingState(isWaitingListTrip),
-      })),
-    );
-
     const db = mongoose.connection.db;
     if (!db) throw new Error("Database connection is unavailable");
     const spacingLockCollection = db.collection<TripSpacingLockDocument>(
       "trip_spacing_locks",
     );
     await ensureTripSpacingLockTtlIndex(spacingLockCollection);
-    const spacingLockIds = dates.map((date) => `${userId}:${date}`);
-    for (const lockId of spacingLockIds) {
+    const lockIds = [
+      ...dates.map((date) => `${userId}:${date}`),
+      `${userId}:pending-cap`,
+    ];
+    for (const lockId of lockIds) {
       try {
         const now = new Date();
         await spacingLockCollection.updateOne(
@@ -746,79 +666,175 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const dbSession = await mongoose.startSession();
-    try {
-      await dbSession.withTransaction(async () => {
-        for (const lockId of spacingLockIds) {
-          const lockUpdate = await spacingLockCollection.updateOne(
-            { _id: lockId },
-            {
-              $inc: { revision: 1 },
-              $set: {
-                updatedAt: new Date(),
-              },
-            },
-            { session: dbSession },
-          );
-          if (lockUpdate.matchedCount !== 1) {
-            throw new Error(`Trip-spacing lock is missing: ${lockId}`);
+    const batchResult = await createTripBatchWith<
+      ClientSession,
+      InstanceType<typeof Trip>,
+      (typeof tripInstances)[number]
+    >(
+      {
+        async withTransaction<TResult>(
+          work: (dbSession: ClientSession) => Promise<TResult>,
+        ) {
+          const dbSession = await mongoose.startSession();
+          try {
+            return await dbSession.withTransaction(() => work(dbSession));
+          } finally {
+            await dbSession.endSession();
           }
-        }
-
-        const existingTrips = await Trip.find({
-          userId: new Types.ObjectId(userId),
-          date: { $in: dates },
-          status: { $in: HOLDING_TRIP_STATUSES },
-        })
-          .select("date arrivalTime status requestId")
-          .session(dbSession)
-          .lean();
-        const existingWindows: TripSpacingWindow[] = existingTrips.map(
-          (trip) => ({
+        },
+        async acquireLocks(dbSession, selectedDates) {
+          const selectedLockIds = [
+            ...selectedDates.map((date) => `${userId}:${date}`),
+            `${userId}:pending-cap`,
+          ];
+          for (const lockId of selectedLockIds) {
+            const lockUpdate = await spacingLockCollection.updateOne(
+              { _id: lockId },
+              {
+                $inc: { revision: 1 },
+                $set: { updatedAt: new Date() },
+              },
+              { session: dbSession },
+            );
+            if (lockUpdate.matchedCount !== 1) {
+              throw new Error(`Trip-spacing lock is missing: ${lockId}`);
+            }
+          }
+        },
+        async countPendingUnpaid(dbSession, pendingUserId) {
+          return Trip.countDocuments({
+            userId: new Types.ObjectId(pendingUserId),
+            $or: [
+              { status: { $in: ["pending_payment", "waiting_list"] } },
+              {
+                status: "approved",
+                paymentStatus: { $nin: ["paid", "refunded"] },
+              },
+            ],
+          }).session(dbSession);
+        },
+        async findSpacingWindows(dbSession, spacingUserId, selectedDates) {
+          const existingTrips = await Trip.find({
+            userId: new Types.ObjectId(spacingUserId),
+            date: { $in: selectedDates },
+            status: { $in: HOLDING_TRIP_STATUSES },
+          })
+            .select("date arrivalTime status requestId")
+            .session(dbSession)
+            .lean();
+          return existingTrips.map((trip) => ({
             date: trip.date,
             arrivalTime: trip.arrivalTime,
             status: trip.status,
             requestId: trip.requestId ? String(trip.requestId) : null,
-          }),
-        );
-        const submittedWindows: TripSpacingWindow[] = [];
-        for (const trip of tripDocuments) {
-          const candidate = { date: trip.date, arrivalTime: trip.arrivalTime };
-          const conflict = findSpacingConflict(candidate, [
-            ...existingWindows,
-            ...submittedWindows,
-          ]);
-          if (conflict) throw new TripSpacingConflictError(conflict);
-          submittedWindows.push({ ...candidate, status: "pending_payment" });
-        }
+          }));
+        },
+        async applyPromo(dbSession, promoUserId, tripId) {
+          if (!promoCode) return { success: false, message: "" };
+          const result = await applyPromoCodeToTrip(
+            promoCode,
+            promoUserId,
+            tripId,
+            dbSession,
+          );
+          if (
+            result.success &&
+            result.discountType &&
+            typeof result.discountValue === "number" &&
+            result.promoCodeId &&
+            result.usageId
+          ) {
+            return {
+              success: true,
+              discountType: result.discountType,
+              discountValue: result.discountValue,
+              promoCodeId: result.promoCodeId,
+              usageId: result.usageId,
+            };
+          }
+          return { success: false, message: result.message };
+        },
+        async insert(dbSession, documents) {
+          await Trip.insertMany(documents, { session: dbSession });
+        },
+      },
+      {
+        userId,
+        dates,
+        candidates: batchCandidates,
+        maxPendingUnpaidTrips: MAX_PENDING_UNPAID_TRIPS,
+        promoCode,
+        computeDiscountedPrice: computePromoDiscountedPrice,
+        async buildDocument(candidate: PreparedTripBatchCandidate<(typeof tripInstances)[number]>) {
+          const instance = candidate.payload;
+          return new Trip({
+            _id: instance.id,
+            tripNumber: await nextSequence("tripNumber"),
+            regionCode: userRegion,
+            userId: new Types.ObjectId(userId),
+            date: candidate.date,
+            cycleIndex: instance.cycleIndex,
+            batchId,
+            ...instance.trip,
+            ...(note ? { note } : {}),
+            basePriceEgp: candidate.basePriceEgp,
+            priceEgp: candidate.priceEgp,
+            ...(candidate.promoApply && {
+              appliedPromoCode: new Types.ObjectId(
+                candidate.promoApply.promoCodeId,
+              ),
+              promoDiscountType: candidate.promoApply.discountType,
+              promoDiscountValue: candidate.promoApply.discountValue,
+              promoDiscountAmountEgp: candidate.promoDiscountAmountEgp,
+            }),
+            ...getInitialTripBookingState(isWaitingListTrip),
+          });
+        },
+      },
+    );
 
-        await Trip.insertMany(tripDocuments, { session: dbSession });
-      });
-    } finally {
-      await dbSession.endSession();
-    }
-
+    const tripDocuments = batchResult.documents;
+    const batchResponse = buildTripBatchResponse({
+      batchId,
+      candidates: batchResult.candidates,
+      waitlist: isWaitingListTrip,
+    });
+    const amountEgp = batchResponse.totalEgp;
+    const promoCodeAppliedTrips = batchResult.candidates.filter(
+      (candidate) => candidate.promoApply,
+    ).length;
+    const promoCodeApplied = promoCodeAppliedTrips > 0;
+    const promoCodePartiallyApplied =
+      promoCodeAppliedTrips > 0 &&
+      promoCodeAppliedTrips < batchResult.candidates.length;
+    const promoCodeUnavailable = Boolean(promoCode) && !promoCodeApplied;
+    const promoFailureMessage = batchResult.promoFailureMessage;
     const tripIds = tripDocuments.map((trip) => String(trip._id));
     const representativeTripId = tripIds[0];
 
     if (isWaitingListTrip) {
       try {
-        await Promise.all(
-          tripIds.map((tripId) => notifyAdminsOfWaitingListTrip(tripId)),
-        );
+        await notifyAdminsOfWaitingListTripBatch({
+          batchId,
+          userId,
+          tripCount: tripIds.length,
+          date: dates[0],
+          routeSummary: `${serverTrips[0].pickup.address} → ${serverTrips[0].dropoff.address}`,
+        });
         const admins = await User.find({ role: "admin" }).select("_id").lean();
-        const firstTrip = serverTrips[0];
         await createNotifications(
-          buildWaitingListCreatedTripAdminNotifications({
+          buildWaitingListCreatedTripBatchAdminNotifications({
             adminIds: admins.map((admin) => String(admin._id)),
             tripId: representativeTripId,
-            routeSummary: `${firstTrip.pickup.address} → ${firstTrip.dropoff.address}`,
-            date: tripInstances[0].date,
+            batchId,
+            tripCount: tripIds.length,
+            routeSummary: `${serverTrips[0].pickup.address} → ${serverTrips[0].dropoff.address}`,
+            date: dates[0],
           }),
         );
       } catch (error) {
         console.error(
-          `[Waiting list] Admin notification failed for trip ${representativeTripId}:`,
+          `[Waiting list] Admin notification failed for batch ${batchId}:`,
           error,
         );
       }
@@ -828,15 +844,16 @@ export async function POST(req: NextRequest) {
         userId,
         type: "request_created",
         title: isWaitingListTrip
-          ? "Shared-ride trip received"
-          : "Trip ready for payment",
+          ? "Shared-ride trips received"
+          : "Trips ready for payment",
         body: isWaitingListTrip
-          ? `Your shared-ride trip for ${dates[0]} is waiting for review.`
-          : `Your trip for ${dates[0]} is ready for payment.`,
+          ? `Your ${tripIds.length} shared-ride ${tripIds.length === 1 ? "trip is" : "trips are"} waiting for review.`
+          : `Your ${tripIds.length} ${tripIds.length === 1 ? "trip is" : "trips are"} ready for payment.`,
         data: {
-          bookingId: representativeTripId,
+          batchId,
+          tripIds,
           tripId: representativeTripId,
-          linkUrl: `/my-trips/${representativeTripId}`,
+          linkUrl: "/my-trips",
           amountEgp,
           waitlist: isWaitingListTrip,
         },
@@ -850,12 +867,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
-        tripId: representativeTripId,
-        bookingId: representativeTripId,
-        tripIds,
-        amountEgp,
-        waitlist: isWaitingListTrip,
-        waitingList: isWaitingListTrip,
+        ...batchResponse,
         ...(isWaitingListTrip
           ? {
               status: "waiting_list",
@@ -874,14 +886,18 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     );
   } catch (err) {
-    await Promise.all(
-      successfulPromoReservations.map((reservation) =>
-        rollbackPromoCodeUsage(reservation.usageId, reservation.promoCodeId),
-      ),
-    );
-    if (err instanceof TripSpacingConflictError) {
+    if (err instanceof TripBatchSpacingConflictError) {
       return NextResponse.json(
         { error: "TRIP_SPACING_CONFLICT", conflict: err.conflict },
+        { status: 409 },
+      );
+    }
+    if (err instanceof TooManyPendingTripsError) {
+      return NextResponse.json(
+        {
+          errorCode: "TOO_MANY_PENDING_TRIPS",
+          error: "TOO_MANY_PENDING_TRIPS",
+        },
         { status: 409 },
       );
     }

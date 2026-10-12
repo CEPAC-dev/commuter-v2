@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const {
-  getSingleTripPayloadError,
   isAuthorizedExpiryRequest,
   isTransientBookingConflict,
   latePaymentDedupeKey,
@@ -19,23 +18,6 @@ const {
 const { ensureTripSpacingLockTtlIndex } = await import(
   "../src/lib/tripSpacingLockIndex.ts"
 );
-
-test("server accepts exactly one expanded Trip and rejects zero or multiple", () => {
-  assert.equal(getSingleTripPayloadError(0), "INVALID_TRIP_COUNT");
-  assert.equal(getSingleTripPayloadError(1), null);
-  assert.equal(getSingleTripPayloadError(2), "INVALID_TRIP_COUNT");
-});
-
-test("Trip creation checks expanded count before promo reservations or inserts", async () => {
-  const route = await readFile(
-    new URL("../src/app/api/trips/route.ts", import.meta.url),
-    "utf8",
-  );
-  const countGuard = route.indexOf("getSingleTripPayloadError(tripInstances.length)");
-  assert.ok(countGuard > route.indexOf("const tripInstances"));
-  assert.ok(countGuard < route.indexOf("const promoApplies"));
-  assert.ok(countGuard < route.indexOf("Trip.insertMany(tripDocuments"));
-});
 
 test("session creation and expiry serialize on the standalone Trip record", async () => {
   const state = { tripStatus: "pending_payment", paymentStatus: "pending", payments: [] };

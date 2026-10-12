@@ -232,6 +232,36 @@ export function buildWaitingListCreatedTripAdminNotifications(input: {
   }));
 }
 
+export function buildWaitingListCreatedTripBatchAdminNotifications(input: {
+  adminIds: readonly string[];
+  tripId: string;
+  batchId: string;
+  tripCount: number;
+  routeSummary: string;
+  date: string;
+}): WaitingListNotification[] {
+  return input.adminIds.map((adminId) => ({
+    userId: adminId,
+    type: "waiting_list_created",
+    title: `${input.tripCount} new shared-ride trips`,
+    body: `${input.routeSummary} on ${input.date}: ${input.tripCount} trips are waiting for review.`,
+    titleAr: `${input.tripCount} رحلات مشتركة جديدة`,
+    bodyAr: `${input.tripCount} رحلات مشتركة من ${input.routeSummary} يوم ${input.date} مستنية المراجعة.`,
+    data: {
+      batchId: input.batchId,
+      bookingId: input.tripId,
+      tripId: input.tripId,
+      tripCount: input.tripCount,
+      linkUrl: "/admin/waiting-list",
+      linkLabel: "Review waiting list",
+    },
+  }));
+}
+
+export function waitingListTripBatchDedupeKey(batchId: string): string {
+  return `batch:${batchId}:waiting_list_created`;
+}
+
 export function buildWaitingListApprovedNotification(
   userId: string,
   bookingId: string,
