@@ -7,17 +7,14 @@ import { Payment } from "@/models/Payment";
 import {
   getOrCreateWallet,
   reserveWallet,
-  captureReservation,
   releaseReservation,
 } from "@/lib/wallet/wallet";
 import { createNotification } from "@/lib/notifications/createNotification";
 import {
   notifyAdminsOfPaidTrip,
-  syncPaidTripsForRequest,
 } from "@/lib/notifications/adminActivity";
 import mongoose, { Types } from "mongoose";
 import { validateMutationRequest } from "@/lib/security/request";
-import { buildSettlementRequestFilter } from "@/lib/pendingRequestHardening";
 import { getCairoNowParts } from "@/lib/cancellationPolicy";
 import { hasPastTrip } from "@/lib/admin/waitingList";
 import {
@@ -26,6 +23,7 @@ import {
   resolvePayableBooking,
 } from "@/lib/payments/resolveBooking";
 import { settleStandaloneTripPayment } from "@/lib/payments/standaloneTripSettlement";
+import { settleRequestPayment } from "@/lib/payments/requestSettlement";
 import { shouldResetFailedTripForRetry } from "@/lib/payments/settlementAttempt";
 import { safeKashierErrorFields } from "@/lib/phase8bGuards";
 import {
@@ -572,41 +570,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const captured = reservationTxId
-      ? await captureReservation(reservationTxId, {
-          description: `Payment for booking ${booking._id}`,
-          paymentId: String(payment._id),
-          bookingId: String(booking._id),
-        })
-      : null;
-
-    if (walletAmount > 0 && captured === null) {
-      await Payment.updateOne(
-        { _id: payment._id },
-        {
-          $set: { overallStatus: "failed" },
-          $push: { timeline: { event: "wallet_capture_failed" } },
-        },
-      );
+    const settlement = await settleRequestPayment(String(booking._id), {
+      paymentId: String(payment._id),
+    });
+    if (settlement === "capture_failed") {
       return NextResponse.json(
-        { error: "Wallet capture failed." },
+        { error: "Wallet capture failed; retry payment verification." },
         { status: 500 },
       );
     }
-
-    // Settle booking — race-safe conditional update.
-    const settled = await Request.findOneAndUpdate(
-      buildSettlementRequestFilter(booking._id),
-      { paymentStatus: "paid", status: "submitted", paidAt: new Date() },
-    );
-    if (!settled) {
-      // Lost race — release/refund what we captured.
-      if (walletAmount > 0) {
-        // Already captured; issue a refund credit.
-        const { creditWallet } = await import("@/lib/wallet/wallet");
-        await creditWallet(session.userId, walletAmount, {
-          description: `Refund — booking ${booking._id} already paid`,
-          type: "refund",
+    if (settlement === "not_settled") {
+      if (reservationTxId) {
+        await releaseReservation(reservationTxId, {
+          description: `Released — booking ${booking._id} was no longer payable.`,
           paymentId: String(payment._id),
           bookingId: String(booking._id),
         });
@@ -614,31 +590,18 @@ export async function POST(req: NextRequest) {
       await Payment.updateOne(
         { _id: payment._id },
         {
-          $set: { overallStatus: "cancelled", walletStatus: "refunded" },
-          $push: { timeline: { event: "booking_already_paid_refunded" } },
+          $set: {
+            overallStatus: "cancelled",
+            walletStatus: walletAmount > 0 ? "released" : "none",
+          },
+          $push: { timeline: { event: "booking_not_payable" } },
         },
       );
       return NextResponse.json(
-        { error: "Booking was already paid. Your wallet was not charged." },
+        { error: "Booking is no longer payable." },
         { status: 409 },
       );
     }
-
-    await syncPaidTripsForRequest(String(booking._id));
-
-    await Payment.updateOne(
-      { _id: payment._id },
-      {
-        $set: {
-          walletStatus: "captured",
-          overallStatus: "paid",
-          paidAt: new Date(),
-        },
-        $push: {
-          timeline: [{ event: "wallet_captured" }, { event: "booking_paid" }],
-        },
-      },
-    );
 
     return NextResponse.json({
       walletOnly: true,

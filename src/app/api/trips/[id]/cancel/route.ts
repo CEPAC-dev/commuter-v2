@@ -18,7 +18,10 @@ import {
   runStandaloneTripCancellation,
 } from "@/lib/standaloneTripCancellation";
 import { cancelStandaloneTripPayments } from "@/lib/services/standaloneTripExpiry";
-import { releasePromoCodeUsageForTrip } from "@/lib/promoCode";
+import {
+  releasePromoCodeUsageForTrip,
+  releasePromoForRequest,
+} from "@/lib/promoCode";
 import { releaseReservation } from "@/lib/wallet/wallet";
 
 const REQUEST_NOT_CANCELLABLE = "REQUEST_NOT_CANCELLABLE";
@@ -474,7 +477,23 @@ export async function POST(
       }
     }
 
-    if (!standaloneCancellation) await trip.save();
+    if (!standaloneCancellation) {
+      if (trip.requestId) {
+        const dbSession = await mongoose.startSession();
+        try {
+          await dbSession.withTransaction(async () => {
+            await trip.save({ session: dbSession });
+            await releasePromoForRequest(trip.requestId, {
+              session: dbSession,
+            });
+          });
+        } finally {
+          await dbSession.endSession();
+        }
+      } else {
+        await trip.save();
+      }
+    }
 
     // Log cancellation event
     try {

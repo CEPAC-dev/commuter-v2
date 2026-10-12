@@ -10,7 +10,6 @@ import { reconcileKashierRefund } from "@/lib/payments/kashierRefundReconciliati
 import {
   completeWithdrawal,
   refundWithdrawal,
-  captureReservation,
   releaseReservation,
 } from "@/lib/wallet/wallet";
 import { queryKashierPayoutStatus } from "@/lib/payments/kashierPayout";
@@ -18,7 +17,6 @@ import { createNotification } from "@/lib/notifications/createNotification";
 import {
   notifyAdminsOfPaidTrip,
   notifyAdminsOfLateTripPayment,
-  syncPaidTripsForRequest,
 } from "@/lib/notifications/adminActivity";
 import {
   buildSettlementRequestFilter,
@@ -33,6 +31,7 @@ import {
   failStandaloneTripPayment,
   settleStandaloneTripPayment,
 } from "@/lib/payments/standaloneTripSettlement";
+import { settleRequestPayment } from "@/lib/payments/requestSettlement";
 import { ACTIVE_PAYMENT_STATUSES } from "@/lib/payments/settlementAttempt";
 
 const REFUND_LOCK_STALE_MS = 5 * 60_000;
@@ -342,6 +341,30 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+      const mixedBooking = await resolvePayableBooking(
+        String(payment.bookingId),
+        String(payment.userId),
+      );
+      if (paid && mixedBooking?.kind === "request") {
+        if (isSettlementBlockedStatus(mixedBooking.status)) {
+          return NextResponse.json(
+            { error: "Transaction already processed" },
+            { status: 400 },
+          );
+        }
+        const settlement = await settleMixedPayment(
+          String(payment._id),
+          true,
+          transactionId,
+        );
+        if (settlement === "capture_failed") {
+          return NextResponse.json(
+            { error: "Payment settlement failed; retry webhook" },
+            { status: 500 },
+          );
+        }
+        return NextResponse.json({ received: true });
+      }
       const claimed = await Payment.findOneAndUpdate(
         { _id: payment._id, kashierTransactionIds: { $ne: transactionId } },
         { $addToSet: { kashierTransactionIds: transactionId } },
@@ -371,10 +394,6 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      const mixedBooking = await resolvePayableBooking(
-        String(payment.bookingId),
-        String(payment.userId),
-      );
       if (mixedBooking?.kind === "trip") {
         await Trip.updateOne(
           { _id: mixedBooking.doc._id, requestId: null },
@@ -451,24 +470,34 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+      if (paid) {
+        const settlement = await settleRequestPayment(orderId, {
+          transactionId,
+        });
+        if (settlement === "capture_failed") {
+          return NextResponse.json(
+            { error: "Payment settlement failed; retry webhook" },
+            { status: 500 },
+          );
+        }
+        if (settlement === "not_settled") {
+          return NextResponse.json(
+            { error: "Transaction already processed" },
+            { status: 400 },
+          );
+        }
+        return NextResponse.json({ received: true });
+      }
+
       const settled = await Request.findOneAndUpdate(
         {
           ...buildSettlementRequestFilter(orderId),
           kashierTransactionIds: { $ne: transactionId },
         },
-        paid
-          ? {
-              $set: {
-                paymentStatus: "paid",
-                status: "submitted",
-                paidAt: new Date(),
-              },
-              $addToSet: { kashierTransactionIds: transactionId },
-            }
-          : {
-              $set: { paymentStatus: "failed" },
-              $addToSet: { kashierTransactionIds: transactionId },
-            },
+        {
+          $set: { paymentStatus: "failed" },
+          $addToSet: { kashierTransactionIds: transactionId },
+        },
       );
       if (!settled) {
         return NextResponse.json(
@@ -476,24 +505,13 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      if (paid) {
-        await syncPaidTripsForRequest(String(settled._id));
-        await createNotification({
-          userId: String(settled.userId),
-          type: "payment_paid",
-          title: "Payment completed",
-          body: "Your booking payment was successful.",
-          data: { bookingId: String(settled._id) },
-        });
-      } else {
-        await createNotification({
-          userId: String(settled.userId),
-          type: "payment_failed",
-          title: "Payment issue",
-          body: "We couldn’t confirm your payment. You can try again from your requests page.",
-          data: { bookingId: String(settled._id) },
-        });
-      }
+      await createNotification({
+        userId: String(settled.userId),
+        type: "payment_failed",
+        title: "Payment issue",
+        body: "We couldn’t confirm your payment. You can try again from your requests page.",
+        data: { bookingId: String(settled._id) },
+      });
       return NextResponse.json({ received: true });
     }
   }
@@ -510,7 +528,7 @@ async function settleMixedPayment(
   paymentId: string,
   paid: boolean,
   transactionId: string,
-): Promise<void> {
+): Promise<Awaited<ReturnType<typeof settleRequestPayment>> | void> {
   const payment = await Payment.findById(paymentId);
   if (!payment) return;
 
@@ -565,25 +583,13 @@ async function settleMixedPayment(
 
   if (!ACTIVE_PAYMENT_STATUSES.includes(payment.overallStatus)) return;
   if (paid) {
-    // Claim the booking FIRST — never capture money before confirming this
-    // Payment is the one allowed to settle it. If another Payment for the
-    // same booking already settled it (should be prevented by the unique
-    // active-Payment index, but defense in depth), compensate below instead
-    // of silently capturing funds for nothing.
-    const settled = await Request.findOneAndUpdate(
-      {
-        ...buildSettlementRequestFilter(payment.bookingId),
-      },
-      {
-        $set: {
-          paymentStatus: "paid",
-          status: "submitted",
-          paidAt: new Date(),
-        },
-      },
-    );
+    const settlement = await settleRequestPayment(String(payment.bookingId), {
+      paymentId: String(payment._id),
+      transactionId,
+    });
+    if (settlement !== "not_settled") return settlement;
 
-    if (!settled) {
+    {
       // Booking already settled elsewhere — refund whatever this Payment
       // took instead of capturing/keeping it.
       if (
@@ -641,64 +647,8 @@ async function settleMixedPayment(
           paymentId: String(payment._id),
         },
       });
-      return;
+      return "not_settled";
     }
-
-    if (payment.walletReservationTxId && payment.walletStatus === "reserved") {
-      const captured = await captureReservation(
-        String(payment.walletReservationTxId),
-        {
-          description: `Payment for booking ${payment.bookingId}`,
-          paymentId: String(payment._id),
-          bookingId: String(payment.bookingId),
-        },
-      );
-      if (captured === null) {
-        // Retryable — leave in kashier_pending for verify path.
-        return;
-      }
-    }
-
-    await Payment.updateOne(
-      { _id: payment._id },
-      {
-        $set: {
-          gatewayStatus: "success",
-          walletStatus:
-            payment.walletAmountEgp > 0 ? "captured" : payment.walletStatus,
-          overallStatus: "paid",
-          paidAt: new Date(),
-        },
-        $push: {
-          timeline: {
-            $each: [
-              { event: "kashier_success", detail: transactionId },
-              { event: "wallet_captured" },
-              { event: "booking_paid" },
-            ],
-          },
-        },
-      },
-    );
-
-    if (payment.gatewayAmountEgp > 0) {
-      await writeKashierPaymentLedger(payment, transactionId);
-    }
-
-    if (settled) {
-      await syncPaidTripsForRequest(String(payment.bookingId));
-      await createNotification({
-        userId: String(payment.userId),
-        type: "payment_paid",
-        title: "Payment completed",
-        body: "Your booking payment was successful.",
-        data: {
-          bookingId: String(payment.bookingId),
-          paymentId: String(payment._id),
-        },
-      });
-    }
-    return;
   }
 
   // Failed / cancelled
@@ -735,36 +685,4 @@ async function settleMixedPayment(
       paymentId: String(payment._id),
     },
   });
-}
-
-// Idempotent ledger write for the Kashier (gateway) leg of a Payment.
-async function writeKashierPaymentLedger(
-  payment: {
-    _id: Types.ObjectId;
-    userId: Types.ObjectId;
-    bookingId: Types.ObjectId;
-    gatewayAmountEgp: number;
-    kashierSessionId?: string | null;
-    kashierOrderId?: string | null;
-  },
-  transactionId: string,
-): Promise<void> {
-  await WalletTransaction.updateOne(
-    { paymentId: payment._id, type: "kashier_payment" },
-    {
-      $setOnInsert: {
-        userId: payment.userId,
-        type: "kashier_payment",
-        amountEgp: payment.gatewayAmountEgp,
-        status: "completed",
-        description: `Card payment via Kashier for booking ${payment.bookingId}`,
-        paymentId: payment._id,
-        bookingId: payment.bookingId,
-        kashierSessionId: payment.kashierSessionId ?? undefined,
-        kashierOrderId: payment.kashierOrderId ?? undefined,
-      },
-      $addToSet: { kashierTransactionIds: transactionId },
-    },
-    { upsert: true },
-  );
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
@@ -11,6 +11,7 @@ import {
   buildPendingTripExpiryFilter,
 } from "@/lib/pendingRequestHardening";
 import { isAuthorizedExpiryRequest } from "@/lib/phase8bGuards";
+import { releasePromoForRequest } from "@/lib/promoCode";
 
 const EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -50,18 +51,37 @@ export async function POST(req: NextRequest) {
     .select("_id")
     .lean<{ _id: Types.ObjectId }[]>();
   const requestIds = expiringRequests.map((request) => request._id);
-  const reqResult = requestIds.length
-    ? await Request.updateMany(
-        { _id: { $in: requestIds }, ...expireFilter },
-        { $set: { status: "time_out", paymentStatus: "expired" } },
-      )
-    : { modifiedCount: 0 };
-  const tripResult = requestIds.length
-    ? await Trip.updateMany(
-        buildPendingTripExpiryFilter(requestIds),
-        { $set: { status: "time_out", paymentStatus: "expired" } },
-      )
-    : { modifiedCount: 0 };
+  let expiredRequests = 0;
+  let expiredTrips = 0;
+  for (const requestId of requestIds) {
+    const dbSession = await mongoose.startSession();
+    let requestChanged = false;
+    let tripCount = 0;
+    try {
+      await dbSession.withTransaction(async () => {
+        requestChanged = false;
+        tripCount = 0;
+        const updated = await Request.updateOne(
+          { _id: requestId, ...expireFilter },
+          { $set: { status: "time_out", paymentStatus: "expired" } },
+          { session: dbSession },
+        );
+        if (updated.modifiedCount !== 1) return;
+        requestChanged = true;
+        const trips = await Trip.updateMany(
+          buildPendingTripExpiryFilter([requestId]),
+          { $set: { status: "time_out", paymentStatus: "expired" } },
+          { session: dbSession },
+        );
+        tripCount = trips.modifiedCount;
+        await releasePromoForRequest(requestId, { session: dbSession });
+      });
+      if (requestChanged) expiredRequests += 1;
+      expiredTrips += tripCount;
+    } finally {
+      await dbSession.endSession();
+    }
+  }
   const standaloneExpiry = await expireStandaloneTrips();
 
   // Auto-mark unmatched "submitted" trips as "nomatch" past the admin-configured cutoff.
@@ -83,8 +103,8 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
-    expiredRequests: reqResult.modifiedCount,
-    expiredTrips: tripResult.modifiedCount,
+    expiredRequests,
+    expiredTrips,
     expiredStandaloneTrips: standaloneExpiry.expiredTrips,
     cancelledStandalonePayments: standaloneExpiry.cancelledPayments,
     releasedStandaloneWalletReservations:
