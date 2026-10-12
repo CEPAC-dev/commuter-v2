@@ -18,6 +18,11 @@ export async function getMapSettings(
         canvasStyle: stored.canvasStyle ?? fallback.canvasStyle,
         osmTheme: stored.osmTheme ?? fallback.osmTheme,
         showStations: stored.showStations ?? fallback.showStations,
+        stationAssignmentMode:
+          stored.stationAssignmentMode ?? fallback.stationAssignmentMode,
+        directPointZoneIds:
+          stored.directPointZoneIds ?? fallback.directPointZoneIds,
+        stationZoneIds: stored.stationZoneIds ?? fallback.stationZoneIds,
         showZones: stored.showZones ?? fallback.showZones,
         showZoneLabels: stored.showZoneLabels ?? fallback.showZoneLabels,
         maskOutsideZones: stored.maskOutsideZones ?? fallback.maskOutsideZones,

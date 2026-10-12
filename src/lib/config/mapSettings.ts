@@ -3,6 +3,7 @@ import type { RegionCode } from "@/lib/config/regions";
 export type MapProviderName = "google" | "osm";
 export type MapCanvasStyle = "roadmap" | "satellite" | "light";
 export type OsmMapThemeName = "default" | "app" | "midnight" | "forest";
+export type StationAssignmentMode = "shared-vehicles" | "zones";
 
 export const OSM_THEMES: Record<
   OsmMapThemeName,
@@ -50,6 +51,9 @@ export interface MapSettings {
   canvasStyle: MapCanvasStyle;
   osmTheme: OsmMapThemeName;
   showStations: boolean;
+  stationAssignmentMode: StationAssignmentMode;
+  directPointZoneIds: string[];
+  stationZoneIds: string[];
   showZones: boolean;
   showZoneLabels: boolean;
   maskOutsideZones: boolean;
@@ -62,6 +66,9 @@ export function defaultMapSettings(regionCode: RegionCode): MapSettings {
     canvasStyle: "roadmap",
     osmTheme: "app",
     showStations: true,
+    stationAssignmentMode: "shared-vehicles",
+    directPointZoneIds: [],
+    stationZoneIds: [],
     // Only Greater Cairo currently has a committed service-zone dataset.
     showZones: regionCode === "EG-CAIRO",
     // Keep zone labels hidden for now while the service-area boundary remains visible.

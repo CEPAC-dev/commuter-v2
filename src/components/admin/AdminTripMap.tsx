@@ -12,6 +12,11 @@ export type TripMapPoint = {
   order?: number;
 };
 
+type TripMapConnection = {
+  from: TripMapPoint;
+  to: TripMapPoint;
+};
+
 function markerHtml(color: string, ring: string, order?: number) {
   const label = order == null ? "" : String(order);
   return `<span style="display:flex;width:22px;height:22px;border-radius:50%;background:${color};border:3px solid ${ring};box-shadow:0 2px 6px var(--color-shadow-strong);align-items:center;justify-content:center;color:var(--color-on-primary);font:700 10px/1 sans-serif">${label}</span>`;
@@ -19,10 +24,16 @@ function markerHtml(color: string, ring: string, order?: number) {
 
 export default function AdminTripMap({
   points,
+  routePoints = points,
+  routeGeometry,
+  walkingConnections = [],
   stationOnly = false,
   focusPoint,
 }: {
   points: TripMapPoint[];
+  routePoints?: TripMapPoint[];
+  routeGeometry?: [number, number][];
+  walkingConnections?: TripMapConnection[];
   stationOnly?: boolean;
   focusPoint?: { lat: number; lng: number } | null;
 }) {
@@ -67,49 +78,75 @@ export default function AdminTripMap({
           .bindTooltip(point.label, { direction: "top", offset: [0, -10] });
       });
 
-      if (!stationOnly && points.length > 1) {
-        const [origin, ...remainingPoints] = points;
-        const destination = remainingPoints.pop();
-        if (!origin || !destination) return;
-        const fallbackRoute = points.map(
-          (point) => [point.lat, point.lng] as [number, number],
-        );
-        const routeLine = L.polyline(fallbackRoute, {
-          color: MAP_COLORS.route,
-          weight: 4,
-          opacity: 0.78,
-          dashArray: "6 8",
-        }).addTo(map);
+      walkingConnections.forEach(({ from, to }) => {
+        L.polyline(
+          [
+            [from.lat, from.lng],
+            [to.lat, to.lng],
+          ],
+          {
+            color: MAP_COLORS.accent,
+            weight: 2,
+            opacity: 0.8,
+            dashArray: "4 6",
+          },
+        )
+          .addTo(map)
+          .bindTooltip("Walk to station", { sticky: true });
+      });
 
-        const params = new URLSearchParams({
-          origin: `${origin.lat},${origin.lng}`,
-          dest: `${destination.lat},${destination.lng}`,
-        });
-        if (remainingPoints.length) {
-          params.set(
-            "waypoints",
-            remainingPoints
-              .map((point) => `${point.lat},${point.lng}`)
-              .join("|"),
+      if (!stationOnly && routePoints.length > 1) {
+        if (routeGeometry && routeGeometry.length > 1) {
+          L.polyline(routeGeometry, {
+            color: MAP_COLORS.route,
+            weight: 4,
+            opacity: 0.9,
+          }).addTo(map);
+          map.fitBounds(L.latLngBounds(routeGeometry), { padding: [32, 32] });
+        } else {
+          const [origin, ...remainingPoints] = routePoints;
+          const destination = remainingPoints.pop();
+          if (!origin || !destination) return;
+          const fallbackRoute = routePoints.map(
+            (point) => [point.lat, point.lng] as [number, number],
           );
+          const routeLine = L.polyline(fallbackRoute, {
+            color: MAP_COLORS.route,
+            weight: 4,
+            opacity: 0.78,
+            dashArray: "6 8",
+          }).addTo(map);
+
+          const params = new URLSearchParams({
+            origin: `${origin.lat},${origin.lng}`,
+            dest: `${destination.lat},${destination.lng}`,
+          });
+          if (remainingPoints.length) {
+            params.set(
+              "waypoints",
+              remainingPoints
+                .map((point) => `${point.lat},${point.lng}`)
+                .join("|"),
+            );
+          }
+          void fetch(`/api/directions?${params.toString()}`)
+            .then(async (response) => {
+              if (!response.ok) return [];
+              return (await response.json()) as Array<{
+                coordinates?: [number, number][];
+              }>;
+            })
+            .then((routes) => {
+              if (cancelled) return;
+              const route = routes[0]?.coordinates;
+              if (route && route.length > 1) {
+                routeLine.setLatLngs(route);
+                routeLine.setStyle({ dashArray: undefined });
+                map.fitBounds(L.latLngBounds(route), { padding: [32, 32] });
+              }
+            })
+            .catch(() => undefined);
         }
-        void fetch(`/api/directions?${params.toString()}`)
-          .then(async (response) => {
-            if (!response.ok) return [];
-            return (await response.json()) as Array<{
-              coordinates?: [number, number][];
-            }>;
-          })
-          .then((routes) => {
-            if (cancelled) return;
-            const route = routes[0]?.coordinates;
-            if (route && route.length > 1) {
-              routeLine.setLatLngs(route);
-              routeLine.setStyle({ dashArray: undefined });
-              map.fitBounds(L.latLngBounds(route), { padding: [32, 32] });
-            }
-          })
-          .catch(() => undefined);
       }
 
       if (focusPoint) map.setView([focusPoint.lat, focusPoint.lng], 17);
@@ -127,7 +164,14 @@ export default function AdminTripMap({
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [focusPoint, points, stationOnly]);
+  }, [
+    focusPoint,
+    points,
+    routeGeometry,
+    routePoints,
+    stationOnly,
+    walkingConnections,
+  ]);
 
   return (
     <div

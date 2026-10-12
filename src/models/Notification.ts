@@ -18,6 +18,8 @@ const NOTIFICATION_TYPES = [
   "waiting_list_created",
   "waiting_list_approved",
   "waiting_list_rejected",
+  "station_suggestion_submitted",
+  "station_suggestion_reviewed",
 ] as const;
 
 const NotificationSchema = new Schema(

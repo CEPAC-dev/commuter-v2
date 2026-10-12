@@ -30,6 +30,8 @@ export interface TripInput {
   pickupTime?: string;
   distanceKm: number;
   durationMinutes: number;
+  // Presentation-only snapshot; never used for pricing or trip validation.
+  routeCoordinates?: [number, number][] | null;
   routeLegs?: RouteLegInput[];
   priceEgp: number;
   extraPassengers?: number;

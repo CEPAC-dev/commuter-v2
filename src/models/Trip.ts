@@ -136,6 +136,7 @@ const TripSchema = new Schema(
     pickupTime: { type: String, required: true },
     distanceKm: { type: Number, required: true },
     durationMinutes: { type: Number, required: true },
+    routeCoordinates: { type: [[Number]], required: false },
     priceEgp: { type: Number, required: true },
     basePriceEgp: { type: Number, required: false, min: 0 },
     appliedPromoCode: {

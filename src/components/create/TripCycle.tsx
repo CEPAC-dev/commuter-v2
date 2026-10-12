@@ -9,6 +9,7 @@ import {
   Info,
   RotateCcw,
   ChevronDown,
+  Plus,
 } from "lucide-react";
 import { useClientLocale } from "@/lib/locale.client";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/lib/i18n";
 import AddressInput from "@/components/landing/AddressInput";
 import AppSelect from "@/components/shared/AppSelect";
+import StationSuggestionModal from "@/components/create/StationSuggestionModal";
 import {
   VEHICLES,
   VEHICLE_LIST,
@@ -51,6 +53,13 @@ import {
   type Station,
   type StationOption,
 } from "@/lib/geo/stations";
+import {
+  isPointInAnyZone,
+  isPointInZone,
+  type ZoneFeature,
+} from "@/lib/geo/zones";
+
+const NO_ZONE_FEATURES: ZoneFeature[] = [];
 
 export interface PassengerDetail {
   id: string;
@@ -116,65 +125,6 @@ export interface TripData {
   passengers: PassengerDetail[]; // per-extra-passenger detail (private vehicles may set distinct points)
   baseDistanceKm: number | null; // main pickup→dropoff distance (reference for 25% detour cap)
   passengerDetourKm: number | null; // last computed combined route distance through distinct passenger points
-}
-
-type ZoneFeature = {
-  type: "Feature";
-  id?: string | number;
-  properties?: { NAME?: string };
-  geometry?: {
-    type: "Polygon" | "MultiPolygon";
-    coordinates?:
-      | Array<Array<[number, number]>>
-      | Array<Array<Array<[number, number]>>>;
-  };
-};
-
-function pointInRing(point: [number, number], ring: Array<[number, number]>) {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [x1, y1] = ring[i];
-    const [x2, y2] = ring[j];
-    const intersects =
-      y1 > point[1] !== y2 > point[1] &&
-      point[0] < ((x2 - x1) * (point[1] - y1)) / (y2 - y1) + x1;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function pointInPolygon(
-  point: [number, number],
-  polygon: Array<Array<[number, number]>>,
-) {
-  if (!polygon.length) return false;
-  const outerRing = polygon[0] as Array<[number, number]>;
-  const holes = polygon.slice(1) as Array<Array<[number, number]>>;
-  if (!outerRing || !outerRing.length) return false;
-  const insideOuter = pointInRing(point, outerRing);
-  if (!insideOuter) return false;
-  return !holes.some((hole) => pointInRing(point, hole));
-}
-
-function isPointInZone(point: [number, number], feature?: ZoneFeature) {
-  if (!feature?.geometry?.coordinates) return false;
-  const geometry = feature.geometry;
-  if (geometry.type === "Polygon") {
-    return pointInPolygon(
-      point,
-      geometry.coordinates as Array<Array<[number, number]>>,
-    );
-  }
-  if (geometry.type === "MultiPolygon") {
-    return (geometry.coordinates as Array<Array<Array<[number, number]>>>).some(
-      (polygon) => pointInPolygon(point, polygon),
-    );
-  }
-  return false;
-}
-
-function isPointInAnyZone(point: [number, number], features: ZoneFeature[]) {
-  return features.some((feature) => isPointInZone(point, feature));
 }
 
 interface Props {
@@ -326,6 +276,19 @@ const locationErrorStyle: React.CSSProperties = {
   marginTop: 6,
 };
 
+const stationNoticeStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  marginTop: 6,
+  fontSize: 12,
+  color: "#7A5000",
+  background: "rgba(245,166,35,0.1)",
+  border: "1px solid rgba(245,166,35,0.35)",
+  borderRadius: 5,
+  padding: "5px 10px",
+};
+
 function counterButtonStyle(disabled: boolean): React.CSSProperties {
   return {
     width: 40,
@@ -395,13 +358,17 @@ function StationOptions({
   options,
   selectedId,
   onSelect,
+  onAddSuggestion,
   locale,
+  addSuggestionLabel,
 }: {
   label: string;
   options: StationOption[];
   selectedId: number | undefined;
   onSelect: (stationId: number) => void;
+  onAddSuggestion?: () => void;
   locale: "en" | "ar";
+  addSuggestionLabel: string;
 }) {
   if (!options.length) return null;
 
@@ -450,6 +417,31 @@ function StationOptions({
           </label>
         );
       })}
+      {options.length >= 5 && onAddSuggestion && (
+        <button
+          type="button"
+          onClick={onAddSuggestion}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            minHeight: 42,
+            padding: "8px 10px",
+            border: "1px dashed #00a894",
+            borderRadius: 6,
+            background: "rgba(0,194,168,0.06)",
+            color: "#007f73",
+            cursor: "pointer",
+            font: "inherit",
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          <Plus size={15} aria-hidden="true" />
+          {addSuggestionLabel}
+        </button>
+      )}
     </div>
   );
 }
@@ -529,18 +521,35 @@ export default function TripCycle({
   const { t, locale } = useClientLocale();
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
+  const stationZoneIdsSignature = JSON.stringify(mapSettings?.stationZoneIds);
   const previousStopErrorRef = useRef<string | null>(null);
   const [zoneFeatures, setZoneFeatures] = useState<ZoneFeature[]>([]);
+  const [zoneLoadError, setZoneLoadError] = useState(false);
+  const [stationSuggestionTarget, setStationSuggestionTarget] = useState<{
+    locationType: "pickup" | "dropoff";
+    point: TripPoint;
+  } | null>(null);
+  const [stationSuggestionSuccess, setStationSuggestionSuccess] = useState("");
+
+  function openStationSuggestion(
+    locationType: "pickup" | "dropoff",
+    point: TripPoint,
+  ) {
+    setStationSuggestionSuccess("");
+    setStationSuggestionTarget({ locationType, point });
+  }
 
   useEffect(() => {
-    if (!mapSettings?.showZones || regionCode !== "EG-CAIRO") {
-      setZoneFeatures([]);
-      return;
-    }
+    const needsZones =
+      mapSettings?.showZones || mapSettings?.stationAssignmentMode === "zones";
+    if (!needsZones || regionCode !== "EG-CAIRO") return;
 
     let cancelled = false;
     fetch("/geo/zone_polygon.geojson")
-      .then((response) => response.json())
+      .then((response) => {
+        if (!response.ok) throw new Error("Unable to load zone data.");
+        return response.json();
+      })
       .then((geojson: { features?: ZoneFeature[] }) => {
         if (cancelled) return;
         setZoneFeatures(
@@ -550,18 +559,34 @@ export default function TripCycle({
               feature.geometry?.type === "MultiPolygon",
           ),
         );
+        setZoneLoadError(false);
       })
       .catch(() => {
-        if (!cancelled) setZoneFeatures([]);
+        if (!cancelled) {
+          setZoneFeatures([]);
+          setZoneLoadError(true);
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [mapSettings?.showZones, regionCode]);
+  }, [mapSettings?.showZones, mapSettings?.stationAssignmentMode, regionCode]);
 
   function validateLocationPoint(point: TripPoint | null) {
     if (!point) return true;
+    if (
+      mapSettings?.stationAssignmentMode === "zones" &&
+      regionCode === "EG-CAIRO" &&
+      !zoneFeatures.length
+    ) {
+      window.alert(
+        zoneLoadError
+          ? "The service-zone data could not be loaded. Please refresh and try again."
+          : "The service zones are still loading. Please try again in a moment.",
+      );
+      return false;
+    }
     if (!mapSettings?.showZones || regionCode !== "EG-CAIRO") return true;
     if (!zoneFeatures.length) {
       window.alert(
@@ -577,6 +602,22 @@ export default function TripCycle({
       return false;
     }
     return true;
+  }
+
+  function usesStationForPoint(point: TripPoint | null, vehicleType: string) {
+    if (!point) return false;
+    if (mapSettings?.stationAssignmentMode !== "zones") {
+      return isSharedVehicle(vehicleType);
+    }
+    const pointInZoneList = (zoneIds: string[]) =>
+      zoneFeatures.some(
+        (feature) =>
+          feature.id != null &&
+          zoneIds.includes(String(feature.id)) &&
+          isPointInZone([point.lng, point.lat], feature),
+      );
+    if (pointInZoneList(mapSettings.directPointZoneIds)) return false;
+    return pointInZoneList(mapSettings.stationZoneIds);
   }
 
   useEffect(() => {
@@ -656,22 +697,24 @@ export default function TripCycle({
     if (!data.pickup || !data.dropoff) {
       // Show station choices as soon as either endpoint is chosen. Routing still
       // waits for both endpoints, exactly as before.
-      const pickupStationOptions = data.pickup
-        ? findNearestStations(
-            data.pickup.lat,
-            data.pickup.lng,
-            stations,
-            data.vehicleType,
-          )
-        : [];
-      const dropoffStationOptions = data.dropoff
-        ? findNearestStations(
-            data.dropoff.lat,
-            data.dropoff.lng,
-            stations,
-            data.vehicleType,
-          )
-        : [];
+      const pickupStationOptions =
+        data.pickup && usesStationForPoint(data.pickup, data.vehicleType)
+          ? findNearestStations(
+              data.pickup.lat,
+              data.pickup.lng,
+              stations,
+              data.vehicleType,
+            )
+          : [];
+      const dropoffStationOptions =
+        data.dropoff && usesStationForPoint(data.dropoff, data.vehicleType)
+          ? findNearestStations(
+              data.dropoff.lat,
+              data.dropoff.lng,
+              stations,
+              data.vehicleType,
+            )
+          : [];
       const toStation =
         pickupStationOptions.find(
           (option) => option.id === data.pickupStation?.id,
@@ -715,9 +758,7 @@ export default function TripCycle({
     if (!data.vehicleType) return;
     const vehicleType = data.vehicleType;
 
-    const shared = isSharedVehicle(vehicleType);
-
-    // For shared vehicles route through currently selected nearby stations.
+    // Route each endpoint through a station only when its assignment requires it.
     let routeFrom: TripPoint = data.pickup;
     let routeTo: TripPoint = data.dropoff;
     let selectedPickupStation: TripData["pickupStation"] = null;
@@ -727,19 +768,23 @@ export default function TripCycle({
     let walkMinToStation: number | null = null;
     let walkMinFromStation: number | null = null;
 
-    if (shared && stations.length > 0) {
-      pickupStationOptions = findNearestStations(
-        data.pickup.lat,
-        data.pickup.lng,
-        stations,
-        vehicleType,
-      );
-      dropoffStationOptions = findNearestStations(
-        data.dropoff.lat,
-        data.dropoff.lng,
-        stations,
-        vehicleType,
-      );
+    if (stations.length > 0) {
+      pickupStationOptions = usesStationForPoint(data.pickup, vehicleType)
+        ? findNearestStations(
+            data.pickup.lat,
+            data.pickup.lng,
+            stations,
+            vehicleType,
+          )
+        : [];
+      dropoffStationOptions = usesStationForPoint(data.dropoff, vehicleType)
+        ? findNearestStations(
+            data.dropoff.lat,
+            data.dropoff.lng,
+            stations,
+            vehicleType,
+          )
+        : [];
       const pickupOption =
         pickupStationOptions.find(
           (option) => option.id === data.pickupStation?.id,
@@ -832,6 +877,9 @@ export default function TripCycle({
     stations.length,
     data.pickupStation?.id,
     data.dropoffStation?.id,
+    mapSettings?.stationAssignmentMode,
+    stationZoneIdsSignature,
+    zoneFeatures.length,
   ]);
 
   /* ── Private route: pickup → ordered stops → dropoff ── */
@@ -839,6 +887,55 @@ export default function TripCycle({
   useEffect(() => {
     if (!data.vehicleType || isSharedVehicle(data.vehicleType)) return;
 
+    const vehicleType = data.vehicleType;
+    const pickupStationOptions = usesStationForPoint(data.pickup, vehicleType)
+      ? findNearestStations(
+          data.pickup!.lat,
+          data.pickup!.lng,
+          stations,
+          vehicleType,
+        )
+      : [];
+    const dropoffStationOptions = usesStationForPoint(data.dropoff, vehicleType)
+      ? findNearestStations(
+          data.dropoff!.lat,
+          data.dropoff!.lng,
+          stations,
+          vehicleType,
+        )
+      : [];
+    const pickupOption =
+      pickupStationOptions.find(
+        (option) => option.id === data.pickupStation?.id,
+      ) ?? pickupStationOptions[0];
+    const dropoffOption =
+      dropoffStationOptions.find(
+        (option) => option.id === data.dropoffStation?.id,
+      ) ?? dropoffStationOptions[0];
+    const selectedPickupStation = pickupOption
+      ? {
+          id: pickupOption.id,
+          regionCode: pickupOption.regionCode,
+          lat: pickupOption.lat,
+          lng: pickupOption.lng,
+          name: pickupOption.name,
+          direction: pickupOption.direction,
+          stationType: pickupOption.stationType,
+        }
+      : null;
+    const selectedDropoffStation = dropoffOption
+      ? {
+          id: dropoffOption.id,
+          regionCode: dropoffOption.regionCode,
+          lat: dropoffOption.lat,
+          lng: dropoffOption.lng,
+          name: dropoffOption.name,
+          direction: dropoffOption.direction,
+          stationType: dropoffOption.stationType,
+        }
+      : null;
+    const walkingMinToStation = pickupOption?.walkingMin ?? null;
+    const walkingMinFromStation = dropoffOption?.walkingMin ?? null;
     const hasCompleteRoute =
       data.pickup && data.dropoff && data.stops.every((stop) => stop.point);
     if (!hasCompleteRoute) {
@@ -847,7 +944,15 @@ export default function TripCycle({
         data.durationMinutes !== null ||
         data.priceEgp !== null ||
         data.arrivalTime ||
-        data.routeCoordinates !== null
+        data.routeCoordinates !== null ||
+        JSON.stringify(data.pickupStationOptions) !==
+          JSON.stringify(pickupStationOptions) ||
+        JSON.stringify(data.dropoffStationOptions) !==
+          JSON.stringify(dropoffStationOptions) ||
+        data.pickupStation?.id !== selectedPickupStation?.id ||
+        data.dropoffStation?.id !== selectedDropoffStation?.id ||
+        data.walkingMinToStation !== walkingMinToStation ||
+        data.walkingMinFromStation !== walkingMinFromStation
       ) {
         onChange({
           ...data,
@@ -857,27 +962,38 @@ export default function TripCycle({
           arrivalTime: "",
           routeCoordinates: null,
           routeLegs: [],
-          pickupStation: null,
-          dropoffStation: null,
-          pickupStationOptions: [],
-          dropoffStationOptions: [],
-          walkingMinToStation: null,
-          walkingMinFromStation: null,
+          pickupStation: selectedPickupStation,
+          dropoffStation: selectedDropoffStation,
+          pickupStationOptions,
+          dropoffStationOptions,
+          walkingMinToStation,
+          walkingMinFromStation,
         });
       }
       return;
     }
 
-    const vehicleType = data.vehicleType;
     const totalWaitingMinutes = data.stops.reduce(
       (total, stop) => total + stop.waitingMinutes,
       0,
     );
     let cancelled = false;
     const routePoints = [
-      data.pickup!,
+      selectedPickupStation
+        ? {
+            address: selectedPickupStation.name,
+            lat: selectedPickupStation.lat,
+            lng: selectedPickupStation.lng,
+          }
+        : data.pickup!,
       ...data.stops.map((stop) => stop.point!),
-      data.dropoff!,
+      selectedDropoffStation
+        ? {
+            address: selectedDropoffStation.name,
+            lat: selectedDropoffStation.lat,
+            lng: selectedDropoffStation.lng,
+          }
+        : data.dropoff!,
     ];
     Promise.all([
       fetchRoadRoutes(routePoints),
@@ -929,19 +1045,19 @@ export default function TripCycle({
           arrivalTime: data.pickupTime
             ? computeArrivalTime(
                 data.pickupTime,
-                duration_minutes,
+                duration_minutes + (walkingMinFromStation ?? 0),
                 totalWaitingMinutes,
                 10,
               )
             : "",
           routeCoordinates: coordinates,
           routeLegs,
-          pickupStation: null,
-          dropoffStation: null,
-          pickupStationOptions: [],
-          dropoffStationOptions: [],
-          walkingMinToStation: null,
-          walkingMinFromStation: null,
+          pickupStation: selectedPickupStation,
+          dropoffStation: selectedDropoffStation,
+          pickupStationOptions,
+          dropoffStationOptions,
+          walkingMinToStation,
+          walkingMinFromStation,
           baseDistanceKm: distance_km,
           passengerDetourKm: null,
         });
@@ -962,6 +1078,12 @@ export default function TripCycle({
     data.vehicleType,
     data.numberOfPassengers,
     data.pickupTime,
+    stations.length,
+    data.pickupStation?.id,
+    data.dropoffStation?.id,
+    mapSettings?.stationAssignmentMode,
+    stationZoneIdsSignature,
+    zoneFeatures.length,
   ]);
 
   /* ── Passenger detour: combined route through distinct passenger points (private vehicles only) ── */
@@ -1290,7 +1412,7 @@ export default function TripCycle({
       distanceKm: null,
       durationMinutes: null,
       priceEgp: null,
-      pickupTime: "",
+      pickupTime: isSharedVehicle(data.vehicleType) ? "" : data.pickupTime,
       routeCoordinates: null,
       routeLegs: [],
       baseDistanceKm: null,
@@ -1400,6 +1522,7 @@ export default function TripCycle({
   );
 
   return (
+    <>
     <div
       style={{
         background: "#ffffff",
@@ -1713,33 +1836,18 @@ export default function TripCycle({
                       )}
                     </div>
 
-                    {isSharedVehicle(data.vehicleType) &&
-                      data.pickup &&
-                      data.pickupStation && (
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            marginTop: 6,
-                            fontSize: 12,
-                            color: "#7A5000",
-                            background: "rgba(245,166,35,0.1)",
-                            border: "1px solid rgba(245,166,35,0.35)",
-                            borderRadius: 5,
-                            padding: "5px 10px",
-                          }}
-                        >
-                          <span aria-hidden="true">↪</span>
-                          <span>
-                            {t("create.station")}:{" "}
-                            <strong>{data.pickupStation.name}</strong>
-                            {data.walkingMinToStation != null
-                              ? ` (~${data.walkingMinToStation} min walk)`
-                              : ""}
-                          </span>
-                        </div>
-                      )}
+                    {data.pickup && data.pickupStation && (
+                      <div style={stationNoticeStyle}>
+                        <span aria-hidden="true">↪</span>
+                        <span>
+                          {t("create.station")}:{" "}
+                          <strong>{data.pickupStation.name}</strong>
+                          {data.walkingMinToStation != null
+                            ? ` (~${data.walkingMinToStation} min walk)`
+                            : ""}
+                        </span>
+                      </div>
+                    )}
                     <StationOptions
                       label={t("create.pickup_station_for_trip").replace(
                         "{tripNumber}",
@@ -1750,7 +1858,14 @@ export default function TripCycle({
                       onSelect={(stationId) =>
                         selectStation("pickup", stationId)
                       }
+                      onAddSuggestion={
+                        data.pickup
+                          ? () =>
+                              openStationSuggestion("pickup", data.pickup!)
+                          : undefined
+                      }
                       locale={locale}
+                      addSuggestionLabel={t("create.station_suggestion_add_button")}
                     />
                   </div>
 
@@ -1804,33 +1919,18 @@ export default function TripCycle({
                         </button>
                       )}
                     </div>
-                    {isSharedVehicle(data.vehicleType) &&
-                      data.dropoff &&
-                      data.dropoffStation && (
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            marginTop: 6,
-                            fontSize: 12,
-                            color: "#7A5000",
-                            background: "rgba(245,166,35,0.1)",
-                            border: "1px solid rgba(245,166,35,0.35)",
-                            borderRadius: 5,
-                            padding: "5px 10px",
-                          }}
-                        >
-                          <span aria-hidden="true">↪</span>
-                          <span>
-                            {t("create.station")}:{" "}
-                            <strong>{data.dropoffStation.name}</strong>
-                            {data.walkingMinFromStation != null
-                              ? ` (~${data.walkingMinFromStation} min walk)`
-                              : ""}
-                          </span>
-                        </div>
-                      )}
+                    {data.dropoff && data.dropoffStation && (
+                      <div style={stationNoticeStyle}>
+                        <span aria-hidden="true">↪</span>
+                        <span>
+                          {t("create.station")}:{" "}
+                          <strong>{data.dropoffStation.name}</strong>
+                          {data.walkingMinFromStation != null
+                            ? ` (~${data.walkingMinFromStation} min walk)`
+                            : ""}
+                        </span>
+                      </div>
+                    )}
                     <StationOptions
                       label={t("create.dropoff_station_for_trip").replace(
                         "{tripNumber}",
@@ -1841,7 +1941,14 @@ export default function TripCycle({
                       onSelect={(stationId) =>
                         selectStation("dropoff", stationId)
                       }
+                      onAddSuggestion={
+                        data.dropoff
+                          ? () =>
+                              openStationSuggestion("dropoff", data.dropoff!)
+                          : undefined
+                      }
                       locale={locale}
+                      addSuggestionLabel={t("create.station_suggestion_add_button")}
                     />
                     {locationError && (
                       <div
@@ -2512,7 +2619,8 @@ export default function TripCycle({
                       placeholder={t("create.enter_pickup_address")}
                       label={`${t("create.pickup_location")} *`}
                       value={data.pickup}
-                      onChange={(point) => set("pickup", point)}
+                      validateLocation={validateLocationPoint}
+                      onChange={(point) => applyLocationField("pickup", point)}
                       iconColor="#00C2A8"
                       savedAddresses={savedAddresses}
                     />
@@ -2554,6 +2662,37 @@ export default function TripCycle({
                         </button>
                       )}
                     </div>
+                    {data.pickupStation && (
+                      <div style={stationNoticeStyle}>
+                        <span aria-hidden="true">↪</span>
+                        <span>
+                          {t("create.station")}:{" "}
+                          <strong>{data.pickupStation.name}</strong>
+                          {data.walkingMinToStation != null
+                            ? ` (~${data.walkingMinToStation} min walk)`
+                            : ""}
+                        </span>
+                      </div>
+                    )}
+                    <StationOptions
+                      label={t("create.pickup_station_for_trip").replace(
+                        "{tripNumber}",
+                        String(index + 1),
+                      )}
+                      options={data.pickupStationOptions}
+                      selectedId={data.pickupStation?.id}
+                      onSelect={(stationId) =>
+                        selectStation("pickup", stationId)
+                      }
+                      onAddSuggestion={
+                        data.pickup
+                          ? () =>
+                              openStationSuggestion("pickup", data.pickup!)
+                          : undefined
+                      }
+                      locale={locale}
+                      addSuggestionLabel={t("create.station_suggestion_add_button")}
+                    />
                   </div>
 
                   <div
@@ -2721,7 +2860,8 @@ export default function TripCycle({
                       placeholder={t("create.enter_dropoff_address")}
                       label={`${t("create.dropoff_location")} *`}
                       value={data.dropoff}
-                      onChange={(point) => set("dropoff", point)}
+                      validateLocation={validateLocationPoint}
+                      onChange={(point) => applyLocationField("dropoff", point)}
                       iconColor="#00C2A8"
                       savedAddresses={savedAddresses}
                     />
@@ -2762,6 +2902,39 @@ export default function TripCycle({
                             : t("create.pick_from_map")}
                         </button>
                       )}
+                    </div>
+                    {data.dropoffStation && (
+                      <div style={stationNoticeStyle}>
+                        <span aria-hidden="true">↪</span>
+                        <span>
+                          {t("create.station")}:{" "}
+                          <strong>{data.dropoffStation.name}</strong>
+                          {data.walkingMinFromStation != null
+                            ? ` (~${data.walkingMinFromStation} min walk)`
+                            : ""}
+                        </span>
+                      </div>
+                    )}
+                    <StationOptions
+                      label={t("create.dropoff_station_for_trip").replace(
+                        "{tripNumber}",
+                        String(index + 1),
+                      )}
+                      options={data.dropoffStationOptions}
+                      selectedId={data.dropoffStation?.id}
+                      onSelect={(stationId) =>
+                        selectStation("dropoff", stationId)
+                      }
+                      onAddSuggestion={
+                        data.dropoff
+                          ? () =>
+                              openStationSuggestion("dropoff", data.dropoff!)
+                          : undefined
+                      }
+                      locale={locale}
+                      addSuggestionLabel={t("create.station_suggestion_add_button")}
+                    />
+                    <div>
                       {locationError && (
                         <div role="alert" style={locationErrorStyle}>
                           ⚠ {locationError}
@@ -2962,6 +3135,50 @@ export default function TripCycle({
         </div>
       </div>
     </div>
+    {stationSuggestionSuccess && (
+      <div className="station-suggestion-success" role="status">
+        <span>{stationSuggestionSuccess}</span>
+        <button
+          type="button"
+          onClick={() => setStationSuggestionSuccess("")}
+          aria-label={t("create.close")}
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
+      </div>
+    )}
+    {stationSuggestionTarget && (
+      <StationSuggestionModal
+        locationType={stationSuggestionTarget.locationType}
+        targetLocation={stationSuggestionTarget.point}
+        zones={
+          mapSettings?.showZones && regionCode === "EG-CAIRO"
+            ? zoneFeatures
+            : NO_ZONE_FEATURES
+        }
+        zonesLoading={
+          Boolean(mapSettings?.showZones) &&
+          regionCode === "EG-CAIRO" &&
+          !zoneFeatures.length &&
+          !zoneLoadError
+        }
+        onClose={() => setStationSuggestionTarget(null)}
+        onSubmitted={(requestNumber) => {
+          const displayNumber =
+            locale === "ar"
+              ? toArabicDigits(String(requestNumber))
+              : String(requestNumber);
+          setStationSuggestionTarget(null);
+          setStationSuggestionSuccess(
+            t("create.station_suggestion_success").replace(
+              "{requestNumber}",
+              displayNumber,
+            ),
+          );
+        }}
+      />
+    )}
+    </>
   );
 }
 

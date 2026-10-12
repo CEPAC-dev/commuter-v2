@@ -7,6 +7,7 @@ import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { nextSequence } from "@/models/Counter";
 import { Station } from "@/models/Station";
+import { getMapSettings } from "@/lib/maps/settings";
 import {
   VEHICLES,
   computePrivateTripPriceEgp,
@@ -28,6 +29,9 @@ import {
   type Station as GeoStation,
   type StationOption,
 } from "@/lib/geo/stations";
+import { isPointInZone, type ZoneFeature } from "@/lib/geo/zones";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { StopInput, TripInput } from "@/types/forms";
 import type { PaymentStatus } from "@/types/booking";
 import { listUserTrips } from "@/lib/services/trips";
@@ -69,6 +73,24 @@ const PAYMENT_STATUSES = new Set<PaymentStatus>([
   "refunded",
   "expired",
 ]);
+
+let cachedZoneFeatures: ZoneFeature[] | null = null;
+
+async function loadZoneFeatures() {
+  if (cachedZoneFeatures) return cachedZoneFeatures;
+  const contents = await readFile(
+    join(process.cwd(), "public", "geo", "zone_polygon.geojson"),
+    "utf8",
+  );
+  const geojson = JSON.parse(contents) as { features?: ZoneFeature[] };
+  cachedZoneFeatures = (geojson.features ?? []).filter(
+    (feature) =>
+      feature.id != null &&
+      (feature.geometry?.type === "Polygon" ||
+        feature.geometry?.type === "MultiPolygon"),
+  );
+  return cachedZoneFeatures;
+}
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -166,7 +188,30 @@ export async function POST(req: NextRequest) {
 
   const activeRegion = await resolveActiveRegion({ userId });
   const userRegion = activeRegion.code;
+  const mapSettings = await getMapSettings(userRegion);
   const vehiclesMap = await getVehicles(userRegion);
+  const zoneFeatures =
+    mapSettings.stationAssignmentMode === "zones" && userRegion === "EG-CAIRO"
+      ? await loadZoneFeatures()
+      : [];
+  const usesStationsForPoint = (
+    point: { lat: number; lng: number },
+    vehicleType: string,
+  ) => {
+    if (mapSettings.stationAssignmentMode !== "zones") {
+      return vehiclesMap[vehicleType]?.ride === "shared";
+    }
+    if (userRegion !== "EG-CAIRO") return false;
+    const pointIsInZoneList = (zoneIds: string[]) =>
+      zoneFeatures.some(
+        (feature) =>
+          feature.id != null &&
+          zoneIds.includes(String(feature.id)) &&
+          isPointInZone([point.lng, point.lat], feature),
+      );
+    if (pointIsInZoneList(mapSettings.directPointZoneIds)) return false;
+    return pointIsInZoneList(mapSettings.stationZoneIds);
+  };
   const allowedVehicleSet = new Set(
     Object.values(vehiclesMap)
       .filter((vehicle) => vehicle.active !== false)
@@ -198,6 +243,7 @@ export async function POST(req: NextRequest) {
     pickupTime: string;
     distanceKm: number;
     durationMinutes: number;
+    routeCoordinates?: [number, number][];
     priceEgp: number;
     extraPassengers: number;
     preferedGender: "male" | "female" | null;
@@ -244,9 +290,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const preferedGender = t.sameGenderPreference
-      ? currentUserGender
-      : null;
+    const preferedGender = t.sameGenderPreference ? currentUserGender : null;
 
     // Validate required fields
     if (!t.pickup?.address || !t.dropoff?.address) {
@@ -264,6 +308,30 @@ export async function POST(req: NextRequest) {
     const vKey = t.vehicleType;
     const vehicle = vehiclesMap[vKey];
     const tripRideType = vehicle.ride;
+    let routeCoordinates: [number, number][] | undefined;
+    if (t.routeCoordinates != null) {
+      if (
+        !Array.isArray(t.routeCoordinates) ||
+        t.routeCoordinates.length > 5000 ||
+        t.routeCoordinates.some(
+          (coordinate) =>
+            !Array.isArray(coordinate) ||
+            coordinate.length !== 2 ||
+            !Number.isFinite(coordinate[0]) ||
+            !Number.isFinite(coordinate[1]) ||
+            coordinate[0] < -90 ||
+            coordinate[0] > 90 ||
+            coordinate[1] < -180 ||
+            coordinate[1] > 180,
+        )
+      ) {
+        return NextResponse.json(
+          { error: "Invalid route geometry" },
+          { status: 400 },
+        );
+      }
+      routeCoordinates = t.routeCoordinates;
+    }
 
     if (tripRideType === "private") {
       if (!t.pickupTime || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.pickupTime)) {
@@ -412,20 +480,64 @@ export async function POST(req: NextRequest) {
         vehiclesMap,
       );
 
-      // Nearest stations attached for admin/export use only — never shown to
-      // the user, never affects route/duration/price.
-      const nearPickup = findNearestStation(
-        t.pickup.lat,
-        t.pickup.lng,
-        canonicalStations,
-        vKey,
+      const zoneBasedStations = mapSettings.stationAssignmentMode === "zones";
+      const pickupNeedsStation =
+        zoneBasedStations && usesStationsForPoint(t.pickup, vKey);
+      const dropoffNeedsStation =
+        zoneBasedStations && usesStationsForPoint(t.dropoff, vKey);
+      const pickupStationOptions = pickupNeedsStation
+        ? findNearestStations(
+            t.pickup.lat,
+            t.pickup.lng,
+            canonicalStations,
+            vKey,
+          )
+        : [];
+      const dropoffStationOptions = dropoffNeedsStation
+        ? findNearestStations(
+            t.dropoff.lat,
+            t.dropoff.lng,
+            canonicalStations,
+            vKey,
+          )
+        : [];
+      const selectedPickup = pickupStationOptions.find(
+        (station) => station.id === t.pickupStation?.id,
       );
-      const nearDropoff = findNearestStation(
-        t.dropoff.lat,
-        t.dropoff.lng,
-        canonicalStations,
-        vKey,
+      const selectedDropoff = dropoffStationOptions.find(
+        (station) => station.id === t.dropoffStation?.id,
       );
+      if (
+        (pickupNeedsStation && !selectedPickup) ||
+        (dropoffNeedsStation && !selectedDropoff) ||
+        (!pickupNeedsStation && t.pickupStation) ||
+        (!dropoffNeedsStation && t.dropoffStation)
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "The selected station no longer matches the configured zones. Please review the trip locations.",
+          },
+          { status: 400 },
+        );
+      }
+
+      const nearPickup = zoneBasedStations
+        ? selectedPickup
+        : findNearestStation(
+            t.pickup.lat,
+            t.pickup.lng,
+            canonicalStations,
+            vKey,
+          );
+      const nearDropoff = zoneBasedStations
+        ? selectedDropoff
+        : findNearestStation(
+            t.dropoff.lat,
+            t.dropoff.lng,
+            canonicalStations,
+            vKey,
+          );
 
       serverTrips.push({
         pickup: t.pickup,
@@ -436,6 +548,7 @@ export async function POST(req: NextRequest) {
         pickupTime,
         distanceKm: routeDistanceKm,
         durationMinutes: Math.round(Number(t.durationMinutes)),
+        ...(routeCoordinates && { routeCoordinates }),
         priceEgp,
         extraPassengers: 0,
         preferedGender,
@@ -448,6 +561,14 @@ export async function POST(req: NextRequest) {
         ...(nearDropoff && {
           dropoffStation: stationPayload(nearDropoff),
         }),
+        ...(pickupNeedsStation && {
+          pickupStationOptions,
+          walkingMinToStation: selectedPickup?.walkingMin,
+        }),
+        ...(dropoffNeedsStation && {
+          dropoffStationOptions,
+          walkingMinFromStation: selectedDropoff?.walkingMin,
+        }),
       });
       continue;
     }
@@ -458,35 +579,44 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    const pickupNeedsStation = usesStationsForPoint(t.pickup, vKey);
+    const dropoffNeedsStation = usesStationsForPoint(t.dropoff, vKey);
     if (
-      !Number.isInteger(t.pickupStation?.id) ||
-      !Number.isInteger(t.dropoffStation?.id)
+      (pickupNeedsStation && !Number.isInteger(t.pickupStation?.id)) ||
+      (dropoffNeedsStation && !Number.isInteger(t.dropoffStation?.id)) ||
+      (!pickupNeedsStation && t.pickupStation) ||
+      (!dropoffNeedsStation && t.dropoffStation)
     ) {
       return NextResponse.json(
-        { error: "Invalid station selection" },
+        {
+          error:
+            "The selected station no longer matches the configured zones. Please review the trip locations.",
+        },
         { status: 400 },
       );
     }
 
-    const pickupStationOptions = findNearestStations(
-      t.pickup.lat,
-      t.pickup.lng,
-      canonicalStations,
-      vKey,
-    );
-    const dropoffStationOptions = findNearestStations(
-      t.dropoff.lat,
-      t.dropoff.lng,
-      canonicalStations,
-      vKey,
-    );
+    const pickupStationOptions = pickupNeedsStation
+      ? findNearestStations(t.pickup.lat, t.pickup.lng, canonicalStations, vKey)
+      : [];
+    const dropoffStationOptions = dropoffNeedsStation
+      ? findNearestStations(
+          t.dropoff.lat,
+          t.dropoff.lng,
+          canonicalStations,
+          vKey,
+        )
+      : [];
     const selectedPickup = pickupStationOptions.find(
-      (station) => station.id === t.pickupStation!.id,
+      (station) => station.id === t.pickupStation?.id,
     );
     const selectedDropoff = dropoffStationOptions.find(
-      (station) => station.id === t.dropoffStation!.id,
+      (station) => station.id === t.dropoffStation?.id,
     );
-    if (!selectedPickup || !selectedDropoff) {
+    if (
+      (pickupNeedsStation && !selectedPickup) ||
+      (dropoffNeedsStation && !selectedDropoff)
+    ) {
       return NextResponse.json(
         { error: "Invalid station selection" },
         { status: 400 },
@@ -557,18 +687,27 @@ export async function POST(req: NextRequest) {
       pickupTime,
       distanceKm: Number(t.distanceKm),
       durationMinutes: Math.round(Number(t.durationMinutes)),
+      ...(routeCoordinates && { routeCoordinates }),
       priceEgp,
       extraPassengers,
       preferedGender,
       numberOfPassengers: 1,
       stops: [],
       passengers: [],
-      pickupStation: stationPayload(selectedPickup),
-      dropoffStation: stationPayload(selectedDropoff),
+      ...(selectedPickup && {
+        pickupStation: stationPayload(selectedPickup),
+      }),
+      ...(selectedDropoff && {
+        dropoffStation: stationPayload(selectedDropoff),
+      }),
       pickupStationOptions,
       dropoffStationOptions,
-      walkingMinToStation: selectedPickup.walkingMin,
-      walkingMinFromStation: selectedDropoff.walkingMin,
+      ...(selectedPickup && {
+        walkingMinToStation: selectedPickup.walkingMin,
+      }),
+      ...(selectedDropoff && {
+        walkingMinFromStation: selectedDropoff.walkingMin,
+      }),
     });
   }
 

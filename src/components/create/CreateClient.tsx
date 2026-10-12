@@ -419,6 +419,7 @@ export default function CreateClient({
             pickupTime: t.pickupTime,
             distanceKm: t.distanceKm,
             durationMinutes: t.durationMinutes,
+            routeCoordinates: t.routeCoordinates,
             routeLegs: t.routeLegs.map((leg) => ({
               distanceKm: leg.distanceKm,
               passengers: leg.passengers,
@@ -437,10 +438,14 @@ export default function CreateClient({
             ...(t.pickupStation
               ? {
                   pickupStation: t.pickupStation,
-                  dropoffStation: t.dropoffStation,
                   pickupStationOptions: t.pickupStationOptions,
-                  dropoffStationOptions: t.dropoffStationOptions,
                   walkingMinToStation: t.walkingMinToStation,
+                }
+              : {}),
+            ...(t.dropoffStation
+              ? {
+                  dropoffStation: t.dropoffStation,
+                  dropoffStationOptions: t.dropoffStationOptions,
                   walkingMinFromStation: t.walkingMinFromStation,
                 }
               : {}),

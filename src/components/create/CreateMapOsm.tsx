@@ -326,7 +326,7 @@ export default function CreateMapOsm({
             allPoints.push(stop.point);
           }
         });
-      if (shared && mapSettings.showStations) {
+      if (mapSettings.showStations) {
         trip.pickupStationOptions.forEach((station) => {
           const marker = L.marker([station.lat, station.lng], {
             icon:
@@ -363,23 +363,23 @@ export default function CreateMapOsm({
           );
           allPoints.push(station);
         });
-        if (trip.pickup && trip.pickupStation)
-          L.polyline(
-            [
-              [trip.pickup.lat, trip.pickup.lng],
-              [trip.pickupStation.lat, trip.pickupStation.lng],
-            ],
-            { color: "#F5A623", weight: 3, dashArray: "8 8" },
-          ).addTo(layers);
-        if (trip.dropoff && trip.dropoffStation)
-          L.polyline(
-            [
-              [trip.dropoffStation.lat, trip.dropoffStation.lng],
-              [trip.dropoff.lat, trip.dropoff.lng],
-            ],
-            { color: "#F5A623", weight: 3, dashArray: "8 8" },
-          ).addTo(layers);
       }
+      if (mapSettings.showStations && trip.pickup && trip.pickupStation)
+        L.polyline(
+          [
+            [trip.pickup.lat, trip.pickup.lng],
+            [trip.pickupStation.lat, trip.pickupStation.lng],
+          ],
+          { color: "#F5A623", weight: 3, dashArray: "8 8" },
+        ).addTo(layers);
+      if (mapSettings.showStations && trip.dropoff && trip.dropoffStation)
+        L.polyline(
+          [
+            [trip.dropoffStation.lat, trip.dropoffStation.lng],
+            [trip.dropoff.lat, trip.dropoff.lng],
+          ],
+          { color: "#F5A623", weight: 3, dashArray: "8 8" },
+        ).addTo(layers);
     });
     // Keep the rider's map position intact when a station or route updates.
     // Refit only when the actual pickup, dropoff, or stop coordinates change.
@@ -390,7 +390,7 @@ export default function CreateMapOsm({
     return () => {
       layers.remove();
     };
-  }, [map, onStationSelect, pointLayoutKey, trips]);
+  }, [map, mapSettings.showStations, onStationSelect, pointLayoutKey, trips]);
 
   const handleClick = useCallback(
     async ({ lat, lng }: OsmPoint) => {
