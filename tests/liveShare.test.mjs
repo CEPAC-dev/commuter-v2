@@ -253,7 +253,6 @@ test("location validation accepts supported readings and rejects invalid, stale,
     { lat: Number.NaN, lng: 31, recordedAt: NOW },
     { lat: 91, lng: 31, recordedAt: NOW },
     { lat: 30, lng: -181, recordedAt: NOW },
-    { lat: 30, lng: 31, accuracy: MAX_LOCATION_ACCURACY_METERS + 1, recordedAt: NOW },
     { lat: 30, lng: 31, heading: 361, recordedAt: NOW },
     { lat: 30, lng: 31, speed: -1, recordedAt: NOW },
     { lat: 30, lng: 31, recordedAt: new Date(NOW.getTime() - 120_001) },
@@ -261,6 +260,17 @@ test("location validation accepts supported readings and rejects invalid, stale,
   ]) {
     assert.equal(validateLocationInput(input, NOW).valid, false);
   }
+  const overAccuracyCap = validateLocationInput(
+    {
+      lat: 30,
+      lng: 31,
+      accuracy: MAX_LOCATION_ACCURACY_METERS + 1,
+      recordedAt: NOW,
+    },
+    NOW,
+  );
+  assert.equal(overAccuracyCap.valid, false);
+  assert.equal(overAccuracyCap.errorCode, "LOCATION_ACCURACY_TOO_LOW");
 });
 
 test("location updates use the minimum interval and return a retry delay", async () => {

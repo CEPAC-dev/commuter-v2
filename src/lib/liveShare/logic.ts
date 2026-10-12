@@ -13,7 +13,7 @@ export const SHARE_LOCATION_STALE_MS = 45 * 1000;
 export const SHARE_VIEW_COUNT_INTERVAL_MS = 60 * 1000;
 export const SHARE_CREATION_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const MAX_SHARE_CREATIONS_PER_TRIP_PER_WINDOW = 5;
-export const MAX_LOCATION_ACCURACY_METERS = 10_000;
+export const MAX_LOCATION_ACCURACY_METERS = 1_000;
 export const MAX_RECORDED_LOCATION_AGE_MS = 2 * 60 * 1000;
 export const MAX_RECORDED_LOCATION_FUTURE_MS = 30 * 1000;
 
@@ -28,7 +28,7 @@ export interface LocationInput {
 
 export type LocationValidation =
   | { valid: true; value: LocationInput }
-  | { valid: false; reason: string };
+  | { valid: false; reason: string; errorCode?: string };
 
 function nullableFiniteNumber(value: unknown): value is number | null | undefined {
   return value === null || value === undefined || (typeof value === "number" && Number.isFinite(value));
@@ -61,9 +61,15 @@ export function validateLocationInput(
   const accuracy = body.accuracy ?? null;
   const heading = body.heading ?? null;
   const speed = body.speed ?? null;
+  if (accuracy !== null && accuracy > MAX_LOCATION_ACCURACY_METERS) {
+    return {
+      valid: false,
+      reason: "Location accuracy is too low. Move to an open area and try again.",
+      errorCode: "LOCATION_ACCURACY_TOO_LOW",
+    };
+  }
   if (
-    (accuracy !== null &&
-      (accuracy < 0 || accuracy > MAX_LOCATION_ACCURACY_METERS)) ||
+    (accuracy !== null && accuracy < 0) ||
     (heading !== null && (heading < 0 || heading > 360)) ||
     (speed !== null && speed < 0)
   ) {

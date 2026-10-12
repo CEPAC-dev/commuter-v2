@@ -31,7 +31,12 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   const now = new Date();
   const validation = validateLocationInput(body, now);
-  if (!validation.valid) return jsonError(validation.reason, 400);
+  if (!validation.valid) {
+    return NextResponse.json(
+      { error: validation.reason, ...(validation.errorCode ? { errorCode: validation.errorCode } : {}) },
+      { status: 400 },
+    );
+  }
 
   try {
     await connectDB();
@@ -148,7 +153,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       return jsonError("Trip is not eligible for live sharing.", 409);
     }
     return jsonError("Live share not found.", 404);
-  } catch (error) {
+  } catch {
     console.error("[POST /api/trips/[id]/share/location] Location update failed.");
     return jsonError("Unable to update live location.", 500);
   }

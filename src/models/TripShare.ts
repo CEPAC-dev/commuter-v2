@@ -8,7 +8,7 @@ const LastLocationSchema = new Schema(
   {
     lat: { type: Number, required: true, min: -90, max: 90 },
     lng: { type: Number, required: true, min: -180, max: 180 },
-    accuracy: { type: Number, required: false, min: 0 },
+    accuracy: { type: Number, required: false, min: 0, max: 1_000 },
     heading: { type: Number, required: false, min: 0, max: 360 },
     speed: { type: Number, required: false, min: 0 },
     recordedAt: { type: Date, required: true },
