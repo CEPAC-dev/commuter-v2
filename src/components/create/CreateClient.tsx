@@ -55,6 +55,7 @@ interface Props {
   userEmail: string;
   region?: RegionCode;
   mapSettings: MapSettings;
+  multiDayRequestsEnabled: boolean;
   onAddressSaved?: (saved: SavedAddress) => void;
 }
 
@@ -112,6 +113,7 @@ export default function CreateClient({
   userEmail,
   region = DEFAULT_REGION,
   mapSettings,
+  multiDayRequestsEnabled,
 }: Props) {
   const mapConfig = getMapConfig(region);
   const { pickup, dropoff } = useTripStore();
@@ -137,6 +139,7 @@ export default function CreateClient({
     representativeTripId: string;
     amountEgp: number;
     waitingList?: boolean;
+    requestGroup?: boolean;
   } | null>(null);
   const [submitError, setSubmitError] = useState("");
   const [useWallet, setUseWallet] = useState(false);
@@ -428,6 +431,7 @@ export default function CreateClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date: selectedDates[0],
+          dates: selectedDates,
           note: bookingNote,
           promoCode: promoCodeDraft.trim() || null,
           trips: trips.map((t) => ({
@@ -502,23 +506,32 @@ export default function CreateClient({
         setPromoWarning(t("create.promo_partially_applied"));
       }
 
+      const isRequestGroup =
+        multiDayRequestsEnabled && typeof data.requestId === "string";
+      const tripIdsAreValid =
+        Array.isArray(data.tripIds) &&
+        data.tripIds.length === selectedDates.length &&
+        data.tripIds.every((tripId: unknown) => typeof tripId === "string");
       if (
-        typeof data.bookingId !== "string" ||
-        typeof data.tripId !== "string" ||
-        data.bookingId !== data.tripId ||
         !Number.isFinite(data.amountEgp) ||
-        !Array.isArray(data.tripIds) ||
-        data.tripIds.length !== 1 ||
-        data.tripIds[0] !== data.tripId
+        !tripIdsAreValid ||
+        (isRequestGroup
+          ? data.bookingId !== data.requestId || selectedDates.length < 2
+          : typeof data.bookingId !== "string" ||
+            typeof data.tripId !== "string" ||
+            data.bookingId !== data.tripId ||
+            data.tripIds.length !== 1 ||
+            data.tripIds[0] !== data.tripId)
       ) {
         setSubmitError(t("create.booking_create_failed"));
         return null;
       }
       const booking = {
         id: data.bookingId,
-        representativeTripId: data.tripId as string,
+        representativeTripId: isRequestGroup ? data.tripIds[0] : data.tripId,
         amountEgp: data.amountEgp,
         waitingList: data.waitlist === true || data.waitingList === true,
+        requestGroup: isRequestGroup,
       };
       setCreatedBooking(booking);
       return booking;
@@ -549,6 +562,10 @@ export default function CreateClient({
     const booking = createdBooking ?? (await createBooking());
     if (!booking) return;
     setShowRequestModal(false);
+    if (booking.requestGroup) {
+      window.location.assign("/my-trips");
+      return;
+    }
     if (booking.waitingList) {
       setRequestSentTripId(booking.representativeTripId);
       return;
@@ -560,6 +577,10 @@ export default function CreateClient({
   async function handleSubmit() {
     const booking = createdBooking ?? (await createBooking());
     if (!booking) return;
+    if (booking.requestGroup) {
+      window.location.assign("/my-trips");
+      return;
+    }
     if (booking.waitingList) {
       setShowPaymentModal(false);
       setRequestSentTripId(booking.representativeTripId);
@@ -1169,7 +1190,7 @@ export default function CreateClient({
                     <DatePicker
                       value={selectedDates}
                       onChange={setSelectedDates}
-                      singleSelect
+                      singleSelect={!multiDayRequestsEnabled}
                     />
                   </div>
                 </div>

@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
+import {
+  isMultiDayRequestsEnabled,
+  shouldCreateRequestGroup,
+} from "@/lib/config/featureFlags";
 import { AdminSettings } from "@/models/AdminSettings";
+import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { nextSequence } from "@/models/Counter";
@@ -55,6 +60,10 @@ import {
   TripBatchSpacingConflictError,
   type PreparedTripBatchCandidate,
 } from "@/lib/tripBatchCreation";
+import {
+  createRequestGroupWith,
+  saveRequestGroup,
+} from "@/lib/requestGroupCreation";
 import mongoose, { Types, type ClientSession } from "mongoose";
 import type { Document } from "mongodb";
 import {
@@ -67,7 +76,10 @@ import {
   spacingLockUpsertFields,
 } from "@/lib/phase8bGuards";
 import { ensureTripSpacingLockTtlIndex } from "@/lib/tripSpacingLockIndex";
-import { notifyAdminsOfWaitingListTripBatch } from "@/lib/notifications/adminActivity";
+import {
+  notifyAdminsOfWaitingListRequest,
+  notifyAdminsOfWaitingListTripBatch,
+} from "@/lib/notifications/adminActivity";
 import { buildWaitingListCreatedTripBatchAdminNotifications } from "@/lib/admin/waitingList";
 
 function stationPayload(
@@ -666,134 +678,305 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const batchResult = await createTripBatchWith<
-      ClientSession,
-      InstanceType<typeof Trip>,
-      (typeof tripInstances)[number]
-    >(
-      {
-        async withTransaction<TResult>(
-          work: (dbSession: ClientSession) => Promise<TResult>,
-        ) {
-          const dbSession = await mongoose.startSession();
-          try {
-            return await dbSession.withTransaction(() => work(dbSession));
-          } finally {
-            await dbSession.endSession();
-          }
-        },
-        async acquireLocks(dbSession, selectedDates) {
-          const selectedLockIds = [
-            ...selectedDates.map((date) => `${userId}:${date}`),
-            `${userId}:pending-cap`,
-          ];
-          for (const lockId of selectedLockIds) {
-            const lockUpdate = await spacingLockCollection.updateOne(
-              { _id: lockId },
-              {
-                $inc: { revision: 1 },
-                $set: { updatedAt: new Date() },
-              },
-              { session: dbSession },
-            );
-            if (lockUpdate.matchedCount !== 1) {
-              throw new Error(`Trip-spacing lock is missing: ${lockId}`);
-            }
-          }
-        },
-        async countPendingUnpaid(dbSession, pendingUserId) {
-          return Trip.countDocuments({
-            userId: new Types.ObjectId(pendingUserId),
-            $or: [
-              { status: { $in: ["pending_payment", "waiting_list"] } },
-              {
-                status: "approved",
-                paymentStatus: { $nin: ["paid", "refunded"] },
-              },
-            ],
-          }).session(dbSession);
-        },
-        async findSpacingWindows(dbSession, spacingUserId, selectedDates) {
-          const existingTrips = await Trip.find({
-            userId: new Types.ObjectId(spacingUserId),
-            date: { $in: selectedDates },
-            status: { $in: HOLDING_TRIP_STATUSES },
-          })
-            .select("date arrivalTime status requestId")
-            .session(dbSession)
-            .lean();
-          return existingTrips.map((trip) => ({
-            date: trip.date,
-            arrivalTime: trip.arrivalTime,
-            status: trip.status,
-            requestId: trip.requestId ? String(trip.requestId) : null,
-          }));
-        },
-        async applyPromo(dbSession, promoUserId, tripId) {
-          if (!promoCode) return { success: false, message: "" };
-          const result = await applyPromoCodeToTrip(
-            promoCode,
-            promoUserId,
-            tripId,
-            dbSession,
-          );
-          if (
-            result.success &&
-            result.discountType &&
-            typeof result.discountValue === "number" &&
-            result.promoCodeId &&
-            result.usageId
-          ) {
-            return {
-              success: true,
-              discountType: result.discountType,
-              discountValue: result.discountValue,
-              promoCodeId: result.promoCodeId,
-              usageId: result.usageId,
-            };
-          }
-          return { success: false, message: result.message };
-        },
-        async insert(dbSession, documents) {
-          await Trip.insertMany(documents, { session: dbSession });
-        },
-      },
-      {
-        userId,
-        dates,
-        candidates: batchCandidates,
-        maxPendingUnpaidTrips: MAX_PENDING_UNPAID_TRIPS,
-        promoCode,
-        computeDiscountedPrice: computePromoDiscountedPrice,
-        async buildDocument(candidate: PreparedTripBatchCandidate<(typeof tripInstances)[number]>) {
-          const instance = candidate.payload;
-          return new Trip({
-            _id: instance.id,
-            tripNumber: await nextSequence("tripNumber"),
-            regionCode: userRegion,
-            userId: new Types.ObjectId(userId),
-            date: candidate.date,
-            cycleIndex: instance.cycleIndex,
-            batchId,
-            ...instance.trip,
-            ...(note ? { note } : {}),
-            basePriceEgp: candidate.basePriceEgp,
-            priceEgp: candidate.priceEgp,
-            ...(candidate.promoApply && {
-              appliedPromoCode: new Types.ObjectId(
-                candidate.promoApply.promoCodeId,
-              ),
-              promoDiscountType: candidate.promoApply.discountType,
-              promoDiscountValue: candidate.promoApply.discountValue,
-              promoDiscountAmountEgp: candidate.promoDiscountAmountEgp,
-            }),
-            ...getInitialTripBookingState(isWaitingListTrip),
-          });
-        },
-      },
+    const requestGroupEnabled = shouldCreateRequestGroup(
+      isMultiDayRequestsEnabled(),
+      dates.length,
     );
+    const requestId = requestGroupEnabled ? new Types.ObjectId() : null;
+    const batchStore = {
+      async withTransaction<TResult>(
+        work: (dbSession: ClientSession) => Promise<TResult>,
+      ) {
+        const dbSession = await mongoose.startSession();
+        try {
+          return await dbSession.withTransaction(() => work(dbSession));
+        } finally {
+          await dbSession.endSession();
+        }
+      },
+      async acquireLocks(dbSession: ClientSession, selectedDates: readonly string[]) {
+        const selectedLockIds = [
+          ...selectedDates.map((date) => `${userId}:${date}`),
+          `${userId}:pending-cap`,
+        ];
+        for (const lockId of selectedLockIds) {
+          const lockUpdate = await spacingLockCollection.updateOne(
+            { _id: lockId },
+            {
+              $inc: { revision: 1 },
+              $set: { updatedAt: new Date() },
+            },
+            { session: dbSession },
+          );
+          if (lockUpdate.matchedCount !== 1) {
+            throw new Error(`Trip-spacing lock is missing: ${lockId}`);
+          }
+        }
+      },
+      async countPendingUnpaid(dbSession: ClientSession, pendingUserId: string) {
+        return Trip.countDocuments({
+          userId: new Types.ObjectId(pendingUserId),
+          $or: [
+            { status: { $in: ["pending_payment", "waiting_list"] } },
+            {
+              status: "approved",
+              paymentStatus: { $nin: ["paid", "refunded"] },
+            },
+          ],
+        }).session(dbSession);
+      },
+      async findSpacingWindows(
+        dbSession: ClientSession,
+        spacingUserId: string,
+        selectedDates: readonly string[],
+      ) {
+        const existingTrips = await Trip.find({
+          userId: new Types.ObjectId(spacingUserId),
+          date: { $in: selectedDates },
+          status: { $in: HOLDING_TRIP_STATUSES },
+        })
+          .select("date arrivalTime status requestId")
+          .session(dbSession)
+          .lean();
+        return existingTrips.map((trip) => ({
+          date: trip.date,
+          arrivalTime: trip.arrivalTime,
+          status: trip.status,
+          requestId: trip.requestId ? String(trip.requestId) : null,
+        }));
+      },
+      async applyPromo(
+        dbSession: ClientSession,
+        promoUserId: string,
+        tripId: string,
+      ) {
+        if (!promoCode) return { success: false as const, message: "" };
+        const result = await applyPromoCodeToTrip(
+          promoCode,
+          promoUserId,
+          tripId,
+          dbSession,
+        );
+        if (
+          result.success &&
+          result.discountType &&
+          typeof result.discountValue === "number" &&
+          result.promoCodeId &&
+          result.usageId
+        ) {
+          return {
+            success: true as const,
+            discountType: result.discountType,
+            discountValue: result.discountValue,
+            promoCodeId: result.promoCodeId,
+            usageId: result.usageId,
+          };
+        }
+        return { success: false as const, message: result.message };
+      },
+      async insert(dbSession: ClientSession, documents: InstanceType<typeof Trip>[]) {
+        await Trip.insertMany(documents, { session: dbSession });
+      },
+    };
+    const buildTripDocument = async (
+      candidate: PreparedTripBatchCandidate<(typeof tripInstances)[number]>,
+    ) => {
+      const instance = candidate.payload;
+      return new Trip({
+        _id: instance.id,
+        tripNumber: await nextSequence("tripNumber"),
+        regionCode: userRegion,
+        userId: new Types.ObjectId(userId),
+        date: candidate.date,
+        cycleIndex: instance.cycleIndex,
+        ...(requestId ? { requestId } : { batchId }),
+        ...instance.trip,
+        ...(note ? { note } : {}),
+        basePriceEgp: candidate.basePriceEgp,
+        priceEgp: candidate.priceEgp,
+        ...(candidate.promoApply && {
+          appliedPromoCode: new Types.ObjectId(
+            candidate.promoApply.promoCodeId,
+          ),
+          promoDiscountType: candidate.promoApply.discountType,
+          promoDiscountValue: candidate.promoApply.discountValue,
+          promoDiscountAmountEgp: candidate.promoDiscountAmountEgp,
+        }),
+        ...getInitialTripBookingState(requestId ? false : isWaitingListTrip),
+      });
+    };
+    const groupResult = requestId
+      ? await createRequestGroupWith<
+          ClientSession,
+          InstanceType<typeof Trip>,
+          InstanceType<typeof Request>,
+          (typeof tripInstances)[number]
+        >(
+          {
+            ...batchStore,
+            async saveRequest(
+              dbSession: ClientSession,
+              request: InstanceType<typeof Request>,
+            ) {
+              await saveRequestGroup(request, dbSession);
+            },
+          },
+          {
+            userId,
+            dates,
+            allowedDates: bookingWindow(),
+            routeCount: serverTrips.length,
+            cycleCount: trips.length,
+            candidates: batchCandidates,
+            maxPendingUnpaidTrips: MAX_PENDING_UNPAID_TRIPS,
+            promoCode,
+            computeDiscountedPrice: computePromoDiscountedPrice,
+            buildDocument: buildTripDocument,
+            buildRequest: (candidates, documents, amountEgp) =>
+              new Request({
+                _id: requestId,
+                userId: new Types.ObjectId(userId),
+                regionCode: userRegion,
+                tripIds: documents.map((trip) => trip._id),
+                dates: candidates.map((candidate) => candidate.date),
+                amountEgp,
+                note,
+                paymentStatus: "pending",
+                status: isWaitingListTrip ? "waiting_list" : "pending_payment",
+              }),
+          },
+        )
+      : null;
+    const batchResult =
+      groupResult ??
+      (await createTripBatchWith<
+        ClientSession,
+        InstanceType<typeof Trip>,
+        (typeof tripInstances)[number]
+      >(
+        batchStore,
+        {
+          userId,
+          dates,
+          candidates: batchCandidates,
+          maxPendingUnpaidTrips: MAX_PENDING_UNPAID_TRIPS,
+          promoCode,
+          computeDiscountedPrice: computePromoDiscountedPrice,
+          buildDocument: buildTripDocument,
+        },
+      ));
 
     const tripDocuments = batchResult.documents;
+    if (groupResult) {
+      const requestId = String(groupResult.request._id);
+      const tripIds = tripDocuments.map((trip) => String(trip._id));
+      const amountEgp = groupResult.request.amountEgp;
+      const promoCodeAppliedTrips = groupResult.candidates.filter(
+        (candidate) => candidate.promoApply,
+      ).length;
+      const promoCodeApplied = promoCodeAppliedTrips > 0;
+      const promoCodePartiallyApplied =
+        promoCodeAppliedTrips > 0 &&
+        promoCodeAppliedTrips < groupResult.candidates.length;
+      const promoCodeUnavailable = Boolean(promoCode) && !promoCodeApplied;
+      const promoFailureMessage = groupResult.promoFailureMessage;
+
+      if (isWaitingListTrip) {
+        try {
+          const routeSummary = `${serverTrips[0].pickup.address} → ${serverTrips[0].dropoff.address}`;
+          await notifyAdminsOfWaitingListRequest({
+            requestId,
+            userId,
+            tripCount: tripIds.length,
+            date: dates[0],
+            routeSummary,
+          });
+          const admins = await User.find({ role: "admin" })
+            .select("_id")
+            .lean();
+          await createNotifications(
+            admins.map((admin) => ({
+              userId: String(admin._id),
+              type: "waiting_list_created",
+              title: "New multi-day shared-ride Request",
+              body: `${tripIds.length} days are waiting for review: ${routeSummary}.`,
+              titleAr: "طلب رحلة مشتركة متعدد الأيام",
+              bodyAr: `${tripIds.length} أيام مستنية المراجعة: ${routeSummary}.`,
+              data: {
+                requestId,
+                bookingId: requestId,
+                tripIds,
+                tripCount: tripIds.length,
+                linkUrl: "/admin/waiting-list",
+                linkLabel: "Review waiting list",
+              },
+            })),
+          );
+        } catch (error) {
+          console.error(
+            `[Waiting list] Admin notification failed for Request ${requestId}:`,
+            error,
+          );
+        }
+      }
+
+      try {
+        await createNotification({
+          userId,
+          type: "request_created",
+          title: isWaitingListTrip
+            ? "Your shared-ride Request was received"
+            : "Your Request is ready for payment",
+          body: isWaitingListTrip
+            ? `Your ${tripIds.length}-day Request is waiting for review.`
+            : `Your ${tripIds.length}-day Request is ready for payment.`,
+          data: {
+            requestId,
+            bookingId: requestId,
+            tripIds,
+            linkUrl: "/my-trips",
+            amountEgp,
+            waitlist: isWaitingListTrip,
+          },
+        });
+      } catch (error) {
+        console.error(
+          `[Trip booking] Passenger notification failed for Request ${requestId}:`,
+          error,
+        );
+      }
+
+      return NextResponse.json(
+        {
+          requestId,
+          bookingId: requestId,
+          tripIds,
+          trips: tripDocuments.map((trip) => ({
+            id: String(trip._id),
+            tripNumber: trip.tripNumber,
+            date: trip.date,
+            priceEgp: trip.priceEgp,
+            status: trip.status,
+            paymentStatus: trip.paymentStatus,
+          })),
+          amountEgp,
+          status: groupResult.request.status,
+          paymentStatus: groupResult.request.paymentStatus,
+          waitlist: isWaitingListTrip,
+          requiresPayment: !isWaitingListTrip,
+          promoCode,
+          promoCodeApplied,
+          promoCodeAppliedTrips,
+          promoCodePartiallyApplied,
+          promoCodeUnavailable,
+          ...(promoFailureMessage
+            ? { promoCodeMessage: promoFailureMessage }
+            : {}),
+        },
+        { status: 201 },
+      );
+    }
+
     const batchResponse = buildTripBatchResponse({
       batchId,
       candidates: batchResult.candidates,

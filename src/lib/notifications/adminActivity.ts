@@ -293,6 +293,43 @@ export async function notifyAdminsOfWaitingListTripBatch(input: {
   }
 }
 
+export async function notifyAdminsOfWaitingListRequest(input: {
+  requestId: string;
+  userId: string;
+  tripCount: number;
+  date: string;
+  routeSummary: string;
+}) {
+  try {
+    if (!Types.ObjectId.isValid(input.requestId) || !Types.ObjectId.isValid(input.userId)) {
+      return;
+    }
+    const user = await User.findById(input.userId)
+      .select("name userNumber phone email")
+      .lean();
+    await notifyAdmins({
+      eventType: "waiting_list_trip_created",
+      dedupeKey: `request:${input.requestId}:waiting_list_created`,
+      title: "New multi-day waiting-list Request",
+      body: `${user?.name ?? "Unknown user"} submitted a ${input.tripCount}-day Request for review.`,
+      data: {
+        requestId: input.requestId,
+        userId: input.userId,
+        userName: user?.name ?? "Unknown user",
+        userNumber: user?.userNumber ?? null,
+        phone: user?.phone ?? "",
+        email: user?.email ?? "",
+        date: input.date,
+        tripCount: input.tripCount,
+        routeSummary: input.routeSummary,
+        href: "/admin/waiting-list",
+      },
+    });
+  } catch (error) {
+    console.error("Admin waiting-list Request alert creation failed:", error);
+  }
+}
+
 export async function syncPaidTripsForRequest(requestId: string) {
   await Trip.updateMany({ requestId }, { $set: { paymentStatus: "paid" } });
   await Trip.updateMany(

@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { getProfile } from "@/lib/services/profile";
 import { normalizeRegion } from "@/lib/config/regions";
 import { getMapSettings } from "@/lib/maps/settings";
+import { isMultiDayRequestsEnabled } from "@/lib/config/featureFlags";
 import CreateClient from "@/components/create/CreateClient";
 
 export default async function CreatePage() {
@@ -17,6 +18,7 @@ export default async function CreatePage() {
       userEmail={session.email}
       region={region}
       mapSettings={mapSettings}
+      multiDayRequestsEnabled={isMultiDayRequestsEnabled()}
     />
   );
 }
