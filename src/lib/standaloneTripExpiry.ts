@@ -31,12 +31,21 @@ export interface StandaloneTripExpiryStore {
     now: CairoNowParts,
     userId?: string,
   ): Promise<StandaloneTripExpiryCandidate[]>;
+  findWaitingListTripCandidates(
+    now: CairoNowParts,
+    userId?: string,
+  ): Promise<StandaloneTripExpiryCandidate[]>;
   expirePendingTrip(
     id: string,
     cutoff: Date,
     userId?: string,
   ): Promise<boolean>;
   expireApprovedTrip(
+    id: string,
+    now: CairoNowParts,
+    userId?: string,
+  ): Promise<boolean>;
+  expireWaitingListTrip(
     id: string,
     now: CairoNowParts,
     userId?: string,
@@ -173,6 +182,33 @@ export async function runStandaloneTripExpiry(input: {
     if (
       hasPastTrip([{ date: trip.date, pickupTime: trip.pickupTime }], nowCairo) &&
       (await input.store.expireApprovedTrip(trip.id, nowCairo, input.userId))
+    ) {
+      expiredTripIds.add(trip.id);
+      expiredTrips += 1;
+    }
+  }
+
+  const waitingListTrips = await input.store.findWaitingListTripCandidates(
+    nowCairo,
+    input.userId,
+  );
+  for (const trip of waitingListTrips) {
+    if (
+      !hasPastTrip([{ date: trip.date, pickupTime: trip.pickupTime }], nowCairo)
+    ) {
+      continue;
+    }
+    if (
+      await input.store.hasRecentActivePayment(
+        trip.id,
+        paymentCutoff,
+        input.userId,
+      )
+    ) {
+      continue;
+    }
+    if (
+      await input.store.expireWaitingListTrip(trip.id, nowCairo, input.userId)
     ) {
       expiredTripIds.add(trip.id);
       expiredTrips += 1;

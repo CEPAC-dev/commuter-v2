@@ -139,6 +139,21 @@ const mongoExpiryStore: StandaloneTripExpiryStore = {
     return trips.map(mapTripCandidate);
   },
 
+  async findWaitingListTripCandidates(now, userId) {
+    const trips = await Trip.find({
+      requestId: null,
+      status: "waiting_list",
+      $or: [
+        { date: { $lt: now.dateStr } },
+        { date: now.dateStr, pickupTime: { $lt: now.timeStr } },
+      ],
+      ...userFilter(userId),
+    })
+      .select("_id status paymentStatus date pickupTime createdAt")
+      .lean<TripCandidateDocument[]>();
+    return trips.map(mapTripCandidate);
+  },
+
   async expirePendingTrip(id, cutoff, userId) {
     const session = await mongoose.startSession();
     try {
@@ -185,6 +200,38 @@ const mongoExpiryStore: StandaloneTripExpiryStore = {
               requestId: null,
               status: "approved",
               paymentStatus: { $in: UNPAID_STATUSES },
+              $or: [
+                { date: { $lt: now.dateStr } },
+                { date: now.dateStr, pickupTime: { $lt: now.timeStr } },
+              ],
+              ...userFilter(userId),
+            },
+          });
+        });
+      } catch (error) {
+        if (!(error instanceof RecentPaymentFound)) throw error;
+      }
+      return expired;
+    } finally {
+      await session.endSession();
+    }
+  },
+
+  async expireWaitingListTrip(id, now, userId) {
+    const session = await mongoose.startSession();
+    try {
+      let expired = false;
+      try {
+        await session.withTransaction(async () => {
+          expired = false;
+          expired = await expireTripInTransaction({
+            session,
+            tripId: id,
+            userId,
+            filter: {
+              _id: new Types.ObjectId(id),
+              requestId: null,
+              status: "waiting_list",
               $or: [
                 { date: { $lt: now.dateStr } },
                 { date: now.dateStr, pickupTime: { $lt: now.timeStr } },

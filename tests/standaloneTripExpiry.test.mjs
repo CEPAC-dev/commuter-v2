@@ -42,6 +42,7 @@ class MemoryExpiryStore {
     this.payments = new Map(payments.map((payment) => [payment.id, payment]));
     this.legacyRequests = [{ id: "request-1", status: "pending_payment" }];
     this.promoReleases = new Set();
+    this.promoReleaseCalls = [];
   }
 
   findPendingTripCandidates(cutoff) {
@@ -74,6 +75,21 @@ class MemoryExpiryStore {
     );
   }
 
+  findWaitingListTripCandidates(nowParts) {
+    return Promise.resolve(
+      [...this.trips.values()]
+        .filter(
+          (trip) =>
+            trip.requestId == null &&
+            trip.status === "waiting_list" &&
+            (trip.date < nowParts.dateStr ||
+              (trip.date === nowParts.dateStr &&
+                trip.pickupTime < nowParts.timeStr)),
+        )
+        .map((trip) => ({ ...trip })),
+    );
+  }
+
   expirePendingTrip(id, cutoff) {
     const trip = this.trips.get(id);
     if (
@@ -88,6 +104,7 @@ class MemoryExpiryStore {
     trip.status = "time_out";
     trip.paymentStatus = "expired";
     this.promoReleases.add(id);
+    this.promoReleaseCalls.push(id);
     return Promise.resolve(true);
   }
 
@@ -108,6 +125,36 @@ class MemoryExpiryStore {
     trip.status = "time_out";
     trip.paymentStatus = "expired";
     this.promoReleases.add(id);
+    this.promoReleaseCalls.push(id);
+    return Promise.resolve(true);
+  }
+
+  expireWaitingListTrip(id, nowParts) {
+    const trip = this.trips.get(id);
+    if (
+      !trip ||
+      trip.requestId != null ||
+      trip.status !== "waiting_list" ||
+      !(
+        trip.date < nowParts.dateStr ||
+        (trip.date === nowParts.dateStr && trip.pickupTime < nowParts.timeStr)
+      )
+    ) {
+      return Promise.resolve(false);
+    }
+    trip.status = "time_out";
+    trip.paymentStatus = "expired";
+    this.promoReleases.add(id);
+    this.promoReleaseCalls.push(id);
+    return Promise.resolve(true);
+  }
+
+  approveWaitingListTrip(id) {
+    const trip = this.trips.get(id);
+    if (!trip || trip.status !== "waiting_list") {
+      return Promise.resolve(false);
+    }
+    trip.status = "approved";
     return Promise.resolve(true);
   }
 
@@ -235,6 +282,123 @@ test("does not expire a paid Trip or a waitlist Trip", async () => {
   assert.equal(result.expiredTrips, 0);
   assert.equal(store.trips.get("paid").status, "pending_payment");
   assert.equal(store.trips.get("waitlisted").status, "waiting_list");
+});
+
+test("expires a past-pickup standalone waiting-list Trip and releases promo once", async () => {
+  const store = new MemoryExpiryStore([
+    makeTrip({
+      status: "waiting_list",
+      pickupTime: "07:59",
+      appliedPromoCode: "promo-1",
+    }),
+  ]);
+
+  const result = await expire(store);
+  const secondResult = await expire(store);
+
+  assert.equal(result.expiredTrips, 1);
+  assert.equal(secondResult.expiredTrips, 0);
+  assert.equal(store.trips.get("trip-1").status, "time_out");
+  assert.equal(store.trips.get("trip-1").paymentStatus, "expired");
+  assert.deepEqual([...store.promoReleases], ["trip-1"]);
+  assert.deepEqual(store.promoReleaseCalls, ["trip-1"]);
+});
+
+test("does not expire a future waiting-list Trip", async () => {
+  const store = new MemoryExpiryStore([
+    makeTrip({ status: "waiting_list", pickupTime: "08:01" }),
+  ]);
+
+  const result = await expire(store);
+
+  assert.equal(result.expiredTrips, 0);
+  assert.equal(store.trips.get("trip-1").status, "waiting_list");
+  assert.equal(store.trips.get("trip-1").paymentStatus, "pending");
+  assert.deepEqual([...store.promoReleases], []);
+});
+
+test("does not expire an approved or rejected Trip", async () => {
+  const store = new MemoryExpiryStore([
+    makeTrip({ id: "approved", status: "approved", pickupTime: "09:00" }),
+    makeTrip({ id: "rejected", status: "rejected", pickupTime: "07:59" }),
+  ]);
+
+  const result = await expire(store);
+
+  assert.equal(result.expiredTrips, 0);
+  assert.equal(store.trips.get("approved").status, "approved");
+  assert.equal(store.trips.get("rejected").status, "rejected");
+  assert.deepEqual([...store.promoReleases], []);
+});
+
+test("admin approval racing expiry has one conditional winner", async () => {
+  const store = new MemoryExpiryStore([
+    makeTrip({ status: "waiting_list", pickupTime: "07:59" }),
+  ]);
+
+  const candidates = await store.findWaitingListTripCandidates(nowCairo);
+  assert.equal(candidates.length, 1);
+  const [expired, approved] = await Promise.all([
+    store.expireWaitingListTrip("trip-1", nowCairo),
+    store.approveWaitingListTrip("trip-1"),
+  ]);
+
+  assert.equal(Number(expired) + Number(approved), 1);
+  if (expired) {
+    assert.equal(store.trips.get("trip-1").status, "time_out");
+    assert.equal(store.trips.get("trip-1").paymentStatus, "expired");
+    assert.deepEqual(store.promoReleaseCalls, ["trip-1"]);
+  }
+  if (approved) {
+    assert.equal(store.trips.get("trip-1").status, "approved");
+    assert.equal(store.trips.get("trip-1").paymentStatus, "pending");
+    assert.deepEqual(store.promoReleaseCalls, []);
+  }
+});
+
+test("defers a waiting-list Trip with a recent active Payment", async () => {
+  const store = new MemoryExpiryStore(
+    [makeTrip({ status: "waiting_list", pickupTime: "07:59" })],
+    [
+      makePayment({
+        createdAt: new Date(now.getTime() - 10 * 60 * 1000),
+        updatedAt: new Date(now.getTime() - 10 * 60 * 1000),
+      }),
+    ],
+  );
+
+  const result = await expire(store);
+
+  assert.equal(result.expiredTrips, 0);
+  assert.equal(store.trips.get("trip-1").status, "waiting_list");
+  assert.equal(store.payments.get("payment-1").overallStatus, "kashier_pending");
+});
+
+test("expires a waiting-list Trip with a stale in-flight Payment and releases reservation", async () => {
+  const store = new MemoryExpiryStore(
+    [makeTrip({ status: "waiting_list", pickupTime: "07:59" })],
+    [
+      makePayment({
+        walletStatus: "reserved",
+        walletReservationTxId: "reservation-1",
+        createdAt: new Date(now.getTime() - 31 * 60 * 1000),
+        updatedAt: new Date(now.getTime() - 31 * 60 * 1000),
+      }),
+    ],
+  );
+  const releasedReservations = [];
+
+  const result = await expire(store, async (reservationTxId) => {
+    releasedReservations.push(reservationTxId);
+    return true;
+  });
+
+  assert.equal(result.expiredTrips, 1);
+  assert.equal(result.cancelledPayments, 1);
+  assert.equal(result.releasedWalletReservations, 1);
+  assert.deepEqual(releasedReservations, ["reservation-1"]);
+  assert.equal(store.trips.get("trip-1").status, "time_out");
+  assert.equal(store.trips.get("trip-1").paymentStatus, "expired");
 });
 
 test("defers expiry while an in-flight Payment is within the 30-minute session lifetime", async () => {
