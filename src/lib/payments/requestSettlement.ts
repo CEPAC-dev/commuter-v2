@@ -35,6 +35,11 @@ export async function settleRequestPayment(
   const session = await mongoose.startSession();
   let payment: PaymentDoc | null = null;
   let requestUserId: Types.ObjectId | null = null;
+  let paidAmountEgp: number | null = null;
+  let settlementAmountMismatch: {
+    paid: number;
+    expected: number;
+  } | null = null;
 
   try {
     const result = await runRequestSettlementWith(
@@ -53,6 +58,7 @@ export async function settleRequestPayment(
           return currentPayment?.overallStatus === "paid";
         },
         async claimRequest() {
+          settlementAmountMismatch = null;
           if (options.paymentId) {
             if (!paymentObjectId) return false;
             payment = await Payment.findOne({
@@ -62,6 +68,7 @@ export async function settleRequestPayment(
             }).session(session);
             if (!payment) return false;
             requestUserId = payment.userId;
+            paidAmountEgp = payment.totalEgp;
           }
 
           const update = await Request.findOneAndUpdate(
@@ -74,19 +81,46 @@ export async function settleRequestPayment(
               },
             },
             { returnDocument: "after", session },
-          ).select("_id userId");
+          ).select("_id userId amountEgp");
           if (!update) return false;
           requestUserId = update.userId;
+          if (paidAmountEgp === null) paidAmountEgp = update.amountEgp;
           return true;
         },
         async updateChildren() {
+          const remainingTrips = await Trip.find({
+            requestId: requestObjectId,
+            status: { $ne: "cancelled" },
+          })
+            .select("priceEgp")
+            .session(session)
+            .lean<{ priceEgp: number }[]>();
+          const expectedAmountEgp = remainingTrips.reduce(
+            (total, trip) => total + trip.priceEgp,
+            0,
+          );
+          if (
+            paidAmountEgp !== null &&
+            paidAmountEgp !== expectedAmountEgp
+          ) {
+            settlementAmountMismatch = {
+              paid: paidAmountEgp,
+              expected: expectedAmountEgp,
+            };
+          }
           await Trip.updateMany(
-            { requestId: requestObjectId },
+            {
+              requestId: requestObjectId,
+              status: { $ne: "cancelled" },
+            },
             { $set: { paymentStatus: "paid" } },
             { session },
           );
           await Trip.updateMany(
-            { requestId: requestObjectId, status: "pending_payment" },
+            {
+              requestId: requestObjectId,
+              status: "pending_payment"
+            },
             { $set: { status: "submitted" } },
             { session },
           );
@@ -194,6 +228,17 @@ export async function settleRequestPayment(
       },
       options.transactionId,
     );
+
+    if (result === "settled" && settlementAmountMismatch) {
+      console.info(
+        JSON.stringify({
+          tag: "[multiday]",
+          event: "settlement_amount_mismatch",
+          requestId,
+          ...settlementAmountMismatch,
+        }),
+      );
+    }
 
     if (result === "settled" && requestUserId) {
       const { createNotification } = await import(
