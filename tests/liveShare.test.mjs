@@ -167,15 +167,24 @@ test("share token rejects malformed input without throwing", () => {
 });
 
 test("share token requires an explicitly configured secret", () => {
+  const secretError = {
+    name: "Error",
+    message: "LIVE_SHARE_SECRET is not configured or is too short.",
+  };
+  assert.throws(() => createShareToken(SHARE_ID, ""), secretError);
   assert.throws(
-    () => createShareToken(SHARE_ID, ""),
-    /LIVE_SHARE_SECRET is not configured/,
+    () => createShareToken(SHARE_ID, "s".repeat(31)),
+    secretError,
+  );
+  assert.equal(
+    verifyShareToken(
+      createShareToken(SHARE_ID, "s".repeat(32)),
+      "s".repeat(32),
+    ),
+    SHARE_ID,
   );
   const validShape = `${SHARE_ID}.${"A".repeat(43)}`;
-  assert.throws(
-    () => verifyShareToken(validShape, ""),
-    /LIVE_SHARE_SECRET is not configured/,
-  );
+  assert.throws(() => verifyShareToken(validShape, ""), secretError);
 });
 
 test("eligibility requires ownership, an assigned driver, and a confirmed or active status", () => {
@@ -328,6 +337,7 @@ test("location updates reject revoked and expired shares and mark ended trips", 
   assert.equal(ended.kind, "ended");
   assert.equal(endedStore.context.share.lastLocation, null);
   assert.equal(endedStore.markedEndedAt, NOW);
+  assert.equal(endedStore.writes, 0);
 });
 
 test("public trip projection exposes only allowlisted values and hides sensitive snapshot fields", () => {
@@ -365,6 +375,10 @@ test("public trip projection exposes only allowlisted values and hides sensitive
   ]);
   assert.equal(projection.driver.firstName, "Sam");
   assert.equal(projection.driver.vehicle.plate, "A B C 1234");
+  assert.deepEqual(Object.keys(projection.pickup).sort(), ["lat", "lng"]);
+  assert.deepEqual(Object.keys(projection.dropoff).sort(), ["lat", "lng"]);
+  assert.equal("address" in projection.pickup, false);
+  assert.equal("address" in projection.dropoff, false);
   assert.equal(
     JSON.stringify(projection).includes("private-account"),
     false,
@@ -432,8 +446,25 @@ test("all failed public token cases produce one generic 404 response", async () 
   }
   assert.deepEqual(
     cases.map(({ store }) => store.failedAttempts),
-    [1, 1, 1, 1, 1],
+    [0, 0, 1, 1, 1],
   );
+});
+
+test("signed unavailable tokens return 429 and Retry-After when the limiter blocks", async () => {
+  const result = await readPublicShare(
+    {
+      token: createShareToken("111111111111111111111111", SECRET),
+      secret: SECRET,
+      now: NOW,
+    },
+    new MemoryPublicStore(),
+    async () => "17",
+  );
+  assert.deepEqual(result, {
+    status: 429,
+    body: INVALID_PUBLIC_SHARE,
+    headers: { "Retry-After": "17" },
+  });
 });
 
 test("ended shares clear location and return a location-free grace response", async () => {

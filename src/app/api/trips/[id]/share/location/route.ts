@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { updateShareLocation, validateLocationInput } from "@/lib/liveShare/logic";
+import { buildLocationUpdateFilter } from "@/lib/liveShare/locationFilter";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { TripShare } from "@/models/TripShare";
@@ -105,24 +106,13 @@ export async function POST(request: Request, { params }: RouteContext) {
         },
         async updateLocationIfDue(input) {
           const update = await TripShare.updateOne(
-            {
-              _id: input.shareId,
+            buildLocationUpdateFilter({
+              shareId: input.shareId,
               tripId: trip._id,
               userId: session.userId,
-              active: true,
-              revokedAt: null,
-              endedAt: null,
-              expiresAt: { $gt: input.now },
-              $or: [
-                { "lastLocation.receivedAt": { $exists: false } },
-                { "lastLocation.receivedAt": null },
-                {
-                  "lastLocation.receivedAt": {
-                    $lte: input.earliestReceivedAt,
-                  },
-                },
-              ],
-            },
+              now: input.now,
+              earliestReceivedAt: input.earliestReceivedAt,
+            }),
             {
               $set: {
                 lastLocation: {

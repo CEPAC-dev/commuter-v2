@@ -226,8 +226,8 @@ export async function updateShareLocation(
 
 export interface PublicTripSnapshot {
   status: string;
-  pickup: { address: string; lat: number; lng: number };
-  dropoff: { address: string; lat: number; lng: number };
+  pickup: { lat: number; lng: number };
+  dropoff: { lat: number; lng: number };
   assignedDriver?: {
     name?: string | null;
     carBrand?: string | null;
@@ -283,12 +283,10 @@ export function projectPublicTrip(
     state: !location ? "waiting" : stale ? "stale" : "live",
     tripStatus: trip.status,
     pickup: {
-      address: trip.pickup.address,
       lat: trip.pickup.lat,
       lng: trip.pickup.lng,
     },
     dropoff: {
-      address: trip.dropoff.address,
       lat: trip.dropoff.lat,
       lng: trip.dropoff.lng,
     },

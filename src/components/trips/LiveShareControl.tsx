@@ -18,6 +18,7 @@ import {
   buildSmsShareUrl,
   buildWhatsAppShareUrl,
 } from "@/lib/liveShare/clientSender";
+import { LIVE_SHARE_CONSENT_VERSION } from "@/lib/liveShare/consent";
 import { MAX_LOCATION_ACCURACY_METERS } from "@/lib/liveShare/logic";
 
 interface LiveShareControlProps {
@@ -245,7 +246,14 @@ export default function LiveShareControl({
     setBusy(true);
     setControlError(null);
     try {
-      const response = await fetch(sharePath, { method: "POST" });
+      const response = await fetch(sharePath, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          consent: true,
+          consentVersion: LIVE_SHARE_CONSENT_VERSION,
+        }),
+      });
       const data = await responseJson(response);
       if (!response.ok) {
         throw new Error(
@@ -269,31 +277,11 @@ export default function LiveShareControl({
 
   function beginCreate() {
     setControlError(null);
-    let previouslyConsented = false;
-    try {
-      previouslyConsented =
-        window.localStorage.getItem(`commuter-live-share-consent:${tripId}`) ===
-        "accepted";
-    } catch {
-      previouslyConsented = false;
-    }
-    if (previouslyConsented) {
-      void createShare();
-      return;
-    }
     dialogOpenerRef.current = document.activeElement as HTMLElement | null;
     setDialog("consent");
   }
 
   async function confirmConsent() {
-    try {
-      window.localStorage.setItem(
-        `commuter-live-share-consent:${tripId}`,
-        "accepted",
-      );
-    } catch {
-      // Consent remains valid for this attempt even if storage is unavailable.
-    }
     await createShare();
   }
 

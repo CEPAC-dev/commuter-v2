@@ -14,8 +14,8 @@ export type LiveViewerState =
 export interface PublicLiveShare {
   state: "waiting" | "live" | "stale" | "ended";
   tripStatus?: string;
-  pickup?: { lat: number; lng: number; address?: string };
-  dropoff?: { lat: number; lng: number; address?: string };
+  pickup?: { lat: number; lng: number };
+  dropoff?: { lat: number; lng: number };
   location?: {
     lat: number;
     lng: number;

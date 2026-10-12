@@ -14,6 +14,8 @@ import {
   SHARE_LINK_LIFETIME_MS,
   revokeShareLocation,
 } from "@/lib/liveShare/logic";
+import { validateLiveShareConsent } from "@/lib/liveShare/consent";
+import { recoverDuplicateShare } from "@/lib/liveShare/duplicateShare";
 import { assertLiveShareSecret, createShareToken } from "@/lib/liveShare/token";
 import { getLiveShareBaseUrl } from "@/lib/liveShare/url";
 import { Ride } from "@/models/Ride";
@@ -33,15 +35,6 @@ function shareUrl(shareId: unknown, baseUrl: string, secret: string) {
   return `${baseUrl}/live/${encodeURIComponent(token)}`;
 }
 
-function isDuplicateKeyError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === 11000
-  );
-}
-
 async function loadOwnedTrip(tripId: string, userId: string) {
   if (!Types.ObjectId.isValid(tripId)) return null;
   return Trip.findOne({ _id: tripId, userId })
@@ -54,7 +47,7 @@ async function loadRideStatus(rideId: unknown) {
   return Ride.findById(rideId).select("status updatedAt").lean();
 }
 
-export async function POST(_request: Request, { params }: RouteContext) {
+export async function POST(request: Request, { params }: RouteContext) {
   const session = await getSession();
   if (!session) return jsonError("Unauthorized", 401);
   if (session.role !== "passenger") return jsonError("Forbidden", 403);
@@ -111,6 +104,32 @@ export async function POST(_request: Request, { params }: RouteContext) {
       return jsonError("This trip is not eligible for live sharing.", 409);
     }
 
+    let consentBody: unknown;
+    try {
+      consentBody = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          error: "Consent is required to create a live-share link.",
+          errorCode: "LIVE_SHARE_CONSENT_REQUIRED",
+        },
+        { status: 400 },
+      );
+    }
+    const consent = validateLiveShareConsent(consentBody, now);
+    if (!consent.valid) {
+      return NextResponse.json(
+        {
+          error:
+            consent.errorCode === "LIVE_SHARE_CONSENT_REQUIRED"
+              ? "Consent is required to create a live-share link."
+              : "The live-share consent version is no longer current.",
+          errorCode: consent.errorCode,
+        },
+        { status: 400 },
+      );
+    }
+
     const windowStart = new Date(now.getTime() - SHARE_CREATION_WINDOW_MS);
     const recentCreations = await TripShare.countDocuments({
       tripId: trip._id,
@@ -129,19 +148,25 @@ export async function POST(_request: Request, { params }: RouteContext) {
         rideId: trip.rideId ?? null,
         userId: session.userId,
         active: true,
+        consentAt: consent.consentAt,
+        consentVersion: consent.consentVersion,
         expiresAt,
         deleteAt: new Date(expiresAt.getTime() + SHARE_LINK_LIFETIME_MS),
       });
     } catch (error) {
-      if (!isDuplicateKeyError(error)) throw error;
-      const concurrent = await TripShare.findOne({
-        tripId: trip._id,
-        userId: session.userId,
-        active: true,
-        revokedAt: null,
-        expiresAt: { $gt: now },
-      }).lean();
-      if (!concurrent) throw error;
+      const recovery = await recoverDuplicateShare(error, async () =>
+        TripShare.findOne({
+          tripId: trip._id,
+          userId: session.userId,
+          active: true,
+          revokedAt: null,
+          expiresAt: { $gt: now },
+        }).lean(),
+      );
+      if (recovery.kind === "conflict") {
+        return jsonError("A live-share link could not be created.", 409);
+      }
+      const concurrent = recovery.share;
       return NextResponse.json({
         url: shareUrl(concurrent._id, baseUrl, secret),
         expiresAt: new Date(concurrent.expiresAt).toISOString(),
@@ -156,7 +181,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
       },
       { status: 201 },
     );
-  } catch (error) {
+  } catch {
     console.error("[POST /api/trips/[id]/share] Live-share request failed.");
     return jsonError("Unable to create live sharing.", 500);
   }
@@ -231,7 +256,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
         ? new Date(share.lastLocation.receivedAt).toISOString()
         : null,
     });
-  } catch (error) {
+  } catch {
     console.error("[GET /api/trips/[id]/share] Live-share request failed.");
     return jsonError("Unable to read live sharing.", 500);
   }
@@ -283,7 +308,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
       },
     );
     return NextResponse.json({ ok: true, revoked });
-  } catch (error) {
+  } catch {
     console.error("[DELETE /api/trips/[id]/share] Live-share request failed.");
     return jsonError("Unable to stop live sharing.", 500);
   }

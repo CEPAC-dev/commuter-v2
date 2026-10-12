@@ -25,6 +25,7 @@ const nextConfig: NextConfig = {
       {
         source: "/live/:path*",
         headers: [
+          { key: "Cache-Control", value: "no-store" },
           { key: "X-Robots-Tag", value: "noindex, nofollow" },
           { key: "Referrer-Policy", value: "no-referrer" },
         ],

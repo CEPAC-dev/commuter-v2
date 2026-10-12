@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { enforceRateLimit } from "@/lib/security/rateLimit";
-import { readPublicShare } from "@/lib/liveShare/public";
-import { assertLiveShareSecret } from "@/lib/liveShare/token";
+import {
+  INVALID_PUBLIC_SHARE,
+  readPublicShare,
+} from "@/lib/liveShare/public";
+import { assertLiveShareSecret, verifyShareToken } from "@/lib/liveShare/token";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { TripShare } from "@/models/TripShare";
@@ -17,14 +20,24 @@ const PUBLIC_HEADERS = {
   "Referrer-Policy": "no-referrer",
 };
 
-function publicJson(body: Record<string, unknown>, status: number) {
-  return NextResponse.json(body, { status, headers: PUBLIC_HEADERS });
+function publicJson(
+  body: Record<string, unknown>,
+  status: number,
+  headers: Record<string, string> = {},
+) {
+  return NextResponse.json(body, {
+    status,
+    headers: { ...PUBLIC_HEADERS, ...headers },
+  });
 }
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const secret = assertLiveShareSecret();
     const { token } = await params;
+    if (!verifyShareToken(token, secret)) {
+      return publicJson(INVALID_PUBLIC_SHARE, 404);
+    }
     await connectDB();
     const result = await readPublicShare(
       { token, secret, now: new Date() },
@@ -87,13 +100,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         },
       },
       async () => {
-        await enforceRateLimit(request, "live-share-failed-token", {
+        const limited = await enforceRateLimit(request, "live-share-failed-token", {
           limit: 30,
           windowMs: 60_000,
         });
+        return limited?.headers.get("Retry-After") ?? null;
       },
     );
-    return publicJson(result.body, result.status);
+    return publicJson(result.body, result.status, result.headers);
   } catch {
     console.error("[GET /api/live/[token]] Public live-share request failed.");
     return publicJson({ error: "Unable to load live location." }, 500);

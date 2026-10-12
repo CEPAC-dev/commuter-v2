@@ -13,14 +13,17 @@ import {
   type LiveViewerState,
   type PublicLiveShare,
 } from "@/lib/liveShare/viewer";
+import { resolveLiveTileUrl } from "@/lib/liveShare/tileUrl";
 
 interface LiveLocationViewerProps {
   token: string;
   initialLocale: Locale;
 }
 
-const LIVE_TILE_URL =
-  process.env.NEXT_PUBLIC_LIVE_TILE_URL || MAP_COLORS.tileUrl;
+const LIVE_TILE_URL = resolveLiveTileUrl(
+  process.env.NEXT_PUBLIC_LIVE_TILE_URL,
+  MAP_COLORS.tileUrl,
+);
 
 function readRouteCoordinates(value: unknown): [number, number][] | null {
   if (!Array.isArray(value) || !value[0] || typeof value[0] !== "object") {

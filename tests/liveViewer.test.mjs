@@ -17,8 +17,8 @@ function livePayload(overrides = {}) {
   return {
     state: "live",
     tripStatus: "active",
-    pickup: { address: "Origin address", lat: 30.1, lng: 31.2 },
-    dropoff: { address: "Destination address", lat: 30.2, lng: 31.3 },
+    pickup: { lat: 30.1, lng: 31.2 },
+    dropoff: { lat: 30.2, lng: 31.3 },
     location: {
       lat: 30.15,
       lng: 31.25,
@@ -132,7 +132,12 @@ test("public response parser strips everything outside the explicit projection",
     passengerName: "Private Passenger",
     passengerPhone: "+201000000000",
     paymentData: { amount: 10 },
-    pickup: { ...livePayload().pickup, passengerEmail: "private@example.com" },
+    pickup: {
+      ...livePayload().pickup,
+      address: "Private origin address",
+      passengerEmail: "private@example.com",
+    },
+    dropoff: { ...livePayload().dropoff, address: "Private destination address" },
     driver: {
       ...livePayload().driver,
       phone: "+201111111111",
@@ -151,6 +156,7 @@ test("public response parser strips everything outside the explicit projection",
     "tripStatus",
   ].sort());
   assert.deepEqual(Object.keys(parsed.pickup).sort(), ["lat", "lng"]);
+  assert.deepEqual(Object.keys(parsed.dropoff).sort(), ["lat", "lng"]);
   assert.deepEqual(Object.keys(parsed.driver.vehicle).sort(), [
     "color",
     "make",

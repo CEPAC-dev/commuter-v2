@@ -5,9 +5,9 @@ const SIGNATURE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const TOKEN_PATTERN = /^([a-f\d]{24})\.([A-Za-z0-9_-]{43})$/i;
 
 function getSecret(secret = process.env.LIVE_SHARE_SECRET): string {
-  if (!secret?.trim()) {
+  if (!secret?.trim() || secret.trim().length < 32) {
     throw new Error(
-      "LIVE_SHARE_SECRET is not configured. Set LIVE_SHARE_SECRET before using live sharing.",
+      "LIVE_SHARE_SECRET is not configured or is too short.",
     );
   }
   return secret;

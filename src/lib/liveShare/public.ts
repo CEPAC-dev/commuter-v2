@@ -33,20 +33,31 @@ export interface PublicShareStore {
 }
 
 export interface PublicShareResult {
-  status: 200 | 404;
+  status: 200 | 404 | 429;
   body: Record<string, unknown>;
+  headers?: Record<string, string>;
+}
+
+async function unavailableResult(
+  onFailedToken: () => Promise<string | null | undefined>,
+): Promise<PublicShareResult> {
+  const retryAfter = await onFailedToken();
+  return retryAfter
+    ? {
+        status: 429,
+        body: INVALID_PUBLIC_SHARE,
+        headers: { "Retry-After": retryAfter },
+      }
+    : { status: 404, body: INVALID_PUBLIC_SHARE };
 }
 
 export async function readPublicShare(
   input: { token: unknown; secret?: string; now?: Date },
   store: PublicShareStore,
-  onFailedToken: () => Promise<unknown>,
+  onFailedToken: () => Promise<string | null | undefined>,
 ): Promise<PublicShareResult> {
   const shareId = verifyShareToken(input.token, input.secret);
-  if (!shareId) {
-    await onFailedToken();
-    return { status: 404, body: INVALID_PUBLIC_SHARE };
-  }
+  if (!shareId) return { status: 404, body: INVALID_PUBLIC_SHARE };
 
   const now = input.now ?? new Date();
   const context = await store.load(shareId);
@@ -56,8 +67,7 @@ export async function readPublicShare(
     context.share.revokedAt ||
     context.share.expiresAt.getTime() <= now.getTime()
   ) {
-    await onFailedToken();
-    return { status: 404, body: INVALID_PUBLIC_SHARE };
+    return unavailableResult(onFailedToken);
   }
 
   if (context.share.endedAt || isEnded(context.trip, context.ride)) {
@@ -68,8 +78,7 @@ export async function readPublicShare(
       await store.markEnded(shareId, endedAt);
     }
     if (now.getTime() - endedAt.getTime() > SHARE_END_GRACE_MS) {
-      await onFailedToken();
-      return { status: 404, body: INVALID_PUBLIC_SHARE };
+      return unavailableResult(onFailedToken);
     }
     await store.touchViewer(
       shareId,

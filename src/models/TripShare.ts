@@ -23,6 +23,8 @@ const TripShareSchema = new Schema(
     rideId: { type: Types.ObjectId, ref: "Ride", default: null },
     userId: { type: Types.ObjectId, ref: "User", required: true },
     active: { type: Boolean, required: true, default: true },
+    consentAt: { type: Date, required: true },
+    consentVersion: { type: String, required: true },
     expiresAt: { type: Date, required: true },
     revokedAt: { type: Date, default: null },
     endedAt: { type: Date, default: null },
