@@ -1,6 +1,22 @@
 import { loadEnvConfig } from "@next/env";
 import mongoose from "mongoose";
 
+const TRIP_SHARE_ACTIVE_INDEX = {
+  keys: { tripId: 1, userId: 1 },
+  options: {
+    unique: true,
+    partialFilterExpression: { active: true },
+    name: "trip_user_one_active_share",
+  },
+};
+const TRIP_SHARE_DELETE_AT_INDEX = {
+  keys: { deleteAt: 1 },
+  options: {
+    expireAfterSeconds: 0,
+    name: "trip_share_delete_at_ttl",
+  },
+};
+
 loadEnvConfig(process.cwd());
 
 const production =
@@ -23,6 +39,7 @@ try {
   const database = mongoose.connection.db;
   if (!database) throw new Error("MongoDB connection is unavailable.");
   const walletTransactions = database.collection("wallettransactions");
+  const tripShares = database.collection("tripshares");
 
   if (checkOnly) {
     const [duplicate] = await walletTransactions
@@ -55,6 +72,14 @@ try {
         expireAfterSeconds: 30 * 24 * 60 * 60,
         name: "trip_spacing_locks_updatedAt_ttl",
       },
+    );
+    await tripShares.createIndex(
+      TRIP_SHARE_ACTIVE_INDEX.keys,
+      TRIP_SHARE_ACTIVE_INDEX.options,
+    );
+    await tripShares.createIndex(
+      TRIP_SHARE_DELETE_AT_INDEX.keys,
+      TRIP_SHARE_DELETE_AT_INDEX.options,
     );
     await walletTransactions.createIndex(
       { paymentId: 1, tripId: 1, type: 1 },
