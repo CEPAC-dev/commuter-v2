@@ -36,10 +36,9 @@ export async function settleRequestPayment(
   let payment: PaymentDoc | null = null;
   let requestUserId: Types.ObjectId | null = null;
   let paidAmountEgp: number | null = null;
-  let settlementAmountMismatch: {
-    paid: number;
-    expected: number;
-  } | null = null;
+  const settlementAmountMismatch: {
+    value: { paid: number; expected: number } | null;
+  } = { value: null };
 
   try {
     const result = await runRequestSettlementWith(
@@ -58,7 +57,7 @@ export async function settleRequestPayment(
           return currentPayment?.overallStatus === "paid";
         },
         async claimRequest() {
-          settlementAmountMismatch = null;
+          settlementAmountMismatch.value = null;
           if (options.paymentId) {
             if (!paymentObjectId) return false;
             payment = await Payment.findOne({
@@ -103,7 +102,7 @@ export async function settleRequestPayment(
             paidAmountEgp !== null &&
             paidAmountEgp !== expectedAmountEgp
           ) {
-            settlementAmountMismatch = {
+            settlementAmountMismatch.value = {
               paid: paidAmountEgp,
               expected: expectedAmountEgp,
             };
@@ -229,13 +228,15 @@ export async function settleRequestPayment(
       options.transactionId,
     );
 
-    if (result === "settled" && settlementAmountMismatch) {
+    const amountMismatch = settlementAmountMismatch.value;
+    if (result === "settled" && amountMismatch) {
       console.info(
         JSON.stringify({
           tag: "[multiday]",
           event: "settlement_amount_mismatch",
           requestId,
-          ...settlementAmountMismatch,
+          paid: amountMismatch.paid,
+          expected: amountMismatch.expected,
         }),
       );
     }

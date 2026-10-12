@@ -33,6 +33,7 @@ import {
   splitTripPaymentAmount,
   validatePaymentAppUrl,
 } from "@/lib/payments/sessionGuards";
+import { KASHIER_SESSION_DURATION_MS } from "@/lib/payments/sessionTiming";
 
 const KASHIER_URL =
   process.env.KASHIER_MODE === "live"
@@ -760,7 +761,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const expireAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  const expireAt = new Date(Date.now() + KASHIER_SESSION_DURATION_MS).toISOString();
 
   const kashierBody = {
     merchantOrderId: String(payment._id),

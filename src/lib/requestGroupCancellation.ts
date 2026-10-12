@@ -4,6 +4,8 @@ import { Payment } from "@/models/Payment";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { releasePromoForRequest } from "@/lib/promoCode";
+import { verifyAndSettleBooking } from "@/lib/payments/kashier";
+import { verifyExpiredRequestPayments as verifyExpiredRequestPaymentList } from "@/lib/payments/sessionTiming";
 import {
   cancelRequestDayWith,
   cancelWholeRequestWith,
@@ -22,6 +24,25 @@ const ACTIVE_PAYMENT_STATUSES = [
   "wallet_reserved",
   "kashier_pending",
 ];
+
+async function verifyExpiredPayments(requestId: string, userId: string) {
+  const activePayments = await Payment.find({
+    bookingId: new Types.ObjectId(requestId),
+    overallStatus: { $in: ACTIVE_PAYMENT_STATUSES },
+  })
+    .select("_id createdAt")
+    .lean<{ _id: Types.ObjectId; createdAt: Date }[]>();
+
+  await verifyExpiredRequestPaymentList(
+    activePayments.map((payment) => ({
+      id: String(payment._id),
+      createdAt: payment.createdAt,
+    })),
+    new Date(),
+    (paymentId) =>
+      verifyAndSettleBooking(requestId, userId, paymentId),
+  );
+}
 
 function createMongooseStore(): RequestGroupCancellationStore<ClientSession> {
   return {
@@ -162,7 +183,7 @@ function createMongooseStore(): RequestGroupCancellationStore<ClientSession> {
           _id: new Types.ObjectId(requestId),
           userId: new Types.ObjectId(userId),
           status: expected.status,
-          paymentStatus: "pending",
+          paymentStatus: expected.paymentStatus,
           amountEgp: expected.amountEgp,
         },
         { $set: { ...update, updatedAt: new Date() } },
@@ -199,6 +220,7 @@ export async function cancelRequestDay(input: {
   reason?: string;
 }) {
   const store = await getMongooseStore(input);
+  await verifyExpiredPayments(input.requestId, input.userId);
   return cancelRequestDayWith(store, input);
 }
 
@@ -208,5 +230,6 @@ export async function cancelWholeRequest(input: {
   reason?: string;
 }) {
   const store = await getMongooseStore(input);
+  await verifyExpiredPayments(input.requestId, input.userId);
   return cancelWholeRequestWith(store, input);
 }

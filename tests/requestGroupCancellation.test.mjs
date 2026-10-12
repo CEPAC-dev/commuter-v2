@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Types } from "mongoose";
+import { readFile } from "node:fs/promises";
 
 const {
   cancelRequestDayWith,
@@ -18,6 +19,11 @@ const {
   buildWaitingListTransitionFilter,
   buildWaitingListReviewUpdate,
 } = await import("../src/lib/admin/waitingList.ts");
+const {
+  KASHIER_SESSION_DURATION_MS,
+  PAYMENT_CANCELLATION_GRACE_MS,
+  verifyExpiredRequestPayments,
+} = await import("../src/lib/payments/sessionTiming.ts");
 
 class MemoryCancellationStore {
   constructor({ prices = [100, 100, 100, 100, 100], status = "waiting_list", paymentStatus = "pending" } = {}) {
@@ -130,7 +136,7 @@ class MemoryCancellationStore {
       this.request.id !== requestId ||
       this.request.userId !== userId ||
       this.request.status !== expected.status ||
-      this.request.paymentStatus !== "pending" ||
+      this.request.paymentStatus !== expected.paymentStatus ||
       this.request.amountEgp !== expected.amountEgp
     ) {
       return false;
@@ -259,16 +265,107 @@ test("refuses day and whole cancellation while a gateway or legacy session is ac
   store.activePayment = true;
   await assert.rejects(
     cancelRequestDayWith(store, { requestId, tripId: "trip-1", userId: "user-1" }),
-    (error) => error.code === "PAYMENT_IN_PROGRESS",
+    (error) =>
+      error.code === "PAYMENT_IN_PROGRESS" &&
+      /after it expires \(up to 35 minutes\)/.test(error.message),
   );
   store.activePayment = false;
   store.request.kashierSessionId = "legacy-session";
-  await assert.rejects(
-    cancelWholeRequestWith(store, { requestId, userId: "user-1" }),
-    (error) => error.code === "PAYMENT_IN_PROGRESS",
+  await cancelWholeRequestWith(store, { requestId, userId: "user-1" });
+  assert.equal(store.request.kashierSessionId, null);
+  assert.equal(store.request.amountEgp, 0);
+  assert.ok(store.trips.every((trip) => trip.status === "cancelled"));
+});
+
+test("stale kashier_pending payment is verified and then cancellation can proceed", async () => {
+  const { store, requestId } = setup([100, 100]);
+  store.activePayment = true;
+  store.request.kashierSessionId = "expired-session";
+  let walletReservationReleased = false;
+  await verifyExpiredRequestPayments(
+    [{ id: "payment-1", createdAt: new Date("2026-10-12T12:00:00.000Z") }],
+    new Date("2026-10-12T12:35:00.000Z"),
+    async (paymentId) => {
+      assert.equal(paymentId, "payment-1");
+      store.activePayment = false;
+      store.request.paymentStatus = "failed";
+      walletReservationReleased = true;
+      return "failed";
+    },
   );
-  assert.equal(store.request.amountEgp, 200);
-  assert.ok(store.trips.every((trip) => trip.status !== "cancelled"));
+  await cancelRequestDayWith(store, {
+    requestId,
+    tripId: "trip-1",
+    userId: "user-1",
+  });
+  assert.equal(walletReservationReleased, true);
+  assert.equal(store.request.paymentStatus, "pending");
+  assert.equal(store.request.kashierSessionId, null);
+  assert.equal(store.trips[0].status, "cancelled");
+});
+
+test("expired Request payment verification uses 30 minutes plus five-minute grace", async () => {
+  const now = new Date("2026-10-12T12:35:00.000Z");
+  const calls = [];
+  await verifyExpiredRequestPayments(
+    [
+      {
+        id: "stale",
+        createdAt: new Date(
+          now.getTime() -
+            KASHIER_SESSION_DURATION_MS -
+            PAYMENT_CANCELLATION_GRACE_MS,
+        ),
+      },
+      {
+        id: "fresh",
+        createdAt: new Date(
+          now.getTime() -
+            KASHIER_SESSION_DURATION_MS -
+            PAYMENT_CANCELLATION_GRACE_MS +
+            1,
+        ),
+      },
+    ],
+    now,
+    async (paymentId) => calls.push(paymentId),
+  );
+  assert.deepEqual(calls, ["stale"]);
+});
+
+test("a new payment session is eligible after cancelling one day at the new amount", async () => {
+  const { store, requestId } = setup({
+    prices: [100, 150, 200],
+    status: "pending_payment",
+  });
+  await cancelRequestDayWith(store, {
+    requestId,
+    tripId: "trip-2",
+    userId: "user-1",
+  });
+
+  assert.equal(store.request.amountEgp, 300);
+  assert.equal(
+    getRequestPaymentSessionBlock(
+      store.request,
+      store.trips.map((trip) => ({
+        status: trip.status,
+        priceEgp: trip.priceEgp,
+      })),
+    ),
+    null,
+  );
+  await store.beginPayment(300);
+  assert.equal(store.activePayment, true);
+});
+
+test("cancellation verifies expired active payments through the shared payment verifier", async () => {
+  const source = await readFile(
+    new URL("../src/lib/requestGroupCancellation.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /verifyAndSettleBooking\(requestId, userId, paymentId\)/);
+  assert.match(source, /await verifyExpiredPayments\(input\.requestId, input\.userId\)/);
 });
 
 test("concurrent cancellation and payment lock have one conditional winner", async () => {

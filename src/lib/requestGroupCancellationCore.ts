@@ -67,11 +67,12 @@ export interface RequestGroupCancellationStore<TSession> {
     session: TSession,
     requestId: string,
     userId: string,
-    expected: { status: string; amountEgp: number },
+    expected: { status: string; paymentStatus: string; amountEgp: number },
     update: {
       status: string;
       paymentStatus: string;
       amountEgp: number;
+      kashierSessionId: null;
     },
   ): Promise<boolean>;
   releasePromos(session: TSession, requestId: string): Promise<number>;
@@ -93,7 +94,7 @@ function assertUnpaidRequest(
     );
   }
   if (
-    request.paymentStatus !== "pending" ||
+    !["pending", "failed"].includes(request.paymentStatus) ||
     ["cancelled", "rejected", "time_out"].includes(request.status)
   ) {
     throw new RequestGroupCancellationError(
@@ -108,13 +109,10 @@ async function assertNoPaymentInProgress<TSession>(
   session: TSession,
   request: RequestGroupCancellationRequest,
 ): Promise<void> {
-  if (
-    request.kashierSessionId ||
-    (await store.hasActivePayment(session, request.id))
-  ) {
+  if (await store.hasActivePayment(session, request.id)) {
     throw new RequestGroupCancellationError(
       "PAYMENT_IN_PROGRESS",
-      "This Request cannot be changed while checkout is in progress.",
+      "A payment session is still active. Try again after it expires (up to 35 minutes).",
     );
   }
 }
@@ -193,11 +191,16 @@ export async function cancelRequestDayWith<TSession>(
       session,
       request.id,
       input.userId,
-      { status: request.status, amountEgp: request.amountEgp },
+      {
+        status: request.status,
+        paymentStatus: request.paymentStatus,
+        amountEgp: request.amountEgp,
+      },
       {
         status: lastDay ? "cancelled" : request.status,
         paymentStatus: lastDay ? "expired" : "pending",
         amountEgp,
+        kashierSessionId: null,
       },
     );
     if (!updated) {
@@ -245,8 +248,17 @@ export async function cancelWholeRequestWith<TSession>(
       session,
       request.id,
       input.userId,
-      { status: request.status, amountEgp: request.amountEgp },
-      { status: "cancelled", paymentStatus: "expired", amountEgp: 0 },
+      {
+        status: request.status,
+        paymentStatus: request.paymentStatus,
+        amountEgp: request.amountEgp,
+      },
+      {
+        status: "cancelled",
+        paymentStatus: "expired",
+        amountEgp: 0,
+        kashierSessionId: null,
+      },
     );
     if (!updated) {
       throw new RequestGroupCancellationError(
