@@ -1,4 +1,5 @@
 import { getTripTab, type TripTab } from "./tripTabs.ts";
+import { getDisplayStatus } from "./statusDisplay.ts";
 
 export type TripTabRow = {
   id: string;
@@ -7,10 +8,10 @@ export type TripTabRow = {
   status: string;
   paymentStatus?: string;
   parentPaymentStatus?: string | null;
-  canPay?: boolean;
   date: string;
   pickupTime: string;
   parentRequestStatus?: string | null;
+  rejectionReason?: string | null;
   hasPastTrip?: boolean;
 };
 
@@ -19,6 +20,19 @@ export type TripTabItem<T extends TripTabRow> =
   | { kind: "request"; date: string; requestId: string; trips: T[] };
 
 export type TripTabKey = "all" | "bookings" | "pending" | "upcoming" | "ongoing";
+
+function requestCanPay<T extends TripTabRow>(trip: T, now: Date): boolean {
+  return getDisplayStatus({
+    request: {
+      status: trip.parentRequestStatus ?? trip.status,
+      paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
+      rejectionReason: trip.rejectionReason,
+      hasPastTrip: trip.hasPastTrip,
+    },
+    trip,
+    now,
+  }).canPay;
+}
 
 export function buildTripTabView<T extends TripTabRow>(
   rows: readonly T[],
@@ -88,7 +102,6 @@ export function buildTripTabView<T extends TripTabRow>(
   const bookingsItems = pendingItems.filter(
     (item): item is Extract<TripTabItem<T>, { kind: "request" }> =>
       item.kind === "request" &&
-      item.trips.length > 1 &&
       item.trips[0].parentPaymentStatus !== "paid",
   );
   const bookedRequestIds = new Set(
@@ -99,8 +112,8 @@ export function buildTripTabView<T extends TripTabRow>(
   );
   bookingsItems.sort((left, right) => {
     if (left.kind !== "request" || right.kind !== "request") return 0;
-    const leftReady = left.trips.some((trip) => trip.canPay);
-    const rightReady = right.trips.some((trip) => trip.canPay);
+    const leftReady = left.trips.some((trip) => requestCanPay(trip, now));
+    const rightReady = right.trips.some((trip) => requestCanPay(trip, now));
     return Number(rightReady) - Number(leftReady) || left.date.localeCompare(right.date);
   });
   const allPendingTrips = [
@@ -139,7 +152,9 @@ export function buildTripTabView<T extends TripTabRow>(
     counts: { ...counts, pending: visiblePendingItems.length },
     items,
     readyToPayCount: bookingsItems.filter(
-      (item) => item.kind === "request" && item.trips.some((trip) => trip.canPay),
+      (item) =>
+        item.kind === "request" &&
+        item.trips.some((trip) => requestCanPay(trip, now)),
     ).length,
   };
 }

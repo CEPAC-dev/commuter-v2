@@ -2,12 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { buildTripTabView } = await import("../src/lib/tripTabView.ts");
+const { getDisplayStatus } = await import("../src/lib/statusDisplay.ts");
 const now = new Date("2026-10-03T09:00:00.000Z");
 
 test("multi-day unpaid Requests appear only in Bookings", () => {
   const rows = [
-    { id: "p1", requestId: "pending-1", isStandalone: false, status: "pending_payment", parentRequestStatus: "approved", parentPaymentStatus: "pending", canPay: true, date: "2026-10-04", pickupTime: "09:00" },
-    { id: "p2", requestId: "pending-1", isStandalone: false, status: "pending_payment", parentRequestStatus: "approved", parentPaymentStatus: "pending", canPay: true, date: "2026-10-05", pickupTime: "09:00" },
+    { id: "p1", requestId: "pending-1", isStandalone: false, status: "pending_payment", parentRequestStatus: "approved", parentPaymentStatus: "pending", date: "2026-10-04", pickupTime: "09:00" },
+    { id: "p2", requestId: "pending-1", isStandalone: false, status: "pending_payment", parentRequestStatus: "approved", parentPaymentStatus: "pending", date: "2026-10-05", pickupTime: "09:00" },
     { id: "u1", requestId: "paid-1", isStandalone: false, status: "submitted", parentRequestStatus: "submitted", date: "2026-10-06", pickupTime: "09:00" },
     { id: "o1", requestId: "paid-2", isStandalone: false, status: "active", parentRequestStatus: "active", date: "2026-10-07", pickupTime: "09:00" },
     { id: "h1", requestId: "old-1", isStandalone: false, status: "completed", parentRequestStatus: "submitted", date: "2026-10-01", pickupTime: "09:00" },
@@ -55,13 +56,53 @@ test("paid Request children remain normal trips and are never Bookings", () => {
 
 test("waiting multi-day Requests are Bookings without being ready to pay", () => {
   const rows = [
-    { id: "w1", requestId: "waiting", isStandalone: false, status: "pending_payment", parentRequestStatus: "waiting_list", parentPaymentStatus: "pending", canPay: false, date: "2026-10-04", pickupTime: "09:00" },
-    { id: "w2", requestId: "waiting", isStandalone: false, status: "pending_payment", parentRequestStatus: "waiting_list", parentPaymentStatus: "pending", canPay: false, date: "2026-10-05", pickupTime: "09:00" },
+    { id: "w1", requestId: "waiting", isStandalone: false, status: "pending_payment", parentRequestStatus: "waiting_list", parentPaymentStatus: "pending", date: "2026-10-04", pickupTime: "09:00" },
+    { id: "w2", requestId: "waiting", isStandalone: false, status: "pending_payment", parentRequestStatus: "waiting_list", parentPaymentStatus: "pending", date: "2026-10-05", pickupTime: "09:00" },
   ];
   const view = buildTripTabView(rows, "bookings", now);
   assert.equal(view.counts.bookings, 1);
   assert.equal(view.readyToPayCount, 0);
   assert.equal(view.items.length, 1);
+});
+
+test("an unpaid Request with one remaining day stays in Bookings", () => {
+  const rows = [
+    { id: "last-day", requestId: "request", isStandalone: false, status: "pending_payment", parentRequestStatus: "approved", parentPaymentStatus: "pending", date: "2026-10-04", pickupTime: "09:00" },
+  ];
+  const view = buildTripTabView(rows, "bookings", now);
+  assert.equal(view.counts.bookings, 1);
+  assert.equal(view.readyToPayCount, 1);
+  assert.equal(view.items[0].kind, "request");
+  assert.equal(view.items[0].trips.length, 1);
+});
+
+test("Bookings readiness and ordering use the existing checkout canPay rule", () => {
+  const rows = [
+    { id: "waiting-1", requestId: "waiting", isStandalone: false, status: "pending_payment", parentRequestStatus: "waiting_list", parentPaymentStatus: "pending", date: "2026-10-04", pickupTime: "09:00" },
+    { id: "waiting-2", requestId: "waiting", isStandalone: false, status: "pending_payment", parentRequestStatus: "waiting_list", parentPaymentStatus: "pending", date: "2026-10-05", pickupTime: "09:00" },
+    { id: "ready-1", requestId: "ready", isStandalone: false, status: "pending_payment", parentRequestStatus: "approved", parentPaymentStatus: "pending", date: "2026-10-06", pickupTime: "09:00" },
+    { id: "ready-2", requestId: "ready", isStandalone: false, status: "pending_payment", parentRequestStatus: "approved", parentPaymentStatus: "pending", date: "2026-10-07", pickupTime: "09:00" },
+  ];
+  const canPayCount = new Set(
+    rows
+      .filter((trip) =>
+        getDisplayStatus({
+          request: {
+            status: trip.parentRequestStatus ?? trip.status,
+            paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
+            rejectionReason: trip.rejectionReason,
+            hasPastTrip: trip.hasPastTrip,
+          },
+          trip,
+          now,
+        }).canPay,
+      )
+      .map((trip) => trip.requestId),
+  ).size;
+  const view = buildTripTabView(rows, "bookings", now);
+  assert.equal(view.readyToPayCount, canPayCount);
+  assert.equal(view.items[0].kind, "request");
+  assert.equal(view.items[0].requestId, "ready");
 });
 
 test("standalone pending Trips stay as individual rows and retain one pay action per trip", () => {

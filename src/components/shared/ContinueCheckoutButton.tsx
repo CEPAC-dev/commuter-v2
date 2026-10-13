@@ -9,12 +9,14 @@ interface Props {
   bookingId: string;
   amountEgp: number;
   walletBalance: number;
+  label?: string;
 }
 
 export default function ContinueCheckoutButton({
   bookingId,
   amountEgp,
   walletBalance,
+  label,
 }: Props) {
   const router = useRouter();
   const { t } = useClientLocale();
@@ -83,7 +85,7 @@ export default function ContinueCheckoutButton({
           letterSpacing: "0.01em",
         }}
       >
-        Continue to checkout
+        {label ?? "Continue to checkout"}
       </button>
 
       {/* ── Payment method sheet ── */}

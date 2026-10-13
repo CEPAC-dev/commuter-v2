@@ -1,17 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
+import { formatEgp, translate } from "@/lib/i18n";
 
 interface RequestGroupCancellationControlsProps {
   requestId: string;
-  trips: { id: string; date: string; priceEgp: number }[];
+  trips: {
+    id: string;
+    dateLabel: string;
+    pickupTimeLabel: string;
+    routeLabel: string;
+    priceEgp: number;
+    priceLabel: string;
+  }[];
+  showRoutePerDay: boolean;
+  showTimePerDay: boolean;
+  paymentAction?: ReactNode;
+  waitingNote: string;
   locale: "en" | "ar";
 }
 
 export default function RequestGroupCancellationControls({
   requestId,
   trips,
+  showRoutePerDay,
+  showTimePerDay,
+  paymentAction,
+  waitingNote,
   locale,
 }: RequestGroupCancellationControlsProps) {
   const router = useRouter();
@@ -21,30 +38,29 @@ export default function RequestGroupCancellationControls({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-
-  const newAmount = cancelAll
+  const cancelsWholeBooking = cancelAll || trips.length === 1;
+  const newAmount = cancelsWholeBooking
     ? 0
     : trips.reduce(
         (total, trip) =>
           trip.id === selectedTrip?.id ? total : total + trip.priceEgp,
         0,
       );
-  const formatAmount = (amount: number) =>
-    `${amount.toLocaleString(locale === "ar" ? "ar-EG" : "en-EG")} EGP`;
+  const formatAmount = (amount: number) => formatEgp(locale, amount);
 
   async function submitCancellation() {
     setBusy(true);
     setError("");
     try {
       const response = await fetch(
-        cancelAll
+        cancelsWholeBooking
           ? `/api/requests/${requestId}/cancel`
           : `/api/trips/${selectedTrip?.id}/cancel`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            reason: cancelAll
+            reason: cancelsWholeBooking
               ? "Passenger cancelled Request before payment"
               : "Passenger cancelled day before payment",
           }),
@@ -52,57 +68,135 @@ export default function RequestGroupCancellationControls({
       );
       const payload = (await response.json()) as {
         error?: string;
+        errorCode?: string;
         amountEgp?: number;
       };
       if (!response.ok) {
-        setError(payload.error ?? "Unable to cancel this Request.");
+        const paymentInProgress =
+          payload.errorCode === "PAYMENT_IN_PROGRESS" ||
+          /payment.{0,30}(in progress|session.{0,10}active)|session.{0,20}active/i.test(
+            payload.error ?? "",
+          );
+        setError(
+          paymentInProgress
+            ? translate(locale, "my_trips.booking_payment_in_progress")
+            : payload.error ??
+                translate(locale, "my_trips.booking_cancel_error"),
+        );
         return;
       }
 
-      setNotice(`Updated group total: ${formatAmount(payload.amountEgp ?? newAmount)}`);
+      setNotice(
+        translate(locale, "my_trips.booking_cancel_updated_total", {
+          amount: formatAmount(payload.amountEgp ?? newAmount),
+        }),
+      );
       setSelectedTrip(null);
       setCancelAll(false);
       router.refresh();
     } catch {
-      setError("Unable to cancel this Request. Please try again.");
+      setError(translate(locale, "my_trips.booking_cancel_network_error"));
     } finally {
       setBusy(false);
     }
   }
 
-  const cancelLabels =
-    locale === "ar"
-      ? { day: "إلغاء هذا اليوم", all: "إلغاء كل الأيام", close: "إغلاق", confirm: "تأكيد الإلغاء" }
-      : { day: "Cancel day", all: "Cancel all days", close: "Close", confirm: "Confirm cancellation" };
+  function closeDialog() {
+    setSelectedTrip(null);
+    setCancelAll(false);
+    setError("");
+  }
 
   return (
-    <div style={{ borderTop: "1px solid #f4f6f8", padding: "12px 18px" }}>
+    <>
       {notice && (
-        <p role="status" style={{ margin: "0 0 10px", color: "#006D60", fontSize: 13 }}>
+        <p role="status" style={{ margin: "8px 0 0", color: "#006D60", fontSize: 13 }}>
           {notice}
         </p>
       )}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {trips.map((trip) => (
-          <button
-            key={trip.id}
-            type="button"
-            onClick={() => setSelectedTrip(trip)}
-            disabled={busy}
-            style={buttonStyle}
-          >
-            {cancelLabels.day} · {trip.date}
-          </button>
-        ))}
+      <fieldset
+        disabled={busy}
+        style={{ minWidth: 0, margin: 0, padding: 0, border: 0 }}
+      >
+        <div style={{ display: "grid", gap: 0 }}>
+          {trips.map((trip) => (
+            <div
+              key={trip.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "8px 14px",
+                paddingBlock: 12,
+                borderTop: "1px solid #EDF2F1",
+              }}
+            >
+              <div style={{ flex: "1 1 150px", minWidth: 0 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: "#0B1E3D", fontSize: 13, fontWeight: 700 }}>
+                    {trip.dateLabel}
+                  </span>
+                  {showTimePerDay && (
+                    <span style={{ color: "#687978", fontSize: 12 }}>
+                      {trip.pickupTimeLabel}
+                    </span>
+                  )}
+                </div>
+                {showRoutePerDay && (
+                  <p style={{ margin: "4px 0 0", color: "#687978", fontSize: 12, lineHeight: 1.4 }}>
+                    {trip.routeLabel}
+                  </p>
+                )}
+              </div>
+              <span
+                style={{
+                  color: "#0B1E3D",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  fontVariantNumeric: "tabular-nums",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {trip.priceLabel}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setNotice("");
+                  setError("");
+                  setSelectedTrip(trip);
+                }}
+                style={textButtonStyle}
+              >
+                {translate(locale, "my_trips.booking_cancel_day")}
+              </button>
+              <Link
+                href={`/my-trips/${trip.id}`}
+                style={viewTripStyle}
+                aria-label={`${translate(locale, "my_trips.view_trip")} · ${trip.dateLabel}`}
+              >
+                {translate(locale, "my_trips.view_trip")}
+              </Link>
+            </div>
+          ))}
+        </div>
+        {paymentAction ?? (
+          <p style={{ margin: "14px 0 0", color: "#687978", fontSize: 12, lineHeight: 1.5 }}>
+            {waitingNote}
+          </p>
+        )}
         <button
           type="button"
-          onClick={() => setCancelAll(true)}
-          disabled={busy}
-          style={buttonStyle}
+          onClick={() => {
+            setNotice("");
+            setError("");
+            setCancelAll(true);
+          }}
+          style={{ ...textButtonStyle, color: "#B54745", marginTop: 8 }}
         >
-          {cancelLabels.all}
+          {translate(locale, "my_trips.booking_cancel_whole")}
         </button>
-      </div>
+      </fieldset>
 
       {(selectedTrip || cancelAll) && (
         <div
@@ -112,62 +206,76 @@ export default function RequestGroupCancellationControls({
           style={dialogBackdrop}
         >
           <div style={dialogStyle}>
-            <h2 id="request-cancel-title" style={{ margin: "0 0 8px", color: "#0B1E3D", fontSize: 18 }}>
-              {cancelLabels.confirm}
+            <h2
+              id="request-cancel-title"
+              style={{ margin: "0 0 8px", color: "#0B1E3D", fontSize: 18 }}
+            >
+              {translate(locale, "my_trips.booking_cancel_dialog_title")}
             </h2>
-            <p style={{ margin: "0 0 16px", color: "#526262" }}>
+            <p style={{ margin: "0 0 16px", color: "#526262", lineHeight: 1.55 }}>
               {cancelAll
-                ? locale === "ar"
-                  ? "سيتم إلغاء كل الأيام. المبلغ الجديد: 0 EGP."
-                  : "All days will be cancelled. The new total will be 0 EGP."
-                : locale === "ar"
-                  ? `سيتم إلغاء اليوم المحدد. المبلغ الجديد: ${formatAmount(newAmount)}.`
-                  : `This day will be cancelled. The new total will be ${formatAmount(newAmount)}.`}
+                ? translate(locale, "my_trips.booking_cancel_all_confirmation", {
+                    count: trips.length,
+                  })
+                : trips.length === 1
+                  ? translate(locale, "my_trips.booking_cancel_last_day_confirmation", {
+                      day: selectedTrip?.dateLabel ?? "",
+                      amount: formatAmount(newAmount),
+                    })
+                  : translate(locale, "my_trips.booking_cancel_day_confirmation", {
+                      day: selectedTrip?.dateLabel ?? "",
+                      amount: formatAmount(newAmount),
+                    })}
             </p>
             {error && (
-              <p role="alert" style={{ margin: "0 0 12px", color: "#C0392B" }}>
+              <p role="alert" style={{ margin: "0 0 12px", color: "#B54745", fontSize: 13 }}>
                 {error}
               </p>
             )}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedTrip(null);
-                  setCancelAll(false);
-                  setError("");
-                }}
+                onClick={closeDialog}
                 disabled={busy}
-                style={buttonStyle}
+                style={textButtonStyle}
               >
-                {cancelLabels.close}
+                {translate(locale, "my_trips.booking_cancel_close")}
               </button>
               <button
                 type="button"
                 onClick={submitCancellation}
                 disabled={busy}
-                style={{ ...buttonStyle, background: "#0B1E3D", color: "#fff" }}
+                style={confirmButtonStyle}
               >
-                {busy ? "…" : cancelLabels.confirm}
+                {translate(locale, "my_trips.booking_cancel_confirm")}
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
-const buttonStyle = {
-  border: "1px solid #D6E2E0",
-  borderRadius: 8,
-  background: "#fff",
-  color: "#0B1E3D",
-  padding: "7px 10px",
+const textButtonStyle = {
+  border: 0,
+  padding: "5px 2px",
+  background: "transparent",
+  color: "#667776",
   fontSize: 12,
-  fontWeight: 700,
+  fontWeight: 600,
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
   cursor: "pointer",
 } as const;
+
+const viewTripStyle = {
+  color: "#007A6A",
+  fontSize: 12,
+  fontWeight: 700,
+  textDecoration: "none",
+  whiteSpace: "nowrap" as const,
+};
 
 const dialogBackdrop = {
   position: "fixed" as const,
@@ -181,8 +289,19 @@ const dialogBackdrop = {
 
 const dialogStyle = {
   width: "min(100%, 420px)",
-  borderRadius: 14,
+  borderRadius: 16,
   background: "#fff",
-  padding: 20,
-  boxShadow: "0 16px 48px rgba(11, 30, 61, 0.2)",
+  padding: 22,
+  boxShadow: "0 16px 48px rgba(11, 30, 61, 0.16)",
 };
+
+const confirmButtonStyle = {
+  border: 0,
+  borderRadius: 8,
+  background: "#0B1E3D",
+  color: "#fff",
+  padding: "8px 12px",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+} as const;

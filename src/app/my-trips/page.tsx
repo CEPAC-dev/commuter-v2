@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
+  ArrowRight,
   Car,
   MapPin,
   Clock,
@@ -533,14 +534,12 @@ function RequestTripGroupCard({
   trips,
   walletBalance,
   locale,
-  allowPay,
   sharedTripDetailsById,
 }: {
   requestId: string;
   trips: TripListRow[];
   walletBalance: number;
   locale: "en" | "ar";
-  allowPay: boolean;
   sharedTripDetailsById: Map<string, UserTripDetail | null>;
 }) {
   const firstTrip = trips[0];
@@ -553,26 +552,30 @@ function RequestTripGroupCard({
     },
     trip: firstTrip,
   });
-  const rejectionDisplay = getRejectionDisplay({
-    request: {
-      status: firstTrip.parentRequestStatus ?? firstTrip.status,
-      rejectionReason: firstTrip.rejectionReason,
-    },
-    trip: firstTrip,
+  const routes = trips.map((trip) => {
+    const detail = sharedTripDetailsById.get(trip.id);
+    return {
+      pickup: detail?.pickupStation?.name ?? trip.pickupAddress,
+      dropoff: detail?.dropoffStation?.name ?? trip.dropoffAddress,
+    };
   });
-  const secondaryText = rejectionDisplay.showReasonCard
-    ? rejectionDisplay.reason ?? translate(locale, "rejection.no_reason")
-    : displayStatus.secondaryKey
-      ? translate(locale, displayStatus.secondaryKey)
-      : displayStatus.secondaryText;
-
+  const firstRoute = routes[0];
+  const sameRoute = routes.every(
+    (route) =>
+      route.pickup === firstRoute.pickup && route.dropoff === firstRoute.dropoff,
+  );
+  const sameTime = trips.every(
+    (trip) => trip.pickupTime === firstTrip.pickupTime,
+  );
+  const bookingStatus = displayStatus.canPay
+    ? translate(locale, "my_trips.booking_ready_to_pay")
+    : translate(locale, "my_trips.booking_waiting_approval");
   return (
     <div
       className="request-group-card"
       style={{
         background: "#fff",
-        borderRadius: 14,
-        border: "1px solid #eef0f3",
+        borderRadius: 18,
         overflow: "hidden",
       }}
     >
@@ -583,116 +586,83 @@ function RequestTripGroupCard({
           justifyContent: "space-between",
           gap: 10,
           flexWrap: "wrap",
-          padding: "15px 18px",
-          borderBottom: "1px solid #f4f6f8",
+          padding: "18px 20px",
+          borderBottom: "1px solid #EDF2F1",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
           <strong style={{ color: "#0B1E3D", fontSize: 14 }}>
-            {translate(locale, "my_trips.booking_group", {
+            {translate(locale, "my_trips.multi_day_booking", {
               count: trips.length,
               plural: trips.length === 1 ? "" : "s",
             })}
           </strong>
-          <Pill {...displayPill(locale, displayStatus)} />
+          <span
+            style={{
+              borderRadius: 20,
+              padding: "5px 10px",
+              background: displayStatus.canPay ? "#E5F5F0" : "#F4F1E8",
+              color: displayStatus.canPay ? "#137667" : "#806B3C",
+              fontSize: 11,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {bookingStatus}
+          </span>
         </div>
-        <strong style={{ color: "#0B1E3D", fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
+        <strong style={{ color: "#0B1E3D", fontSize: 16, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
           {formatEgp(locale, firstTrip.bookingAmountEgp)}
         </strong>
       </div>
-
-      {secondaryText && (
-        <p
-          className={displayStatus.secondaryKey === "status.approved_by_admin" ? "trip-approved-caption" : undefined}
-          title={rejectionDisplay.showReasonCard ? secondaryText : undefined}
-          style={{
-            ...(displayStatus.secondaryKey === "status.approved_by_admin"
-              ? { margin: "-6px 0 8px", marginInlineStart: 18, padding: 0, fontSize: 11, lineHeight: 1.35, color: "#687978" }
-              : {
-                  margin: 0,
-                  padding: "11px 18px 0",
-                  fontSize: 13,
-                  lineHeight: 1.5,
-                  color: "#5A6A7A",
-                  ...(rejectionDisplay.showReasonCard
-                    ? { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }
-                    : {}),
-                }),
-          }}
-        >
-          {secondaryText}
-        </p>
-      )}
-
-      <div style={{ display: "grid", gap: 0 }}>
-        {trips.map((trip) => {
-          const detail = sharedTripDetailsById.get(trip.id);
-          const shared = isSharedVehicle(trip.vehicleType);
-          const pickupName = detail?.pickupStation?.name ?? trip.pickupAddress;
-          const dropoffName = detail?.dropoffStation?.name ?? trip.dropoffAddress;
-          return (
-            <Link
-              key={trip.id}
-              className="trip-card-link"
-              href={`/my-trips/${trip.id}`}
-              style={{
-                display: "grid",
-                gap: 8,
-                padding: "13px 18px",
-                color: "inherit",
-                textDecoration: "none",
-                borderTop: "1px solid #f4f6f8",
-              }}
-            >
-              <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span className="trip-card-date">{formatDate(locale, trip.date)}<span>{formatTime(locale, trip.pickupTime)}</span></span>
-                  <span className="trip-type-badge">{translate(locale, shared ? "ride.shared" : "ride.private")}</span>
-                  <span style={{ color: "#526262", fontSize: 12, fontWeight: 700 }}>{descriptionForVehicle(locale, trip.vehicleType)}</span>
-                </span>
-                <span style={{ color: "#006D60", fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{formatEgp(locale, trip.priceEgp)}</span>
-              </span>
-              <span className="trip-card-route-row">
-                <MapPin size={13} color="#00C2A8" aria-hidden="true" />
-                <span title={pickupName}>{truncate(pickupName)}</span>
-              </span>
-              <span className="trip-card-route-row">
-                <MapPin size={13} color="#D46A32" aria-hidden="true" />
-                <span title={dropoffName}>{truncate(dropoffName)}</span>
-              </span>
-              <span className="trip-card-view-action">
-                {translate(locale, "my_trips.view_trip")}
-                <ChevronRight size={15} aria-hidden="true" />
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-
-      {allowPay && displayStatus.canPay && (
-        <div style={{ borderTop: "1px solid #f4f6f8" }}>
-          <ContinueCheckoutButton
-            bookingId={requestId}
-            amountEgp={firstTrip.bookingAmountEgp}
-            walletBalance={walletBalance}
-          />
-        </div>
-      )}
-
-      {firstTrip.parentPaymentStatus === "pending" &&
-        ["pending_payment", "waiting_list", "approved"].includes(
-          firstTrip.parentRequestStatus ?? firstTrip.status,
-        ) && (
-          <RequestGroupCancellationControls
-            requestId={requestId}
-            trips={trips.map((trip) => ({
-              id: trip.id,
-              date: trip.date,
-              priceEgp: trip.priceEgp,
-            }))}
-            locale={locale}
-          />
+      <div style={{ padding: "4px 20px 18px" }}>
+        {sameRoute && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#0B1E3D", fontSize: 13, lineHeight: 1.5 }}>
+            <MapPin size={15} color="#00A98F" aria-hidden="true" />
+            <span title={firstRoute.pickup}>{truncate(firstRoute.pickup)}</span>
+            <ArrowRight
+              size={14}
+              color="#91A6A3"
+              aria-hidden="true"
+              style={locale === "ar" ? { transform: "scaleX(-1)" } : undefined}
+            />
+            <span title={firstRoute.dropoff}>{truncate(firstRoute.dropoff)}</span>
+          </div>
         )}
+        {sameTime && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, color: "#687978", fontSize: 12 }}>
+            <Clock size={14} aria-hidden="true" />
+            {formatTime(locale, firstTrip.pickupTime)}
+          </div>
+        )}
+        <RequestGroupCancellationControls
+          requestId={requestId}
+          trips={trips.map((trip, index) => ({
+            id: trip.id,
+            dateLabel: prettyDate(locale, trip.date),
+            pickupTimeLabel: formatTime(locale, trip.pickupTime),
+            routeLabel: `${routes[index].pickup} → ${routes[index].dropoff}`,
+            priceEgp: trip.priceEgp,
+            priceLabel: formatEgp(locale, trip.priceEgp),
+          }))}
+          showRoutePerDay={!sameRoute}
+          showTimePerDay={!sameTime}
+          paymentAction={
+            displayStatus.canPay ? (
+              <div style={{ marginTop: 12 }}>
+                <ContinueCheckoutButton
+                  bookingId={requestId}
+                  amountEgp={firstTrip.bookingAmountEgp}
+                  walletBalance={walletBalance}
+                  label={translate(locale, "my_trips.booking_continue_checkout")}
+                />
+              </div>
+            ) : undefined
+          }
+          waitingNote={translate(locale, "my_trips.booking_waiting_note")}
+          locale={locale}
+        />
+      </div>
     </div>
   );
 }
@@ -834,20 +804,7 @@ export default async function MyTripsPage({
   } else {
     const result = await listUserTrips(session.userId, passengerListOptions);
     allPassengerTrips = result.rows;
-    const tabRows = result.rows.map((trip) => ({
-      ...trip,
-      canPay: getDisplayStatus({
-        request: {
-          status: trip.parentRequestStatus ?? trip.status,
-          paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
-          hasPastTrip: trip.hasPastTrip,
-          rejectionReason: trip.rejectionReason,
-        },
-        trip,
-        now: displayNow,
-      }).canPay,
-    }));
-    const bookingsView = buildTripTabView(tabRows, "bookings", displayNow);
+    const bookingsView = buildTripTabView(result.rows, "bookings", displayNow);
     bookingRequestIds = new Set(
       bookingsView.items.flatMap((item) =>
         item.kind === "request" ? [item.requestId] : [],
@@ -862,7 +819,7 @@ export default async function MyTripsPage({
         : groupFilter === "upcoming" || groupFilter === "ongoing"
           ? groupFilter
           : "all";
-    const view = buildTripTabView(tabRows, selectedTab, displayNow);
+    const view = buildTripTabView(result.rows, selectedTab, displayNow);
     tabCounts = view.counts;
     total = view.items.length;
     paginationTotal = total;
@@ -1572,7 +1529,6 @@ export default async function MyTripsPage({
                           trips={item.data.trips}
                           walletBalance={walletBalance}
                           locale={locale}
-                          allowPay={activePassengerTab === "pending"}
                           sharedTripDetailsById={sharedTripDetailsById}
                         />
                       );
