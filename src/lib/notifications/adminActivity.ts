@@ -198,6 +198,39 @@ export async function notifyAdminsOfLateTripPayment(
   }
 }
 
+export async function notifyAdminsOfRequestPaymentIssue(input: {
+  paymentId: string;
+  requestId: string;
+  paidAmountEgp: number;
+  expectedAmountEgp: number;
+  reason: string;
+}) {
+  try {
+    if (
+      !Types.ObjectId.isValid(input.paymentId) ||
+      !Types.ObjectId.isValid(input.requestId)
+    ) {
+      return;
+    }
+    await notifyAdmins({
+      eventType: "late_gateway_payment",
+      dedupeKey: latePaymentDedupeKey(input.paymentId),
+      title: `Request payment needs review`,
+      body: `Request ${input.requestId}: paid ${input.paidAmountEgp} EGP; expected ${input.expectedAmountEgp} EGP. ${input.reason}.`,
+      data: {
+        paymentId: input.paymentId,
+        requestId: input.requestId,
+        paidAmountEgp: input.paidAmountEgp,
+        expectedAmountEgp: input.expectedAmountEgp,
+        reason: input.reason,
+        href: `/admin/transactions/${input.paymentId}`,
+      },
+    });
+  } catch (error) {
+    console.error("Admin Request payment alert creation failed:", error);
+  }
+}
+
 export async function notifyAdminsOfWaitingListTrip(tripId: string) {
   try {
     if (!Types.ObjectId.isValid(tripId)) return;

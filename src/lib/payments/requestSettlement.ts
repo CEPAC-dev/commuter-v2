@@ -18,7 +18,11 @@ export type RequestSettlementResult =
 
 export async function settleRequestPayment(
   requestId: string,
-  options: { paymentId?: string; transactionId?: string } = {},
+  options: {
+    paymentId?: string;
+    transactionId?: string;
+    allowClosedPayment?: boolean;
+  } = {},
 ): Promise<RequestSettlementResult> {
   if (
     !Types.ObjectId.isValid(requestId) ||
@@ -32,6 +36,9 @@ export async function settleRequestPayment(
   const paymentObjectId = options.paymentId
     ? new Types.ObjectId(options.paymentId)
     : null;
+  const paymentStatuses = options.allowClosedPayment
+    ? [...ACTIVE_PAYMENT_STATUSES, "failed", "cancelled"]
+    : ACTIVE_PAYMENT_STATUSES;
   const session = await mongoose.startSession();
   let payment: PaymentDoc | null = null;
   let requestUserId: Types.ObjectId | null = null;
@@ -63,7 +70,7 @@ export async function settleRequestPayment(
             payment = await Payment.findOne({
               _id: paymentObjectId,
               bookingId: requestObjectId,
-              overallStatus: { $in: ACTIVE_PAYMENT_STATUSES },
+              overallStatus: { $in: paymentStatuses },
             }).session(session);
             if (!payment) return false;
             requestUserId = payment.userId;
@@ -71,7 +78,12 @@ export async function settleRequestPayment(
           }
 
           const update = await Request.findOneAndUpdate(
-            buildSettlementRequestFilter(requestObjectId),
+            {
+              ...buildSettlementRequestFilter(requestObjectId),
+              status: {
+                $nin: ["waiting_list", "rejected", "cancelled", "time_out"],
+              },
+            },
             {
               $set: {
                 paymentStatus: "paid",
@@ -149,7 +161,7 @@ export async function settleRequestPayment(
                 const paymentUpdate = await Payment.updateOne(
                   {
                     _id: paymentObjectId,
-                    overallStatus: { $in: ACTIVE_PAYMENT_STATUSES },
+                    overallStatus: { $in: paymentStatuses },
                   },
                   {
                     $set: {

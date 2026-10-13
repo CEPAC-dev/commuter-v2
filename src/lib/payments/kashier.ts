@@ -25,6 +25,7 @@ import {
   settleStandaloneTripPayment,
 } from "@/lib/payments/standaloneTripSettlement";
 import { settleRequestPayment } from "@/lib/payments/requestSettlement";
+import { handlePaidRequestPayment } from "@/lib/payments/requestPaymentRecovery";
 
 const BASE =
   process.env.KASHIER_MODE === "live"
@@ -87,9 +88,9 @@ export async function verifyAndSettleBooking(
   }
   const booking = resolved.doc;
 
-  if (booking.paymentStatus === "paid") return "paid";
-  if (booking.paymentStatus === "failed") return "failed";
-  if (isSettlementBlockedStatus(booking.status)) {
+  if (booking.paymentStatus === "paid" && !paymentId) return "paid";
+  if (booking.paymentStatus === "failed" && !paymentId) return "failed";
+  if (isSettlementBlockedStatus(booking.status) && !paymentId) {
     console.warn(
       `[Payment] Refusing settlement for blocked booking ${String(booking._id)} (${booking.status})`,
     );
@@ -97,10 +98,12 @@ export async function verifyAndSettleBooking(
   }
 
   // Prefer the newest Payment (mixed-payment aware) if one exists.
-  const payment = await Payment.findOne({
-    bookingId: booking._id,
-    overallStatus: { $in: ["created", "wallet_reserved", "kashier_pending"] },
-  }).sort({ createdAt: -1 });
+  const payment = paymentId
+    ? await Payment.findOne({ _id: paymentId, bookingId: booking._id })
+    : await Payment.findOne({
+        bookingId: booking._id,
+        overallStatus: { $in: ["created", "wallet_reserved", "kashier_pending"] },
+      }).sort({ createdAt: -1 });
 
   if (payment) {
     // No gateway leg — capture wallet and settle.
@@ -117,10 +120,12 @@ export async function verifyAndSettleBooking(
     const outcome = await queryKashierStatus(payment.kashierSessionId);
 
     if (outcome === "paid") {
-      const settlement = await settleRequestPayment(String(booking._id), {
+      const recovery = await handlePaidRequestPayment({
         paymentId: String(payment._id),
       });
-      return settlement === "settled" || settlement === "already_settled"
+      return recovery === "settled" ||
+        recovery === "settled_with_mismatch" ||
+        recovery === "already_processed"
         ? "paid"
         : "pending";
     }

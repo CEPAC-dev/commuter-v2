@@ -34,13 +34,15 @@ export async function GET(
   const paymentTimeline = paymentCandidate?.timeline as
     | { event?: string }[]
     | undefined;
-  const paymentForId = paymentTimeline?.some((event) =>
-    ["blocked_trip_payment_webhook", "blocked_trip_payment_callback"].includes(
-      event.event ?? "",
-    ),
-  )
-    ? paymentCandidate
-    : null;
+  const paymentHasLateCharge = paymentTimeline?.some((event) =>
+    [
+      "blocked_trip_payment_webhook",
+      "blocked_trip_payment_callback",
+      "request_payment_manual_review",
+      "request_payment_amount_mismatch",
+    ].includes(event.event ?? ""),
+  );
+  const paymentForId = paymentHasLateCharge ? paymentCandidate : null;
   const tx =
     walletTransaction ??
     (paymentForId
@@ -49,7 +51,7 @@ export async function GET(
           type: "kashier_payment",
           status: "completed",
           amountEgp: paymentForId.gatewayAmountEgp,
-          description: "Kashier charge reported after the trip became unavailable.",
+          description: "Kashier payment flagged for manual review.",
           balanceAfterEgp: null,
           createdAt: paymentForId.createdAt,
           kashierOrderId: paymentForId.kashierOrderId,
@@ -196,9 +198,12 @@ export async function GET(
           lateGatewayCharge: (payment.timeline as {
             event?: string;
           }[] | undefined)?.some((event) =>
-            ["blocked_trip_payment_webhook", "blocked_trip_payment_callback"].includes(
-              event.event ?? "",
-            ),
+            [
+              "blocked_trip_payment_webhook",
+              "blocked_trip_payment_callback",
+              "request_payment_manual_review",
+              "request_payment_amount_mismatch",
+            ].includes(event.event ?? ""),
           ) ?? false,
         }
       : null,

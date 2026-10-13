@@ -32,6 +32,7 @@ import {
   settleStandaloneTripPayment,
 } from "@/lib/payments/standaloneTripSettlement";
 import { settleRequestPayment } from "@/lib/payments/requestSettlement";
+import { handlePaidRequestPayment } from "@/lib/payments/requestPaymentRecovery";
 import { ACTIVE_PAYMENT_STATUSES } from "@/lib/payments/settlementAttempt";
 
 const REFUND_LOCK_STALE_MS = 5 * 60_000;
@@ -346,18 +347,11 @@ export async function POST(req: NextRequest) {
         String(payment.userId),
       );
       if (paid && mixedBooking?.kind === "request") {
-        if (isSettlementBlockedStatus(mixedBooking.status)) {
-          return NextResponse.json(
-            { error: "Transaction already processed" },
-            { status: 400 },
-          );
-        }
-        const settlement = await settleMixedPayment(
-          String(payment._id),
-          true,
+        const recovery = await handlePaidRequestPayment({
+          paymentId: String(payment._id),
           transactionId,
-        );
-        if (settlement === "capture_failed") {
+        });
+        if (recovery === "capture_failed") {
           return NextResponse.json(
             { error: "Payment settlement failed; retry webhook" },
             { status: 500 },
