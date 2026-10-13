@@ -680,7 +680,7 @@ export async function POST(req: NextRequest) {
     }
 
     const requestGroupEnabled = shouldCreateRequestGroup(
-      isMultiDayRequestsEnabled(),
+      isMultiDayRequestsEnabled(userId),
       dates.length,
     );
     const requestId = requestGroupEnabled ? new Types.ObjectId() : null;

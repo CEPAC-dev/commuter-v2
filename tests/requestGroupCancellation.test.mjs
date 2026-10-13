@@ -24,6 +24,9 @@ const {
   PAYMENT_CANCELLATION_GRACE_MS,
   verifyExpiredRequestPayments,
 } = await import("../src/lib/payments/sessionTiming.ts");
+const { isMultiDayRequestsEnabled } = await import(
+  "../src/lib/config/featureFlags.ts"
+);
 
 class MemoryCancellationStore {
   constructor({ prices = [100, 100, 100, 100, 100], status = "waiting_list", paymentStatus = "pending" } = {}) {
@@ -200,6 +203,33 @@ test("cancels one of five equal-price days and keeps Request status and tripIds 
   assert.deepEqual(store.trips.map((trip) => trip.id), originalTripIds);
   assert.equal(store.trips[2].status, "cancelled");
   assert.deepEqual(store.promoReleases, ["trip-3"]);
+});
+
+test("unlisted users can still cancel existing Requests", async () => {
+  const previousFlag = process.env.MULTI_DAY_REQUESTS_ENABLED;
+  const previousAllowedIds = process.env.MULTI_DAY_REQUESTS_ALLOWED_USER_IDS;
+  process.env.MULTI_DAY_REQUESTS_ENABLED = "true";
+  process.env.MULTI_DAY_REQUESTS_ALLOWED_USER_IDS =
+    "64b000000000000000000001";
+  try {
+    assert.equal(isMultiDayRequestsEnabled("64b000000000000000000002"), false);
+    const { store, requestId } = setup();
+    const result = await cancelRequestDayWith(store, {
+      requestId,
+      tripId: "trip-3",
+      userId: "user-1",
+    });
+    assert.equal(result.amountEgp, 400);
+    assert.equal(store.trips[2].status, "cancelled");
+  } finally {
+    if (previousFlag === undefined) delete process.env.MULTI_DAY_REQUESTS_ENABLED;
+    else process.env.MULTI_DAY_REQUESTS_ENABLED = previousFlag;
+    if (previousAllowedIds === undefined) {
+      delete process.env.MULTI_DAY_REQUESTS_ALLOWED_USER_IDS;
+    } else {
+      process.env.MULTI_DAY_REQUESTS_ALLOWED_USER_IDS = previousAllowedIds;
+    }
+  }
 });
 
 test("recomputes the amount from unequal remaining child prices", async () => {

@@ -18,7 +18,7 @@ export default async function CreatePage() {
       userEmail={session.email}
       region={region}
       mapSettings={mapSettings}
-      multiDayRequestsEnabled={isMultiDayRequestsEnabled()}
+      multiDayRequestsEnabled={isMultiDayRequestsEnabled(session.userId)}
     />
   );
 }
