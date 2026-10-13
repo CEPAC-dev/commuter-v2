@@ -6,6 +6,8 @@ export type TripTabRow = {
   isStandalone?: boolean;
   status: string;
   paymentStatus?: string;
+  parentPaymentStatus?: string | null;
+  canPay?: boolean;
   date: string;
   pickupTime: string;
   parentRequestStatus?: string | null;
@@ -16,7 +18,7 @@ export type TripTabItem<T extends TripTabRow> =
   | { kind: "trip"; date: string; trip: T }
   | { kind: "request"; date: string; requestId: string; trips: T[] };
 
-export type TripTabKey = "all" | "pending" | "upcoming" | "ongoing";
+export type TripTabKey = "all" | "bookings" | "pending" | "upcoming" | "ongoing";
 
 export function buildTripTabView<T extends TripTabRow>(
   rows: readonly T[],
@@ -25,6 +27,7 @@ export function buildTripTabView<T extends TripTabRow>(
 ): {
   counts: Record<TripTabKey, number>;
   items: TripTabItem<T>[];
+  readyToPayCount: number;
 } {
   const pendingByRequest = new Map<string, T[]>();
   const pendingStandalone: T[] = [];
@@ -82,8 +85,28 @@ export function buildTripTabView<T extends TripTabRow>(
     date: trip.date,
     trip,
   }));
+  const bookingsItems = pendingItems.filter(
+    (item) =>
+      item.kind === "request" &&
+      item.trips.length > 1 &&
+      item.trips[0].parentPaymentStatus !== "paid",
+  );
+  const bookedRequestIds = new Set(
+    bookingsItems.map((item) => item.requestId),
+  );
+  const visiblePendingItems = pendingItems.filter(
+    (item) => item.kind !== "request" || !bookedRequestIds.has(item.requestId),
+  );
+  bookingsItems.sort((left, right) => {
+    if (left.kind !== "request" || right.kind !== "request") return 0;
+    const leftReady = left.trips.some((trip) => trip.canPay);
+    const rightReady = right.trips.some((trip) => trip.canPay);
+    return Number(rightReady) - Number(leftReady) || left.date.localeCompare(right.date);
+  });
   const allPendingTrips = [
-    ...Array.from(pendingByRequest.values()).flat(),
+    ...Array.from(pendingByRequest)
+      .filter(([requestId]) => !bookedRequestIds.has(requestId))
+      .flatMap(([, trips]) => trips),
     ...pendingStandalone,
   ].map((trip) => ({
     kind: "trip" as const,
@@ -99,15 +122,24 @@ export function buildTripTabView<T extends TripTabRow>(
     upcoming: upcoming.length,
     ongoing: ongoing.length,
     all: allItems.length,
+    bookings: bookingsItems.length,
   };
   const items =
     selected === "all"
       ? allItems
+      : selected === "bookings"
+        ? bookingsItems
       : selected === "pending"
-        ? pendingItems
+        ? visiblePendingItems
         : selected === "upcoming"
           ? upcomingItems
           : ongoingItems;
 
-  return { counts, items };
+  return {
+    counts: { ...counts, pending: visiblePendingItems.length },
+    items,
+    readyToPayCount: bookingsItems.filter(
+      (item) => item.kind === "request" && item.trips.some((trip) => trip.canPay),
+    ).length,
+  };
 }
