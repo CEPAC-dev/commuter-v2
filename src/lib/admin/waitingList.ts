@@ -33,7 +33,10 @@ export function hasPastTrip(
 
 export const hasPastWaitingListTrip = hasPastTrip;
 
-export function countWaitingListRows(requestCount: number, tripCount: number): number {
+export function countWaitingListRows(
+  requestCount: number,
+  tripCount: number,
+): number {
   return requestCount + tripCount;
 }
 
@@ -48,8 +51,10 @@ export function paginateWaitingListRows<
       const createdAtDifference =
         new Date(left.record.createdAt).getTime() -
         new Date(right.record.createdAt).getTime();
-      return createdAtDifference ||
-        String(left.record._id).localeCompare(String(right.record._id));
+      return (
+        createdAtDifference ||
+        String(left.record._id).localeCompare(String(right.record._id))
+      );
     })
     .slice((page - 1) * limit, page * limit);
 }
@@ -70,11 +75,16 @@ export function validateWaitingListAction(
     return { ok: false, error: "reason is only accepted when rejecting." };
   }
 
-  if (input.action === "reject" && input.reason !== undefined && typeof input.reason !== "string") {
+  if (
+    input.action === "reject" &&
+    input.reason !== undefined &&
+    typeof input.reason !== "string"
+  ) {
     return { ok: false, error: "reason must be a string." };
   }
 
-  const reason = typeof input.reason === "string" ? input.reason.trim() : undefined;
+  const reason =
+    typeof input.reason === "string" ? input.reason.trim() : undefined;
   if (input.action === "reject" && !reason) {
     return { ok: false, error: "reason is required when rejecting." };
   }
@@ -112,7 +122,9 @@ export function buildWaitingListReviewUpdate(
       reviewedAt,
       ...(action === "reject" && reason ? { rejectionReason: reason } : {}),
     },
-    ...(action === "reject" && !reason ? { $unset: { rejectionReason: 1 } } : {}),
+    ...(action === "reject" && !reason
+      ? { $unset: { rejectionReason: 1 } }
+      : {}),
   };
 }
 
@@ -152,7 +164,10 @@ export function groupPromoUsageCounts(
 
 type WaitingListNotification = {
   userId: string;
-  type: "waiting_list_created" | "waiting_list_approved" | "waiting_list_rejected";
+  type:
+    | "waiting_list_created"
+    | "waiting_list_approved"
+    | "waiting_list_rejected";
   title: string;
   body: string;
   titleAr: string;
@@ -177,6 +192,7 @@ export type WaitingListTripRecord = {
   pickupTime: string;
   arrivalTime: string;
   vehicleType: string;
+  preferedGender?: string | null;
   numberOfPassengers: number;
   priceEgp: number;
   note?: string;
