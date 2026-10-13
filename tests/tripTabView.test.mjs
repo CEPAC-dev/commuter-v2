@@ -57,6 +57,21 @@ test("one-day unpaid Requests remain individual Pending trips", () => {
   assert.equal(view.items[0].trip.id, "one-day");
 });
 
+test("approval-waiting groups and single trips add no payable Pending items", () => {
+  const view = buildTripTabView(
+    [
+      { id: "waiting-1", requestId: "request", isStandalone: false, status: "pending_payment", parentRequestStatus: "waiting_list", parentPaymentStatus: "pending", date: "2026-10-04", pickupTime: "09:00" },
+      { id: "waiting-2", requestId: "request", isStandalone: false, status: "pending_payment", parentRequestStatus: "waiting_list", parentPaymentStatus: "pending", date: "2026-10-05", pickupTime: "09:00" },
+      { id: "waiting-single", requestId: "single", isStandalone: true, status: "waiting_list", paymentStatus: "pending", date: "2026-10-04", pickupTime: "09:00" },
+    ],
+    "pending",
+    now,
+  );
+  assert.equal(view.counts.pending, 2);
+  assert.equal(view.payablePendingCount, 0);
+  assert.deepEqual(view.items.map((item) => item.kind), ["request", "trip"]);
+});
+
 test("payable Pending count uses the existing canPay rule for groups and single Trips", () => {
   const trips = rows();
   const expectedPayableCount = new Set(
