@@ -171,7 +171,7 @@ export default function RequestGroupCancellationControls({
                 className="my-trips-booking-action booking-action-icon booking-day-view"
                 aria-label={`${translate(locale, "my_trips.view_trip")} · ${trip.dateLabel}`}
               >
-                <ChevronRight size={17} aria-hidden="true" />
+                <ChevronRight className="rtl-directional-icon" size={17} aria-hidden="true" />
               </Link>
             </div>
           ))}

@@ -41,6 +41,7 @@ import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
 import { buildTripTabView, type TripTabKey } from "@/lib/tripTabView.ts";
 import { normalizePassengerTabKey } from "@/lib/tripTabs.ts";
 import { getNextTrip } from "@/lib/nextTrip.ts";
+import { multiDayBookingCountKey } from "@/lib/i18n/multiDayBooking.ts";
 
 export const metadata = { title: "My trips — Commuter" };
 export const dynamic = "force-dynamic";
@@ -593,10 +594,14 @@ function RequestTripGroupCard({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
           <strong style={{ color: "#0B1E3D", fontSize: 14 }}>
-            {translate(locale, "my_trips.multi_day_booking", {
-              count: trips.length,
-              plural: trips.length === 1 ? "" : "s",
-            })}
+            {translate(
+              locale,
+              multiDayBookingCountKey(locale, trips.length),
+              {
+                count: trips.length,
+                plural: trips.length === 1 ? "" : "s",
+              },
+            )}
           </strong>
           <span
             style={{
@@ -625,7 +630,7 @@ function RequestTripGroupCard({
               size={14}
               color="#91A6A3"
               aria-hidden="true"
-              style={locale === "ar" ? { transform: "scaleX(-1)" } : undefined}
+              className="rtl-directional-icon"
             />
             <span title={firstRoute.dropoff}>{truncate(firstRoute.dropoff)}</span>
           </div>
@@ -642,7 +647,7 @@ function RequestTripGroupCard({
             id: trip.id,
             dateLabel: prettyDate(locale, trip.date),
             pickupTimeLabel: formatTime(locale, trip.pickupTime),
-            routeLabel: `${routes[index].pickup} → ${routes[index].dropoff}`,
+            routeLabel: `${routes[index].pickup} ${locale === "ar" ? "←" : "→"} ${routes[index].dropoff}`,
             priceEgp: trip.priceEgp,
             priceLabel: formatEgp(locale, trip.priceEgp),
           }))}
@@ -1243,7 +1248,7 @@ export default async function MyTripsPage({
                   <Link className="my-trips-alert" href="/my-trips?group=pending" aria-label={translate(locale, payablePendingCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: toArabicDigitsIf(locale, String(payablePendingCount)) })}>
                     <Clock size={15} aria-hidden="true" />
                     {translate(locale, payablePendingCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: toArabicDigitsIf(locale, String(payablePendingCount)) })}
-                    <ChevronRight size={15} aria-hidden="true" />
+                    <ChevronRight className="rtl-directional-icon" size={15} aria-hidden="true" />
                   </Link>
                 )}
                 {approvalRequestCount > 0 && (
@@ -1815,6 +1820,7 @@ export default async function MyTripsPage({
                                   }}
                                 >
                                   <ChevronRight
+                                    className="rtl-directional-icon"
                                     size={16}
                                     color="#9aa7b4"
                                     aria-hidden="true"
@@ -2102,7 +2108,7 @@ export default async function MyTripsPage({
                                   </span>
                                   <span className="trip-card-view-action">
                                     {translate(locale, "my_trips.view_trip")}
-                                    <ChevronRight size={15} aria-hidden="true" />
+                                    <ChevronRight className="rtl-directional-icon" size={15} aria-hidden="true" />
                                   </span>
                                 </div>
                               </>

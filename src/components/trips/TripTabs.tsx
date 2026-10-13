@@ -119,12 +119,12 @@ export default function TripTabs({
         </nav>
         <Link className="my-trips-history-link my-trips-history-link-desktop" href="/my-trips/history" aria-label={t("my_trips.view_history")}>
           {t("my_trips.view_history")}
-          <ChevronRight size={15} aria-hidden="true" />
+          <ChevronRight className="rtl-directional-icon" size={15} aria-hidden="true" />
         </Link>
       </div>
       <Link className="my-trips-history-link my-trips-history-link-mobile" href="/my-trips/history" aria-label={t("my_trips.view_history")}>
         {t("my_trips.view_history")}
-        <ChevronRight size={15} aria-hidden="true" />
+        <ChevronRight className="rtl-directional-icon" size={15} aria-hidden="true" />
       </Link>
       <style jsx>{`
         .trip-tab-link:focus-visible {

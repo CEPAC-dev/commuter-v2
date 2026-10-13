@@ -157,7 +157,7 @@ export default async function TripHistoryPage({
                           {translate(locale, status.key)}
                         </span>
                       </span>
-                      <span style={{ color: "#5A6A7A", fontSize: 12, overflowWrap: "anywhere" }}>{first.pickupAddress} → {first.dropoffAddress}</span>
+                      <span style={{ color: "#5A6A7A", fontSize: 12, overflowWrap: "anywhere" }}>{first.pickupAddress} {locale === "ar" ? "←" : "→"} {first.dropoffAddress}</span>
                       <span style={{ color: "#5A6A7A", fontSize: 12 }}>{translate(locale, "pickup")} {formatTime(locale, first.pickupTime)} · {translate(locale, "arrive")} {formatTime(locale, first.arrivalTime)} · {formatEgp(locale, first.priceEgp)}</span>
                       {rejectionDisplay.showReasonCard && (
                         <span style={{ color: "#6E4542", fontSize: 12 }}>
@@ -201,7 +201,7 @@ export default async function TripHistoryPage({
                             </span>
                           </span>
                         </span>
-                        <span style={{ color: "#5A6A7A", fontSize: 12, overflowWrap: "anywhere" }}>{trip.pickupAddress} → {trip.dropoffAddress}</span>
+                        <span style={{ color: "#5A6A7A", fontSize: 12, overflowWrap: "anywhere" }}>{trip.pickupAddress} {locale === "ar" ? "←" : "→"} {trip.dropoffAddress}</span>
                         <span style={{ color: "#5A6A7A", fontSize: 12 }}>{translate(locale, "pickup")} {formatTime(locale, trip.pickupTime)} · {translate(locale, "arrive")} {formatTime(locale, trip.arrivalTime)} · {formatEgp(locale, trip.priceEgp)}</span>
                       </Link>
                     );

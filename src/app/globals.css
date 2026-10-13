@@ -441,11 +441,11 @@
   color: var(--color-primary);
 }
 
-.booking-action-icon svg {
+.rtl-directional-icon {
   transition: transform 160ms ease;
 }
 
-html[dir="rtl"] .booking-action-icon svg {
+html[dir="rtl"] .rtl-directional-icon {
   transform: scaleX(-1);
 }
 

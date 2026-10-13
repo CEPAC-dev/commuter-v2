@@ -469,7 +469,7 @@ export default function NotificationCenter({
                         <em>{notificationLinkLabel(notification)}</em>
                       )}
                     </span>
-                    <ChevronRight size={16} aria-hidden="true" />
+                    <ChevronRight className="rtl-directional-icon" size={16} aria-hidden="true" />
                   </button>
                   {!notification.isRead && (
                     <button
@@ -498,7 +498,7 @@ export default function NotificationCenter({
             }}
           >
             {t("notifications.see_all")}
-            <ChevronRight size={16} aria-hidden="true" />
+            <ChevronRight className="rtl-directional-icon" size={16} aria-hidden="true" />
           </button>
         </section>
       )}

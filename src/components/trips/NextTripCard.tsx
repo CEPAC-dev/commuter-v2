@@ -51,7 +51,7 @@ export default function NextTripCard({
         </div>
         <Link className="next-trip-action" href="/create">
           {translate(locale, "my_trips.book_trip")}
-          <ArrowUpRight size={16} aria-hidden="true" />
+          <ArrowUpRight className="rtl-directional-icon" size={16} aria-hidden="true" />
         </Link>
       </section>
     );
@@ -172,7 +172,7 @@ export default function NextTripCard({
         <span className="next-trip-vehicle-name">{translate(locale, `vehicles.${trip.vehicleType}`)}</span>
         <Link className="next-trip-action" href={href} aria-label={`${translate(locale, ongoing ? "my_trips.track_trip" : "my_trips.view_trip")}: ${trip.pickupAddress} to ${trip.dropoffAddress}`}>
           {translate(locale, ongoing ? "my_trips.track_short" : "my_trips.view_trip")}
-          {ongoing ? <Navigation size={16} aria-hidden="true" /> : <ArrowUpRight size={16} aria-hidden="true" />}
+          {ongoing ? <Navigation size={16} aria-hidden="true" /> : <ArrowUpRight className="rtl-directional-icon" size={16} aria-hidden="true" />}
         </Link>
       </footer>
     </section>
