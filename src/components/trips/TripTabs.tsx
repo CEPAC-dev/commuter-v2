@@ -6,7 +6,7 @@ import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useClientLocale } from "@/lib/locale.client";
 
-type TripTabKey = "all" | "pending" | "upcoming" | "ongoing";
+type TripTabKey = "all" | "bookings" | "pending" | "upcoming" | "ongoing";
 
 export default function TripTabs({
   active,
@@ -23,6 +23,7 @@ export default function TripTabs({
   const [stuck, setStuck] = useState(false);
   const tabs: { key: TripTabKey; label: string }[] = [
     { key: "all", label: t("filter.all") },
+    { key: "bookings", label: t("my_trips.bookings") },
     { key: "pending", label: t("status.pending") },
     { key: "upcoming", label: t("status.upcoming") },
     { key: "ongoing", label: t("status.ongoing") },

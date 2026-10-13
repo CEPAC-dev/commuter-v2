@@ -739,11 +739,12 @@ export default async function MyTripsPage({
   const params = await searchParams;
   const groupFilter =
     typeof params.group === "string" &&
-    ["all", "pending", "upcoming", "ongoing", "pending_payment"].includes(
+    ["all", "bookings", "pending", "upcoming", "ongoing", "pending_payment"].includes(
       params.group,
     )
       ? (params.group as
           | "all"
+          | "bookings"
           | "pending"
           | "upcoming"
           | "ongoing"
@@ -766,7 +767,9 @@ export default async function MyTripsPage({
   const driverOngoingView = isDriver && groupFilter === "ongoing";
   const passengerOngoingView = isPassenger && groupFilter === "ongoing";
   const activePassengerTab: TripTabKey =
-    groupFilter === "pending" || groupFilter === "pending_payment"
+    groupFilter === "bookings"
+      ? "bookings"
+      : groupFilter === "pending" || groupFilter === "pending_payment"
       ? "pending"
       : groupFilter === "upcoming" || groupFilter === "ongoing"
         ? groupFilter
@@ -784,8 +787,9 @@ export default async function MyTripsPage({
   const passengerHasActiveStatusFilter = Boolean(
     groupFilter &&
       groupFilter !== "all" &&
-      groupFilter !== "ongoing" &&
-      ["pending", "upcoming", "pending_payment"].includes(groupFilter),
+    groupFilter !== "bookings" &&
+    groupFilter !== "ongoing" &&
+    ["pending", "upcoming", "pending_payment"].includes(groupFilter),
   );
 
   const driverListOptions = {
@@ -807,10 +811,13 @@ export default async function MyTripsPage({
   let paginationTotal = 0;
   let tabCounts: Record<TripTabKey, number> = {
     all: 0,
+    bookings: 0,
     pending: 0,
     upcoming: 0,
     ongoing: 0,
   };
+  let readyToPayBookingCount = 0;
+  let bookingRequestIds = new Set<string>();
   const displayNow = new Date();
   if (isDriver) {
     const result = await getRidesByDriver(session.userId, driverListOptions);
@@ -827,13 +834,35 @@ export default async function MyTripsPage({
   } else {
     const result = await listUserTrips(session.userId, passengerListOptions);
     allPassengerTrips = result.rows;
+    const tabRows = result.rows.map((trip) => ({
+      ...trip,
+      canPay: getDisplayStatus({
+        request: {
+          status: trip.parentRequestStatus ?? trip.status,
+          paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
+          hasPastTrip: trip.hasPastTrip,
+          rejectionReason: trip.rejectionReason,
+        },
+        trip,
+        now: displayNow,
+      }).canPay,
+    }));
+    const bookingsView = buildTripTabView(tabRows, "bookings", displayNow);
+    bookingRequestIds = new Set(
+      bookingsView.items.flatMap((item) =>
+        item.kind === "request" ? [item.requestId] : [],
+      ),
+    );
+    readyToPayBookingCount = bookingsView.readyToPayCount;
     const selectedTab: TripTabKey =
-      groupFilter === "pending" || groupFilter === "pending_payment"
+      groupFilter === "bookings"
+        ? "bookings"
+        : groupFilter === "pending" || groupFilter === "pending_payment"
         ? "pending"
         : groupFilter === "upcoming" || groupFilter === "ongoing"
           ? groupFilter
           : "all";
-    const view = buildTripTabView(result.rows, selectedTab, displayNow);
+    const view = buildTripTabView(tabRows, selectedTab, displayNow);
     tabCounts = view.counts;
     total = view.items.length;
     paginationTotal = total;
@@ -886,15 +915,17 @@ export default async function MyTripsPage({
   const paymentRequestCount = new Set(
     allPassengerTrips
       .filter((trip) =>
+        !bookingRequestIds.has(trip.requestId) &&
         getDisplayStatus({
-          request: {
-            status: trip.parentRequestStatus ?? trip.status,
-            paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
-            hasPastTrip: trip.hasPastTrip,
-            rejectionReason: trip.rejectionReason,
-          },
-          trip,
-        }).canPay,
+            request: {
+              status: trip.parentRequestStatus ?? trip.status,
+              paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
+              hasPastTrip: trip.hasPastTrip,
+              rejectionReason: trip.rejectionReason,
+            },
+            trip,
+            now: displayNow,
+          }).canPay,
       )
       .map((trip) => trip.requestId),
   ).size;
@@ -938,6 +969,8 @@ export default async function MyTripsPage({
         ? translate(locale, "my_trips.total_ongoing", { total, plural: total === 1 ? "" : "s" })
         : activePassengerTab === "pending"
           ? translate(locale, "my_trips.total_pending_requests", { total })
+          : activePassengerTab === "bookings"
+            ? translate(locale, "my_trips.total_bookings", { total })
           : activePassengerTab === "upcoming"
             ? translate(locale, "my_trips.total_upcoming", { total, plural: total === 1 ? "" : "s" })
             : translate(locale, "my_trips.total_active", { total, plural: total === 1 ? "" : "s" });
@@ -999,6 +1032,7 @@ export default async function MyTripsPage({
           text-decoration: none;
         }
         .my-trips-alert.approval { border-color: #D8E7E3; background: #EFF7F4; color: #16594F; }
+        .my-trips-alert.booking-ready { border-color: #C7EAE3; background: #EFF9F6; color: #16594F; }
         .my-trips-alert:focus-visible, .my-trips-history-link:focus-visible,
         .next-trip-action:focus-visible, .my-trips-book-link:focus-visible {
           outline: 3px solid #F5A623;
@@ -1279,8 +1313,19 @@ export default async function MyTripsPage({
               locale={locale}
               now={displayNow}
             />
-            {(paymentRequestCount > 0 || approvalRequestCount > 0) && (
+            {(readyToPayBookingCount > 0 || paymentRequestCount > 0 || approvalRequestCount > 0) && (
               <div className="my-trips-alerts" aria-label={translate(locale, "my_trips.request_alerts")}>
+                {readyToPayBookingCount > 0 && (
+                  <Link
+                    className="my-trips-alert booking-ready"
+                    href="/my-trips?group=bookings"
+                    aria-label={translate(locale, readyToPayBookingCount === 1 ? "my_trips.booking_ready_one" : "my_trips.booking_ready_many", { count: toArabicDigitsIf(locale, String(readyToPayBookingCount)) })}
+                  >
+                    <Clock size={15} aria-hidden="true" />
+                    {translate(locale, readyToPayBookingCount === 1 ? "my_trips.booking_ready_one" : "my_trips.booking_ready_many", { count: toArabicDigitsIf(locale, String(readyToPayBookingCount)) })}
+                    <ChevronRight size={15} aria-hidden="true" />
+                  </Link>
+                )}
                 {paymentRequestCount > 0 && (
                   <Link className="my-trips-alert" href="/my-trips?group=pending" aria-label={translate(locale, paymentRequestCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: paymentRequestCount })}>
                     <Clock size={15} aria-hidden="true" />

@@ -86,7 +86,7 @@ export function buildTripTabView<T extends TripTabRow>(
     trip,
   }));
   const bookingsItems = pendingItems.filter(
-    (item) =>
+    (item): item is Extract<TripTabItem<T>, { kind: "request" }> =>
       item.kind === "request" &&
       item.trips.length > 1 &&
       item.trips[0].parentPaymentStatus !== "paid",
