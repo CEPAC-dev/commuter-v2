@@ -1,4 +1,9 @@
-import { Schema, model, models, Types, type InferSchemaType } from "mongoose";
+import mongoose, { type InferSchemaType, type Query } from "mongoose";
+
+const { Schema, model, models, Types } = mongoose;
+
+const REQUEST_CREATION_DISABLED =
+  "Request creation is disabled; create a Trip instead";
 
 const RequestSchema = new Schema(
   {
@@ -66,4 +71,73 @@ const existingRequestModel = models.Request;
 if (existingRequestModel && !existingRequestModel.schema.path("regionCode")) {
   existingRequestModel.schema.add({ regionCode: RequestSchema.obj.regionCode });
 }
+
+const requestSchema = existingRequestModel?.schema ?? RequestSchema;
+requestSchema.pre(
+  "save",
+  function (this: {
+    isNew: boolean;
+    $locals: Record<string, unknown>;
+    $session: () => unknown;
+  }) {
+    if (
+      this.isNew &&
+      !(
+        this.$locals.groupCreationApproved === true &&
+        this.$session()
+      )
+    ) {
+      throw new Error(REQUEST_CREATION_DISABLED);
+    }
+  },
+);
+requestSchema.pre("insertMany", function () {
+  throw new Error(REQUEST_CREATION_DISABLED);
+});
+
+for (const method of [
+  "update",
+  "updateOne",
+  "updateMany",
+  "findOneAndUpdate",
+  "replaceOne",
+  "findOneAndReplace",
+] as const) {
+  requestSchema.pre(method, function (this: Query<unknown, unknown>) {
+    if (this.getOptions().upsert) {
+      throw new Error(REQUEST_CREATION_DISABLED);
+    }
+  });
+}
+
+requestSchema.pre("bulkWrite", function (...args: unknown[]) {
+  const operations = args[0];
+  const options = args[1];
+  if (!Array.isArray(operations)) {
+    throw new Error("Request bulkWrite requires an operations array");
+  }
+
+  const hasInsertOrUpsert = operations.some((operation) => {
+    if (!operation || typeof operation !== "object") return false;
+    const write = operation as Record<string, unknown>;
+    if ("insertOne" in write) return true;
+    return ["updateOne", "updateMany", "replaceOne"].some((key) => {
+      const update = write[key];
+      return (
+        update !== null &&
+        typeof update === "object" &&
+        (update as Record<string, unknown>).upsert === true
+      );
+    });
+  });
+  if (
+    hasInsertOrUpsert ||
+    (options !== null &&
+      typeof options === "object" &&
+      (options as Record<string, unknown>).upsert === true)
+  ) {
+    throw new Error(REQUEST_CREATION_DISABLED);
+  }
+});
+
 export const Request = existingRequestModel || model("Request", RequestSchema);

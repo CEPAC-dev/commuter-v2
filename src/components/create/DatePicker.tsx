@@ -9,14 +9,23 @@ import { toArabicDigits } from "@/lib/i18n";
 interface Props {
   value: string[]; // selected "YYYY-MM-DD" dates
   onChange: (dates: string[]) => void;
+  singleSelect?: boolean;
 }
 
-export default function DatePicker({ value, onChange }: Props) {
+export default function DatePicker({
+  value,
+  onChange,
+  singleSelect = false,
+}: Props) {
   const days = bookingWindow();
   const { t, locale } = useClientLocale();
   const dateLocale = locale === "ar" ? ar : enUS;
 
   function toggle(day: string) {
+    if (singleSelect) {
+      if (!value.includes(day)) onChange([day]);
+      return;
+    }
     if (value.includes(day)) {
       onChange(value.filter((d) => d !== day));
     } else {
@@ -34,11 +43,15 @@ export default function DatePicker({ value, onChange }: Props) {
           margin: "0 0 10px",
         }}
       >
-        {t("create.request_dates")}
+        {t(singleSelect ? "create.trip_date" : "create.request_dates")}
       </p>
       <div
         role="group"
-        aria-label={t("create.select_dates_aria")}
+        aria-label={t(
+          singleSelect
+            ? "create.select_trip_date_aria"
+            : "create.select_dates_aria",
+        )}
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(84px, 1fr))",
@@ -96,9 +109,11 @@ export default function DatePicker({ value, onChange }: Props) {
         })}
       </div>
       <p style={{ fontSize: 12, color: "#5A6A7A", margin: "8px 0 0" }}>
-        {t("create.pick_days_note")}
+        {t(singleSelect ? "create.pick_one_day_note" : "create.pick_days_note")}
       </p>
-      {value.length === days.length && days.every((day) => value.includes(day)) && (
+      {!singleSelect &&
+        value.length === days.length &&
+        days.every((day) => value.includes(day)) && (
         <p
           style={{
             margin: "8px 0 0",
@@ -109,7 +124,7 @@ export default function DatePicker({ value, onChange }: Props) {
         >
           Full week selected — 5% off applies to the 7th-day trips.
         </p>
-      )}
+        )}
     </div>
   );
 }

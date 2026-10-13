@@ -4,6 +4,7 @@ import { getProfile } from "@/lib/services/profile";
 import { User } from "@/models/User";
 import { normalizeRegion } from "@/lib/config/regions";
 import { getMapSettings } from "@/lib/maps/settings";
+import { isMultiDayRequestsEnabled } from "@/lib/config/featureFlags";
 import CreateClient from "@/components/create/CreateClient";
 
 export default async function CreatePage() {
@@ -27,6 +28,7 @@ export default async function CreatePage() {
       userGender={userGender}
       region={region}
       mapSettings={mapSettings}
+      multiDayRequestsEnabled={isMultiDayRequestsEnabled(session.userId)}
     />
   );
 }

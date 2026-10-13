@@ -89,11 +89,42 @@ function TripActions({
   isDriver: boolean;
 }) {
   if (isDriver) return null;
+  if (trip.isStandalone) {
+    return (
+      <div style={{ display: "grid", gap: 8 }}>
+        {displayStatus.canPay && (
+          <ContinueCheckoutButton
+            bookingId={trip.id}
+            amountEgp={trip.priceEgp}
+            walletBalance={walletBalance}
+          />
+        )}
+        {displayStatus.canCancel && (
+          <CancelTripModal
+            tripId={trip.id}
+            tripNumber={trip.tripNumber}
+            date={trip.date}
+            priceEgp={trip.priceEgp}
+            status={trip.status}
+            isStandalone
+            paymentStatus={trip.paymentStatus}
+          />
+        )}
+        {displayStatus.canRate && (
+          <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />
+        )}
+      </div>
+    );
+  }
   if (displayStatus.canPay) {
     return (
       <ContinueCheckoutButton
-        bookingId={trip.requestId}
-        amountEgp={trip.requestAmountEgp ?? trip.priceEgp}
+        bookingId={trip.isStandalone ? trip.id : trip.requestId}
+        amountEgp={
+          trip.isStandalone
+            ? trip.priceEgp
+            : trip.requestAmountEgp ?? trip.priceEgp
+        }
         walletBalance={walletBalance}
       />
     );
@@ -106,6 +137,8 @@ function TripActions({
         date={trip.date}
         priceEgp={trip.priceEgp}
         status={trip.status}
+        isStandalone={false}
+        paymentStatus={trip.paymentStatus}
       />
     );
   }
@@ -242,12 +275,13 @@ export default async function TripDetailPage({
           box-sizing: border-box;
           display: flex;
           flex-direction: column;
+          gap: 24px;
         }
         .trip-detail-heading {
           display: flex;
           align-items: center;
           gap: var(--space-16);
-          margin-bottom: 28px;
+          margin-bottom: 0;
         }
         .trip-detail-heading-icon {
           width: 64px;
@@ -266,34 +300,36 @@ export default async function TripDetailPage({
           min-width: 0;
           flex: 1;
         }
+        .trip-rejection-card { padding: 20px; border-radius: 12px; }
         .trip-detail-grid {
           display: grid;
           grid-template-columns: minmax(0, 1fr);
-          gap: var(--space-20);
+          gap: 16px;
         }
         .trip-detail-primary,
         .trip-detail-secondary {
           display: flex;
           flex-direction: column;
-          gap: var(--space-20);
+          gap: 16px;
           min-width: 0;
         }
         .trip-detail-map-card {
           background: #fff;
-          border-radius: 16px;
-          border: 1px solid #eef0f3;
+          border-radius: 12px;
+          border: 1px solid #DCE6E4;
           overflow: hidden;
         }
-        .trip-summary-card, .trip-route-card, .trip-stepper-card {
+        .trip-summary-card, .trip-route-card, .trip-stepper-card,
+        .trip-expandable-details, .trip-passenger-stops-card {
           background: #fff;
           border: 1px solid #DCE6E4;
-          border-radius: 8px;
-          padding: var(--space-16);
+          border-radius: 12px;
+          padding: 20px;
         }
-        .trip-expandable-details { overflow: hidden; border: 1px solid #DCE6E4; border-radius: 8px; background: #fff; }
-        .trip-expandable-details > summary { padding: 13px 16px; color: #006D60; font-size: 13px; font-weight: 800; cursor: pointer; }
+        .trip-expandable-details { overflow: hidden; padding: 0; }
+        .trip-expandable-details > summary { padding: 16px 20px; color: #006D60; font-size: 13px; font-weight: 800; cursor: pointer; }
         .trip-expandable-details > summary:focus-visible { outline: 3px solid #F5A623; outline-offset: -3px; }
-        .trip-expandable-content { padding: 0 12px 12px; }
+        .trip-expandable-content { padding: 0 20px 20px; }
         .trip-summary-card { display: grid; gap: var(--space-12); }
         .trip-summary-label { margin: 0; color: #526262; font-size: 11px; font-weight: 800; text-transform: uppercase; }
         .trip-summary-price { margin: 0; color: #0B1E3D; font-size: 24px; font-weight: 800; }
@@ -344,6 +380,15 @@ export default async function TripDetailPage({
         .trip-shared-step.current .trip-shared-step-mark { border-color: #007A6A; background: #E8F4F1; color: #006D60; }
         .trip-shared-step.rejected { color: #8F2D28; }
         .trip-shared-step.rejected .trip-shared-step-mark { border-color: #C0392B; background: #FDECEA; color: #8F2D28; }
+        @media (max-width: 899px) {
+          .trip-detail-grid { gap: 16px; }
+          .trip-detail-primary, .trip-detail-secondary { gap: 16px; }
+          .trip-rejection-card { padding: 16px; }
+          .trip-summary-card, .trip-route-card, .trip-stepper-card,
+          .trip-passenger-stops-card { padding: 16px; }
+          .trip-expandable-details > summary { padding: 14px 16px; }
+          .trip-expandable-content { padding: 0 16px 16px; }
+        }
         @media (max-width: 480px) {
           .trip-detail-heading {
             align-items: flex-start;
@@ -352,9 +397,11 @@ export default async function TripDetailPage({
         @media (min-width: 900px) {
           .trip-detail-shell {
             padding: 40px var(--space-32) 72px;
+            gap: 28px;
           }
-          .trip-detail-grid { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+          .trip-detail-grid { grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
           .trip-detail-secondary { position: sticky; top: var(--app-header-offset); }
+          .trip-detail-primary, .trip-detail-secondary { gap: 24px; }
           .trip-detail-desktop-actions { display: flex; flex-direction: column; gap: 10px; }
           .trip-detail-mobile-actions { display: none; }
         }
@@ -366,11 +413,9 @@ export default async function TripDetailPage({
             className="trip-rejection-card"
             aria-labelledby="rejection-title"
             style={{
-              marginBottom: 24,
-              padding: "18px 20px",
+              marginBottom: 0,
               border: "1px solid #EBC7C4",
               borderInlineStart: "4px solid #C0392B",
-              borderRadius: 8,
               background: "#FFF8F7",
             }}
           >
@@ -416,7 +461,7 @@ export default async function TripDetailPage({
               {vLabel}
             </h1>
             <p style={{ margin: "0 0 9px", fontSize: 13, color: "#5A6A7A" }}>
-              {translate(locale, "my_trips.ride_number", { n: trip.tripNumber })} · {formatDate(locale, trip.date)}
+              {trip.tripNumber != null && translate(locale, "my_trips.ride_number", { rideNumber: trip.tripNumber })}{trip.tripNumber != null ? " · " : ""}{formatDate(locale, trip.date)}
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <Pill label={translate(locale, trip.rideType === "shared" ? "ride.shared" : "ride.private")} bg="#EEF2F2" color="#405555" />
@@ -603,7 +648,10 @@ export default async function TripDetailPage({
                     bg={{ neutral: "#EEF2F2", warning: "#FFF3E0", success: "#E8F5E9", danger: "#FFEBEE", info: "#E2F8F5" }[displayStatus.tone]}
                     color={{ neutral: "#526262", warning: "#8B4A08", success: "#166B48", danger: "#8F2D28", info: "#006D60" }[displayStatus.tone]}
                   />
-                  {!rejectionDisplay.showReasonCard && trip.parentRequestStatus !== "waiting_list" && (
+                  {!rejectionDisplay.showReasonCard &&
+                    (trip.isStandalone
+                      ? trip.status !== "waiting_list"
+                      : trip.parentRequestStatus !== "waiting_list") && (
                     <Pill
                       label={translate(locale, `payments.${parentPaymentStatus}`)}
                       bg={PAY_PILL[parentPaymentStatus]?.bg ?? PAY_PILL.pending.bg}
@@ -666,7 +714,7 @@ export default async function TripDetailPage({
               )}
 
               {trip.rideType === "shared" && sharedStepper.step !== null && (
-                <div className="trip-stepper-card" style={{ padding: 12 }}>
+                <div className="trip-stepper-card">
                   <p className="trip-summary-label" style={{ marginBottom: 10 }}>{translate(locale, "trip_detail.shared_progress")}</p>
                   <ol className="trip-shared-stepper" aria-label={translate(locale, "trip_detail.shared_progress")}>
                     {[
@@ -764,14 +812,7 @@ export default async function TripDetailPage({
 
             {/* Distinct passenger points (shared rides only) */}
             {trip.rideType === "shared" && distinctPassengers.length > 0 && (
-              <div className="trip-secondary-details"
-                style={{
-                  background: "#fff",
-                  borderRadius: 14,
-                  border: "1px solid #eef0f3",
-                  padding: "16px 18px",
-                }}
-              >
+              <div className="trip-secondary-details trip-passenger-stops-card">
                 <p
                   style={{
                     margin: "0 0 12px",

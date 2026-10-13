@@ -4,7 +4,7 @@ import { WalletTransaction } from "@/models/WalletTransaction";
 import { WithdrawalRequest } from "@/models/WithdrawalRequest";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { getAdminSettings } from "@/lib/cancellationPolicy";
-import mongoose, { Types } from "mongoose";
+import mongoose, { Types, type ClientSession } from "mongoose";
 
 const MAX_WALLET_AMOUNT_EGP = 1_000_000_000;
 
@@ -22,6 +22,21 @@ function amount(value: number): number {
   )
     throw new RangeError("Wallet amount must be a positive whole EGP value.");
   return value;
+}
+
+function reservationAmount(value: number): number {
+  const piasters = Math.round(value * 100);
+  if (
+    !Number.isFinite(value) ||
+    !Number.isSafeInteger(piasters) ||
+    piasters <= 0 ||
+    piasters > MAX_WALLET_AMOUNT_EGP * 100 ||
+    Math.abs(value * 100 - piasters) > 1e-7
+  )
+    throw new RangeError(
+      "Wallet reservation must be a positive amount with at most two decimals.",
+    );
+  return piasters / 100;
 }
 
 function description(value: string): string {
@@ -416,7 +431,7 @@ export async function reserveWallet(
 ): Promise<{ transactionId: string; availableEgp: number } | null> {
   await connectDB();
   const uid = objectId(userId, "userId");
-  const safeAmount = amount(amountEgp);
+  const safeAmount = reservationAmount(amountEgp);
   const safeDescription = description(opts.description);
   const paymentId = objectId(opts.paymentId, "paymentId");
   const bookingId = opts.bookingId
@@ -485,7 +500,12 @@ export async function reserveWallet(
  */
 export async function captureReservation(
   reservationTxId: string,
-  opts: { description: string; paymentId: string; bookingId?: string },
+  opts: {
+    description: string;
+    paymentId: string;
+    bookingId?: string;
+    session?: ClientSession;
+  },
 ): Promise<number | null> {
   await connectDB();
   const reservationId = objectId(reservationTxId, "reservationTxId");
@@ -494,17 +514,31 @@ export async function captureReservation(
   const bookingId = opts.bookingId
     ? objectId(opts.bookingId, "bookingId")
     : undefined;
-  const session = await mongoose.startSession();
+  const session = opts.session ?? (await mongoose.startSession());
+  const ownsSession = !opts.session;
   let balance: number | null = null;
 
   try {
-    await session.withTransaction(async () => {
+    const capture = async () => {
       const reservation = await WalletTransaction.findOneAndUpdate(
         { _id: reservationId, type: "payment_reserved", status: "pending" },
         { $set: { status: "completed" } },
         { returnDocument: "after", session, runValidators: true },
       );
-      if (!reservation) return;
+      if (!reservation) {
+        const existingCapture = await WalletTransaction.findOne({
+          type: "payment_captured",
+          paymentId,
+          bookingId,
+        })
+          .session(session)
+          .select("balanceAfterEgp");
+        if (existingCapture) {
+          balance = existingCapture.balanceAfterEgp ?? 0;
+          return;
+        }
+        return;
+      }
 
       const wallet = await Wallet.findOneAndUpdate(
         {
@@ -540,10 +574,13 @@ export async function captureReservation(
         { session },
       );
       balance = wallet.balanceEgp;
-    });
+    };
+
+    if (ownsSession) await session.withTransaction(capture);
+    else await capture();
     return balance;
   } finally {
-    await session.endSession();
+    if (ownsSession) await session.endSession();
   }
 }
 
@@ -553,7 +590,12 @@ export async function captureReservation(
  */
 export async function releaseReservation(
   reservationTxId: string,
-  opts: { description: string; paymentId: string; bookingId?: string },
+  opts: {
+    description: string;
+    paymentId: string;
+    bookingId?: string;
+    session?: ClientSession;
+  },
 ): Promise<boolean> {
   await connectDB();
   const reservationId = objectId(reservationTxId, "reservationTxId");
@@ -562,11 +604,12 @@ export async function releaseReservation(
   const bookingId = opts.bookingId
     ? objectId(opts.bookingId, "bookingId")
     : undefined;
-  const session = await mongoose.startSession();
+  const session = opts.session ?? (await mongoose.startSession());
+  const ownsSession = !opts.session;
   let released = false;
 
   try {
-    await session.withTransaction(async () => {
+    const release = async () => {
       const reservation = await WalletTransaction.findOneAndUpdate(
         { _id: reservationId, type: "payment_reserved", status: "pending" },
         { $set: { status: "failed" } },
@@ -603,10 +646,13 @@ export async function releaseReservation(
         { session },
       );
       released = true;
-    });
+    };
+
+    if (ownsSession) await session.withTransaction(release);
+    else await release();
     return released;
   } finally {
-    await session.endSession();
+    if (ownsSession) await session.endSession();
   }
 }
 

@@ -55,11 +55,14 @@ export async function POST(
       const refundAmount = refundReq.refundAmount;
       responseRefundAmount = refundAmount;
       const trip = await Trip.findById(refundReq.tripId)
-        .select("requestId")
+        .select("_id requestId")
         .session(dbSession);
-      const payment = trip?.requestId
+      const paymentBookingId = trip
+        ? trip.requestId ?? trip._id
+        : undefined;
+      const payment = paymentBookingId
         ? await Payment.findOne({
-            bookingId: trip.requestId,
+            bookingId: paymentBookingId,
             overallStatus: { $in: ["paid", "partially_refunded"] },
           })
             .sort({ createdAt: -1 })
@@ -91,7 +94,7 @@ export async function POST(
             description: `Admin approved cancellation refund for trip`,
             balanceAfterEgp: wallet.balanceEgp,
             tripId: refundReq.tripId,
-            bookingId: trip?.requestId,
+            bookingId: paymentBookingId,
             paymentId: payment?._id,
           },
         ],

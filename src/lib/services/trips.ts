@@ -245,6 +245,8 @@ export async function listDriverTrips(
           date: string;
           paymentStatus: string;
           status: string;
+          rejectionReason?: string | null;
+          reviewedAt?: Date | string | null;
           vehicleType: string;
           pickup: GeoPoint;
           dropoff: GeoPoint;
@@ -278,11 +280,13 @@ export async function listDriverTrips(
   );
 
   const requestIds = Array.from(
-    new Set(rawTrips.map((t) => String(t.requestId))),
+    new Set(rawTrips.flatMap((trip) => trip.requestId ? [String(trip.requestId)] : [])),
   );
-  const requests = await RequestModel.find({ _id: { $in: requestIds } })
+  const requests = requestIds.length
+    ? await RequestModel.find({ _id: { $in: requestIds } })
     .select("amountEgp")
-    .lean<{ _id: unknown; amountEgp: number }[]>();
+    .lean<{ _id: unknown; amountEgp: number }[]>()
+    : [];
   const amountByRequestId = new Map(
     requests.map((r) => [String(r._id), r.amountEgp]),
   );
@@ -293,7 +297,8 @@ export async function listDriverTrips(
     rows: rawTrips.map((trip) => ({
       id: String(trip._id),
       tripNumber: trip.tripNumber,
-      requestId: String(trip.requestId),
+      requestId: trip.requestId ? String(trip.requestId) : String(trip._id),
+      isStandalone: trip.requestId == null,
       date: trip.date,
       paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
       status: (trip.status as BookingStatus) ?? "pending_payment",
@@ -314,7 +319,9 @@ export async function listDriverTrips(
       distanceKm: trip.distanceKm,
       durationMinutes: trip.durationMinutes,
       bookingAmountEgp:
-        amountByRequestId.get(String(trip.requestId)) ?? trip.priceEgp,
+        (trip.requestId
+          ? amountByRequestId.get(String(trip.requestId))
+          : undefined) ?? trip.priceEgp,
       createdAt:
         trip.createdAt instanceof Date
           ? trip.createdAt.toISOString()
@@ -372,6 +379,8 @@ export async function listUserTrips(
     date: string;
     paymentStatus: string;
     status: string;
+    rejectionReason?: string | null;
+    reviewedAt?: Date | string | null;
     vehicleType: string;
     pickup: GeoPoint;
     dropoff: GeoPoint;
@@ -399,32 +408,97 @@ export async function listUserTrips(
       Trip.distinct("requestId", tripMatch),
     ]);
     total = matchedTripCount;
-    let scopedRequestIds = matchingRequestIds;
+    let scopedRequestIds = matchingRequestIds.filter(
+      (requestId): requestId is NonNullable<typeof requestId> =>
+        requestId !== null && requestId !== undefined,
+    );
+    const standaloneMatch: Record<string, unknown> = {
+      ...tripMatch,
+      requestId: null,
+    };
     if (tripNumber != null && (dateFrom || dateTo)) {
       const dateMatch = {
         ...buildHistoryTripMatch(userId, { from: dateFrom, to: dateTo }),
         userId: new Types.ObjectId(userId),
       };
-      const dateRequestIds = await Trip.distinct("requestId", dateMatch);
+      const [dateRequestIds, dateStandaloneIds] = await Promise.all([
+        Trip.distinct("requestId", dateMatch),
+        Trip.distinct("_id", {
+          ...dateMatch,
+          ...tripMatch,
+          requestId: null,
+        }),
+      ]);
       const dateRequestIdSet = new Set(dateRequestIds.map(String));
       scopedRequestIds = matchingRequestIds.filter((requestId) =>
-        dateRequestIdSet.has(String(requestId)),
+        requestId != null && dateRequestIdSet.has(String(requestId)),
       );
+      standaloneMatch._id = { $in: dateStandaloneIds };
     }
-    totalRequests = scopedRequestIds.length;
-    const requestQuery = RequestModel.find({
-      _id: { $in: scopedRequestIds },
-      userId: new Types.ObjectId(userId),
-    })
-      .select("_id")
+    const candidateLimit = fetchAll ? 0 : page * pageSize;
+    const requestQuery = scopedRequestIds.length
+      ? RequestModel.find({
+          _id: { $in: scopedRequestIds },
+          userId: new Types.ObjectId(userId),
+        })
+          .select("_id createdAt")
+          .sort({ createdAt: -1 })
+      : null;
+    const standaloneQuery = Trip.find(standaloneMatch)
+      .select("_id createdAt")
       .sort({ createdAt: -1 });
-    if (!fetchAll) requestQuery.skip((page - 1) * pageSize).limit(pageSize);
-    const requestPage = await requestQuery.lean<{ _id: unknown }[]>();
-    const pageRequestIds = requestPage.map((request) => request._id);
-    rawTrips = pageRequestIds.length
+    if (candidateLimit > 0) {
+      requestQuery?.limit(candidateLimit);
+      standaloneQuery.limit(candidateLimit);
+    }
+    const [requestCandidates, standaloneCandidates, standaloneCount] =
+      await Promise.all([
+        requestQuery
+          ? requestQuery.lean<{ _id: Types.ObjectId; createdAt: Date | string }[]>()
+          : Promise.resolve([]),
+        standaloneQuery.lean<{ _id: Types.ObjectId; createdAt: Date | string }[]>(),
+        Trip.countDocuments(standaloneMatch),
+      ]);
+    const requestGroups = requestCandidates.map((request) => ({
+      kind: "request" as const,
+      id: String(request._id),
+      createdAt: request.createdAt,
+    }));
+    const standaloneGroups = standaloneCandidates.map((trip) => ({
+      kind: "trip" as const,
+      id: String(trip._id),
+      createdAt: trip.createdAt,
+    }));
+    const sortedGroups = [...requestGroups, ...standaloneGroups].sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() -
+        new Date(left.createdAt).getTime(),
+    );
+    const selectedGroups = fetchAll
+      ? sortedGroups
+      : sortedGroups.slice((page - 1) * pageSize, page * pageSize);
+    const pageRequestIds = selectedGroups
+      .filter((group) => group.kind === "request")
+      .map((group) => new Types.ObjectId(group.id));
+    const pageStandaloneIds = selectedGroups
+      .filter((group) => group.kind === "trip")
+      .map((group) => new Types.ObjectId(group.id));
+    totalRequests = scopedRequestIds.length + standaloneCount;
+
+    const selectedTripConditions: Record<string, unknown>[] = [];
+    if (pageRequestIds.length) {
+      selectedTripConditions.push({ requestId: { $in: pageRequestIds } });
+    }
+    if (pageStandaloneIds.length) {
+      selectedTripConditions.push({
+        _id: { $in: pageStandaloneIds },
+        requestId: null,
+      });
+    }
+    rawTrips = selectedTripConditions.length
       ? await Trip.find({
           userId: new Types.ObjectId(userId),
-          requestId: { $in: pageRequestIds },
+          $or: selectedTripConditions,
         })
           .sort({ date: 1, cycleIndex: 1 })
           .lean<UserTripListDocument[]>()
@@ -460,14 +534,15 @@ export async function listUserTrips(
   );
 
   const requestIds = Array.from(
-    new Set(rawTrips.map((t) => String(t.requestId))),
+    new Set(rawTrips.flatMap((trip) => trip.requestId ? [String(trip.requestId)] : [])),
   );
-  const requests = await RequestModel.find({
-    _id: { $in: requestIds },
-    userId: new Types.ObjectId(userId),
-  })
-    .select("amountEgp status paymentStatus rejectionReason reviewedAt")
-    .lean<
+  const requests = requestIds.length
+    ? await RequestModel.find({
+        _id: { $in: requestIds },
+        userId: new Types.ObjectId(userId),
+      })
+        .select("amountEgp status paymentStatus rejectionReason reviewedAt")
+        .lean<
       {
         _id: unknown;
         amountEgp: number;
@@ -476,14 +551,17 @@ export async function listUserTrips(
         rejectionReason?: string | null;
         reviewedAt?: Date | null;
       }[]
-    >();
+        >()
+    : [];
   const amountByRequestId = new Map(
     requests.map((r) => [String(r._id), r.amountEgp]),
   );
   const requestById = new Map(requests.map((request) => [String(request._id), request]));
-  const requestTrips = await Trip.find({ requestId: { $in: requestIds } })
-    .select("requestId date pickupTime")
-    .lean<{ requestId: unknown; date: string; pickupTime: string }[]>();
+  const requestTrips = requestIds.length
+    ? await Trip.find({ requestId: { $in: requestIds } })
+        .select("requestId date pickupTime")
+        .lean<{ requestId: unknown; date: string; pickupTime: string }[]>()
+    : [];
   const nowCairo = getCairoNowParts();
   const hasPastTripByRequestId = new Map<string, boolean>();
   for (const trip of requestTrips) {
@@ -515,12 +593,16 @@ export async function listUserTrips(
     ...(totalRequests !== undefined ? { totalRequests } : {}),
     page,
     rows: rawTrips.map((trip) => {
-      const requestId = String(trip.requestId);
+      const requestId = trip.requestId
+        ? String(trip.requestId)
+        : String(trip._id);
+      const isStandalone = trip.requestId == null;
       const parentRequest = requestById.get(requestId);
       return {
       id: String(trip._id),
       tripNumber: trip.tripNumber,
       requestId,
+      isStandalone,
       date: trip.date,
       paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
       status: (trip.status as BookingStatus) ?? "pending_payment",
@@ -541,12 +623,24 @@ export async function listUserTrips(
       distanceKm: trip.distanceKm,
       durationMinutes: trip.durationMinutes,
       bookingAmountEgp:
-        amountByRequestId.get(requestId) ?? trip.priceEgp,
+        (trip.requestId ? amountByRequestId.get(requestId) : undefined) ??
+        trip.priceEgp,
       parentRequestStatus: parentRequest?.status,
       parentPaymentStatus: parentRequest?.paymentStatus,
-      rejectionReason: parentRequest?.rejectionReason ?? null,
-      reviewedAt: parentRequest?.reviewedAt?.toISOString() ?? null,
-      hasPastTrip: hasPastTripByRequestId.get(requestId) ?? false,
+      rejectionReason: isStandalone
+        ? trip.rejectionReason ?? null
+        : parentRequest?.rejectionReason ?? null,
+      reviewedAt: isStandalone
+        ? trip.reviewedAt instanceof Date
+          ? trip.reviewedAt.toISOString()
+          : trip.reviewedAt ?? null
+        : parentRequest?.reviewedAt?.toISOString() ?? null,
+      hasPastTrip: trip.requestId
+        ? hasPastTripByRequestId.get(requestId) ?? false
+        : hasPastPickup(
+            [{ date: trip.date, pickupTime: trip.pickupTime }],
+            nowCairo,
+          ),
       cancelledBy: trip.cancelledBy,
       cancelReason: trip.cancelReason,
       cancellation: trip.cancellation,
@@ -567,6 +661,7 @@ export interface UserTripDetail {
   id: string;
   tripNumber: number;
   requestId: string;
+  isStandalone: boolean;
   otherTrips?: { id: string; date: string }[];
   requestAmountEgp?: number;
   paymentBreakdown?: { walletAmountEgp: number; gatewayAmountEgp: number } | null;
@@ -669,6 +764,8 @@ export async function getDriverTrip(
     }[];
     paymentStatus: string;
     status: string;
+    rejectionReason?: string | null;
+    reviewedAt?: Date | string | null;
     cancelledBy?: string;
     cancelReason?: string;
     cancellation?: {
@@ -681,14 +778,16 @@ export async function getDriverTrip(
 
   if (!trip) return null;
 
-  const parentRequest = await RequestModel.findById(trip.requestId)
-    .select("amountEgp status paymentStatus rejectionReason")
-    .lean<{
-      amountEgp: number;
-      status: BookingStatus;
-      paymentStatus: PaymentStatus;
-      rejectionReason?: string | null;
-    } | null>();
+  const parentRequest = trip.requestId
+    ? await RequestModel.findById(trip.requestId)
+        .select("amountEgp status paymentStatus rejectionReason")
+        .lean<{
+          amountEgp: number;
+          status: BookingStatus;
+          paymentStatus: PaymentStatus;
+          rejectionReason?: string | null;
+        } | null>()
+    : null;
 
   const assignedDriver = trip.driverId
     ? await buildAssignedDriver(trip.driverId)
@@ -697,11 +796,19 @@ export async function getDriverTrip(
   return {
     ...trip,
     id: String(trip._id),
-    requestId: String(trip.requestId),
-    requestAmountEgp: parentRequest?.amountEgp,
+    requestId: trip.requestId ? String(trip.requestId) : String(trip._id),
+    isStandalone: trip.requestId == null,
+    requestAmountEgp: parentRequest?.amountEgp ?? trip.priceEgp,
     parentRequestStatus: parentRequest?.status,
     parentPaymentStatus: parentRequest?.paymentStatus,
-    rejectionReason: parentRequest?.rejectionReason ?? null,
+    rejectionReason:
+      (trip.requestId ? parentRequest?.rejectionReason : trip.rejectionReason) ??
+      null,
+    reviewedAt: trip.requestId
+      ? null
+      : trip.reviewedAt instanceof Date
+        ? trip.reviewedAt.toISOString()
+        : trip.reviewedAt ?? null,
     paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
     pickupStationOptions: trip.pickupStationOptions ?? [],
     dropoffStationOptions: trip.dropoffStationOptions ?? [],
@@ -763,6 +870,8 @@ export async function getUserTrip(
     }[];
     paymentStatus: string;
     status: string;
+    rejectionReason?: string | null;
+    reviewedAt?: Date | string | null;
     cancelledBy?: string;
     cancelReason?: string;
     cancellation?: {
@@ -775,7 +884,7 @@ export async function getUserTrip(
 
   if (!trip) return null;
 
-  const parentRequest = includeSiblingTrips
+  const parentRequest = includeSiblingTrips && trip.requestId
     ? await RequestModel.findOne({
         _id: trip.requestId,
         userId: new Types.ObjectId(userId),
@@ -789,7 +898,7 @@ export async function getUserTrip(
           reviewedAt?: Date | null;
         } | null>()
     : null;
-  const requestTrips = includeSiblingTrips
+  const requestTrips = includeSiblingTrips && trip.requestId
     ? await Trip.find({
         requestId: trip.requestId,
         userId: new Types.ObjectId(userId),
@@ -805,14 +914,19 @@ export async function getUserTrip(
     : [];
   const paymentBreakdown = includeSiblingTrips
     ? await Payment.findOne({
-        bookingId: trip.requestId,
+        bookingId: trip.requestId ?? trip._id,
         userId: new Types.ObjectId(userId),
       })
         .select("walletAmountEgp gatewayAmountEgp")
         .sort({ createdAt: -1 })
         .lean<{ walletAmountEgp: number; gatewayAmountEgp: number } | null>()
     : null;
-  const hasPastTrip = hasPastPickup(requestTrips, getCairoNowParts());
+  const hasPastTrip = trip.requestId
+    ? hasPastPickup(requestTrips, getCairoNowParts())
+    : hasPastPickup(
+        [{ date: trip.date, pickupTime: trip.pickupTime }],
+        getCairoNowParts(),
+      );
   const otherTrips = requestTrips.filter(
     (requestTrip) => String(requestTrip._id) !== String(trip._id),
   );
@@ -836,13 +950,20 @@ export async function getUserTrip(
   return {
     ...trip,
     id: String(trip._id),
-    requestId: String(trip.requestId),
-    requestAmountEgp: parentRequest?.amountEgp,
+    requestId: trip.requestId ? String(trip.requestId) : String(trip._id),
+    isStandalone: trip.requestId == null,
+    requestAmountEgp: parentRequest?.amountEgp ?? trip.priceEgp,
     paymentBreakdown,
     parentRequestStatus: parentRequest?.status,
     parentPaymentStatus: parentRequest?.paymentStatus,
-    rejectionReason: parentRequest?.rejectionReason ?? null,
-    reviewedAt: parentRequest?.reviewedAt?.toISOString() ?? null,
+    rejectionReason: trip.requestId
+      ? parentRequest?.rejectionReason ?? null
+      : trip.rejectionReason ?? null,
+    reviewedAt: trip.requestId
+      ? parentRequest?.reviewedAt?.toISOString() ?? null
+      : trip.reviewedAt instanceof Date
+        ? trip.reviewedAt.toISOString()
+        : trip.reviewedAt ?? null,
     hasPastTrip,
     otherTrips: otherTrips.map((otherTrip) => ({
       id: String(otherTrip._id),

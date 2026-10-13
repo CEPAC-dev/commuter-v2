@@ -69,7 +69,7 @@ export default function Pagination({ page, totalPages }: Props) {
         aria-label="Previous page"
         style={{ ...baseBtn, ...(page <= 1 ? disabled : {}) }}
       >
-        <ChevronLeft size={18} aria-hidden="true" />
+        <ChevronLeft className="rtl-directional-icon" size={18} aria-hidden="true" />
       </Link>
 
       {pages.map((p) => {
@@ -100,7 +100,7 @@ export default function Pagination({ page, totalPages }: Props) {
         aria-label="Next page"
         style={{ ...baseBtn, ...(page >= totalPages ? disabled : {}) }}
       >
-        <ChevronRight size={18} aria-hidden="true" />
+        <ChevronRight className="rtl-directional-icon" size={18} aria-hidden="true" />
       </Link>
     </nav>
   );

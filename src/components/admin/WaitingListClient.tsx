@@ -37,6 +37,7 @@ type WaitingListTrip = {
 };
 
 type WaitingListItem = {
+  kind: "trip" | "request";
   id: string;
   createdAt: string;
   totalFare: number;
@@ -234,6 +235,9 @@ export default function WaitingListClient() {
   async function submitDecision() {
     if (!dialog) return;
     const { action, item } = dialog;
+    if (action === "reject" && !reason.trim()) {
+      return;
+    }
     setBusyId(item.id);
     try {
       const response = await fetch(`/api/admin/waiting-list/${item.id}`, {
@@ -241,7 +245,7 @@ export default function WaitingListClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action,
-          ...(action === "reject" && reason.trim() ? { reason: reason.trim() } : {}),
+          ...(action === "reject" ? { reason: reason.trim() } : {}),
         }),
       });
       const payload = (await response.json().catch(() => null)) as {
@@ -251,8 +255,8 @@ export default function WaitingListClient() {
       if (response.ok) {
         toast.success(
           action === "approve"
-            ? t("admin.waiting_list.approved_success")
-            : t("admin.waiting_list.rejected_success"),
+            ? t(item.kind === "trip" ? "admin.waiting_list.trip_approved_success" : "admin.waiting_list.approved_success")
+            : t(item.kind === "trip" ? "admin.waiting_list.trip_rejected_success" : "admin.waiting_list.rejected_success"),
         );
         setDialog(null);
         setReason("");
@@ -263,9 +267,9 @@ export default function WaitingListClient() {
 
       const message =
         response.status === 409 && payload?.errorCode === "WAITING_LIST_TRIP_IN_PAST"
-          ? payload.error ?? t("admin.waiting_list.past_error")
+          ? t(item.kind === "trip" ? "admin.waiting_list.trip_past_error" : "admin.waiting_list.past_error")
           : response.status === 409
-            ? t("admin.waiting_list.conflict")
+            ? t(item.kind === "trip" ? "admin.waiting_list.trip_conflict" : "admin.waiting_list.conflict")
             : t(`admin.waiting_list.${waitingListErrorMessageKey(waitingListErrorKey(response.status, payload?.errorCode))}`);
       toast.error(message);
       if (response.status === 409) await fetchRequests(page);
@@ -389,7 +393,9 @@ export default function WaitingListClient() {
                 </div>
 
                 {item.hasPastTrip ? (
-                  <p className="waiting-list-past-note">{t("admin.waiting_list.past_description")}</p>
+                  <p className="waiting-list-past-note">
+                    {t(item.kind === "trip" ? "admin.waiting_list.trip_past_description" : "admin.waiting_list.past_description")}
+                  </p>
                 ) : null}
 
                 <div className="waiting-list-meta-grid">
@@ -460,11 +466,11 @@ export default function WaitingListClient() {
         >
           <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="waiting-list-dialog-title" className="waiting-list-dialog" dir={dir}>
             <h2 id="waiting-list-dialog-title">{t(dialog.action === "approve" ? "admin.waiting_list.confirm_approve_title" : "admin.waiting_list.confirm_reject_title")}</h2>
-            <p>{t(dialog.action === "approve" ? "admin.waiting_list.confirm_approve_description" : "admin.waiting_list.confirm_reject_description")}</p>
+            <p>{t(dialog.action === "approve" ? "admin.waiting_list.confirm_approve_description" : dialog.item.kind === "trip" ? "admin.waiting_list.trip_reject_description" : "admin.waiting_list.confirm_reject_description")}</p>
             {dialog.action === "reject" ? (
               <label style={{ display: "grid", gap: 6 }}>
                 <span>{t("admin.waiting_list.reason_label")}</span>
-                <textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} rows={4} />
+                <textarea required value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} rows={4} />
                 <small>{reason.length}/500</small>
               </label>
             ) : null}
@@ -472,7 +478,7 @@ export default function WaitingListClient() {
               <AdminButton variant="ghost" disabled={Boolean(busyId)} onClick={() => { setDialog(null); setReason(""); }}>
                 {t("admin.waiting_list.cancel")}
               </AdminButton>
-              <AdminButton variant={dialog.action === "approve" ? "primary" : "destructive"} disabled={Boolean(busyId)} onClick={() => void submitDecision()}>
+              <AdminButton variant={dialog.action === "approve" ? "primary" : "destructive"} disabled={Boolean(busyId) || (dialog.action === "reject" && !reason.trim())} onClick={() => void submitDecision()}>
                 {busyId ? <Loader2 size={15} className="animate-spin" /> : null}
                 {t("admin.waiting_list.confirm")}
               </AdminButton>

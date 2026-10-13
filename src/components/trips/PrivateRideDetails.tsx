@@ -60,7 +60,7 @@ export default function PrivateRideDetails({
     const shareKm = (km / segTotal) * distanceKm;
     const shareMin = (km / segTotal) * durationMinutes;
     return {
-      label: `${from} → ${to} ${translate(locale, "ride.estimated")}`,
+      label: `${from} ${locale === "ar" ? "←" : "→"} ${to} ${translate(locale, "ride.estimated")}`,
       value: `${shareKm.toFixed(1)} km · ${Math.round(shareMin)} min`,
     };
   });

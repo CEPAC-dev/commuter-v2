@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { Payment } from "@/models/Payment";
-import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { Types } from "mongoose";
+import { resolvePayableBooking } from "@/lib/payments/resolveBooking";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,13 +25,51 @@ export async function GET(
 
   await connectDB();
 
-  const tx = await WalletTransaction.findById(id).lean<Record<
-    string,
-    unknown
-  > | null>();
+  const walletTransaction = await WalletTransaction.findById(id).lean<
+    Record<string, unknown> | null
+  >();
+  const paymentCandidate = walletTransaction
+    ? null
+    : await Payment.findById(id).lean<Record<string, unknown> | null>();
+  const paymentTimeline = paymentCandidate?.timeline as
+    | { event?: string }[]
+    | undefined;
+  const paymentHasLateCharge = paymentTimeline?.some((event) =>
+    [
+      "blocked_trip_payment_webhook",
+      "blocked_trip_payment_callback",
+      "request_payment_manual_review",
+      "request_payment_amount_mismatch",
+    ].includes(event.event ?? ""),
+  );
+  const paymentForId = paymentHasLateCharge ? paymentCandidate : null;
+  const tx =
+    walletTransaction ??
+    (paymentForId
+      ? ({
+          _id: paymentForId._id,
+          type: "kashier_payment",
+          status: "completed",
+          amountEgp: paymentForId.gatewayAmountEgp,
+          description: "Kashier payment flagged for manual review.",
+          balanceAfterEgp: null,
+          createdAt: paymentForId.createdAt,
+          kashierOrderId: paymentForId.kashierOrderId,
+          kashierTransactionIds: paymentForId.kashierTransactionIds,
+          userId: paymentForId.userId,
+          bookingId: paymentForId.bookingId,
+          paymentId: paymentForId._id,
+        } as Record<string, unknown>)
+      : null);
   if (!tx) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const [user, payment, booking, trips] = await Promise.all([
+  // This admin detail lookup intentionally skips userId. Standalone Trips
+  // resolve first; Request-backed payments fall back through the shared helper.
+  const booking = tx.bookingId
+    ? await resolvePayableBooking(String(tx.bookingId))
+    : null;
+
+  const [user, payment, trips] = await Promise.all([
     tx.userId
       ? User.findById(tx.userId)
           .select("name email phone role")
@@ -40,13 +78,14 @@ export async function GET(
     tx.paymentId
       ? Payment.findById(tx.paymentId).lean<Record<string, unknown> | null>()
       : null,
-    tx.bookingId
-      ? Request.findById(tx.bookingId)
-          .select("amountEgp paymentStatus status dates note")
-          .lean<Record<string, unknown> | null>()
-      : null,
-    tx.bookingId
-      ? Trip.find({ requestId: tx.bookingId })
+    tx.bookingId && booking
+      ? booking.kind === "trip"
+        ? Trip.find({ _id: booking.doc._id, requestId: null })
+            .select(
+              "tripNumber date cycleIndex pickup.address dropoff.address vehicleType rideType pickupTime arrivalTime priceEgp paymentStatus status cancellation adminRefund",
+            )
+            .lean<Record<string, unknown>[]>()
+        : Trip.find({ requestId: tx.bookingId })
           .select(
             "tripNumber date cycleIndex pickup.address dropoff.address vehicleType rideType pickupTime arrivalTime priceEgp preferedGender paymentStatus status cancellation adminRefund",
           )
@@ -116,8 +155,11 @@ export async function GET(
           amountEgp: booking.amountEgp,
           paymentStatus: booking.paymentStatus,
           status: booking.status,
-          dates: booking.dates,
-          note: booking.note,
+          dates:
+            booking.kind === "trip"
+              ? [booking.doc.date]
+              : booking.doc.dates,
+          note: booking.doc.note,
         }
       : null,
     trips: trips.map((trip) => ({
@@ -154,6 +196,16 @@ export async function GET(
           kashierOrderId: payment.kashierOrderId ?? null,
           kashierTransactionIds: payment.kashierTransactionIds ?? [],
           kashierRefundIds: payment.kashierRefundIds ?? [],
+          lateGatewayCharge: (payment.timeline as {
+            event?: string;
+          }[] | undefined)?.some((event) =>
+            [
+              "blocked_trip_payment_webhook",
+              "blocked_trip_payment_callback",
+              "request_payment_manual_review",
+              "request_payment_amount_mismatch",
+            ].includes(event.event ?? ""),
+          ) ?? false,
         }
       : null,
     ledger: siblings.map((s) => ({

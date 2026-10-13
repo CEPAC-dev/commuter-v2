@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { getDisplayStatus } = await import("../src/lib/statusDisplay.ts");
+const { getDisplayStatus, getRejectionDisplay } = await import(
+  "../src/lib/statusDisplay.ts"
+);
 const now = new Date("2026-10-03T09:00:00.000Z");
 
 test("private requests display payment state using the existing pay rule", () => {
@@ -131,4 +133,82 @@ test("trip display preserves current cancellation and rating eligibility", () =>
   });
   assert.equal(cancellable.canCancel, true);
   assert.equal(rateable.canRate, true);
+});
+
+test("standalone waitlist and payment statuses show only their eligible actions", () => {
+  const make = (status, paymentStatus = "pending", extra = {}) =>
+    getDisplayStatus({
+      trip: {
+        isStandalone: true,
+        status,
+        paymentStatus,
+        date: "2026-10-05",
+        pickupTime: "09:00",
+        ...extra,
+      },
+      now,
+    });
+  assert.equal(make("waiting_list").key, "request_status.waiting_for_approval");
+  assert.equal(make("waiting_list").canPay, false);
+  assert.equal(make("waiting_list").canCancel, true);
+  assert.equal(make("approved", "failed").key, "request_status.approved_pay_now");
+  assert.equal(make("approved", "failed").canPay, true);
+  assert.equal(make("pending_payment").canPay, true);
+  assert.equal(make("time_out").key, "status.expired");
+  assert.equal(make("time_out").canPay, false);
+});
+
+test("standalone approved Trips cannot be paid after Cairo pickup time", () => {
+  const status = getDisplayStatus({
+    trip: {
+      isStandalone: true,
+      status: "approved",
+      paymentStatus: "pending",
+      date: "2026-10-02",
+      pickupTime: "09:00",
+    },
+    now,
+  });
+  assert.equal(status.key, "status.expired");
+  assert.equal(status.canPay, false);
+});
+
+test("standalone rejection displays its own reason without a parent Request", () => {
+  const trip = {
+    isStandalone: true,
+    status: "rejected",
+    paymentStatus: "pending",
+    rejectionReason: "Capacity unavailable",
+  };
+  const status = getDisplayStatus({ trip, now });
+  assert.equal(status.key, "request_status.rejected");
+  assert.equal(
+    getRejectionDisplay({ trip }).reason,
+    "Capacity unavailable",
+  );
+});
+
+test("standalone cancellation actions match the route's accepted states", () => {
+  const canCancel = (status, paymentStatus) =>
+    getDisplayStatus({
+      trip: {
+        isStandalone: true,
+        status,
+        paymentStatus,
+        date: "2026-10-05",
+        pickupTime: "09:00",
+      },
+      now,
+    }).canCancel;
+  for (const status of ["waiting_list", "pending_payment", "approved"]) {
+    assert.equal(canCancel(status, "pending"), true, `${status} pending`);
+    assert.equal(canCancel(status, "failed"), true, `${status} failed`);
+  }
+  for (const status of ["submitted", "matched", "confirmed", "nomatch"]) {
+    assert.equal(canCancel(status, "paid"), true, `${status} paid`);
+  }
+  for (const status of ["active", "completed", "cancelled", "time_out", "rejected", "refunded"]) {
+    assert.equal(canCancel(status, "paid"), false, `${status} paid`);
+  }
+  assert.equal(canCancel("pending_payment", "expired"), false);
 });

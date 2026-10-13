@@ -1,10 +1,13 @@
 import { Types } from "mongoose";
 import { AdminActivityNotification } from "@/models/AdminActivityNotification";
+import { Payment } from "@/models/Payment";
 import { Trip } from "@/models/Trip";
 import { Request } from "@/models/Request";
 import { User } from "@/models/User";
 import { AdminReferralUsage } from "@/models/AdminReferralUsage";
 import { sendPushPayloadToUser } from "@/lib/notifications/webPush";
+import { latePaymentDedupeKey } from "@/lib/phase8bGuards";
+import { waitingListTripBatchDedupeKey } from "@/lib/admin/waitingList";
 
 function isDuplicateKeyError(error: unknown) {
   return Boolean(
@@ -21,6 +24,7 @@ export async function notifyAdmins(input: {
     | "completed_paid_trip"
     | "waiting_list_trip_created"
     | "admin_campaign_claim"
+    | "late_gateway_payment"
     | "station_suggestion_requested";
   dedupeKey: string;
   title: string;
@@ -143,12 +147,94 @@ export async function notifyAdminsOfPaidTrip(tripId: string) {
   }
 }
 
+export async function notifyAdminsOfLateTripPayment(
+  paymentId: string,
+  tripId: string,
+) {
+  try {
+    if (!Types.ObjectId.isValid(paymentId) || !Types.ObjectId.isValid(tripId))
+      return;
+    const [payment, trip] = await Promise.all([
+      Payment.findById(paymentId)
+        .select("userId gatewayAmountEgp kashierOrderId")
+        .lean(),
+      Trip.findOne({
+        _id: tripId,
+        status: { $in: ["cancelled", "time_out", "rejected"] },
+      })
+        .select("_id tripNumber userId status")
+        .lean(),
+    ]);
+    if (!payment || !trip) return;
+
+    const user = await User.findById(trip.userId)
+      .select("name userNumber phone email")
+      .lean();
+    const userName = user?.name ?? "Unknown user";
+    const gatewayAmountEgp = Number(payment.gatewayAmountEgp ?? 0);
+    await notifyAdmins({
+      eventType: "late_gateway_payment",
+      dedupeKey: latePaymentDedupeKey(paymentId),
+      title: `Late gateway charge for trip #${trip.tripNumber}`,
+      body: `${userName} was charged ${gatewayAmountEgp} EGP after the trip became ${trip.status}.`,
+      data: {
+        paymentId,
+        tripId,
+        tripNumber: trip.tripNumber,
+        tripStatus: trip.status,
+        userId: String(trip.userId),
+        userName,
+        userNumber: user?.userNumber ?? null,
+        email: user?.email ?? "",
+        gatewayAmountEgp,
+        kashierOrderId: payment.kashierOrderId ?? null,
+        href: `/admin/transactions/${paymentId}`,
+      },
+    });
+  } catch (error) {
+    console.error("Admin late-payment alert creation failed:", error);
+  }
+}
+
+export async function notifyAdminsOfRequestPaymentIssue(input: {
+  paymentId: string;
+  requestId: string;
+  paidAmountEgp: number;
+  expectedAmountEgp: number;
+  reason: string;
+}) {
+  try {
+    if (
+      !Types.ObjectId.isValid(input.paymentId) ||
+      !Types.ObjectId.isValid(input.requestId)
+    ) {
+      return;
+    }
+    await notifyAdmins({
+      eventType: "late_gateway_payment",
+      dedupeKey: latePaymentDedupeKey(input.paymentId),
+      title: `Request payment needs review`,
+      body: `Request ${input.requestId}: paid ${input.paidAmountEgp} EGP; expected ${input.expectedAmountEgp} EGP. ${input.reason}.`,
+      data: {
+        paymentId: input.paymentId,
+        requestId: input.requestId,
+        paidAmountEgp: input.paidAmountEgp,
+        expectedAmountEgp: input.expectedAmountEgp,
+        reason: input.reason,
+        href: `/admin/transactions/${input.paymentId}`,
+      },
+    });
+  } catch (error) {
+    console.error("Admin Request payment alert creation failed:", error);
+  }
+}
+
 export async function notifyAdminsOfWaitingListTrip(tripId: string) {
   try {
     if (!Types.ObjectId.isValid(tripId)) return;
     const trip = await Trip.findOne({
       _id: tripId,
-      status: "pending_payment",
+      status: { $in: ["pending_payment", "waiting_list"] },
       paymentStatus: "pending",
     })
       .select(
@@ -157,13 +243,19 @@ export async function notifyAdminsOfWaitingListTrip(tripId: string) {
       .lean();
     if (!trip) return;
 
-    const request = await Request.findOne({
-      _id: trip.requestId,
-      status: "waiting_list",
-    })
-      .select("_id")
-      .lean();
-    if (!request) return;
+    let requestId: string | null = null;
+    if (trip.requestId) {
+      const request = await Request.findOne({
+        _id: trip.requestId,
+        status: "waiting_list",
+      })
+        .select("_id")
+        .lean();
+      if (!request) return;
+      requestId = String(request._id);
+    } else if (trip.status !== "waiting_list") {
+      return;
+    }
 
     const user = await User.findById(trip.userId)
       .select("name userNumber phone email")
@@ -177,7 +269,7 @@ export async function notifyAdminsOfWaitingListTrip(tripId: string) {
       data: {
         tripId: String(trip._id),
         tripNumber: trip.tripNumber,
-        requestId: String(request._id),
+        ...(requestId ? { requestId } : { bookingId: String(trip._id) }),
         userId: String(trip.userId),
         userName,
         userNumber: user?.userNumber ?? null,
@@ -193,6 +285,82 @@ export async function notifyAdminsOfWaitingListTrip(tripId: string) {
     });
   } catch (error) {
     console.error("Admin waiting-list trip alert creation failed:", error);
+  }
+}
+
+export async function notifyAdminsOfWaitingListTripBatch(input: {
+  batchId: string;
+  userId: string;
+  tripCount: number;
+  date: string;
+  routeSummary: string;
+}) {
+  try {
+    if (!Types.ObjectId.isValid(input.userId)) return;
+    const user = await User.findById(input.userId)
+      .select("name userNumber phone email")
+      .lean();
+    const userName = user?.name ?? "Unknown user";
+    await notifyAdmins({
+      eventType: "waiting_list_trip_created",
+      dedupeKey: waitingListTripBatchDedupeKey(input.batchId),
+      title: `${input.tripCount} new waiting-list trips`,
+      body: `${userName} submitted ${input.tripCount} trips for waiting-list review.`,
+      data: {
+        batchId: input.batchId,
+        userId: input.userId,
+        userName,
+        userNumber: user?.userNumber ?? null,
+        phone: user?.phone ?? "",
+        email: user?.email ?? "",
+        date: input.date,
+        tripCount: input.tripCount,
+        routeSummary: input.routeSummary,
+        href: "/admin/waiting-list",
+      },
+    });
+  } catch (error) {
+    console.error("Admin waiting-list batch alert creation failed:", error);
+  }
+}
+
+export async function notifyAdminsOfWaitingListRequest(input: {
+  requestId: string;
+  userId: string;
+  tripCount: number;
+  date: string;
+  routeSummary: string;
+}) {
+  try {
+    if (
+      !Types.ObjectId.isValid(input.requestId) ||
+      !Types.ObjectId.isValid(input.userId)
+    ) {
+      return;
+    }
+    const user = await User.findById(input.userId)
+      .select("name userNumber phone email")
+      .lean();
+    await notifyAdmins({
+      eventType: "waiting_list_trip_created",
+      dedupeKey: `request:${input.requestId}:waiting_list_created`,
+      title: "New multi-day waiting-list Request",
+      body: `${user?.name ?? "Unknown user"} submitted a ${input.tripCount}-day Request for review.`,
+      data: {
+        requestId: input.requestId,
+        userId: input.userId,
+        userName: user?.name ?? "Unknown user",
+        userNumber: user?.userNumber ?? null,
+        phone: user?.phone ?? "",
+        email: user?.email ?? "",
+        date: input.date,
+        tripCount: input.tripCount,
+        routeSummary: input.routeSummary,
+        href: "/admin/waiting-list",
+      },
+    });
+  } catch (error) {
+    console.error("Admin waiting-list Request alert creation failed:", error);
   }
 }
 

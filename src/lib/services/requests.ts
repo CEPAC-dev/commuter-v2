@@ -1,5 +1,5 @@
 import "server-only";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
@@ -15,6 +15,8 @@ import {
   buildPendingRequestExpiryFilter,
   buildPendingTripExpiryFilter,
 } from "@/lib/pendingRequestHardening";
+import { expireStandaloneTrips } from "@/lib/services/standaloneTripExpiry";
+import { releasePromoForRequest } from "@/lib/promoCode";
 import { getCairoNowParts } from "@/lib/cancellationPolicy";
 import { hasPastTrip as hasPastPickupTime } from "@/lib/admin/waitingList";
 
@@ -29,16 +31,28 @@ export async function expireStaleForUser(userId: string): Promise<void> {
     .select("_id")
     .lean<{ _id: Types.ObjectId }[]>();
   const requestIds = expiringRequests.map((request) => request._id);
-  if (requestIds.length === 0) return;
-
-  await Request.updateMany(
-    { _id: { $in: requestIds }, ...expireFilter },
-    { $set: { status: "time_out", paymentStatus: "expired" } },
-  );
-  await Trip.updateMany(
-    buildPendingTripExpiryFilter(requestIds),
-    { $set: { status: "time_out", paymentStatus: "expired" } },
-  );
+  for (const requestId of requestIds) {
+    const dbSession = await mongoose.startSession();
+    try {
+      await dbSession.withTransaction(async () => {
+        const updated = await Request.updateOne(
+          { _id: requestId, ...expireFilter },
+          { $set: { status: "time_out", paymentStatus: "expired" } },
+          { session: dbSession },
+        );
+        if (updated.modifiedCount !== 1) return;
+        await Trip.updateMany(
+          buildPendingTripExpiryFilter([requestId]),
+          { $set: { status: "time_out", paymentStatus: "expired" } },
+          { session: dbSession },
+        );
+        await releasePromoForRequest(requestId, { session: dbSession });
+      });
+    } finally {
+      await dbSession.endSession();
+    }
+  }
+  await expireStandaloneTrips(userId);
 }
 
 export async function expireStaleRequest(
@@ -46,25 +60,30 @@ export async function expireStaleRequest(
   userId: string,
 ): Promise<void> {
   await connectDB();
+  await expireStandaloneTrips(userId);
 
   const cutoff = new Date(Date.now() - EXPIRY_MS);
   const expireFilter = buildPendingRequestExpiryFilter(cutoff, userId);
-  const expiringRequest = await Request.findOne({
-    _id: requestId,
-    ...expireFilter,
-  })
-    .select("_id")
-    .lean<{ _id: Types.ObjectId }>();
-  if (!expiringRequest) return;
-
-  await Request.updateOne(
-    { _id: expiringRequest._id, ...expireFilter },
-    { $set: { status: "time_out", paymentStatus: "expired" } },
-  );
-  await Trip.updateMany(
-    buildPendingTripExpiryFilter([expiringRequest._id]),
-    { $set: { status: "time_out", paymentStatus: "expired" } },
-  );
+  if (!Types.ObjectId.isValid(requestId)) return;
+  const dbSession = await mongoose.startSession();
+  try {
+    await dbSession.withTransaction(async () => {
+      const updated = await Request.updateOne(
+        { _id: requestId, ...expireFilter },
+        { $set: { status: "time_out", paymentStatus: "expired" } },
+        { session: dbSession },
+      );
+      if (updated.modifiedCount !== 1) return;
+      await Trip.updateMany(
+        buildPendingTripExpiryFilter([new Types.ObjectId(requestId)]),
+        { $set: { status: "time_out", paymentStatus: "expired" } },
+        { session: dbSession },
+      );
+      await releasePromoForRequest(requestId, { session: dbSession });
+    });
+  } finally {
+    await dbSession.endSession();
+  }
 }
 
 export interface ListUserRequestsOptions {

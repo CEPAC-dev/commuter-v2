@@ -12,6 +12,7 @@ const AdminActivityNotificationSchema = new Schema(
         "waiting_list_trip_created",
         "admin_campaign_claim",
         "station_suggestion_requested",
+        "late_gateway_payment",
       ],
       index: true,
     },

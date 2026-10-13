@@ -92,9 +92,10 @@ const TripSchema = new Schema(
     requestId: {
       type: Types.ObjectId,
       ref: "Request",
-      required: true,
+      required: false,
       index: true,
     },
+    batchId: { type: String, required: false, index: true },
     regionCode: {
       type: String,
       enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
@@ -165,6 +166,34 @@ const TripSchema = new Schema(
       min: 0,
       default: null,
     },
+    note: { type: String, required: false, trim: true, maxlength: 1000 },
+    reviewedBy: {
+      type: Types.ObjectId,
+      ref: "User",
+      required: false,
+      default: null,
+    },
+    reviewedAt: { type: Date, required: false, default: null },
+    rejectionReason: {
+      type: String,
+      required: false,
+      trim: true,
+      maxlength: 500,
+      default: null,
+    },
+    kashierSessionId: { type: String, required: false },
+    kashierOrderId: { type: String, required: false },
+    kashierTransactionIds: {
+      type: [String],
+      required: false,
+      default: [],
+    },
+    paidAt: { type: Date, required: false },
+    settlementPaymentId: {
+      type: Types.ObjectId,
+      ref: "Payment",
+      required: false,
+    },
     extraPassengers: { type: Number, default: 0, min: 0, max: 9 },
     preferedGender: {
       type: String,
@@ -193,6 +222,9 @@ const TripSchema = new Schema(
       default: "pending_payment",
       enum: [
         "pending_payment",
+        "waiting_list",
+        "approved",
+        "rejected",
         "submitted",
         "matched",
         "nomatch",
@@ -285,6 +317,11 @@ const TripSchema = new Schema(
 TripSchema.index({ requestId: 1, date: 1 });
 TripSchema.index({ userId: 1, date: -1 });
 TripSchema.index({ driverId: 1, date: -1 });
+TripSchema.index(
+  { status: 1 },
+  { partialFilterExpression: { status: "waiting_list" } },
+);
+TripSchema.index({ kashierOrderId: 1 }, { sparse: true });
 
 export type TripDoc = InferSchemaType<typeof TripSchema>;
 const existingTripModel = models.Trip;

@@ -234,7 +234,7 @@ export default function AppHeader({
                 flexShrink: 0,
               }}
             >
-              <ArrowLeft size={18} aria-hidden="true" />
+              <ArrowLeft className="rtl-directional-icon" size={18} aria-hidden="true" />
             </Link>
           )}
           <Link

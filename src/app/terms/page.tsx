@@ -78,7 +78,7 @@ export default function TermsPage() {
   ];
   return (
     <div style={{ minHeight: "100dvh", background: palette.bg }}>
-      <AppHeader authed variant="app" />
+      <AppHeader authed={false} variant="app" />
 
       <main style={{ maxWidth: 760, margin: "0 auto", padding: "48px 20px 64px" }}>
         <div style={{ marginBottom: 32 }}>

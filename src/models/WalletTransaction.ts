@@ -91,6 +91,16 @@ WalletTransactionSchema.index(
     partialFilterExpression: { type: "earning", tripId: { $exists: true } },
   },
 );
+WalletTransactionSchema.index(
+  { paymentId: 1, tripId: 1, type: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      type: "kashier_payment",
+      tripId: { $exists: true },
+    },
+  },
+);
 
 // Admin ledger read patterns.
 WalletTransactionSchema.index({ createdAt: -1 });

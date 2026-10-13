@@ -57,6 +57,7 @@ interface Props {
   userGender: "male" | "female" | null;
   region?: RegionCode;
   mapSettings: MapSettings;
+  multiDayRequestsEnabled: boolean;
   onAddressSaved?: (saved: SavedAddress) => void;
 }
 
@@ -117,6 +118,7 @@ export default function CreateClient({
   userGender: initialUserGender,
   region = DEFAULT_REGION,
   mapSettings,
+  multiDayRequestsEnabled,
 }: Props) {
   const mapConfig = getMapConfig(region);
   const { pickup, dropoff } = useTripStore();
@@ -125,6 +127,11 @@ export default function CreateClient({
     earliestBookingDate(),
   ]);
   const [trips, setTrips] = useState<TripData[]>([]);
+  const [existingTripsByDate, setExistingTripsByDate] = useState<
+    Record<string, TripSpacingWindow[]>
+  >({});
+  const [spacingCheckLoading, setSpacingCheckLoading] = useState(true);
+  const [spacingCheckFailed, setSpacingCheckFailed] = useState(false);
   const [tripSteps, setTripSteps] = useState<Record<string, BookingStep>>({});
   const [collapsedTrips, setCollapsedTrips] = useState<Record<string, boolean>>(
     {},
@@ -137,6 +144,7 @@ export default function CreateClient({
     representativeTripId: string;
     amountEgp: number;
     waitingList?: boolean;
+    requestGroup?: boolean;
   } | null>(null);
   const [submitError, setSubmitError] = useState("");
   const [useWallet, setUseWallet] = useState(false);
@@ -213,6 +221,51 @@ export default function CreateClient({
       setGenderSaving(false);
     }
   }
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadExistingTrips() {
+      setSpacingCheckLoading(true);
+      setSpacingCheckFailed(false);
+      if (selectedDates.length === 0) {
+        setExistingTripsByDate({});
+        setSpacingCheckLoading(false);
+        return;
+      }
+
+      try {
+        const results = await Promise.all(
+          selectedDates.map(async (date) => {
+            const response = await fetch(
+              `/api/trips/spacing?date=${encodeURIComponent(date)}`,
+              { cache: "no-store", signal: controller.signal },
+            );
+            if (!response.ok) {
+              throw new Error(
+                `Trip-spacing lookup failed with status ${response.status}`,
+              );
+            }
+            const result = (await response.json()) as {
+              data: TripSpacingWindow[];
+            };
+            return [date, result.data] as const;
+          }),
+        );
+        if (controller.signal.aborted) return;
+        setExistingTripsByDate(Object.fromEntries(results));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("Failed to load existing trip arrival windows:", error);
+        setSpacingCheckFailed(true);
+      } finally {
+        if (!controller.signal.aborted) setSpacingCheckLoading(false);
+      }
+    }
+
+    void loadExistingTrips();
+    return () => controller.abort();
+  }, [selectedDates]);
 
   // Hydrate from store after mount (avoid SSR mismatch)
   useEffect(() => {
@@ -408,6 +461,7 @@ export default function CreateClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          date: selectedDates[0],
           dates: selectedDates,
           note: bookingNote,
           promoCode: promoCodeDraft.trim() || null,
@@ -454,7 +508,30 @@ export default function CreateClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        setSubmitError(data.error ?? t("create.booking_create_failed"));
+        setSubmitError(
+          data.error === "TRIP_SPACING_CONFLICT" &&
+            typeof data.conflict?.date === "string" &&
+            typeof data.conflict?.arrivalTime === "string" &&
+            typeof data.conflict?.window?.start === "string" &&
+            typeof data.conflict?.window?.end === "string"
+            ? formatSpacingConflict({
+                date: data.conflict.date,
+                arrivalTime: data.conflict.arrivalTime,
+                window: {
+                  start: data.conflict.window.start,
+                  end: data.conflict.window.end,
+                },
+              })
+            : data.error === "MULTIPLE_DATES_NOT_SUPPORTED"
+              ? t("errors.MULTIPLE_DATES_NOT_SUPPORTED")
+              : data.error === "MULTIPLE_TRIPS_NOT_SUPPORTED"
+                ? t("errors.MULTIPLE_TRIPS_NOT_SUPPORTED")
+                : data.errorCode === "BOOKING_BUSY"
+                  ? t("errors.BOOKING_BUSY")
+                  : data.error === "INVALID_TRIP_COUNT"
+                    ? t("errors.INVALID_TRIP_COUNT")
+                    : (data.error ?? t("create.booking_create_failed")),
+        );
         return null;
       }
 
@@ -466,20 +543,32 @@ export default function CreateClient({
         setPromoWarning(t("create.promo_partially_applied"));
       }
 
+      const isRequestGroup =
+        multiDayRequestsEnabled && typeof data.requestId === "string";
+      const tripIdsAreValid =
+        Array.isArray(data.tripIds) &&
+        data.tripIds.length === selectedDates.length &&
+        data.tripIds.every((tripId: unknown) => typeof tripId === "string");
       if (
-        typeof data.bookingId !== "string" ||
         !Number.isFinite(data.amountEgp) ||
-        !Array.isArray(data.tripIds) ||
-        typeof data.tripIds[0] !== "string"
+        !tripIdsAreValid ||
+        (isRequestGroup
+          ? data.bookingId !== data.requestId || selectedDates.length < 2
+          : typeof data.bookingId !== "string" ||
+            typeof data.tripId !== "string" ||
+            data.bookingId !== data.tripId ||
+            data.tripIds.length !== 1 ||
+            data.tripIds[0] !== data.tripId)
       ) {
         setSubmitError(t("create.booking_create_failed"));
         return null;
       }
       const booking = {
         id: data.bookingId,
-        representativeTripId: data.tripIds[0] as string,
+        representativeTripId: isRequestGroup ? data.tripIds[0] : data.tripId,
         amountEgp: data.amountEgp,
-        waitingList: data.waitingList === true,
+        waitingList: data.waitlist === true || data.waitingList === true,
+        requestGroup: isRequestGroup,
       };
       setCreatedBooking(booking);
       return booking;
@@ -510,6 +599,10 @@ export default function CreateClient({
     const booking = createdBooking ?? (await createBooking());
     if (!booking) return;
     setShowRequestModal(false);
+    if (booking.requestGroup) {
+      window.location.assign("/my-trips");
+      return;
+    }
     if (booking.waitingList) {
       setRequestSentTripId(booking.representativeTripId);
       return;
@@ -521,6 +614,10 @@ export default function CreateClient({
   async function handleSubmit() {
     const booking = createdBooking ?? (await createBooking());
     if (!booking) return;
+    if (booking.requestGroup) {
+      window.location.assign("/my-trips");
+      return;
+    }
     if (booking.waitingList) {
       setShowPaymentModal(false);
       setRequestSentTripId(booking.representativeTripId);
@@ -542,10 +639,10 @@ export default function CreateClient({
       }
       navigating = true;
       if (payData.walletOnly && payData.redirect) {
-        window.location.href = payData.redirect;
+        window.location.assign(payData.redirect);
         return;
       }
-      window.location.href = payData.sessionUrl;
+      window.location.assign(payData.sessionUrl);
     } catch {
       setSubmitError(t("create.network_error_retry"));
     } finally {
@@ -687,13 +784,6 @@ export default function CreateClient({
     });
   }, []);
 
-  function addTrip() {
-    const nextTrip = defaultTrip(null, null);
-    setTrips((prev) => [...prev, nextTrip]);
-    setTripSteps((prev) => ({ ...prev, [nextTrip.id]: "vehicle" }));
-    setCollapsedTrips((prev) => ({ ...prev, [nextTrip.id]: false }));
-  }
-
   const stepLabels: Record<BookingStep, string> = {
     vehicle: t("create.vehicle_type"),
     locations: t("create.step_pickup_dropoff_locations"),
@@ -793,6 +883,41 @@ export default function CreateClient({
     ["--drawer-height-vh" as string]: String(drawerHeightVh),
   } as React.CSSProperties;
 
+  function getSpacingConflict(
+    arrivalTime: string,
+    excludeTripId?: string,
+  ): SpacingConflict | null {
+    for (const date of selectedDates) {
+      const otherSubmissionTrips = trips
+        .filter(
+          (trip) => trip.id !== excludeTripId && Boolean(trip.arrivalTime),
+        )
+        .map((trip) => ({
+          date,
+          arrivalTime: trip.arrivalTime,
+          status: "pending_payment",
+        }));
+      const conflict = findSpacingConflict(
+        { date, arrivalTime },
+        [...(existingTripsByDate[date] ?? []), ...otherSubmissionTrips],
+      );
+      if (conflict) return conflict;
+    }
+    return null;
+  }
+
+  function formatSpacingConflict(conflict: SpacingConflict): string {
+    return t("create.trip_spacing_conflict")
+      .replace("{date}", conflict.date)
+      .replace(
+        "{window}",
+        `${formatTime(locale, conflict.window.start)}–${formatTime(
+          locale,
+          conflict.window.end,
+        )}`,
+      );
+  }
+
   // Validate all trips before preview
   function validate(): string | null {
     if (selectedDates.length === 0) return t("create.select_at_least_one_date");
@@ -878,6 +1003,15 @@ export default function CreateClient({
         }
       }
     }
+
+    if (spacingCheckLoading) return t("create.spacing_check_loading");
+    if (spacingCheckFailed) return t("create.spacing_check_failed");
+    for (const trip of trips) {
+      if (!trip.arrivalTime) continue;
+      const conflict = getSpacingConflict(trip.arrivalTime, trip.id);
+      if (conflict) return formatSpacingConflict(conflict);
+    }
+
     return null;
   }
 
@@ -1032,9 +1166,9 @@ export default function CreateClient({
                 </h1>
               </div>
 
-              {/* Request-level dates: shared by every trip in this booking. */}
+              {/* One selected date for this Trip. */}
               <section
-                aria-label={t("create.request_dates")}
+                aria-label={t("create.trip_date")}
                 style={{
                   background: "#ffffff",
                   border: "1.5px solid rgb(200, 232, 228)",
@@ -1066,7 +1200,7 @@ export default function CreateClient({
                     textAlign: "start",
                   }}
                 >
-                  <span>{t("create.request_dates")}</span>
+                  <span>{t("create.trip_date")}</span>
                   <span
                     aria-hidden="true"
                     className="create-request-dates-toggle"
@@ -1096,10 +1230,21 @@ export default function CreateClient({
                     <DatePicker
                       value={selectedDates}
                       onChange={setSelectedDates}
+                      singleSelect={!multiDayRequestsEnabled}
                     />
                   </div>
                 </div>
               </section>
+              {spacingCheckLoading && (
+                <p role="status" style={{ fontSize: 13, color: "#5A6A7A" }}>
+                  {t("create.spacing_check_loading")}
+                </p>
+              )}
+              {spacingCheckFailed && (
+                <p role="alert" style={{ fontSize: 13, color: "#e74c3c" }}>
+                  {t("create.spacing_check_failed")}
+                </p>
+              )}
 
               {/* Trip cycles */}
               <div
@@ -1138,6 +1283,36 @@ export default function CreateClient({
                     !!prevTrip &&
                     !prevTrip.returnTrip &&
                     !!(prevTrip.pickup && prevTrip.dropoff);
+                  const blockedArrivalTimes =
+                    spacingCheckLoading || spacingCheckFailed
+                      ? []
+                      : getDayHalfHourSlots()
+                          .filter((slot) =>
+                            selectedDates.some((date) => {
+                              const otherSubmissionTrips = trips
+                                .filter(
+                                  (otherTrip) =>
+                                    otherTrip.id !== trip.id &&
+                                    Boolean(otherTrip.arrivalTime),
+                                )
+                                .map((otherTrip) => ({
+                                  date,
+                                  arrivalTime: otherTrip.arrivalTime,
+                                  status: "pending_payment",
+                                }));
+                              return hasSpacingConflict(
+                                { date, arrivalTime: slot.value },
+                                [
+                                  ...(existingTripsByDate[date] ?? []),
+                                  ...otherSubmissionTrips,
+                                ],
+                              );
+                            }),
+                          )
+                          .map((slot) => slot.value);
+                  const spacingConflict = trip.arrivalTime
+                    ? getSpacingConflict(trip.arrivalTime, trip.id)
+                    : null;
                   return (
                     <TripCycle
                       key={trip.id}
@@ -1159,6 +1334,8 @@ export default function CreateClient({
                       }
                       stations={stations}
                       minArrivalTime={minArrivalTime}
+                      blockedArrivalTimes={blockedArrivalTimes}
+                      spacingConflict={spacingConflict}
                       vehiclesMap={vehiclesMap ?? undefined}
                       vehicleList={vehicleList}
                       disabledVehicleKeys={vehicleList
@@ -1339,44 +1516,6 @@ export default function CreateClient({
                   );
                 })}
               </div>
-
-              {/* Add trip */}
-              {trips.length < 3 &&
-                trips.at(-1) &&
-                getTripStep(trips.at(-1)!.id) === "passengers" && (
-                  <button
-                    type="button"
-                    onClick={addTrip}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      width: "100%",
-                      height: 48,
-                      background: "transparent",
-                      border: "2px dashed #d0d8e0",
-                      borderRadius: 12,
-                      cursor: "pointer",
-                      color: "#5A6A7A",
-                      fontSize: 14,
-                      fontWeight: 600,
-                      fontFamily: "inherit",
-                      transition: "border-color 0.15s, color 0.15s",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = "#00C2A8";
-                      e.currentTarget.style.color = "#00C2A8";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = "#d0d8e0";
-                      e.currentTarget.style.color = "#5A6A7A";
-                    }}
-                  >
-                    <Plus size={16} aria-hidden="true" />
-                    {t("create.add_another_trip")}
-                  </button>
-                )}
 
               {/* Validation error */}
               {validationError && (
@@ -2423,7 +2562,7 @@ export default function CreateClient({
                   lineHeight: 1.5,
                 }}
               >
-                {t("request_status.waiting_payment_explanation")}
+                {t("create.trip_waitlist_confirmation")}
               </p>
               <Link
                 href={`/my-trips/${requestSentTripId}`}
@@ -2974,7 +3113,18 @@ export default function CreateClient({
 /* ── Helpers local to this file ── */
 import { VEHICLE_LIST, VEHICLES } from "@/lib/config/vehicles";
 import { formatDisplayName } from "@/lib/nominatim";
-import { toMinutes, toHHMM, pickupWindowRange } from "@/lib/time/pickupWindow";
+import {
+  getDayHalfHourSlots,
+  toMinutes,
+  toHHMM,
+  pickupWindowRange,
+} from "@/lib/time/pickupWindow";
+import {
+  findSpacingConflict,
+  hasSpacingConflict,
+  type SpacingConflict,
+  type TripSpacingWindow,
+} from "@/lib/validation/tripSpacing";
 
 function VEHICLE_LIST_LABEL(key: string, t: (key: string) => string) {
   const translated = t(`vehicles.${key}`);

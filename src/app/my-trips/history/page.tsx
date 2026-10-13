@@ -60,17 +60,20 @@ export default async function TripHistoryPage({
         dateTo: parsed.to || undefined,
       });
 
-  const requests = groupTripsByRequest(result.rows).map((group) => ({
+  const historyItems = groupTripsByRequest(result.rows).map((group) => ({
+    kind: group.kind === "single" ? ("trip" as const) : ("request_group" as const),
     requestId: group.kind === "single" ? group.trip.requestId : group.requestId,
     trips: group.kind === "single" ? [group.trip] : group.trips,
   }));
-  const filteredRequests = requests
-    .filter(({ trips }) => {
+  const filteredItems = historyItems
+    .filter(({ kind, trips }) => {
       const first = trips[0];
       return matchesTripHistoryFilter(
         filter,
         {
-          status: first.parentRequestStatus ?? first.status,
+          status: kind === "trip"
+            ? first.status
+            : first.parentRequestStatus ?? first.status,
           paymentStatus: first.parentPaymentStatus ?? first.paymentStatus,
           rejectionReason: first.rejectionReason,
           hasPastTrip: first.hasPastTrip,
@@ -81,8 +84,8 @@ export default async function TripHistoryPage({
     .sort((left, right) =>
       (right.trips[0].createdAt ?? "").localeCompare(left.trips[0].createdAt ?? ""),
     );
-  const totalPages = Math.ceil(filteredRequests.length / PAGE_SIZE);
-  const pageRequests = filteredRequests.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.ceil(filteredItems.length / PAGE_SIZE);
+  const pageItems = filteredItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const validationMessage = parsed.error
     ? translate(locale, `history.error_${parsed.error}`)
     : null;
@@ -100,8 +103,8 @@ export default async function TripHistoryPage({
               {translate(locale, "my_trips.title")}
             </Link>
           </div>
-          <span style={{ color: "#5A6A7A", fontSize: 13, fontVariantNumeric: "tabular-nums" }} aria-label={translate(locale, "history.results_count", { count: filteredRequests.length })}>
-            {filteredRequests.length}
+          <span style={{ color: "#5A6A7A", fontSize: 13, fontVariantNumeric: "tabular-nums" }} aria-label={translate(locale, "history.results_count", { count: filteredItems.length })}>
+            {filteredItems.length}
           </span>
         </div>
 
@@ -112,7 +115,7 @@ export default async function TripHistoryPage({
           <div role="alert" style={{ marginTop: 20, padding: "12px 14px", border: "1px solid #E8C4C0", borderRadius: 6, background: "#FFF5F4", color: "#8F2D28", fontSize: 13, fontWeight: 700 }}>
             {validationMessage}
           </div>
-        ) : pageRequests.length === 0 ? (
+        ) : pageItems.length === 0 ? (
           <div style={{ marginTop: 20 }}>
             <EmptyState title={translate(locale, "history.no_results")} />
             {(parsed.q || parsed.from || parsed.to || filter !== "all") && (
@@ -128,17 +131,45 @@ export default async function TripHistoryPage({
           </div>
         ) : (
           <div style={{ display: "grid", gap: 14, marginTop: 18 }}>
-            {pageRequests.map(({ requestId, trips }) => {
+            {pageItems.map(({ kind, requestId, trips }) => {
               const first = trips[0];
+              const itemKey = kind === "trip" ? first.id : requestId;
               const request = {
-                status: first.parentRequestStatus ?? first.status,
-                paymentStatus: first.parentPaymentStatus ?? first.paymentStatus,
+                status: first.isStandalone
+                  ? first.status
+                  : first.parentRequestStatus ?? first.status,
+                paymentStatus: first.isStandalone
+                  ? first.paymentStatus
+                  : first.parentPaymentStatus ?? first.paymentStatus,
                 rejectionReason: first.rejectionReason,
                 hasPastTrip: first.hasPastTrip,
               };
               const rejectionDisplay = getRejectionDisplay({ request, trip: first });
+              if (kind === "trip") {
+                const status = getDisplayStatus({ trip: first });
+                const colors = statusColors(status.tone);
+                return (
+                  <article key={itemKey} style={{ background: "#fff", border: "1px solid #E5ECEA", borderRadius: 8, overflow: "hidden" }}>
+                    <Link href={`/my-trips/${first.id}`} style={{ display: "grid", gap: 5, padding: "13px 16px", color: "inherit", textDecoration: "none" }}>
+                      <span style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                        <strong style={{ color: "#0B1E3D", fontSize: 13 }}>{formatDate(locale, first.date)} · {translate(locale, `vehicles.${first.vehicleType}`)}</strong>
+                        <span style={{ padding: "3px 9px", borderRadius: 16, background: colors.background, color: colors.color, fontSize: 11, fontWeight: 700 }}>
+                          {translate(locale, status.key)}
+                        </span>
+                      </span>
+                      <span style={{ color: "#5A6A7A", fontSize: 12, overflowWrap: "anywhere" }}>{first.pickupAddress} {locale === "ar" ? "←" : "→"} {first.dropoffAddress}</span>
+                      <span style={{ color: "#5A6A7A", fontSize: 12 }}>{translate(locale, "pickup")} {formatTime(locale, first.pickupTime)} · {translate(locale, "arrive")} {formatTime(locale, first.arrivalTime)} · {formatEgp(locale, first.priceEgp)}</span>
+                      {rejectionDisplay.showReasonCard && (
+                        <span style={{ color: "#6E4542", fontSize: 12 }}>
+                          {rejectionDisplay.reason ?? translate(locale, "rejection.no_reason")}
+                        </span>
+                      )}
+                    </Link>
+                  </article>
+                );
+              }
               return (
-                <section key={requestId} style={{ background: "#fff", border: "1px solid #E5ECEA", borderRadius: 8, overflow: "hidden" }}>
+                <section key={itemKey} style={{ background: "#fff", border: "1px solid #E5ECEA", borderRadius: 8, overflow: "hidden" }}>
                   <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "13px 16px", borderBottom: "1px solid #EEF2F2" }}>
                     <strong style={{ color: "#0B1E3D", fontSize: 13 }}>
                       {translate(locale, "my_trips.booking_group", { count: trips.length, plural: trips.length === 1 ? "" : "s" })}
@@ -170,7 +201,7 @@ export default async function TripHistoryPage({
                             </span>
                           </span>
                         </span>
-                        <span style={{ color: "#5A6A7A", fontSize: 12, overflowWrap: "anywhere" }}>{trip.pickupAddress} → {trip.dropoffAddress}</span>
+                        <span style={{ color: "#5A6A7A", fontSize: 12, overflowWrap: "anywhere" }}>{trip.pickupAddress} {locale === "ar" ? "←" : "→"} {trip.dropoffAddress}</span>
                         <span style={{ color: "#5A6A7A", fontSize: 12 }}>{translate(locale, "pickup")} {formatTime(locale, trip.pickupTime)} · {translate(locale, "arrive")} {formatTime(locale, trip.arrivalTime)} · {formatEgp(locale, trip.priceEgp)}</span>
                       </Link>
                     );

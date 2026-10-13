@@ -222,10 +222,25 @@ export async function GET(req: NextRequest) {
     Trip.aggregate<{ _id: Types.ObjectId; count: number }>([
       {
         $match: {
-          requestId: { $in: bookingIds.map((id) => new Types.ObjectId(id)) },
+          $or: [
+            {
+              requestId: {
+                $in: bookingIds.map((id) => new Types.ObjectId(id)),
+              },
+            },
+            {
+              _id: { $in: bookingIds.map((id) => new Types.ObjectId(id)) },
+              requestId: null,
+            },
+          ],
         },
       },
-      { $group: { _id: "$requestId", count: { $sum: 1 } } },
+      {
+        $group: {
+          _id: { $ifNull: ["$requestId", "$_id"] },
+          count: { $sum: 1 },
+        },
+      },
     ]),
   ]);
   const userMap = new Map(users.map((u) => [String(u._id), u]));

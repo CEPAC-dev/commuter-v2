@@ -181,7 +181,7 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
                 display: "flex",
               }}
             >
-              <ChevronLeft size={16} color="var(--color-muted)" aria-hidden="true" />
+              <ChevronLeft className="rtl-directional-icon" size={16} color="var(--color-muted)" aria-hidden="true" />
             </button>
               <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-primary)" }}>
               {format(month, "MMMM yyyy")}
@@ -198,7 +198,7 @@ export default function DateRangeCalendar({ fullWidth = false }: { fullWidth?: b
                 display: "flex",
               }}
             >
-              <ChevronRight size={16} color="var(--color-muted)" aria-hidden="true" />
+              <ChevronRight className="rtl-directional-icon" size={16} color="var(--color-muted)" aria-hidden="true" />
             </button>
           </div>
 
