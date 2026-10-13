@@ -1113,6 +1113,26 @@ export default async function MyTripsPage({
         .trip-card-route-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
         .trip-card-route-row span { min-width: 0; overflow: hidden; color: #24454A; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
         .trip-card-view-action { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding-top: 10px; border-top: 1px solid #EEF2F2; color: #006D60; font-size: 12px; font-weight: 800; }
+        .trip-pending-single-card { display: grid; gap: 14px; padding: 16px 18px; border: 1px solid #DCE6E4; border-radius: 18px; background: #fff; }
+        .trip-pending-single-header, .trip-pending-single-heading, .trip-pending-single-route, .trip-pending-single-date, .trip-pending-single-actions { display: flex; align-items: center; }
+        .trip-pending-single-header { justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; }
+        .trip-pending-single-heading { min-width: 0; flex-wrap: wrap; gap: 8px; }
+        .trip-pending-single-price { color: #0B1E3D; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .trip-pending-single-route { min-width: 0; gap: 9px; color: #24454A; font-size: 13px; }
+        .trip-pending-single-route svg { flex: 0 0 auto; }
+        .trip-pending-single-route span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .trip-pending-single-date { gap: 7px; color: #526262; font-size: 12px; }
+        .trip-pending-single-note { margin: -4px 0 0; color: #687978; font-size: 12px; line-height: 1.5; }
+        .trip-pending-single-actions { justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+        .trip-pending-single-actions > .booking-action-primary { min-width: 180px; }
+        .trip-pending-single-actions > .booking-action-danger { min-height: 44px; }
+        .trip-pending-single-view { width: 40px; height: 40px; flex: 0 0 40px; }
+        @media (max-width: 400px) {
+          .trip-pending-single-card { padding: 14px; }
+          .trip-pending-single-actions { display: grid; grid-template-columns: minmax(0, 1fr) 40px; }
+          .trip-pending-single-actions > .booking-action-primary { grid-column: 1 / -1; width: 100%; }
+          .trip-pending-single-actions > .booking-action-danger { width: 100%; }
+        }
         .trip-approved-caption { margin-block-start: 2px; color: #687978; font-size: 11px; line-height: 1.35; font-weight: 600; }
         .my-trips-day-group, .trip-card, .request-group-card {
           scroll-margin-top: calc(var(--app-header-h) + var(--my-trips-tabbar-height));
@@ -1865,6 +1885,87 @@ export default async function MyTripsPage({
                       !isDriver &&
                       activePassengerTab === "pending" &&
                       displayStatus.canPay;
+                    const tripPaymentStatus = trip.isStandalone
+                      ? trip.paymentStatus
+                      : trip.parentPaymentStatus ?? trip.paymentStatus;
+                    const compactPendingPassengerTrip =
+                      !isDriver &&
+                      activePassengerTab === "pending" &&
+                      !["paid", "refunded"].includes(tripPaymentStatus ?? "") &&
+                      (displayStatus.canPay ||
+                        [
+                          "request_status.waiting_for_approval",
+                          "status.waiting_list",
+                          "status.pending_payment",
+                        ].includes(displayStatus.key));
+                    if (compactPendingPassengerTrip) {
+                      const checkoutAmount = trip.isStandalone
+                        ? trip.priceEgp
+                        : trip.bookingAmountEgp;
+                      const waitingForApproval = [
+                        "request_status.waiting_for_approval",
+                        "status.waiting_list",
+                      ].includes(displayStatus.key);
+                      return (
+                        <article key={trip.id} className="trip-card trip-pending-single-card">
+                          <header className="trip-pending-single-header">
+                            <div className="trip-pending-single-heading">
+                              <Car size={19} color="#00806E" aria-hidden="true" />
+                              <strong style={{ color: "#0B1E3D", fontSize: 15, fontWeight: 800 }}>
+                                {vLabel}
+                              </strong>
+                              <Pill {...displayPill(locale, displayStatus)} />
+                            </div>
+                            <strong className="trip-pending-single-price">
+                              {formatEgp(locale, checkoutAmount)}
+                            </strong>
+                          </header>
+                          <div className="trip-pending-single-route">
+                            <MapPin size={14} color="#00A98F" aria-hidden="true" />
+                            <span dir="auto" title={pickupName}>{truncate(pickupName)}</span>
+                            <ArrowRight className="rtl-directional-icon" size={14} color="#91A6A3" aria-hidden="true" />
+                            <span dir="auto" title={dropoffName}>{truncate(dropoffName)}</span>
+                          </div>
+                          <div className="trip-pending-single-date">
+                            <CalendarDays size={14} aria-hidden="true" />
+                            <span>{prettyDate(locale, trip.date)} · {formatTime(locale, trip.pickupTime)}</span>
+                          </div>
+                          {waitingForApproval && (
+                            <p className="trip-pending-single-note">
+                              {translate(locale, "request_status.waiting_payment_explanation")}
+                            </p>
+                          )}
+                          <div className="trip-pending-single-actions">
+                            {needsPayment && (
+                              <ContinueCheckoutButton
+                                bookingId={trip.isStandalone ? trip.id : trip.requestId}
+                                amountEgp={checkoutAmount}
+                                walletBalance={walletBalance}
+                              />
+                            )}
+                            {displayStatus.canCancel && (
+                              <CancelTripModal
+                                tripId={trip.id}
+                                tripNumber={trip.tripNumber}
+                                date={trip.date}
+                                priceEgp={trip.priceEgp}
+                                status={trip.status}
+                                isStandalone={trip.isStandalone}
+                                paymentStatus={trip.paymentStatus}
+                                triggerClassName="my-trips-booking-action booking-action-danger"
+                              />
+                            )}
+                            <Link
+                              href={`/my-trips/${trip.id}`}
+                              className="my-trips-booking-action booking-action-icon trip-pending-single-view"
+                              aria-label={translate(locale, "my_trips.view_trip")}
+                            >
+                              <ChevronRight className="rtl-directional-icon" size={17} aria-hidden="true" />
+                            </Link>
+                          </div>
+                        </article>
+                      );
+                    }
                     return (
                       <div
                         key={trip.id}
