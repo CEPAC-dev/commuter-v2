@@ -8,7 +8,6 @@ import {
   XCircle,
   AlertTriangle,
   Wallet,
-  Clock,
   ShieldAlert,
   Loader2,
   CheckCircle2,
@@ -35,6 +34,7 @@ interface CancelTripModalProps {
   isStandalone?: boolean;
   paymentStatus?: string;
   onCancelled?: () => void;
+  triggerClassName?: string;
 }
 
 export default function CancelTripModal({
@@ -46,6 +46,7 @@ export default function CancelTripModal({
   isStandalone = false,
   paymentStatus = "pending",
   onCancelled,
+  triggerClassName,
 }: CancelTripModalProps) {
   const router = useRouter();
   const { t } = useClientLocale();
@@ -92,8 +93,8 @@ export default function CancelTripModal({
         );
       }
       setEvaluation(json.evaluation);
-    } catch (err: any) {
-      setError(err.message || "Failed to load cancellation policy");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load cancellation policy");
     } finally {
       setLoading(false);
     }
@@ -127,8 +128,8 @@ export default function CancelTripModal({
         if (onCancelled) onCancelled();
         router.refresh();
       }, 1200);
-    } catch (err: any) {
-      setError(err.message || "Cancellation failed");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Cancellation failed");
     } finally {
       setSubmitting(false);
     }
@@ -139,7 +140,7 @@ export default function CancelTripModal({
       <button
         type="button"
         onClick={openModal}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+        className={triggerClassName ?? "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"}
       >
         <XCircle size={14} />
         <span>Cancel Trip</span>

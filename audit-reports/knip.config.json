@@ -1,0 +1,24 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "scripts/**/*.{js,cjs,mjs,ts}",
+    "tests/**/*.{js,cjs,mjs,ts}"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx,js,jsx}",
+    "scripts/**/*.{js,cjs,mjs,ts}",
+    "tests/**/*.{js,cjs,mjs,ts}"
+  ],
+  "ignore": [
+    "**/.next/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/*.d.ts",
+    "audit-reports/**",
+    "PROJECT_MAP.md",
+    ".tmp_*",
+    "tmp-*",
+    "**/.tmp/**"
+  ]
+}
