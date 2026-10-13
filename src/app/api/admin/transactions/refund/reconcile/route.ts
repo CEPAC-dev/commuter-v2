@@ -8,6 +8,7 @@ import { reconcileKashierRefund } from "@/lib/payments/kashierRefundReconciliati
 import { queryKashierRefundTransaction } from "@/lib/payments/kashier";
 import { Trip } from "@/models/Trip";
 import { WalletTransaction } from "@/models/WalletTransaction";
+import { resolvePayableBooking } from "@/lib/payments/resolveBooking";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,6 +33,13 @@ export async function POST(req: NextRequest) {
   const payment = await Payment.findById(paymentId);
   if (!payment)
     return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+  // Admin reconciliation intentionally does not apply a passenger userId filter.
+  const payableBooking = await resolvePayableBooking(String(payment.bookingId));
+  if (!payableBooking)
+    return NextResponse.json(
+      { error: "Payment booking not found" },
+      { status: 404 },
+    );
   if (payment.refundLock) {
     if (
       Date.now() - payment.refundLock.acquiredAt.getTime() <
@@ -78,7 +86,9 @@ export async function POST(req: NextRequest) {
   }
 
   const unresolvedTrips = await Trip.find({
-    requestId: payment.bookingId,
+    ...(payableBooking.kind === "trip"
+      ? { _id: payment.bookingId, requestId: null }
+      : { requestId: payment.bookingId }),
     "adminRefund.paymentId": payment._id,
     $or: [
       {

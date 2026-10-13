@@ -3,6 +3,8 @@ import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { Types } from "mongoose";
+import { resolvePayableBooking } from "@/lib/payments/resolveBooking";
+import { fullyRefundedTripUpdate } from "@/lib/payments/tripSettlement";
 
 function isDuplicateKeyError(error: unknown): boolean {
   return (
@@ -31,6 +33,14 @@ export async function reconcileKashierRefund(
 
   const payment = await Payment.findById(paymentId);
   if (!payment) throw new Error("Payment not found for Kashier refund");
+  // Reconciliation is an admin/system operation, so it intentionally omits
+  // userId. A standalone Trip takes precedence; legacy payments resolve to Request.
+  const payableBooking = await resolvePayableBooking(String(payment.bookingId));
+  if (!payableBooking) throw new Error("Payment booking not found");
+  const tripScope =
+    payableBooking.kind === "trip"
+      ? { _id: payment.bookingId, requestId: null }
+      : { requestId: payment.bookingId };
 
   let refundLedger = await WalletTransaction.findOne({
     paymentId: payment._id,
@@ -39,7 +49,7 @@ export async function reconcileKashierRefund(
   });
 
   const relatedTrips = await Trip.find({
-    requestId: payment.bookingId,
+    ...tripScope,
     "adminRefund.paymentId": payment._id,
     "adminRefund.status": { $in: ["processing", "failed"] },
   })
@@ -209,10 +219,23 @@ export async function reconcileKashierRefund(
     payment.overallStatus !== "cancelled" &&
     refundedAmountEgp >= payment.totalEgp
   ) {
-    await Request.updateOne(
-      { _id: payment.bookingId },
-      { $set: { paymentStatus: "refunded" } },
-    );
+    if (payableBooking.kind === "trip") {
+      const fullRefundUpdate = fullyRefundedTripUpdate(
+        refundedAmountEgp,
+        payableBooking.amountEgp,
+      );
+      if (fullRefundUpdate) {
+        await Trip.updateOne(
+          { _id: payment.bookingId, requestId: null },
+          { $set: fullRefundUpdate },
+        );
+      }
+    } else {
+      await Request.updateOne(
+        { _id: payment.bookingId },
+        { $set: { paymentStatus: "refunded" } },
+      );
+    }
   }
 
   if (matchingTrip) {
@@ -224,7 +247,11 @@ export async function reconcileKashierRefund(
           | undefined
       )?.compensationAmountEgp ?? 0;
     const refundedTripAmountEgp = currentRefund + amountEgp;
-    const fullyRefundedTrip = refundedTripAmountEgp >= matchingTrip.priceEgp;
+    const fullRefundUpdate = fullyRefundedTripUpdate(
+      refundedTripAmountEgp,
+      matchingTrip.priceEgp,
+    );
+    const fullyRefundedTrip = fullRefundUpdate !== null;
     const totalReturnEgp = refundedTripAmountEgp + currentCompensation;
     await Trip.updateOne(
       {
@@ -233,9 +260,7 @@ export async function reconcileKashierRefund(
       },
       {
         $set: {
-          ...(fullyRefundedTrip
-            ? { status: "refunded", paymentStatus: "refunded" }
-            : {}),
+          ...(fullRefundUpdate ?? {}),
           "adminRefund.status": fullyRefundedTrip ? "completed" : "failed",
           "adminRefund.refundAmountEgp": refundedTripAmountEgp,
           "adminRefund.totalReturnEgp": totalReturnEgp,

@@ -33,6 +33,32 @@ export function hasPastTrip(
 
 export const hasPastWaitingListTrip = hasPastTrip;
 
+export function countWaitingListRows(
+  requestCount: number,
+  tripCount: number,
+): number {
+  return requestCount + tripCount;
+}
+
+export function paginateWaitingListRows<
+  T extends {
+    kind: "request" | "trip";
+    record: { _id: unknown; createdAt: Date | string };
+  },
+>(rows: T[], page: number, limit: number): T[] {
+  return rows
+    .sort((left, right) => {
+      const createdAtDifference =
+        new Date(left.record.createdAt).getTime() -
+        new Date(right.record.createdAt).getTime();
+      return (
+        createdAtDifference ||
+        String(left.record._id).localeCompare(String(right.record._id))
+      );
+    })
+    .slice((page - 1) * limit, page * limit);
+}
+
 export function validateWaitingListAction(
   body: unknown,
 ): { ok: true; value: WaitingListActionInput } | { ok: false; error: string } {
@@ -49,11 +75,19 @@ export function validateWaitingListAction(
     return { ok: false, error: "reason is only accepted when rejecting." };
   }
 
-  if (input.action === "reject" && input.reason !== undefined && typeof input.reason !== "string") {
+  if (
+    input.action === "reject" &&
+    input.reason !== undefined &&
+    typeof input.reason !== "string"
+  ) {
     return { ok: false, error: "reason must be a string." };
   }
 
-  const reason = typeof input.reason === "string" ? input.reason.trim() : undefined;
+  const reason =
+    typeof input.reason === "string" ? input.reason.trim() : undefined;
+  if (input.action === "reject" && !reason) {
+    return { ok: false, error: "reason is required when rejecting." };
+  }
   if (reason && reason.length > 500) {
     return { ok: false, error: "reason must be 500 characters or fewer." };
   }
@@ -71,6 +105,10 @@ export function buildWaitingListTransitionFilter(requestId: unknown) {
   return { _id: requestId, status: "waiting_list" };
 }
 
+export function buildWaitingListTripTransitionFilter(tripId: unknown) {
+  return { _id: tripId, requestId: null, status: "waiting_list" };
+}
+
 export function buildWaitingListReviewUpdate(
   action: WaitingListAction,
   adminId: unknown,
@@ -84,7 +122,9 @@ export function buildWaitingListReviewUpdate(
       reviewedAt,
       ...(action === "reject" && reason ? { rejectionReason: reason } : {}),
     },
-    ...(action === "reject" && !reason ? { $unset: { rejectionReason: 1 } } : {}),
+    ...(action === "reject" && !reason
+      ? { $unset: { rejectionReason: 1 } }
+      : {}),
   };
 }
 
@@ -124,12 +164,45 @@ export function groupPromoUsageCounts(
 
 type WaitingListNotification = {
   userId: string;
-  type: "waiting_list_created" | "waiting_list_approved" | "waiting_list_rejected";
+  type:
+    | "waiting_list_created"
+    | "waiting_list_approved"
+    | "waiting_list_rejected";
   title: string;
   body: string;
   titleAr: string;
   bodyAr: string;
   data: Record<string, unknown>;
+};
+
+export type WaitingListPassengerRecord = {
+  name?: string;
+  phone?: string;
+  email?: string;
+};
+
+export type WaitingListTripRecord = {
+  _id: unknown;
+  requestId?: unknown;
+  userId?: WaitingListPassengerRecord | null;
+  appliedPromoCode?: unknown;
+  pickup?: { address?: string } | null;
+  dropoff?: { address?: string } | null;
+  date: string;
+  pickupTime: string;
+  arrivalTime: string;
+  vehicleType: string;
+  preferedGender?: string | null;
+  numberOfPassengers: number;
+  priceEgp: number;
+  note?: string;
+};
+
+export type WaitingListRequestRecord = {
+  _id: unknown;
+  createdAt: Date | string;
+  amountEgp: number;
+  note?: string;
 };
 
 export function buildWaitingListCreatedAdminNotifications(input: {
@@ -151,6 +224,58 @@ export function buildWaitingListCreatedAdminNotifications(input: {
       linkLabel: "Review waiting list",
     },
   }));
+}
+
+export function buildWaitingListCreatedTripAdminNotifications(input: {
+  adminIds: readonly string[];
+  tripId: string;
+  routeSummary: string;
+  date: string;
+}): WaitingListNotification[] {
+  return input.adminIds.map((adminId) => ({
+    userId: adminId,
+    type: "waiting_list_created",
+    title: "New shared-ride trip",
+    body: `${input.routeSummary} on ${input.date} is waiting for review.`,
+    titleAr: "رحلة مشتركة جديدة",
+    bodyAr: `رحلة مشتركة من ${input.routeSummary} يوم ${input.date} مستنية المراجعة.`,
+    data: {
+      bookingId: input.tripId,
+      tripId: input.tripId,
+      linkUrl: "/admin/waiting-list",
+      linkLabel: "Review waiting list",
+    },
+  }));
+}
+
+export function buildWaitingListCreatedTripBatchAdminNotifications(input: {
+  adminIds: readonly string[];
+  tripId: string;
+  batchId: string;
+  tripCount: number;
+  routeSummary: string;
+  date: string;
+}): WaitingListNotification[] {
+  return input.adminIds.map((adminId) => ({
+    userId: adminId,
+    type: "waiting_list_created",
+    title: `${input.tripCount} new shared-ride trips`,
+    body: `${input.routeSummary} on ${input.date}: ${input.tripCount} trips are waiting for review.`,
+    titleAr: `${input.tripCount} رحلات مشتركة جديدة`,
+    bodyAr: `${input.tripCount} رحلات مشتركة من ${input.routeSummary} يوم ${input.date} مستنية المراجعة.`,
+    data: {
+      batchId: input.batchId,
+      bookingId: input.tripId,
+      tripId: input.tripId,
+      tripCount: input.tripCount,
+      linkUrl: "/admin/waiting-list",
+      linkLabel: "Review waiting list",
+    },
+  }));
+}
+
+export function waitingListTripBatchDedupeKey(batchId: string): string {
+  return `batch:${batchId}:waiting_list_created`;
 }
 
 export function buildWaitingListApprovedNotification(
@@ -200,13 +325,14 @@ export function buildWaitingListRejectedNotification(
 }
 
 export function mapWaitingListRequest(input: {
-  request: Record<string, any>;
-  passenger: Record<string, any> | null;
-  trips: Record<string, any>[];
+  request: WaitingListRequestRecord;
+  passenger: WaitingListPassengerRecord | null;
+  trips: WaitingListTripRecord[];
   promoCodes: string[];
   hasPastTrip: boolean;
 }) {
   return {
+    kind: "request" as const,
     id: String(input.request._id),
     createdAt: input.request.createdAt,
     totalFare: input.request.amountEgp,
@@ -234,5 +360,44 @@ export function mapWaitingListRequest(input: {
       preferedGender: trip.preferedGender ?? null,
       fare: trip.priceEgp,
     })),
+  };
+}
+
+export function mapWaitingListTrip(input: {
+  trip: WaitingListTripRecord & { createdAt: Date | string };
+  passenger: WaitingListPassengerRecord | null;
+  promoCodes: string[];
+  hasPastTrip: boolean;
+}) {
+  return {
+    kind: "trip" as const,
+    id: String(input.trip._id),
+    createdAt: input.trip.createdAt,
+    totalFare: input.trip.priceEgp,
+    hasPastTrip: input.hasPastTrip,
+    promoCodes: input.promoCodes,
+    note: input.trip.note ?? "",
+    passenger: input.passenger
+      ? {
+          name: input.passenger.name,
+          phone: input.passenger.phone,
+          email: input.passenger.email,
+        }
+      : null,
+    trips: [
+      {
+        id: String(input.trip._id),
+        route: {
+          pickup: input.trip.pickup,
+          dropoff: input.trip.dropoff,
+        },
+        date: input.trip.date,
+        pickupTime: input.trip.pickupTime,
+        arrivalTime: input.trip.arrivalTime,
+        vehicleType: input.trip.vehicleType,
+        numberOfPassengers: input.trip.numberOfPassengers,
+        fare: input.trip.priceEgp,
+      },
+    ],
   };
 }

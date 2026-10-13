@@ -7,14 +7,19 @@ const {
   buildWaitingListCreatedAdminNotifications,
   buildWaitingListRejectedNotification,
   buildWaitingListReviewUpdate,
+  buildWaitingListTripTransitionFilter,
   buildWaitingListTransitionFilter,
+  countWaitingListRows,
   getSharedRideWaitingListEnabled,
   groupPromoUsageCounts,
   hasPastWaitingListTrip,
   mapWaitingListRequest,
+  mapWaitingListTrip,
+  paginateWaitingListRows,
   shouldCreateWaitingListRequest,
   validateWaitingListAction,
 } = await import('../src/lib/admin/waitingList.ts');
+const { isStandaloneTripPayable } = await import('../src/lib/payments/resolvePayableBookingRecord.ts');
 const {
   formatAdminBadgeCount,
   formatWaitingListAge,
@@ -29,6 +34,14 @@ test('validates approve and reject actions and reasons', () => {
   assert.deepEqual(validateWaitingListAction({ action: 'reject', reason: '  Not available  ' }), {
     ok: true,
     value: { action: 'reject', reason: 'Not available' },
+  });
+  assert.deepEqual(validateWaitingListAction({ action: 'reject' }), {
+    ok: false,
+    error: 'reason is required when rejecting.',
+  });
+  assert.deepEqual(validateWaitingListAction({ action: 'reject', reason: '   ' }), {
+    ok: false,
+    error: 'reason is required when rejecting.',
   });
   assert.equal(validateWaitingListAction({ action: 'archive' }).ok, false);
   assert.equal(validateWaitingListAction({ action: 'approve', reason: 'not allowed' }).ok, false);
@@ -51,6 +64,68 @@ test('waiting-list transition is conditional on waiting_list', () => {
       },
     },
   );
+});
+
+test("legacy Request approval remains an allowed existing-record update", () => {
+  const filter = buildWaitingListTransitionFilter("legacy-request");
+  const update = buildWaitingListReviewUpdate(
+    "approve",
+    "admin-id",
+    new Date("2026-10-11T09:00:00.000Z"),
+  );
+  assert.deepEqual(filter, {
+    _id: "legacy-request",
+    status: "waiting_list",
+  });
+  assert.deepEqual(update.$set, {
+    status: "approved",
+    reviewedBy: "admin-id",
+    reviewedAt: new Date("2026-10-11T09:00:00.000Z"),
+  });
+  assert.equal(update.$set.paymentStatus, undefined);
+});
+
+test('standalone Trip review filter is atomic and approval unlocks payment only', () => {
+  const filter = buildWaitingListTripTransitionFilter('trip-id');
+  assert.deepEqual(filter, {
+    _id: 'trip-id',
+    requestId: null,
+    status: 'waiting_list',
+  });
+
+  const approve = buildWaitingListReviewUpdate(
+    'approve',
+    'admin-id',
+    new Date('2026-09-28T12:00:00.000Z'),
+  );
+  const approvedTrip = {
+    status: approve.$set.status,
+    paymentStatus: 'pending',
+  };
+  assert.equal(isStandaloneTripPayable(approvedTrip), true);
+
+  const reject = buildWaitingListReviewUpdate(
+    'reject',
+    'admin-id',
+    new Date('2026-09-28T12:00:00.000Z'),
+    'No seats available',
+  );
+  const rejectedTrip = {
+    status: reject.$set.status,
+    paymentStatus: 'pending',
+  };
+  assert.equal(reject.$set.rejectionReason, 'No seats available');
+  assert.equal(isStandaloneTripPayable(rejectedTrip), false);
+
+  let status = 'waiting_list';
+  const conditionalReview = () => {
+    if (status !== filter.status) return false;
+    status = approve.$set.status;
+    return true;
+  };
+  assert.equal(conditionalReview(), true);
+  assert.equal(conditionalReview(), false);
+  assert.equal(status, 'approved');
 });
 
 test('waiting-list creation requires both an enabled feature and a shared ride', () => {
@@ -93,6 +168,43 @@ test('passenger projection and response mapping exclude sensitive fields', () =>
   assert.equal('wallet' in mapped.passenger, false);
   assert.equal(mapped.hasPastTrip, false);
   assert.equal(mapped.trips[0].preferedGender, 'female');
+});
+
+test('waiting-list list mapping and pagination include Trips and Requests in created-time order', () => {
+  const requestRow = {
+    kind: 'request',
+    record: { _id: 'request-id', createdAt: '2026-09-28T12:00:00.000Z' },
+  };
+  const tripRow = {
+    kind: 'trip',
+    record: { _id: 'trip-id', createdAt: '2026-09-28T11:00:00.000Z' },
+  };
+  assert.deepEqual(paginateWaitingListRows([requestRow, tripRow], 1, 1), [tripRow]);
+  assert.deepEqual(paginateWaitingListRows([requestRow, tripRow], 2, 1), [requestRow]);
+  assert.equal(countWaitingListRows(2, 3), 5);
+
+  const standalone = mapWaitingListTrip({
+    trip: {
+      _id: 'trip-id',
+      createdAt: '2026-09-28T11:00:00.000Z',
+      priceEgp: 95,
+      note: 'One passenger',
+      pickup: { address: 'A' },
+      dropoff: { address: 'B' },
+      date: '2026-09-29',
+      pickupTime: '08:00',
+      arrivalTime: '09:00',
+      vehicleType: 'taxi_shared',
+      numberOfPassengers: 1,
+    },
+    passenger: { name: 'Passenger', email: 'passenger@example.com' },
+    promoCodes: [],
+    hasPastTrip: false,
+  });
+  assert.equal(standalone.kind, 'trip');
+  assert.equal(standalone.id, 'trip-id');
+  assert.equal(standalone.trips.length, 1);
+  assert.equal(standalone.totalFare, 95);
 });
 
 test('promo release grouping is empty when a request has no promo usage', () => {

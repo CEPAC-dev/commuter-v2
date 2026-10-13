@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { getServerLocale } from "@/lib/i18n/server";
 import { localeDirection } from "@/lib/i18n/config";
+import SupportChatWidget from "@/components/support/SupportChatWidget";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3000"),
@@ -72,6 +73,7 @@ export default async function RootLayout({
         }}
       >
         {children}
+        <SupportChatWidget initialLocale={locale} />
       </body>
     </html>
   );

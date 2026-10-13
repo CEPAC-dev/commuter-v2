@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { getTripTab } = await import("../src/lib/tripTabs.ts");
+const { getTripTab, normalizePassengerTabKey } = await import("../src/lib/tripTabs.ts");
 const { getDisplayStatus } = await import("../src/lib/statusDisplay.ts");
 const { getCairoNowParts } = await import("../src/lib/time/cairoTime.ts");
 const { hasPastTrip } = await import("../src/lib/admin/waitingList.ts");
@@ -15,6 +15,14 @@ test("private unpaid trip is pending", () => {
       now,
     }),
     "pending",
+  );
+});
+
+test("legacy bookings links resolve to the Pending tab and expose no bookings tab", () => {
+  assert.equal(normalizePassengerTabKey("bookings"), "pending");
+  assert.deepEqual(
+    ["all", "pending", "upcoming", "ongoing"].map(normalizePassengerTabKey),
+    ["all", "pending", "upcoming", "ongoing"],
   );
 });
 
@@ -99,6 +107,56 @@ test("unknown status values safely fall into history", () => {
       now,
     }),
     "history",
+  );
+});
+
+test("standalone Trip statuses map directly to passenger tabs", () => {
+  const expected = {
+    pending_payment: "pending",
+    waiting_list: "pending",
+    approved: "pending",
+    submitted: "upcoming",
+    matched: "upcoming",
+    confirmed: "upcoming",
+    nomatch: "upcoming",
+    active: "ongoing",
+    rejected: "history",
+    time_out: "history",
+    cancelled: "history",
+    completed: "history",
+    refunded: "history",
+  };
+  for (const [status, tab] of Object.entries(expected)) {
+    assert.equal(
+      getTripTab({
+        trip: {
+          isStandalone: true,
+          status,
+          paymentStatus: "pending",
+          date: "2026-10-05",
+          pickupTime: "09:00",
+        },
+        now,
+      }),
+      tab,
+      status,
+    );
+  }
+});
+
+test("standalone approved unpaid trips stay pending even after pickup time", () => {
+  assert.equal(
+    getTripTab({
+      trip: {
+        isStandalone: true,
+        status: "approved",
+        paymentStatus: "pending",
+        date: "2026-10-02",
+        pickupTime: "09:00",
+      },
+      now,
+    }),
+    "pending",
   );
 });
 

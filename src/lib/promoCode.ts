@@ -1,10 +1,14 @@
 import "server-only";
 import { randomBytes } from "crypto";
-import { Types } from "mongoose";
+import mongoose, { Types, type ClientSession } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import { isPromoCodeExpired } from "@/lib/promoCodeShared";
 import { PromoCode } from "@/models/PromoCode";
 import { PromoCodeUsage } from "@/models/PromoCodeUsage";
+import { Request } from "@/models/Request";
+import { Trip } from "@/models/Trip";
+import { releasePromoUsageForTripWith } from "@/lib/promoUsageRelease";
+import { releasePromoForRequestWith } from "@/lib/requestPromoRelease";
 
 const PROMO_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_CODE_ATTEMPTS = 10;
@@ -115,6 +119,7 @@ export async function applyPromoCodeToTrip(
   code: string,
   userId: string,
   tripId: string,
+  session?: ClientSession,
 ): Promise<PromoCodeApplyResult> {
   await connectDB();
 
@@ -140,6 +145,7 @@ export async function applyPromoCodeToTrip(
     {
       returnDocument: "after",
       select: "_id discountType discountValue code expiresAt",
+      ...(session ? { session } : {}),
     },
   ).lean<{
     _id: Types.ObjectId;
@@ -158,6 +164,11 @@ export async function applyPromoCodeToTrip(
   }
 
   if (isPromoCodeExpired(promo.expiresAt)) {
+    await PromoCode.updateOne(
+      { _id: promo._id, usedCount: { $gt: 0 } },
+      { $inc: { usedCount: -1 } },
+      session ? { session } : {},
+    );
     return {
       success: false,
       message: "This code has expired.",
@@ -165,13 +176,18 @@ export async function applyPromoCodeToTrip(
     };
   }
 
-  const usage = await PromoCodeUsage.create({
-    promoCode: promo._id,
-    user: new Types.ObjectId(userId),
-    trip: new Types.ObjectId(tripId),
-    discountType: promo.discountType,
-    discountValue: promo.discountValue,
-  });
+  const [usage] = await PromoCodeUsage.create(
+    [
+      {
+        promoCode: promo._id,
+        user: new Types.ObjectId(userId),
+        trip: new Types.ObjectId(tripId),
+        discountType: promo.discountType,
+        discountValue: promo.discountValue,
+      },
+    ],
+    session ? { session } : {},
+  );
 
   return {
     success: true,
@@ -198,4 +214,107 @@ export async function rollbackPromoCodeUsage(
     { _id: promoCodeId, usedCount: { $gt: 0 } },
     { $inc: { usedCount: -1 } },
   );
+}
+
+async function releasePromoCodeUsageInSession(
+  tripId: Types.ObjectId,
+  session: ClientSession,
+): Promise<number> {
+  return releasePromoUsageForTripWith(
+    {
+      async findUsageForTrip(id) {
+        const usages = await PromoCodeUsage.find({ trip: new Types.ObjectId(id) })
+          .select("_id promoCode")
+          .session(session)
+          .lean<{ _id: Types.ObjectId; promoCode: Types.ObjectId }[]>();
+        return usages.map((usage) => ({
+          id: String(usage._id),
+          promoCodeId: String(usage.promoCode),
+        }));
+      },
+      async deleteUsage(id) {
+        const result = await PromoCodeUsage.deleteOne(
+          { _id: new Types.ObjectId(id), trip: tripId },
+          { session },
+        );
+        return result.deletedCount === 1;
+      },
+      async decrementUsedCount(promoCodeId) {
+        await PromoCode.updateOne(
+          { _id: new Types.ObjectId(promoCodeId), usedCount: { $gt: 0 } },
+          { $inc: { usedCount: -1 } },
+          { session },
+        );
+      },
+    },
+    String(tripId),
+  );
+}
+
+export async function releasePromoCodeUsageForTrip(
+  tripId: string | Types.ObjectId,
+  session?: ClientSession,
+): Promise<number> {
+  await connectDB();
+  const normalizedId = new Types.ObjectId(tripId);
+  if (session) return releasePromoCodeUsageInSession(normalizedId, session);
+
+  const dbSession = await mongoose.startSession();
+  let released = 0;
+  try {
+    await dbSession.withTransaction(async () => {
+      released = await releasePromoCodeUsageInSession(normalizedId, dbSession);
+    });
+    return released;
+  } finally {
+    await dbSession.endSession();
+  }
+}
+
+export async function releasePromoForRequest(
+  requestId: string | Types.ObjectId,
+  options: { session?: ClientSession } = {},
+): Promise<number> {
+  await connectDB();
+  const normalizedId = new Types.ObjectId(requestId);
+  const release = (session: ClientSession) =>
+    releasePromoForRequestWith(
+      {
+        async getRequest(id) {
+          return Request.findById(id)
+            .select("status paymentStatus")
+            .session(session)
+            .lean<{ status: string; paymentStatus: string } | null>();
+        },
+        async findTripsForRequest(id) {
+          const trips = await Trip.find({ requestId: new Types.ObjectId(id) })
+            .select("_id status paymentStatus")
+            .session(session)
+            .lean<
+              { _id: Types.ObjectId; status: string; paymentStatus: string }[]
+            >();
+          return trips.map((trip) => ({
+            id: String(trip._id),
+            status: trip.status,
+            paymentStatus: trip.paymentStatus,
+          }));
+        },
+        releaseTrip: (tripId) =>
+          releasePromoCodeUsageForTrip(tripId, session),
+      },
+      String(normalizedId),
+    );
+
+  if (options.session) return release(options.session);
+
+  const dbSession = await mongoose.startSession();
+  let released = 0;
+  try {
+    await dbSession.withTransaction(async () => {
+      released = await release(dbSession);
+    });
+    return released;
+  } finally {
+    await dbSession.endSession();
+  }
 }

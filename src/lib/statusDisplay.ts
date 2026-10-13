@@ -1,11 +1,19 @@
 import { getRequestPaymentState } from "./requestPaymentState.ts";
-import { hasPastPickup } from "./time/cairoTime.ts";
+import { getCairoNowParts, hasPastPickup } from "./time/cairoTime.ts";
+import { getStandaloneTripCancellationMode } from "./standaloneTripCancellation.ts";
+import {
+  isApprovedTripPickupPast,
+  isStandaloneTripPayable,
+} from "./payments/resolvePayableBookingRecord.ts";
 
 type TripLike = {
+  id?: string;
+  isStandalone?: boolean;
   status?: string | null;
   paymentStatus?: string | null;
   date?: string | null;
   pickupTime?: string | null;
+  rejectionReason?: string | null;
   cancelledBy?: string | null;
   cancelReason?: string | null;
   cancellation?: {
@@ -69,6 +77,101 @@ export function getDisplayStatus({
 }): DisplayStatus {
   const parent = request ?? {};
   const child = trip ?? undefined;
+  if (child?.isStandalone) {
+    const status = child.status ?? "";
+    const paymentStatus = child.paymentStatus ?? "pending";
+    const payable =
+      isStandaloneTripPayable({ status, paymentStatus }) &&
+      !(
+        status === "approved" &&
+        child.date &&
+        child.pickupTime &&
+        isApprovedTripPickupPast(
+          { status, date: child.date, pickupTime: child.pickupTime },
+          getCairoNowParts(now),
+        )
+      );
+    const cancellation = getStandaloneTripCancellationMode({
+      id: child.id ?? "",
+      status,
+      paymentStatus,
+    });
+    const showRefundBadge = Boolean(
+      child.cancellation?.refundStatus &&
+        child.cancellation.refundStatus !== "none",
+    );
+    const refundOptions = { showRefundBadge };
+
+    switch (status) {
+      case "waiting_list":
+        return result("request_status.waiting_for_approval", "warning", {
+          canCancel: cancellation.kind !== "blocked",
+        });
+      case "approved":
+        return payable
+          ? result("request_status.approved_pay_now", "warning", {
+              canPay: true,
+              canCancel: cancellation.kind !== "blocked",
+            })
+          : result("status.expired", "neutral", {
+              canCancel: cancellation.kind !== "blocked",
+            });
+      case "pending_payment":
+        return result("status.pending_payment", "warning", {
+          canPay: payable,
+          canCancel: cancellation.kind !== "blocked",
+        });
+      case "rejected":
+        return result("request_status.rejected", "danger", {
+          ...refundOptions,
+          secondaryText: child.rejectionReason?.trim() || undefined,
+        });
+      case "time_out":
+        return result("status.expired", "neutral", refundOptions);
+      case "submitted":
+        return result("status.searching_for_ride", "info", {
+          ...refundOptions,
+          canCancel: cancellation.kind !== "blocked",
+        });
+      case "matched":
+        return result("status.matched", "info", {
+          ...refundOptions,
+          canCancel: cancellation.kind !== "blocked",
+        });
+      case "confirmed":
+        return result("status.confirmed", "info", {
+          ...refundOptions,
+          canCancel: cancellation.kind !== "blocked",
+        });
+      case "active":
+        return result("status.in_progress", "success", {
+          ...refundOptions,
+          canCancel: cancellation.kind !== "blocked",
+        });
+      case "completed":
+        return result("status.completed", "success", {
+          ...refundOptions,
+          canRate: true,
+        });
+      case "nomatch":
+        return result("status.no_ride_found", "danger", {
+          ...refundOptions,
+          canCancel: cancellation.kind !== "blocked",
+        });
+      case "cancelled":
+        return result("status.cancelled", "neutral", {
+          ...refundOptions,
+          secondaryText:
+            child.cancelReason?.trim() ||
+            child.cancellation?.reason?.trim() ||
+            undefined,
+        });
+      case "refunded":
+        return result("status.refunded", "success", refundOptions);
+      default:
+        return result("status.unknown", "neutral", refundOptions);
+    }
+  }
   const pastPickup = hasPastTrip(parent, child, now);
   const requestPayment = getRequestPaymentState({
     status:
@@ -193,7 +296,9 @@ export function getRejectionDisplay({
     getDisplayStatus({ request, trip }).key === "request_status.rejected";
   const reason = !showReasonCard
     ? null
-    : request?.status === "rejected"
+    : trip?.isStandalone
+      ? trip.rejectionReason?.trim() || null
+      : request?.status === "rejected"
       ? request.rejectionReason?.trim() || null
       : trip?.cancelReason?.trim() || null;
 

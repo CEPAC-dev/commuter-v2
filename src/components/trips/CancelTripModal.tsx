@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useClientLocale } from "@/lib/locale.client";
+import { getStandaloneTripCancellationMode } from "@/lib/standaloneTripCancellation";
 import {
   XCircle,
   AlertTriangle,
   Wallet,
-  Clock,
   ShieldAlert,
   Loader2,
   CheckCircle2,
@@ -31,7 +31,10 @@ interface CancelTripModalProps {
   date: string;
   priceEgp: number;
   status: string;
+  isStandalone?: boolean;
+  paymentStatus?: string;
   onCancelled?: () => void;
+  triggerClassName?: string;
 }
 
 export default function CancelTripModal({
@@ -40,7 +43,10 @@ export default function CancelTripModal({
   date,
   priceEgp,
   status,
+  isStandalone = false,
+  paymentStatus = "pending",
   onCancelled,
+  triggerClassName,
 }: CancelTripModalProps) {
   const router = useRouter();
   const { t } = useClientLocale();
@@ -51,9 +57,20 @@ export default function CancelTripModal({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const unpaidStandalone =
+    isStandalone &&
+    getStandaloneTripCancellationMode({
+      id: tripId,
+      status,
+      paymentStatus,
+    }).kind === "unpaid";
 
   // Exclude cancelled and completed trips
-  if (status === "cancelled" || status === "completed" || status === "time_out") {
+  if (
+    status === "cancelled" ||
+    status === "completed" ||
+    status === "time_out"
+  ) {
     return null;
   }
 
@@ -72,12 +89,12 @@ export default function CancelTripModal({
             ? t("errors.REQUEST_NOT_CANCELLABLE")
             : json.errorCode === "TRIP_NOT_PAID"
               ? t("errors.TRIP_NOT_PAID")
-            : json.error || "Failed to load cancellation details",
+              : json.error || "Failed to load cancellation details",
         );
       }
       setEvaluation(json.evaluation);
-    } catch (err: any) {
-      setError(err.message || "Failed to load cancellation policy");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load cancellation policy");
     } finally {
       setLoading(false);
     }
@@ -101,7 +118,7 @@ export default function CancelTripModal({
             ? t("errors.REQUEST_NOT_CANCELLABLE")
             : json.errorCode === "TRIP_NOT_PAID"
               ? t("errors.TRIP_NOT_PAID")
-            : json.error || "Failed to cancel trip",
+              : json.error || "Failed to cancel trip",
         );
       }
 
@@ -111,8 +128,8 @@ export default function CancelTripModal({
         if (onCancelled) onCancelled();
         router.refresh();
       }, 1200);
-    } catch (err: any) {
-      setError(err.message || "Cancellation failed");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Cancellation failed");
     } finally {
       setSubmitting(false);
     }
@@ -123,14 +140,14 @@ export default function CancelTripModal({
       <button
         type="button"
         onClick={openModal}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+        className={triggerClassName ?? "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"}
       >
         <XCircle size={14} />
         <span>Cancel Trip</span>
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200 z-[999]">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-slate-900">
             {/* Header */}
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
@@ -170,7 +187,9 @@ export default function CancelTripModal({
                 <div className="py-8 flex flex-col items-center justify-center text-slate-400 gap-2">
                   <Loader2 className="w-6 h-6 animate-spin text-[#00C2A8]" />
                   <span className="text-xs font-medium">
-                    Calculating cancellation policy & refund...
+                    {unpaidStandalone
+                      ? "Loading cancellation options..."
+                      : "Calculating cancellation policy & refund..."}
                   </span>
                 </div>
               ) : evaluation ? (
@@ -178,17 +197,41 @@ export default function CancelTripModal({
                   {/* Trip Summary Card */}
                   <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100 flex items-center justify-between text-xs">
                     <div>
-                      <span className="text-slate-500 block font-medium">Pickup Date</span>
+                      <span className="text-slate-500 block font-medium">
+                        Pickup Date
+                      </span>
                       <span className="font-bold text-slate-900">{date}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-slate-500 block font-medium">Trip Fare</span>
-                      <span className="font-bold text-slate-900">{priceEgp} EGP</span>
+                      <span className="text-slate-500 block font-medium">
+                        Trip Fare
+                      </span>
+                      <span className="font-bold text-slate-900">
+                        {priceEgp} EGP
+                      </span>
                     </div>
                   </div>
 
-                  {/* Policy evaluation details */}
-                  {!evaluation.allowed ? (
+                  {unpaidStandalone ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        No payment has been taken. Cancelling will end this
+                        trip.
+                      </p>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Cancellation Reason (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                          placeholder="e.g. Schedule changed, emergency"
+                          className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#00C2A8]"
+                        />
+                      </div>
+                    </div>
+                  ) : !evaluation.allowed ? (
                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
                       <div className="flex items-center gap-2 text-amber-800 font-bold text-xs">
                         <AlertTriangle className="w-4 h-4 text-amber-600" />
@@ -203,28 +246,37 @@ export default function CancelTripModal({
                     <div className="space-y-3">
                       <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-2.5">
                         <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-200">
-                          <span className="text-slate-600 font-medium">Refund Tier</span>
+                          <span className="text-slate-600 font-medium">
+                            Refund Tier
+                          </span>
                           <span className="font-bold text-slate-900 capitalize">
                             {evaluation.tierLabel.replace(/_/g, " ")}
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-600 font-medium">Refund Percentage</span>
+                          <span className="text-slate-600 font-medium">
+                            Refund Percentage
+                          </span>
                           <span className="font-extrabold text-emerald-600">
                             {evaluation.refundPercent}%
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-600 font-medium">Penalty (Retained)</span>
+                          <span className="text-slate-600 font-medium">
+                            Penalty (Retained)
+                          </span>
                           <span className="font-bold text-rose-500">
-                            {evaluation.penaltyPercent}% ({evaluation.retainedAmount} EGP)
+                            {evaluation.penaltyPercent}% (
+                            {evaluation.retainedAmount} EGP)
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200">
-                          <span className="font-bold text-slate-900">Net Wallet Refund</span>
+                          <span className="font-bold text-slate-900">
+                            Net Wallet Refund
+                          </span>
                           <span className="font-extrabold text-slate-900 text-sm text-[#00806E]">
                             + {evaluation.refundAmount} EGP
                           </span>
@@ -233,7 +285,11 @@ export default function CancelTripModal({
 
                       <div className="flex items-center gap-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200/80 p-2.5 rounded-lg">
                         <Wallet className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        <span>Your refund of {evaluation.refundAmount} EGP will be reviewed by an admin before it is credited to your wallet.</span>
+                        <span>
+                          Your refund of {evaluation.refundAmount} EGP will be
+                          reviewed by an admin before it is credited to your
+                          wallet.
+                        </span>
                       </div>
 
                       <div>
@@ -272,8 +328,12 @@ export default function CancelTripModal({
                   disabled={submitting || !!successMsg}
                   className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-xl transition-colors shadow-sm cursor-pointer"
                 >
-                  {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{submitting ? "Cancelling..." : "Confirm Cancellation"}</span>
+                  {submitting && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  <span>
+                    {submitting ? "Cancelling..." : "Confirm Cancellation"}
+                  </span>
                 </button>
               )}
             </div>

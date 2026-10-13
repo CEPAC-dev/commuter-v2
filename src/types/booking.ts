@@ -23,8 +23,20 @@ export type BookingStatus =
   | "cancelled"
   | "time_out";
 
-/** A Trip's lifecycle status uses the same enum as its parent Booking. */
-export type TripStatus = BookingStatus;
+export type TripStatus =
+  | "pending_payment"
+  | "waiting_list"
+  | "approved"
+  | "rejected"
+  | "submitted"
+  | "matched"
+  | "nomatch"
+  | "confirmed"
+  | "active"
+  | "completed"
+  | "refunded"
+  | "cancelled"
+  | "time_out";
 
 // ── API / view-model row shapes ───────────────────────────────────────────────
 
@@ -101,9 +113,10 @@ export interface TripListRow {
   id: string;
   tripNumber: number;
   requestId: string;
+  isStandalone: boolean;
   date: string;
   paymentStatus: PaymentStatus;
-  status: BookingStatus;
+  status: TripStatus;
   vehicleType: string;
   pickupAddress: string;
   dropoffAddress: string;
@@ -115,6 +128,12 @@ export interface TripListRow {
   distanceKm: number;
   durationMinutes: number;
   bookingAmountEgp: number;
+  note?: string;
+  reviewedBy?: string | null;
+  kashierSessionId?: string;
+  kashierOrderId?: string;
+  kashierTransactionIds?: string[];
+  paidAt?: string | null;
   parentRequestStatus?: BookingStatus;
   parentPaymentStatus?: PaymentStatus;
   rejectionReason?: string | null;
