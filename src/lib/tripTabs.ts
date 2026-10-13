@@ -15,6 +15,20 @@ type RequestLike = {
 };
 
 export type TripTab = "pending" | "upcoming" | "ongoing" | "history";
+export type PassengerTabKey = "all" | "pending" | "upcoming" | "ongoing";
+
+export function normalizePassengerTabKey(value: string): PassengerTabKey {
+  switch (value) {
+    case "bookings":
+    case "pending":
+      return "pending";
+    case "upcoming":
+    case "ongoing":
+      return value;
+    default:
+      return "all";
+  }
+}
 
 function requestHasPastPickup(request: RequestLike, trip: TripLike, now: Date): boolean {
   if (request.hasPastTrip === true) return true;

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { getTripTab } = await import("../src/lib/tripTabs.ts");
+const { getTripTab, normalizePassengerTabKey } = await import("../src/lib/tripTabs.ts");
 const { getDisplayStatus } = await import("../src/lib/statusDisplay.ts");
 const { getCairoNowParts } = await import("../src/lib/time/cairoTime.ts");
 const { hasPastTrip } = await import("../src/lib/admin/waitingList.ts");
@@ -15,6 +15,14 @@ test("private unpaid trip is pending", () => {
       now,
     }),
     "pending",
+  );
+});
+
+test("legacy bookings links resolve to the Pending tab and expose no bookings tab", () => {
+  assert.equal(normalizePassengerTabKey("bookings"), "pending");
+  assert.deepEqual(
+    ["all", "pending", "upcoming", "ongoing"].map(normalizePassengerTabKey),
+    ["all", "pending", "upcoming", "ongoing"],
   );
 });
 
