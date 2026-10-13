@@ -23,6 +23,7 @@ import CancelTripModal from "@/components/trips/CancelTripModal";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
+import LiveShareControl from "@/components/trips/LiveShareControl";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
 import { getSharedRideStep } from "@/lib/sharedRideStepper.ts";
@@ -33,6 +34,8 @@ import type {
 } from "@/types/booking";
 import { translate, formatDate, formatTime, formatEgp, localeDirection } from "@/lib/i18n";
 import { getServerLocale } from "@/lib/i18n/server";
+import { canShare } from "@/lib/liveShare/eligibility";
+import { TripShare } from "@/models/TripShare";
 export const metadata = { title: "Trip detail — Commuter" };
 export const dynamic = "force-dynamic";
 
@@ -238,6 +241,28 @@ export default async function TripDetailPage({
       };
     }
   ).cancellation;
+  const liveShareEligible =
+    !isDriver &&
+    canShare(
+      {
+        userId: trip.userId,
+        driverId: trip.driverId,
+        status: trip.status,
+      },
+      session.userId,
+      trip.rideDetails,
+    );
+  const hasActiveLiveShare =
+    !isDriver &&
+    Boolean(
+      await TripShare.exists({
+        tripId: trip.id,
+        userId: session.userId,
+        active: true,
+        revokedAt: null,
+        expiresAt: { $gt: new Date() },
+      }),
+    );
   const showRefundBadge =
     !rejectionDisplay.showReasonCard &&
     displayStatus.key !== "status.expired" &&
@@ -759,6 +784,14 @@ export default async function TripDetailPage({
                     ))}
                   </div>
                 </div>
+              )}
+
+              {!isDriver && (liveShareEligible || hasActiveLiveShare) && (
+                <LiveShareControl
+                  tripId={trip.id}
+                  eligible={liveShareEligible}
+                  initialLocale={locale}
+                />
               )}
 
               <div className="trip-detail-desktop-actions">

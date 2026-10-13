@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
+import { enforceRateLimit } from "@/lib/security/rateLimit";
 
 export interface DirectionsResult {
   coordinates: [number, number][];
@@ -202,13 +204,13 @@ export async function fetchGraphHopperMatrix(
   points: MatrixPoint[],
 ): Promise<DirectionsTableResult | null> {
   if (points.length < 2) {
-    console.warn("[GraphHopper matrix] Skipped: fewer than two points.");
+    console.warn("[api/directions] provider=graphhopper outcome=skipped");
     return null;
   }
 
   const baseUrl = process.env.GRAPHHOPPER_URL?.trim().replace(/\/+$/, "");
   if (!baseUrl) {
-    console.error("[GraphHopper matrix] Skipped: GRAPHHOPPER_URL is unset.");
+    console.error("[api/directions] provider=graphhopper outcome=unconfigured");
     return null;
   }
 
@@ -245,7 +247,6 @@ export async function fetchGraphHopperMatrix(
       const batchIndex = nextBatchIndex++;
       const { sourceGroup, sourceGroupIndex, targetGroup, targetGroupIndex } =
         batches[batchIndex];
-      const batchLabel = `${sourceGroupIndex + 1}-${targetGroupIndex + 1}`;
       const isSameGroup = sourceGroupIndex === targetGroupIndex;
       const combinedPoints = isSameGroup
         ? sourceGroup.points
@@ -262,10 +263,7 @@ export async function fetchGraphHopperMatrix(
         cache: "no-store",
       });
       if (!res.ok) {
-        const errorBody = await res.text();
-        console.error(
-          `[GraphHopper matrix] Batch ${batchLabel} ${res.status} ${res.statusText}: ${errorBody}`,
-        );
+        console.error("[api/directions] provider=graphhopper outcome=http_error");
         continue;
       }
 
@@ -283,9 +281,7 @@ export async function fetchGraphHopperMatrix(
         !data.times ||
         !isCombinedResponse
       ) {
-        console.error(
-          `[GraphHopper matrix] Batch ${batchLabel} returned invalid dimensions: ${data.distances?.length ?? 0}x${data.distances?.[0]?.length ?? 0}.`,
-        );
+        console.error("[api/directions] provider=graphhopper outcome=invalid_response");
         continue;
       }
 
@@ -330,9 +326,7 @@ export async function fetchGraphHopperMatrix(
       }
 
       if ((batchIndex + 1) % 100 === 0 || batchIndex + 1 === batches.length) {
-        console.log(
-          `[GraphHopper matrix] Completed ${batchIndex + 1}/${batches.length} batches.`,
-        );
+        console.log("[api/directions] provider=graphhopper outcome=progress");
       }
     }
   }
@@ -344,15 +338,7 @@ export async function fetchGraphHopperMatrix(
     ),
   );
 
-  console.log(
-    "[GraphHopper matrix] Completed",
-    JSON.stringify({
-      pointCount: points.length,
-      batchSize: GRAPHHOPPER_BATCH_SIZE,
-      batchCount: batches.length,
-      concurrency: GRAPHHOPPER_CONCURRENCY,
-    }),
-  );
+  console.log("[api/directions] provider=graphhopper outcome=completed");
   return { distancesKm, durationsMinutes };
 }
 
@@ -364,7 +350,7 @@ export async function fetchTravelTimeMatrix(
 
   const baseUrl = process.env.TRAVELTIME_URL?.trim().replace(/\/+$/, "");
   if (!baseUrl) {
-    console.error("[TravelTime matrix] Skipped: TRAVELTIME_URL is unset.");
+    console.error("[api/directions] provider=traveltime outcome=unconfigured");
     return null;
   }
 
@@ -383,10 +369,7 @@ export async function fetchTravelTimeMatrix(
     cache: "no-store",
   });
   if (!response.ok) {
-    const detail = await response.text();
-    console.error(
-      `[TravelTime matrix] ${response.status} ${response.statusText}: ${detail}`,
-    );
+    console.error("[api/directions] provider=traveltime outcome=http_error");
     return null;
   }
 
@@ -400,7 +383,7 @@ export async function fetchTravelTimeMatrix(
     data.distances.length !== points.length ||
     data.times.length !== points.length
   ) {
-    console.error("[TravelTime matrix] Invalid matrix dimensions.");
+    console.error("[api/directions] provider=traveltime outcome=invalid_response");
     return null;
   }
 
@@ -496,7 +479,7 @@ export async function fetchDirections(
   };
 
   if (data.code && data.code !== "Ok") {
-    console.error("[api/directions]", data.code, data.message);
+    console.error("[api/directions] provider=osrm outcome=error_response");
   }
 
   const route = data.routes?.[0];
@@ -516,16 +499,18 @@ export async function fetchDirections(
 }
 
 export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    const limited = await enforceRateLimit(req, "directions", {
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (limited) return limited;
+  }
+
   const origin = req.nextUrl.searchParams.get("origin");
   const dest = req.nextUrl.searchParams.get("dest");
   const wps = req.nextUrl.searchParams.get("waypoints");
-
-  console.log("[api/directions] request payload", {
-    url: req.url,
-    origin,
-    dest,
-    waypoints: wps,
-  });
 
   if (!origin || !dest)
     return NextResponse.json({ error: "missing origin/dest" }, { status: 400 });

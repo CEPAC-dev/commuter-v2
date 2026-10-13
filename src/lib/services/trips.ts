@@ -659,6 +659,8 @@ export async function listUserTrips(
 
 export interface UserTripDetail {
   id: string;
+  userId?: unknown;
+  driverId?: unknown;
   tripNumber: number;
   requestId: string;
   isStandalone: boolean;
@@ -729,6 +731,7 @@ export async function getDriverTrip(
     driverId: new Types.ObjectId(driverId),
   }).lean<{
     _id: unknown;
+    userId?: unknown;
     tripNumber: number;
     requestId: unknown;
     driverId?: unknown;
@@ -833,6 +836,7 @@ export async function getUserTrip(
     userId: new Types.ObjectId(userId),
   }).lean<{
     _id: unknown;
+    userId?: unknown;
     tripNumber: number;
     requestId: unknown;
     driverId?: unknown;
