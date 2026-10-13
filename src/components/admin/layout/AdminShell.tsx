@@ -16,6 +16,7 @@ import {
   MapPinned,
   Menu,
   Bell,
+  MessageCircle,
   Route,
   Settings,
   SlidersHorizontal,
@@ -46,6 +47,12 @@ const sections = [
     label: "Notification center",
     icon: Bell,
     statKey: null,
+  },
+  {
+    href: "/admin/support",
+    label: "Support center",
+    icon: MessageCircle,
+    statKey: "supportUnread",
   },
   {
     href: "/admin/alerts",
@@ -121,6 +128,7 @@ type Stats = {
   rides: number;
   availability: number;
   waitingList: number;
+  supportUnread: number;
 };
 
 const COLLAPSE_STORAGE_KEY = "admin-sidebar-collapsed";
@@ -181,6 +189,7 @@ export default function AdminShell({
             rides: json.rides ?? 0,
             availability: json.availability ?? 0,
             waitingList: current?.waitingList ?? 0,
+            supportUnread: current?.supportUnread ?? 0,
           }));
         }
       })
@@ -205,6 +214,7 @@ export default function AdminShell({
               rides: current?.rides ?? 0,
               availability: current?.availability ?? 0,
               waitingList: json.count,
+              supportUnread: current?.supportUnread ?? 0,
             }));
           }
         })
@@ -221,6 +231,37 @@ export default function AdminShell({
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("waiting-list-updated", onWaitingListUpdate);
+    };
+  }, [isAuthPage]);
+
+  useEffect(() => {
+    if (isAuthPage) return;
+    let cancelled = false;
+    const fetchSupportUnread = () => {
+      if (document.visibilityState !== "visible") return;
+      fetch("/api/admin/support/unread", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((json) => {
+          if (!cancelled && json && typeof json.unreadCount === "number") {
+            setStats((current) => ({
+              users: current?.users ?? 0,
+              trips: current?.trips ?? 0,
+              rides: current?.rides ?? 0,
+              availability: current?.availability ?? 0,
+              waitingList: current?.waitingList ?? 0,
+              supportUnread: json.unreadCount,
+            }));
+          }
+        })
+        .catch(() => {});
+    };
+    const interval = window.setInterval(fetchSupportUnread, 15_000);
+    window.addEventListener("focus", fetchSupportUnread);
+    fetchSupportUnread();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", fetchSupportUnread);
     };
   }, [isAuthPage]);
 
@@ -304,7 +345,10 @@ export default function AdminShell({
               (href !== "/admin/dashboard" &&
                 normalizedPath.startsWith(`${href}/`));
             const count = statKey ? stats?.[statKey] : undefined;
-            return (
+                const showCount =
+                  typeof count === "number" &&
+                  (statKey !== "supportUnread" || count > 0);
+                return (
               <Link
                 key={href}
                 href={destination}
@@ -314,20 +358,20 @@ export default function AdminShell({
               >
                 <span style={{ position: "relative", display: "inline-flex" }}>
                   <Icon size={17} aria-hidden="true" />
-                  {collapsed && typeof count === "number" && count > 0 ? (
+                  {collapsed && showCount && count > 0 ? (
                     <span className="admin-sidebar-icon-badge">
                       {count > 99 ? "99+" : count}
                     </span>
                   ) : null}
                 </span>
                 <span className="admin-sidebar-link-label">{label}</span>
-                {!collapsed && typeof count === "number" ? (
+                {!collapsed && showCount ? (
                   <span className="admin-sidebar-badge">{count}</span>
                 ) : null}
                 {collapsed ? (
                   <span className="admin-sidebar-tooltip">
                     {label}
-                    {typeof count === "number" ? ` (${count})` : ""}
+                    {showCount ? ` (${count})` : ""}
                   </span>
                 ) : null}
               </Link>
