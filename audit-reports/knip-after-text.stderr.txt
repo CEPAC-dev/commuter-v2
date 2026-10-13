@@ -1,0 +1,12 @@
+Configuration hints (11)
+**/.next/**           audit-reports/knip.config.json  Remove from ignore                                           
+**/node_modules/**    audit-reports/knip.config.json  Remove from ignore                                           
+**/dist/**            audit-reports/knip.config.json  Remove from ignore                                           
+**/build/**           audit-reports/knip.config.json  Remove from ignore                                           
+**/*.d.ts             audit-reports/knip.config.json  Remove from ignore                                           
+audit-reports/**      audit-reports/knip.config.json  Remove from ignore                                           
+PROJECT_MAP.md        audit-reports/knip.config.json  Remove from ignore                                           
+.tmp_*                audit-reports/knip.config.json  Remove from ignore                                           
+tmp-*                 audit-reports/knip.config.json  Remove from ignore                                           
+**/.tmp/**            audit-reports/knip.config.json  Remove from ignore                                           
+.css                  audit-reports/knip.config.json  Compiled extension excluded by project (imports not followed)
