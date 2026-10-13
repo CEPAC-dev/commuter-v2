@@ -21,6 +21,12 @@ function rows() {
 test("Pending groups unpaid Requests once and keeps pending single Trips individual", () => {
   const view = buildTripTabView(rows(), "pending", now);
   assert.equal(view.counts.pending, 4);
+  assert.deepEqual(Object.keys(view.counts).sort(), [
+    "all",
+    "ongoing",
+    "pending",
+    "upcoming",
+  ]);
   assert.deepEqual(
     view.items.map((item) =>
       item.kind === "request" ? `request:${item.requestId}` : `trip:${item.trip.id}`,

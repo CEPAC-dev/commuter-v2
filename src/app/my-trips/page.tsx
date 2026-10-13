@@ -39,6 +39,7 @@ import CancelTripModal from "@/components/trips/CancelTripModal";
 import RequestGroupCancellationControls from "@/components/trips/RequestGroupCancellationControls";
 import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
 import { buildTripTabView, type TripTabKey } from "@/lib/tripTabView.ts";
+import { normalizePassengerTabKey } from "@/lib/tripTabs.ts";
 import { getNextTrip } from "@/lib/nextTrip.ts";
 
 export const metadata = { title: "My trips — Commuter" };
@@ -735,13 +736,9 @@ export default async function MyTripsPage({
   const driverOngoingView = isDriver && groupFilter === "ongoing";
   const passengerOngoingView = isPassenger && groupFilter === "ongoing";
   const activePassengerTab: TripTabKey =
-    groupFilter === "bookings"
-      ? "bookings"
-      : groupFilter === "pending" || groupFilter === "pending_payment"
+    groupFilter === "pending_payment"
       ? "pending"
-      : groupFilter === "upcoming" || groupFilter === "ongoing"
-        ? groupFilter
-        : "all";
+      : normalizePassengerTabKey(groupFilter ?? "all");
 
   const passengerListOptions = {
     page: 1,
@@ -754,10 +751,9 @@ export default async function MyTripsPage({
 
   const passengerHasActiveStatusFilter = Boolean(
     groupFilter &&
-      groupFilter !== "all" &&
-    groupFilter !== "bookings" &&
+    groupFilter !== "all" &&
     groupFilter !== "ongoing" &&
-    ["pending", "upcoming", "pending_payment"].includes(groupFilter),
+    ["bookings", "pending", "upcoming", "pending_payment"].includes(groupFilter),
   );
 
   const driverListOptions = {
@@ -779,13 +775,11 @@ export default async function MyTripsPage({
   let paginationTotal = 0;
   let tabCounts: Record<TripTabKey, number> = {
     all: 0,
-    bookings: 0,
     pending: 0,
     upcoming: 0,
     ongoing: 0,
   };
-  let readyToPayBookingCount = 0;
-  let bookingRequestIds = new Set<string>();
+  let payablePendingCount = 0;
   const displayNow = new Date();
   if (isDriver) {
     const result = await getRidesByDriver(session.userId, driverListOptions);
@@ -802,21 +796,12 @@ export default async function MyTripsPage({
   } else {
     const result = await listUserTrips(session.userId, passengerListOptions);
     allPassengerTrips = result.rows;
-    const bookingsView = buildTripTabView(result.rows, "bookings", displayNow);
-    bookingRequestIds = new Set(
-      bookingsView.items.flatMap((item) =>
-        item.kind === "request" ? [item.requestId] : [],
-      ),
-    );
-    readyToPayBookingCount = bookingsView.readyToPayCount;
     const selectedTab: TripTabKey =
-      groupFilter === "bookings"
-        ? "bookings"
-        : groupFilter === "pending" || groupFilter === "pending_payment"
+      groupFilter === "pending_payment"
         ? "pending"
-        : groupFilter === "upcoming" || groupFilter === "ongoing"
-          ? groupFilter
-          : "all";
+        : normalizePassengerTabKey(groupFilter ?? "all");
+    const pendingView = buildTripTabView(result.rows, "pending", displayNow);
+    payablePendingCount = pendingView.payablePendingCount;
     const view = buildTripTabView(result.rows, selectedTab, displayNow);
     tabCounts = view.counts;
     total = view.items.length;
@@ -867,23 +852,6 @@ export default async function MyTripsPage({
     nextTrip && isSharedVehicle(nextTrip.vehicleType)
       ? sharedTripDetailsById.get(nextTrip.id) ?? await getUserTrip(session.userId, nextTrip.id)
       : null;
-  const paymentRequestCount = new Set(
-    allPassengerTrips
-      .filter((trip) =>
-        !bookingRequestIds.has(trip.requestId) &&
-        getDisplayStatus({
-            request: {
-              status: trip.parentRequestStatus ?? trip.status,
-              paymentStatus: trip.parentPaymentStatus ?? trip.paymentStatus,
-              hasPastTrip: trip.hasPastTrip,
-              rejectionReason: trip.rejectionReason,
-            },
-            trip,
-            now: displayNow,
-          }).canPay,
-      )
-      .map((trip) => trip.requestId),
-  ).size;
   const approvalRequestCount = new Set(
     allPassengerTrips
       .filter((trip) =>
@@ -924,8 +892,6 @@ export default async function MyTripsPage({
         ? translate(locale, "my_trips.total_ongoing", { total, plural: total === 1 ? "" : "s" })
         : activePassengerTab === "pending"
           ? translate(locale, "my_trips.total_pending_requests", { total })
-          : activePassengerTab === "bookings"
-            ? translate(locale, "my_trips.total_bookings", { total })
           : activePassengerTab === "upcoming"
             ? translate(locale, "my_trips.total_upcoming", { total, plural: total === 1 ? "" : "s" })
             : translate(locale, "my_trips.total_active", { total, plural: total === 1 ? "" : "s" });
@@ -937,12 +903,16 @@ export default async function MyTripsPage({
   }
 
   const activeGroupLabel =
-    !groupFilter || groupFilter === "all"
-      ? translate(locale, "filter.all")
-      : translate(locale, `status.${groupFilter}`);
+    isPassenger
+      ? activePassengerTab === "all"
+        ? translate(locale, "filter.all")
+        : translate(locale, `status.${activePassengerTab}`)
+      : !groupFilter || groupFilter === "all"
+        ? translate(locale, "filter.all")
+        : translate(locale, `status.${groupFilter}`);
 
   const pendingPaymentCount = !isDriver
-    ? paymentRequestCount
+    ? payablePendingCount
     : 0;
 
   return (
@@ -987,7 +957,6 @@ export default async function MyTripsPage({
           text-decoration: none;
         }
         .my-trips-alert.approval { border-color: #D8E7E3; background: #EFF7F4; color: #16594F; }
-        .my-trips-alert.booking-ready { border-color: #C7EAE3; background: #EFF9F6; color: #16594F; }
         .my-trips-alert:focus-visible, .my-trips-history-link:focus-visible,
         .next-trip-action:focus-visible, .my-trips-book-link:focus-visible {
           outline: 3px solid #F5A623;
@@ -1268,23 +1237,12 @@ export default async function MyTripsPage({
               locale={locale}
               now={displayNow}
             />
-            {(readyToPayBookingCount > 0 || paymentRequestCount > 0 || approvalRequestCount > 0) && (
+            {(payablePendingCount > 0 || approvalRequestCount > 0) && (
               <div className="my-trips-alerts" aria-label={translate(locale, "my_trips.request_alerts")}>
-                {readyToPayBookingCount > 0 && (
-                  <Link
-                    className="my-trips-alert booking-ready"
-                    href="/my-trips?group=bookings"
-                    aria-label={translate(locale, readyToPayBookingCount === 1 ? "my_trips.booking_ready_one" : "my_trips.booking_ready_many", { count: toArabicDigitsIf(locale, String(readyToPayBookingCount)) })}
-                  >
+                {payablePendingCount > 0 && (
+                  <Link className="my-trips-alert" href="/my-trips?group=pending" aria-label={translate(locale, payablePendingCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: toArabicDigitsIf(locale, String(payablePendingCount)) })}>
                     <Clock size={15} aria-hidden="true" />
-                    {translate(locale, readyToPayBookingCount === 1 ? "my_trips.booking_ready_one" : "my_trips.booking_ready_many", { count: toArabicDigitsIf(locale, String(readyToPayBookingCount)) })}
-                    <ChevronRight size={15} aria-hidden="true" />
-                  </Link>
-                )}
-                {paymentRequestCount > 0 && (
-                  <Link className="my-trips-alert" href="/my-trips?group=pending" aria-label={translate(locale, paymentRequestCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: paymentRequestCount })}>
-                    <Clock size={15} aria-hidden="true" />
-                    {translate(locale, paymentRequestCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: toArabicDigitsIf(locale, String(paymentRequestCount)) })}
+                    {translate(locale, payablePendingCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: toArabicDigitsIf(locale, String(payablePendingCount)) })}
                     <ChevronRight size={15} aria-hidden="true" />
                   </Link>
                 )}
