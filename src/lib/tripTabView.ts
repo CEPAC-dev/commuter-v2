@@ -136,14 +136,24 @@ export function buildTripTabView<T extends TripTabRow>(
   const pendingRequestItems = pendingItems.filter(
     (item): item is Extract<TripTabItem<T>, { kind: "request" }> =>
       item.kind === "request" &&
+      item.trips.length > 1 &&
       item.trips[0].parentPaymentStatus !== "paid",
   );
-  const pendingRequestIds = new Set(
-    pendingRequestItems.map((item) => item.requestId),
+  const pendingSingleRequestItems = pendingItems.flatMap((item) =>
+    item.kind === "request" && item.trips.length === 1
+      ? [
+          {
+            kind: "trip" as const,
+            date: item.trips[0].date,
+            trip: item.trips[0],
+          },
+        ]
+      : [],
   );
   const combinedPendingItems = [
     ...pendingRequestItems,
     ...pendingItems.filter((item) => item.kind === "trip"),
+    ...pendingSingleRequestItems,
   ].sort(
     (left, right) =>
       Number(itemCanPay(right)) - Number(itemCanPay(left)) ||

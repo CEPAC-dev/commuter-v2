@@ -38,6 +38,19 @@ test("Pending groups unpaid Requests once and keeps pending single Trips individ
   );
 });
 
+test("one-day unpaid Requests remain individual Pending trips", () => {
+  const view = buildTripTabView(
+    [
+      { id: "one-day", requestId: "request", isStandalone: false, status: "pending_payment", parentRequestStatus: "approved", parentPaymentStatus: "pending", date: "2026-10-04", pickupTime: "09:00" },
+    ],
+    "pending",
+    now,
+  );
+  assert.equal(view.counts.pending, 1);
+  assert.equal(view.items[0].kind, "trip");
+  assert.equal(view.items[0].trip.id, "one-day");
+});
+
 test("payable Pending count uses the existing canPay rule for groups and single Trips", () => {
   const trips = rows();
   const expectedPayableCount = new Set(
