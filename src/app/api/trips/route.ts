@@ -6,6 +6,7 @@ import {
   isMultiDayRequestsEnabled,
   shouldCreateRequestGroup,
 } from "@/lib/config/featureFlags";
+import { logMultiDayEvent } from "@/lib/logging/multiday";
 import { AdminSettings } from "@/models/AdminSettings";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
@@ -161,6 +162,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const userId = session.userId;
+  let requestGroupEnabledForRequest = false;
+  let requestGroupIdForLog: string | null = null;
+  let requestGroupDateCount = 0;
+  let requestGroupTripCount = 0;
 
   let body: {
     date?: string;
@@ -684,6 +689,10 @@ export async function POST(req: NextRequest) {
       dates.length,
     );
     const requestId = requestGroupEnabled ? new Types.ObjectId() : null;
+    requestGroupEnabledForRequest = requestGroupEnabled;
+    requestGroupIdForLog = requestId ? String(requestId) : null;
+    requestGroupDateCount = dates.length;
+    requestGroupTripCount = tripInstances.length;
     const batchStore = {
       async withTransaction<TResult>(
         work: (dbSession: ClientSession) => Promise<TResult>,
@@ -871,6 +880,12 @@ export async function POST(req: NextRequest) {
     if (groupResult) {
       const requestId = String(groupResult.request._id);
       const tripIds = tripDocuments.map((trip) => String(trip._id));
+      logMultiDayEvent({
+        event: "group_created",
+        requestId,
+        userId,
+        counts: { dates: dates.length, trips: tripIds.length },
+      });
       const amountEgp = groupResult.request.amountEgp;
       const promoCodeAppliedTrips = groupResult.candidates.filter(
         (candidate) => candidate.promoApply,
@@ -1070,6 +1085,28 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     );
   } catch (err) {
+    if (requestGroupEnabledForRequest) {
+      const reason =
+        err instanceof RequestGroupPromoError
+          ? "REQUEST_PROMO_UNAVAILABLE"
+          : err instanceof TripBatchSpacingConflictError
+            ? "TRIP_SPACING_CONFLICT"
+            : err instanceof TooManyPendingTripsError
+              ? "TOO_MANY_PENDING_TRIPS"
+              : isTransientBookingConflict(err)
+                ? "BOOKING_BUSY"
+                : "CREATION_FAILED";
+      logMultiDayEvent({
+        event: "group_create_rejected",
+        requestId: requestGroupIdForLog,
+        userId,
+        counts: {
+          dates: requestGroupDateCount,
+          trips: requestGroupTripCount,
+        },
+        reason,
+      });
+    }
     if (err instanceof RequestGroupPromoError) {
       return NextResponse.json(
         {

@@ -88,3 +88,28 @@ test("creation API decides per user and falls back to standalone batch creation"
   assert.match(route, /groupResult \?\?[\s\S]*?createTripBatchWith/);
   assert.match(page, /isMultiDayRequestsEnabled\(session\.userId\)/);
 });
+
+test("multi-day logger emits one structured line with identifiers and counts", async () => {
+  const { logMultiDayEvent } = await import("../src/lib/logging/multiday.ts");
+  const originalInfo = console.info;
+  const lines = [];
+  console.info = (line) => lines.push(line);
+  try {
+    logMultiDayEvent({
+      event: "group_created",
+      requestId: "64b000000000000000000003",
+      userId: LISTED_USER,
+      counts: { dates: 2, trips: 2 },
+    });
+  } finally {
+    console.info = originalInfo;
+  }
+  assert.equal(lines.length, 1);
+  assert.deepEqual(JSON.parse(lines[0]), {
+    tag: "[multiday]",
+    event: "group_created",
+    requestId: "64b000000000000000000003",
+    userId: LISTED_USER,
+    counts: { dates: 2, trips: 2 },
+  });
+});

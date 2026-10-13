@@ -4,6 +4,7 @@ import {
   cancelWholeRequest,
   RequestGroupCancellationError,
 } from "@/lib/requestGroupCancellation";
+import { logMultiDayEvent } from "@/lib/logging/multiday";
 
 function errorStatus(error: RequestGroupCancellationError): number {
   return error.code === "REQUEST_NOT_FOUND" ? 404 : 409;
@@ -33,9 +34,22 @@ export async function POST(
       userId: session.userId,
       reason,
     });
+    logMultiDayEvent({
+      event: "request_cancelled",
+      requestId: id,
+      userId: session.userId,
+      counts: { trips: result.cancelledTrips },
+    });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     if (error instanceof RequestGroupCancellationError) {
+      logMultiDayEvent({
+        event: "cancel_blocked",
+        requestId: id,
+        userId: session.userId,
+        counts: { trips: 0 },
+        reason: error.code,
+      });
       return NextResponse.json(
         { errorCode: error.code, error: error.message },
         { status: errorStatus(error) },

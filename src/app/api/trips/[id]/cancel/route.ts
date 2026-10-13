@@ -27,6 +27,7 @@ import {
   cancelRequestDay,
   RequestGroupCancellationError,
 } from "@/lib/requestGroupCancellation";
+import { logMultiDayEvent } from "@/lib/logging/multiday";
 
 const REQUEST_NOT_CANCELLABLE = "REQUEST_NOT_CANCELLABLE";
 
@@ -179,9 +180,25 @@ export async function POST(
             userId: session.userId,
             reason,
           });
+          logMultiDayEvent({
+            event: "day_cancelled",
+            requestId: String(trip.requestId),
+            userId: session.userId,
+            counts: {
+              cancelledTrips: 1,
+              remainingTrips: result.remainingTrips.length,
+            },
+          });
           return NextResponse.json({ success: true, ...result });
         } catch (error) {
           if (error instanceof RequestGroupCancellationError) {
+            logMultiDayEvent({
+              event: "cancel_blocked",
+              requestId: String(trip.requestId),
+              userId: session.userId,
+              counts: { trips: 1 },
+              reason: error.code,
+            });
             return NextResponse.json(
               { errorCode: error.code, error: error.message },
               { status: error.code === "REQUEST_NOT_FOUND" ? 404 : 409 },
