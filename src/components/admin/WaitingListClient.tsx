@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Clock3, Loader2, Mail, MapPin, Phone, X } from "lucide-react";
+import { ArrowRight, Check, Loader2, Mail, MapPin, Phone, X } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { useClientLocale } from "@/lib/i18n/client";
-import { formatEgp } from "@/lib/i18n";
+import { formatDate, formatEgp, formatTime } from "@/lib/i18n";
 import {
   AdminButton,
   AdminCard,
@@ -15,11 +15,14 @@ import {
   AdminStatusBadge,
 } from "@/components/admin/layout";
 import {
-  formatAdminBadgeCount,
   formatWaitingListAge,
   waitingListErrorKey,
   waitingListErrorMessageKey,
 } from "@/lib/admin/waitingListUi";
+import {
+  groupIdenticalWaitingListTripFields,
+  type WaitingListTripField,
+} from "@/lib/admin/waitingListTripFields";
 
 type WaitingListTrip = {
   id: string;
@@ -363,8 +366,22 @@ export default function WaitingListClient() {
               ? t("admin.waiting_list.just_now")
               : t(`admin.waiting_list.${age.unit === "minutes" ? "minute" : age.unit === "hours" ? "hour" : "day"}`, { count: age.count });
             const isBusy = busyId === item.id;
+            const tripFields = groupIdenticalWaitingListTripFields(
+              item.trips.map((trip) => ({
+                pickup: trip.route.pickup?.address?.trim() ?? "",
+                dropoff: trip.route.dropoff?.address?.trim() ?? "",
+                pickupTime: trip.pickupTime,
+                arrivalTime: trip.arrivalTime,
+                numberOfPassengers: trip.numberOfPassengers,
+                preferedGender: trip.preferedGender,
+              })),
+            );
+            const isSharedField = (field: WaitingListTripField) =>
+              tripFields.sharedFields.includes(field);
+            const hasSharedRoute =
+              isSharedField("pickup") && isSharedField("dropoff");
             return (
-              <AdminCard key={item.id} className="waiting-list-request-card">
+              <AdminCard key={item.id} className="waiting-list-request-card" padding={16}>
                 <div className="waiting-list-request-header">
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -375,20 +392,27 @@ export default function WaitingListClient() {
                         <AdminStatusBadge status="warning" label={t("admin.waiting_list.past_badge")} />
                       ) : null}
                     </div>
-                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 8, fontSize: 13 }}>
-                      <a href={item.passenger?.phone ? `tel:${item.passenger.phone}` : undefined} style={{ color: "var(--color-secondary)" }}>
-                        <Phone size={14} aria-hidden="true" /> {displayValue(item.passenger?.phone)}
-                      </a>
-                      <a href={item.passenger?.email ? `mailto:${item.passenger.email}` : undefined} style={{ color: "var(--color-secondary)" }}>
-                        <Mail size={14} aria-hidden="true" /> {displayValue(item.passenger?.email)}
-                      </a>
+                    <div className="waiting-list-contact-links">
+                      {item.passenger?.phone?.trim() ? (
+                        <a href={`tel:${item.passenger.phone}`}>
+                          <Phone size={14} aria-hidden="true" /> {item.passenger.phone}
+                        </a>
+                      ) : null}
+                      {item.passenger?.email?.trim() ? (
+                        <a href={`mailto:${item.passenger.email}`}>
+                          <Mail size={14} aria-hidden="true" /> {item.passenger.email}
+                        </a>
+                      ) : null}
                     </div>
                   </div>
-                  <div style={{ textAlign: dir === "rtl" ? "left" : "right", flexShrink: 0 }}>
-                    <strong style={{ display: "block", color: "var(--color-primary)", fontSize: 17 }}>{formatEgp(locale, item.totalFare)}</strong>
-                    <time title={new Date(item.createdAt).toLocaleString()} style={{ display: "block", marginTop: 4, color: "var(--color-muted)", fontSize: 12 }}>
-                      <Clock3 size={13} aria-hidden="true" /> {t("admin.waiting_list.waiting", { value: ageValue })}
-                    </time>
+                  <div className="waiting-list-header-end">
+                    <AdminStatusBadge
+                      status="warning"
+                      label={t("admin.waiting_list.waiting", { value: ageValue })}
+                    />
+                    <strong className="waiting-list-total-fare">
+                      {formatEgp(locale, item.totalFare)}
+                    </strong>
                   </div>
                 </div>
 
@@ -398,37 +422,94 @@ export default function WaitingListClient() {
                   </p>
                 ) : null}
 
-                <div className="waiting-list-meta-grid">
-                  <div><span>{t("admin.waiting_list.promo")}</span><strong>{item.promoCodes.length ? item.promoCodes.join(", ") : "—"}</strong></div>
-                  <div><span>{t("admin.waiting_list.note")}</span><strong>{displayValue(item.note)}</strong></div>
-                </div>
+                {(item.promoCodes.length > 0 || item.note.trim()) && (
+                  <div className="waiting-list-meta-lines">
+                    {item.promoCodes.length > 0 && (
+                      <p><b>{t("admin.waiting_list.promo")}:</b> {item.promoCodes.join(", ")}</p>
+                    )}
+                    {item.note.trim() && (
+                      <p><b>{t("admin.waiting_list.note")}:</b> {item.note}</p>
+                    )}
+                  </div>
+                )}
 
-                <div style={{ display: "grid", gap: 10 }}>
-                  {item.trips.map((trip, index) => (
-                    <div key={trip.id} className="waiting-list-trip">
-                      <div className="waiting-list-trip-title">
-                        <strong>{t("admin.waiting_list.trip", { count: index + 1 })}</strong>
-                        <AdminStatusBadge status="pending" label={trip.vehicleType.replace(/_/g, " ")} />
-                      </div>
-                      <div className="waiting-list-route">
-                        <span><MapPin size={14} aria-hidden="true" /><b>{t("admin.waiting_list.pickup")}:</b> <span dir="auto">{displayValue(trip.route.pickup?.address)}</span></span>
-                        <span><MapPin size={14} aria-hidden="true" /><b>{t("admin.waiting_list.dropoff")}:</b> <span dir="auto">{displayValue(trip.route.dropoff?.address)}</span></span>
-                      </div>
-                      <div className="waiting-list-trip-facts">
-                        <span><b>{t("admin.waiting_list.date")}:</b> {trip.date}</span>
-                        <span><b>{t("admin.waiting_list.pickup_time")}:</b> {trip.pickupTime}</span>
-                        <span><b>{t("admin.waiting_list.arrival_time")}:</b> {trip.arrivalTime}</span>
-                        <span><b>{t("admin.waiting_list.passengers")}:</b> {trip.numberOfPassengers}</span>
-                        <span><b>{t("admin.waiting_list.gender_preference")}:</b> {trip.preferedGender ? t(`gender.${trip.preferedGender}`) : t("admin.waiting_list.no_gender_preference")}</span>
-                        <span><b>{t("admin.waiting_list.fare")}:</b> {formatEgp(locale, trip.fare)}</span>
-                      </div>
+                <div className="waiting-list-shared-details">
+                  {hasSharedRoute && item.trips[0] && (
+                    <div className="waiting-list-shared-route">
+                      <MapPin size={15} aria-hidden="true" />
+                      <span dir="auto">{displayValue(item.trips[0].route.pickup?.address)}</span>
+                      <ArrowRight className="rtl-directional-icon" size={15} aria-hidden="true" />
+                      <span dir="auto">{displayValue(item.trips[0].route.dropoff?.address)}</span>
                     </div>
-                  ))}
+                  )}
+                  <div className="waiting-list-trip-facts">
+                    {isSharedField("pickupTime") && item.trips[0] && (
+                      <span><b>{t("admin.waiting_list.pickup_time")}:</b> {formatTime(locale, item.trips[0].pickupTime)}</span>
+                    )}
+                    {isSharedField("arrivalTime") && item.trips[0] && (
+                      <span><b>{t("admin.waiting_list.arrival_time")}:</b> {formatTime(locale, item.trips[0].arrivalTime)}</span>
+                    )}
+                    {isSharedField("numberOfPassengers") && item.trips[0] && (
+                      <span><b>{t("admin.waiting_list.passengers")}:</b> {item.trips[0].numberOfPassengers}</span>
+                    )}
+                    {isSharedField("preferedGender") && item.trips[0] && (
+                      <span><b>{t("admin.waiting_list.gender_preference")}:</b> {item.trips[0].preferedGender ? t(`gender.${item.trips[0].preferedGender}`) : t("admin.waiting_list.no_gender_preference")}</span>
+                    )}
+                  </div>
+                  {item.trips.length > 1 && (
+                    <strong className="waiting-list-days-count">
+                      {t("admin.waiting_list.days_count", { count: item.trips.length })}
+                    </strong>
+                  )}
+                  <div className="waiting-list-days">
+                    {item.trips.map((trip, index) => {
+                      const perDayFields = tripFields.perTripFields[index]?.fields ?? [];
+                      const isPerDay = (field: WaitingListTripField) =>
+                        perDayFields.includes(field);
+                      const showRoutePerDay =
+                        !hasSharedRoute &&
+                        (isPerDay("pickup") || isPerDay("dropoff"));
+                      const variableDetailFields: WaitingListTripField[] = [
+                        "pickupTime",
+                        "arrivalTime",
+                        "numberOfPassengers",
+                        "preferedGender",
+                      ];
+                      const hasVariableDetails =
+                        showRoutePerDay ||
+                        variableDetailFields.some(isPerDay);
+                      return (
+                        <div key={trip.id} className="waiting-list-day">
+                          <div className="waiting-list-day-heading">
+                            <time>{formatDate(locale, trip.date)}</time>
+                            <strong>{formatEgp(locale, trip.fare)}</strong>
+                          </div>
+                          {hasVariableDetails && (
+                            <div className="waiting-list-day-details">
+                              {showRoutePerDay && (
+                                <div className="waiting-list-shared-route">
+                                  <MapPin size={14} aria-hidden="true" />
+                                  <span dir="auto">{displayValue(trip.route.pickup?.address)}</span>
+                                  <ArrowRight className="rtl-directional-icon" size={14} aria-hidden="true" />
+                                  <span dir="auto">{displayValue(trip.route.dropoff?.address)}</span>
+                                </div>
+                              )}
+                              {isPerDay("pickupTime") && <span><b>{t("admin.waiting_list.pickup_time")}:</b> {formatTime(locale, trip.pickupTime)}</span>}
+                              {isPerDay("arrivalTime") && <span><b>{t("admin.waiting_list.arrival_time")}:</b> {formatTime(locale, trip.arrivalTime)}</span>}
+                              {isPerDay("numberOfPassengers") && <span><b>{t("admin.waiting_list.passengers")}:</b> {trip.numberOfPassengers}</span>}
+                              {isPerDay("preferedGender") && <span><b>{t("admin.waiting_list.gender_preference")}:</b> {trip.preferedGender ? t(`gender.${trip.preferedGender}`) : t("admin.waiting_list.no_gender_preference")}</span>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="waiting-list-actions">
                   <AdminButton
                     variant="primary"
+                    size="md"
                     disabled={isBusy || item.hasPastTrip}
                     onClick={() => openDialog("approve", item)}
                     aria-label={`${t("admin.waiting_list.approve")} ${displayValue(item.passenger?.name)}`}
@@ -437,10 +518,16 @@ export default function WaitingListClient() {
                     {t("admin.waiting_list.approve")}
                   </AdminButton>
                   <AdminButton
-                    variant="destructive"
+                    variant="secondary"
+                    size="md"
                     disabled={isBusy}
                     onClick={() => openDialog("reject", item)}
                     aria-label={`${t("admin.waiting_list.reject")} ${displayValue(item.passenger?.name)}`}
+                    style={{
+                      color: "var(--color-danger)",
+                      border: "1px solid color-mix(in srgb, var(--color-danger) 45%, white)",
+                      background: "var(--color-panel)",
+                    }}
                   >
                     {isBusy ? <Loader2 size={15} className="animate-spin" /> : <X size={15} />}
                     {t("admin.waiting_list.reject")}
@@ -540,20 +627,32 @@ export default function WaitingListClient() {
         .waiting-list-setting-switch { position:relative; width:48px; height:28px; padding:3px; border:0; border-radius:999px; background:${sharedRideWaitingListEnabled ? "var(--color-secondary)" : "var(--color-border)"}; cursor:pointer; transition:background .15s ease; }
         .waiting-list-setting-switch:disabled { cursor:not-allowed; opacity:.6; }
         .waiting-list-setting-switch-knob { display:block; width:22px; height:22px; border-radius:50%; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.2); transform:translateX(${sharedRideWaitingListEnabled ? (dir === "rtl" ? "-20px" : "20px") : "0"}); transition:transform .15s ease; }
-        .waiting-list-request-header { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; }
-        .waiting-list-request-header a { display:inline-flex; align-items:center; gap:5px; text-decoration:none; }
-        .waiting-list-past-note { margin:14px 0 0; color:var(--color-warning); font-size:13px; font-weight:700; }
-        .waiting-list-meta-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:16px 0; }
-        .waiting-list-meta-grid > div { display:grid; gap:4px; min-width:0; padding:11px 12px; background:var(--color-background); border:1px solid var(--color-border); border-radius:var(--radius-sm); }
-        .waiting-list-meta-grid span { color:var(--color-muted); font-size:11px; font-weight:800; text-transform:uppercase; }
-        .waiting-list-meta-grid strong { color:var(--color-primary); font-size:13px; overflow-wrap:anywhere; }
-        .waiting-list-trip { display:grid; gap:10px; padding:14px; background:color-mix(in srgb, var(--color-secondary-tint) 35%, var(--color-panel)); border:1px solid var(--color-border); border-radius:var(--radius-sm); }
-        .waiting-list-trip-title { display:flex; justify-content:space-between; gap:12px; align-items:center; }
-        .waiting-list-route { display:grid; gap:7px; color:var(--color-primary); font-size:13px; }
-        .waiting-list-route span { display:flex; align-items:flex-start; gap:6px; min-width:0; }
-        .waiting-list-route svg { color:var(--color-secondary); flex-shrink:0; margin-top:2px; }
-        .waiting-list-trip-facts { display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--color-muted); font-size:12px; }
-        .waiting-list-actions { display:flex; gap:9px; flex-wrap:wrap; justify-content:flex-end; margin-top:16px; }
+        .waiting-list-request-header { display:flex; justify-content:space-between; gap:16px; align-items:center; }
+        .waiting-list-contact-links { display:flex; gap:12px 16px; flex-wrap:wrap; margin-top:6px; font-size:12px; }
+        .waiting-list-contact-links a { display:inline-flex; align-items:center; gap:5px; color:var(--color-muted); text-decoration:none; overflow-wrap:anywhere; }
+        .waiting-list-contact-links a:hover { color:var(--color-secondary); }
+        .waiting-list-header-end { display:flex; align-items:center; justify-content:flex-end; gap:12px; flex-wrap:wrap; flex-shrink:0; }
+        .waiting-list-total-fare { color:var(--color-primary); font-size:17px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+        .waiting-list-past-note { margin:12px 0 0; color:var(--color-warning); font-size:13px; font-weight:700; }
+        .waiting-list-meta-lines { display:grid; gap:5px; margin-top:12px; color:var(--color-muted); font-size:12px; line-height:1.5; }
+        .waiting-list-meta-lines p { margin:0; overflow-wrap:anywhere; }
+        .waiting-list-meta-lines b { color:var(--color-primary); }
+        .waiting-list-shared-details { display:grid; gap:10px; margin-top:14px; }
+        .waiting-list-shared-route { display:flex; align-items:center; gap:8px; min-width:0; color:var(--color-primary); font-size:13px; font-weight:700; }
+        .waiting-list-shared-route > span { min-width:0; overflow-wrap:anywhere; }
+        .waiting-list-shared-route > svg { flex:0 0 auto; color:var(--color-secondary); }
+        .waiting-list-trip-facts { display:flex; flex-wrap:wrap; gap:7px 16px; color:var(--color-muted); font-size:12px; }
+        .waiting-list-trip-facts b, .waiting-list-day-details b { color:var(--color-primary); }
+        .waiting-list-days-count { color:var(--color-muted); font-size:12px; }
+        .waiting-list-days { display:flex; flex-wrap:wrap; gap:8px; }
+        .waiting-list-day { display:grid; flex:1 1 200px; gap:5px; min-width:0; max-width:100%; padding:8px 10px; border:1px solid var(--color-border); border-radius:var(--radius-sm); background:var(--color-background); }
+        .waiting-list-day-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--color-primary); font-size:12px; }
+        .waiting-list-day-heading time { color:var(--color-muted); }
+        .waiting-list-day-heading strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
+        .waiting-list-day-details { display:grid; gap:4px; color:var(--color-muted); font-size:11px; line-height:1.4; }
+        .waiting-list-day-details > span { overflow-wrap:anywhere; }
+        .waiting-list-actions { display:flex; gap:9px; flex-wrap:wrap; justify-content:flex-end; margin-top:14px; }
+        .waiting-list-actions > button { min-width:120px; min-height:42px; justify-content:center; }
         .waiting-list-dialog-backdrop { position:fixed; inset:0; z-index:500; display:grid; place-items:center; padding:20px; background:rgba(11,30,61,.55); }
         .waiting-list-dialog { width:min(460px,100%); display:grid; gap:14px; padding:22px; background:var(--color-panel); color:var(--color-primary); border:1px solid var(--color-border); border-radius:var(--radius-md); box-shadow:0 20px 60px rgba(11,30,61,.25); }
         .waiting-list-dialog h2 { margin:0; font-size:19px; }
@@ -561,7 +660,7 @@ export default function WaitingListClient() {
         .waiting-list-dialog textarea { width:100%; box-sizing:border-box; resize:vertical; border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:10px; background:var(--color-background); color:var(--color-primary); font:inherit; }
         .waiting-list-dialog small { color:var(--color-muted); text-align:end; }
         .waiting-list-dialog-actions { display:flex; justify-content:flex-end; gap:9px; flex-wrap:wrap; }
-        @media (max-width: 640px) { .waiting-list-setting-row { align-items:flex-start; flex-direction:column; } .waiting-list-setting-control { width:100%; justify-content:space-between; } .waiting-list-request-header { flex-direction:column; } .waiting-list-request-header > div:last-child { text-align:start !important; } .waiting-list-meta-grid { grid-template-columns:1fr; } .waiting-list-actions > button { flex:1 1 140px; justify-content:center; } }
+        @media (max-width: 640px) { .waiting-list-setting-row { align-items:flex-start; flex-direction:column; } .waiting-list-setting-control { width:100%; justify-content:space-between; } .waiting-list-request-header { align-items:stretch; flex-direction:column; } .waiting-list-header-end { justify-content:space-between; } .waiting-list-actions { display:grid; grid-template-columns:minmax(0,1fr); } .waiting-list-actions > button { width:100%; } }
       `}</style>
     </div>
   );

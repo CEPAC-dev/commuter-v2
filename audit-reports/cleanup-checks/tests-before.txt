@@ -1,0 +1,425 @@
+
+> commuter@0.1.0 test
+> node --import ./tests/register-next-server-hook.mjs --test tests/*.test.mjs
+
+✔ Request-group audit script contains no database write operations (3.5423ms)
+✔ Request-group audit script emits each of the seven reports once (4.379ms)
+(node:7048) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/time/availabilityWindow.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ accepts an availability window of exactly eight hours (3.8629ms)
+✔ rejects availability longer than eight hours (0.5423ms)
+✔ rejects invalid or reversed availability times (0.3176ms)
+✔ normalizes valid origins and rejects invalid ids (1.8842ms)
+(node:2404) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/countdown.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ >1 day formats into day and hour values (6.4269ms)
+✔ exactly 24 hours stays in the day format (1.0122ms)
+✔ one-hour boundary switches tick interval only below one hour (0.3984ms)
+✔ under one minute exposes seconds (0.3773ms)
+✔ pickup exactly now is reached (0.3546ms)
+✔ pickup one second past is reached (0.2718ms)
+✔ pickup less than one second away is still future (0.7918ms)
+✔ Cairo pickup conversion crosses midnight using the Cairo wall time (191.952ms)
+✔ invalid or missing pickup input returns null (1.0448ms)
+(node:12164) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/groupRequestTrips.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ keeps legacy Request groups intact and standalone Trips ungrouped (38.5039ms)
+(node:10460) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/config/regions.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ normalizes legacy region aliases (2.1858ms)
+✔ resolves regional currencies (0.3541ms)
+✔ validates supported station GeoJSON (14.0475ms)
+✔ rejects duplicate source ids and invalid coordinates (1.322ms)
+✔ computes actual station dataset changes (7.6494ms)
+✔ formats money using the regional currency (89.5621ms)
+✔ includes changed source fields in station dataset previews (0.9898ms)
+(node:11992) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/i18n/multiDayBooking.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Arabic multi-day booking uses singular form for one remaining day (2.0887ms)
+✔ Arabic multi-day booking uses dual form for two days (0.3679ms)
+✔ Arabic multi-day booking uses plural form for three and seven days (0.2561ms)
+✔ Arabic multi-day booking uses accusative plural for eleven or more days (0.2623ms)
+✔ English multi-day booking keeps its existing wording (0.4027ms)
+(node:4816) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/config/featureFlags.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ enabled allowlist permits listed users and leaves others on standalone batches (2.7021ms)
+✔ unset and whitespace-only allowlists permit everyone only when flag is on (1.0593ms)
+✔ invalid allowlist entries are ignored without opening rollout to everyone (8.2422ms)
+✔ creation API decides per user and falls back to standalone batch creation (47.7265ms)
+✔ multi-day logger emits one structured line with identifiers and counts (12.8014ms)
+(node:28456) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/nextTrip.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ active trip wins over upcoming trips (150.7188ms)
+✔ earliest upcoming pickup wins (2.4696ms)
+✔ past upcoming pickups are ignored (3.0749ms)
+✔ pending and waiting-list trips are ignored (3.1042ms)
+✔ cancelled and refunded trips are ignored (1.531ms)
+✔ nomatch can be upcoming before pickup but not after pickup (2.0852ms)
+✔ pickup exactly at now is not selected as a future trip (1.3259ms)
+✔ empty list returns null (0.3334ms)
+(node:20640) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/notifications/notificationHref.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ stored notification URL takes precedence over trip fallback (1.9854ms)
+✔ trip id takes precedence over legacy booking id (0.3761ms)
+✔ booking id alone never creates a my-requests URL (0.3139ms)
+✔ notification-specific wallet and ride-offer fallbacks remain intact (0.2747ms)
+(node:29356) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/phase8bGuards.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ session creation and expiry serialize on the standalone Trip record (17.416ms)
+✔ a session cannot be created after an expiry transition wins (0.6534ms)
+✔ unpaid cancellation conflicts with session creation on the same Trip (3.2349ms)
+✔ session cancellation checkpoint prevents reservation and gateway creation (2.4517ms)
+✔ spacing locks refresh a Date TTL field and transaction conflicts are classified (39.867ms)
+✔ Trip session amounts use integer piasters and Kashier-safe formatting (0.7633ms)
+✔ APP_URL validation permits loopback only in non-production test mode (2.3265ms)
+✔ all Kashier checkout session paths validate APP_URL (48.5413ms)
+✔ late success for every dead Trip status alerts once without changing money state (14.6651ms)
+✔ expiry authorization fails closed in production but keeps Bearer auth (7.1648ms)
+✔ Kashier log projection excludes raw response/session/card fields (8.4575ms)
+(node:9068) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/config/vehicles.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ shared rides derive the final price from the distance-based base price (1.7682ms)
+✔ full-week selection discounts only the seventh day (3.8932ms)
+✔ private route fare includes per-leg passenger price, waiting, and minimum charge (0.4651ms)
+(node:11816) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/promoUsageRelease.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ releases promo usage only once on waitlist rejection (1.9863ms)
+✔ releases promo usage only once on expiry (0.648ms)
+✔ releases promo usage only once on unpaid cancellation (0.4579ms)
+(node:26960) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/statusDisplay.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ rejected request returns its stored reason (3.9105ms)
+✔ rejected request with an empty reason returns the fallback state (0.5222ms)
+✔ old rejected documents do not require cancelledBy (0.4267ms)
+✔ non-rejected trip does not show a rejection card (0.4127ms)
+(node:4088) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/models/Request.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ saving a new Request is rejected (48.3798ms)
+✔ Request.create is rejected (3.8096ms)
+✔ Request.insertMany is rejected (1.8046ms)
+✔ Request upserts are rejected across query update methods (6.0012ms)
+✔ bulkWrite cannot insert or upsert a Request (1.5677ms)
+✔ saving and updating an existing Request remain allowed (31.137ms)
+(node:15860) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/requestGroupCancellationCore.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ cancels one of five equal-price days and keeps Request status and tripIds intact (42.8981ms)
+✔ unlisted users can still cancel existing Requests (1.8881ms)
+✔ recomputes the amount from unequal remaining child prices (0.7357ms)
+✔ cancelling the last non-cancelled day cancels the Request (0.6956ms)
+✔ cancels the whole Request, all children, and all promo reservations (1.0952ms)
+✔ rejects paid Requests without modifying children, amount, or promo usage (1.3192ms)
+✔ refuses day and whole cancellation while a gateway or legacy session is active (1.0698ms)
+✔ stale kashier_pending payment is verified and then cancellation can proceed (0.9889ms)
+✔ expired Request payment verification uses 30 minutes plus five-minute grace (0.4063ms)
+✔ a new payment session is eligible after cancelling one day at the new amount (1.1139ms)
+✔ cancellation verifies expired active payments through the shared payment verifier (31.7144ms)
+✔ concurrent cancellation and payment lock have one conditional winner (1.352ms)
+✔ payment eligibility blocks waiting-list, cancelled, empty, and amount-stale Requests (0.2854ms)
+✔ cancelled children leave active passenger and admin groups; paid Requests display single Trips (1.81ms)
+✔ transaction failure restores child state, promo release record, and parent amount (1.0217ms)
+(node:37384) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/requestGroupCreation.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ the server flag defaults off and Request creation requires multiple dates (1.5656ms)
+✔ creates a two-date Request with children and final summed prices in one transaction (23.4666ms)
+✔ creates the maximum seven-date Request with each child counted toward the pending cap (5.377ms)
+✔ rejects more than seven dates, duplicates, out-of-window dates, and extra routes or cycles before writes (1.0473ms)
+✔ a spacing conflict with an existing holding Trip aborts before promo reservation (2.1341ms)
+✔ duplicate same-day children are rejected rather than bypassing the group spacing rule (0.4475ms)
+✔ promo is reserved and applied per child; an error on a later child rolls back all reservations (5.4356ms)
+✔ a child insert failure rolls back the Request and all promo reservations (2.6716ms)
+✔ a created group displays once, reviews as a Request, and resolves payment as a Request (3.9007ms)
+✔ unmarked Request save is blocked while the transaction helper authorizes a marked save (17.1389ms)
+(node:5884) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/requestGroupCancellationCore.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ cancelled child remains cancelled through group approval and total uses remaining prices (47.52ms)
+✔ group rejection releases each remaining promo once and preserves a cancelled day (1.6009ms)
+✔ Request settlement leaves a cancelled child untouched (23.4516ms)
+✔ expiry on a reduced group preserves the cancelled child and promo release is idempotent (1.5979ms)
+✔ cancel-all is terminal and a second cancel or expiry cannot release promos again (11.6293ms)
+(node:20192) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/payments/requestPaymentRecoveryDecision.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ late closed card Payment settles a still-payable Request once (2.8257ms)
+✔ late Payment for a cancelled or expired Request requires manual review (0.7982ms)
+✔ amount mismatch settles an eligible Request and replay adds no duplicate alert (1.6817ms)
+✔ closed late Payment with an amount mismatch requires manual review (0.457ms)
+✔ late closed Payment amount is rechecked when settlement loses a race (0.571ms)
+✔ released wallet reservation prevents late auto-settlement (0.4327ms)
+✔ webhook and callback route Request successes through recoverable settlement (59.8097ms)
+(node:5800) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/requestPaymentState.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ waiting requests never offer payment (16.149ms)
+✔ approved unpaid requests can be paid unless any pickup has passed (0.6635ms)
+✔ rejected requests never offer payment and retain a reason (0.3265ms)
+✔ other request states preserve the existing pending-payment rule (0.2953ms)
+✔ past-trip comparison uses Cairo date and pickup-time ordering (0.5272ms)
+✔ money-taken predicate recognizes settled, refunded, and partial capture states (0.3227ms)
+(node:17520) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/requestPromoRelease.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Request expiry releases every child promo usage only once (2.7204ms)
+✔ concurrent expiry and admin rejection release each child usage once (0.894ms)
+✔ paid Requests do not release promo usage (0.4872ms)
+✔ Requests without promo usage are unaffected (0.4199ms)
+(node:24044) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/payments/requestSettlementFlow.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ capture returning null rolls back Request, children, Payment, and webhook event (3.8449ms)
+✔ capture throwing rolls back Request and remains retryable (1.7115ms)
+✔ the same webhook transaction can retry after capture failure (1.2265ms)
+✔ verify and webhook settlement modes use the same retryable transaction steps (0.9176ms)
+✔ duplicate settlement after success does not capture or update children twice (2.9313ms)
+✔ card-only Request settlement does not require a wallet capture (0.7651ms)
+✔ settlement updates only non-cancelled children and logs amount mismatch once (33.2078ms)
+(node:14088) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/security/request.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ allows localhost same-site requests even without an Origin header (3.4607ms)
+✔ rejects mismatched external origins (10.208ms)
+✔ requires JSON Content-Type for localhost requests (7.0335ms)
+✔ rejects a mismatched Origin before checking the request content type (22.6187ms)
+✔ rejects a non-localhost request with no Origin header (1.2216ms)
+(node:16944) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/sharedRideStepper.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ waiting-list Request is at admin review (5.3031ms)
+✔ approved Request is at payment (0.5361ms)
+✔ paid searching trip remains at the payment-complete stage (0.3637ms)
+✔ matched trip completes the progress stepper (0.3286ms)
+✔ rejected Request marks the review step as rejected (0.4875ms)
+(node:25092) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/standaloneTripCancellation.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ cancels an unpaid standalone Trip, payment and reservation without refund (2.2548ms)
+✔ cancels a waiting-list standalone Trip without payment or refund (1.7805ms)
+✔ a paid standalone Trip creates the policy refund and does not cancel a Payment (0.5394ms)
+✔ a second cancellation is refused without changing state again (0.9583ms)
+✔ passenger cancellation is scoped to the owning user (0.7226ms)
+✔ legacy Request-backed Trips stay on the parent cancellation path (0.2791ms)
+(node:4776) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/standaloneTripExpiry.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ expires old pending and failed standalone Trips (47.6637ms)
+✔ does not expire a paid Trip or a waitlist Trip (7.1121ms)
+✔ expires a past-pickup standalone waiting-list Trip and releases promo once (34.4134ms)
+✔ does not expire a future waiting-list Trip (25.9287ms)
+✔ does not expire an approved or rejected Trip (1.6837ms)
+✔ admin approval racing expiry has one conditional winner (0.6695ms)
+✔ defers a waiting-list Trip with a recent active Payment (6.628ms)
+✔ expires a waiting-list Trip with a stale in-flight Payment and releases reservation (5.0241ms)
+✔ defers expiry while an in-flight Payment is within the 30-minute session lifetime (1.738ms)
+✔ expires an approved unpaid Trip once its Cairo pickup time has passed (2.2753ms)
+✔ cancels an in-flight Payment and releases its wallet reservation (6.6909ms)
+✔ leaves legacy Request-backed Trips to the unchanged Request expiry path (1.2958ms)
+✔ concurrent expiry runs claim the Trip and wallet release once (2.13ms)
+(node:38880) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/statusDisplay.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ private requests display payment state using the existing pay rule (3.7695ms)
+✔ shared requests created with the waiting-list toggle on stay waiting (54.661ms)
+✔ shared requests created with the toggle off use private payment display (1.6926ms)
+✔ existing waiting-list requests remain waiting regardless of later toggle changes (1.4491ms)
+✔ approved request with any past pickup displays expired without payment (1.916ms)
+✔ ordinary pending-payment trip with a past pickup displays expired (1.0589ms)
+✔ nomatch status has a safe display label and no refund badge for none (0.8335ms)
+✔ cancelled by admin rejection displays rejected and its reason (1.6641ms)
+✔ unknown statuses fall back to a non-empty safe label (0.6441ms)
+✔ refunded trips have a label while none refund state has no refund badge (0.5463ms)
+✔ trip display preserves current cancellation and rating eligibility (0.3876ms)
+✔ standalone waitlist and payment statuses show only their eligible actions (1.9033ms)
+✔ standalone approved Trips cannot be paid after Cairo pickup time (0.6825ms)
+✔ standalone rejection displays its own reason without a parent Request (1.4961ms)
+✔ standalone cancellation actions match the route's accepted states (2.7644ms)
+(node:32572) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/admin/transactionDescriptionFilters.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ referral description categories match their exact bonus descriptions (2.9484ms)
+✔ description search escapes regex metacharacters (1.2576ms)
+(node:37132) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/tripBatchCreation.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ creates one standalone Trip per date in one transaction with shared batchId (25.0787ms)
+✔ a spacing conflict rolls back the whole batch before any promo reservation (3.0789ms)
+✔ invalid batch dates and server prices fail before promo usage or insertion (0.4433ms)
+✔ the pending cap counts pending, waiting-list, and approved-unpaid Trips (0.4642ms)
+✔ prices each date server-side and ignores client-supplied prices (4.886ms)
+✔ promo usage is reserved once per Trip and discounts each Trip (1.8017ms)
+✔ promo application remains per-Trip when the code runs out during a batch (2.0124ms)
+✔ a failed insert rolls back every per-Trip promo reservation (2.6703ms)
+✔ all Trips receive the same waitlist state (1.1631ms)
+✔ concurrent batches cannot exceed the pending-trip cap (1.7506ms)
+(node:7376) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/tripBooking.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ accepts one through seven unique dates within the booking window (2.583ms)
+✔ rejects duplicate, invalid, out-of-window, and over-limit dates (1.6068ms)
+✔ rejects multiple trip definitions with the required error code (0.3621ms)
+✔ builds the batch response and retains legacy fields for a single trip (0.7481ms)
+✔ multi-trip response has one status and price per date (1.5304ms)
+✔ chooses the standalone Trip initial status consistently (0.4017ms)
+✔ builds one counted, batch-keyed admin waitlist notification per admin (0.8953ms)
+✔ localizes new multi-date API errors in English and Arabic (58.103ms)
+(node:9240) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/tripHistory.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ history categories distinguish terminal and expired stages (3.7108ms)
+✔ history filters only match Requests containing the requested category (0.8631ms)
+(node:30036) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/tripHistoryFilters.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ history params parse filters and normalize valid pages (23.752ms)
+✔ invalid numbers, dates, and reversed ranges return friendly error codes (0.8137ms)
+✔ trip number normalization tolerates an optional hash and whitespace (0.3768ms)
+✔ Cairo pickup date boundaries are inclusive through 23:59 and exclude next midnight (0.4731ms)
+✔ a Request matches a date range when any trip pickup is in range (0.3537ms)
+✔ history match construction always scopes by owner (1.994ms)
+(node:32456) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/payments/resolvePayableBookingRecord.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ standalone pending-payment or approved trips with pending or failed payment are payable (2.8846ms)
+✔ failed Trip retries through the conditional claim and settles paid (2.1011ms)
+✔ approved Trip past-pickup rule uses Cairo date and pickup comparison only (0.6138ms)
+✔ resolver excludes legacy child Trips and falls back to their Request (0.6085ms)
+✔ legacy Request remains payable and can be conditionally settled (0.541ms)
+✔ standalone Trip resolver charges Trip.priceEgp and never loads Request (0.3995ms)
+✔ wallet-only and Kashier settlement effects run only after an atomic claim (0.4662ms)
+✔ webhook replay cannot settle or notify twice (0.649ms)
+✔ callback and webhook racing settle and notify once (0.6545ms)
+✔ waiting-list and rejected trips do not settle (0.8973ms)
+✔ full Trip refunds set both Trip statuses; partial refunds do not (4.5243ms)
+✔ failed standalone payment retry resets only an unpaid pending or approved Trip (1.3437ms)
+✔ late failure from an older attempt cannot fail a retrying Trip (0.6448ms)
+✔ failure racing a successful claim does not release or fail either record (0.7835ms)
+✔ failure only marks a Trip failed when no newer Payment is in flight (0.3974ms)
+✔ settlement transaction rolls back each failing step and replays without double capture (1.908ms)
+✔ webhook and callback settlement share replay-safe finalization steps (0.5919ms)
+(node:25948) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/validation/tripSpacing.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ blocks touching and overlapping arrival windows (46.5949ms)
+✔ allows exactly thirty minutes between arrival windows (2.3957ms)
+✔ trips on different dates do not conflict (1.2876ms)
+✔ freed statuses do not hold an arrival window (7.0379ms)
+✔ every holding status keeps its arrival window (14.5521ms)
+✔ legacy Request-backed trips still hold their arrival window (2.7486ms)
+✔ matches the 7:00–7:30 example using stored slot midpoints (8.3503ms)
+(node:16432) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/tripTabView.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Pending groups unpaid Requests once and keeps pending single Trips individual (78.4084ms)
+✔ one-day unpaid Requests remain individual Pending trips (8.8945ms)
+✔ approval-waiting groups and single trips add no payable Pending items (4.4252ms)
+✔ payable Pending count uses the existing canPay rule for groups and single Trips (10.3235ms)
+✔ unpaid Request children stay out of All, Upcoming and Ongoing; paid trips stay normal (37.9819ms)
+✔ standalone pending Trips retain one pay action per Trip (2.6627ms)
+(node:9264) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/tripTabs.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ private unpaid trip is pending (57.4068ms)
+✔ legacy bookings links resolve to the Pending tab and expose no bookings tab (1.8715ms)
+✔ waiting-list trip is pending after the creation-time toggle decision (1.4558ms)
+✔ approved request with a past pickup belongs to history (0.8804ms)
+✔ ordinary pending-payment request with a past pickup belongs to history (0.8834ms)
+✔ nomatch is upcoming before pickup and history after pickup (1.4598ms)
+✔ one past trip puts every trip in a multi-day pending request in history (1.3214ms)
+✔ unknown status values safely fall into history (0.5672ms)
+✔ standalone Trip statuses map directly to passenger tabs (4.2861ms)
+✔ standalone approved unpaid trips stay pending even after pickup time (3.8261ms)
+✔ all pickup-time consumers agree for past, future, now, and multi-day fixtures (5.6181ms)
+(node:2688) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/admin/waitingList.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ validates approve and reject actions and reasons (3.4953ms)
+✔ waiting-list transition is conditional on waiting_list (0.5671ms)
+✔ legacy Request approval remains an allowed existing-record update (0.3113ms)
+✔ standalone Trip review filter is atomic and approval unlocks payment only (0.5055ms)
+✔ waiting-list creation requires both an enabled feature and a shared ride (0.304ms)
+✔ passenger projection and response mapping exclude sensitive fields (0.6173ms)
+✔ waiting-list list mapping and pagination include Trips and Requests in created-time order (6.852ms)
+✔ promo release grouping is empty when a request has no promo usage (0.4594ms)
+✔ past-trip helper uses the booking pickup date and time (0.5699ms)
+✔ waiting-list notification payloads use links and omit passenger contact data (0.8419ms)
+✔ waiting-list UI helpers format age, errors, and badge counts (0.5665ms)
+(node:30548) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/pendingRequestHardening.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ pending request expiry filter is parent-status driven (3.0447ms)
+✔ legacy Request expiry remains limited to unpaid pending-payment records (0.5425ms)
+✔ trip expiry filter requires selected parent request ids and pending trip status (0.3457ms)
+✔ settlement filter excludes waiting-list and rejected requests (0.3992ms)
+--- STARTING WALLET RESERVE & WITHDRAWAL LIMIT TESTS ---
+PASS Test 1: Balance = 200, Reserve = 200 => Withdrawable = 0. Withdrawal rejected.
+PASS Test 2: Admin lowers reserve to 100 EGP => Withdrawable immediately recalculates to 100 EGP. Withdrawal of 100 EGP succeeds.
+PASS Test 3: Per-driver reserve override (100 EGP) takes precedence over global default (200 EGP).
+PASS Test 4: Withdrawal limits enforced correctly (global & per-driver overrides).
+PASS Test 5: Null defaultWithdrawalLimit treats withdrawal limit as unlimited.
+--- ALL TESTS PASSED SUCCESSFULLY! ---
+✔ tests\walletReserveWithdrawal.test.mjs (153.6816ms)
+(node:5728) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/CEPAC/software/New%20folder/commuter-ae/src/lib/geo/zones.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to D:\CEPAC\software\New folder\commuter-ae\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ finds the containing zone and uses its mapped name (2.5691ms)
+✔ rejects points outside service zones and inside polygon holes (0.6273ms)
+✔ uses the map feature id when a zone name is unavailable (0.2579ms)
+ℹ tests 258
+ℹ suites 0
+ℹ pass 258
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4483.0364

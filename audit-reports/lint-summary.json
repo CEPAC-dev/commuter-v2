@@ -1,0 +1,45 @@
+{
+  "totalErrors": 97,
+  "totalWarnings": 59,
+  "totalIssues": 156,
+  "byFolder": {
+    "src": 108,
+    "scripts": 35,
+    "tests": 0,
+    "other": 13
+  },
+  "byRule": [
+    {
+      "ruleId": "@typescript-eslint/no-require-imports",
+      "count": 42
+    },
+    {
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "count": 39
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "count": 35
+    },
+    {
+      "ruleId": "react-hooks/exhaustive-deps",
+      "count": 17
+    },
+    {
+      "ruleId": "react-hooks/set-state-in-effect",
+      "count": 15
+    },
+    {
+      "ruleId": "@next/next/no-img-element",
+      "count": 5
+    },
+    {
+      "ruleId": "UNKNOWN",
+      "count": 2
+    },
+    {
+      "ruleId": "react-hooks/static-components",
+      "count": 1
+    }
+  ]
+}

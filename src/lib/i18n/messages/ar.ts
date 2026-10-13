@@ -1100,6 +1100,7 @@ export const ar: Record<MessageKey, string> = {
   "admin.waiting_list.promo": "كود الخصم",
   "admin.waiting_list.note": "ملاحظة الراكب",
   "admin.waiting_list.trip": "الرحلة {count}",
+  "admin.waiting_list.days_count": "عدد الأيام: {count}",
   "admin.waiting_list.route": "المسار",
   "admin.waiting_list.pickup": "الركوب",
   "admin.waiting_list.dropoff": "النزول",

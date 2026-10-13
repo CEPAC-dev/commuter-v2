@@ -1113,6 +1113,7 @@ export const en = {
   "admin.waiting_list.promo": "Promo",
   "admin.waiting_list.note": "Passenger note",
   "admin.waiting_list.trip": "Trip {count}",
+  "admin.waiting_list.days_count": "{count} days",
   "admin.waiting_list.route": "Route",
   "admin.waiting_list.pickup": "Pickup",
   "admin.waiting_list.dropoff": "Dropoff",

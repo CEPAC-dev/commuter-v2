@@ -1,0 +1,247 @@
+Unused files (23)
+src/components/admin/ReferralUserOverrides.tsx 
+src/components/admin/RefundRequestsClient.tsx  
+src/components/admin/StationsClient.tsx        
+src/components/availability/AvailabilityMap.tsx
+src/components/create/CreateMap.tsx            
+src/components/layout/BottomNav.tsx            
+src/components/layout/Header.tsx               
+src/components/map/PickupMap.tsx               
+src/components/map/PickupMapInner.tsx          
+src/components/map/PickupMapInnerOsm.tsx       
+src/components/map/useRouteOSRM.ts             
+src/components/shared/PageHeader.tsx           
+src/components/shared/SaveAddressButton.tsx    
+src/components/shared/TripChatButton.tsx       
+src/lib/config/environment.ts                  
+src/lib/locale.ts                              
+src/lib/mongodb.ts                             
+src/lib/useMapState.ts                         
+src/types/auth.ts                              
+src/types/driver.ts                            
+src/types/log.ts                               
+src/types/Ride.ts                              
+src/types/user.ts                              
+Unused dependencies (3)
+next-intl          package.json:27:6
+rc-time-picker     package.json:31:6
+react-time-picker  package.json:35:6
+Unused devDependencies (2)
+@types/bcryptjs  package.json:43:6
+tailwindcss      package.json:52:6
+Unlisted dependencies (49)
+mongodb      scripts/audit-operational-regions.cjs:6:9       
+@next/env    scripts/audit-request-groups.mjs:2:31           
+mongodb      scripts/audit-station-region-migration.cjs:2:9  
+dotenv       scripts/audit-station-regions.cjs:7:13          
+mongodb      scripts/audit-station-regions.cjs:20:9          
+mongodb      scripts/audit-user-regions.cjs:6:9              
+dotenv       scripts/backfill-admin-permissions.cjs:4:9      
+dotenv       scripts/backfill-kashier-payment-ledger.cjs:5:9 
+mongodb      scripts/backfill-operational-regions.cjs:6:9    
+@next/env    scripts/backfill-public-numbers.cjs:2:9         
+mongodb      scripts/backfill-station-regions.cjs:7:9        
+mongodb      scripts/backfill-user-regions.cjs:7:9           
+dotenv       scripts/backfill-wallet-reserved.cjs:4:9        
+@next/env    scripts/checkLegacyRequests.mjs:2:31            
+@next/env    scripts/ensureIndexes.mjs:1:31                  
+@next/env    scripts/migrate-promo-code-discount-type.cjs:2:9
+@next/env    scripts/migrate-referral-balance-bonuses.cjs:2:9
+dotenv       scripts/seed-prod-data.cjs:19:13                
+mongodb      scripts/seed-prod-data.cjs:31:9                 
+dotenv       scripts/seed-stations.cjs:9:13                  
+mongodb      scripts/seed-stations.cjs:22:9                  
+dotenv       scripts/sync-payment-indexes.cjs:5:9            
+mongodb      src/app/api/trips/route.ts:72:31                
+mongodb      src/app/api/upload/[filename]/route.ts:1:40     
+mongodb      src/app/api/upload/route.ts:3:30                
+server-only  src/lib/auth/securityQuestion.ts:1:8            
+server-only  src/lib/auth/session.ts:1:8                     
+server-only  src/lib/auth/smsOtp.ts:1:8                      
+server-only  src/lib/db/getVehicles.ts:1:8                   
+server-only  src/lib/db/seedVehicles.ts:1:8                  
+server-only  src/lib/email/sendContactEmail.ts:1:8           
+server-only  src/lib/geo/zones.server.ts:1:8                 
+server-only  src/lib/maps/settings.ts:1:8                    
+server-only  src/lib/notifications/webPush.ts:1:8            
+server-only  src/lib/payments/requestPaymentRecovery.ts:1:8  
+server-only  src/lib/payments/requestSettlement.ts:1:8       
+server-only  src/lib/promoCode.ts:1:8                        
+server-only  src/lib/referral.ts:1:8                         
+server-only  src/lib/regions/resolveActiveRegion.ts:1:8      
+server-only  src/lib/services/availability.ts:1:8            
+server-only  src/lib/services/booking-status.ts:1:8          
+server-only  src/lib/services/profile.ts:1:8                 
+server-only  src/lib/services/requests.ts:1:8                
+server-only  src/lib/services/tripEarnings.ts:1:8            
+server-only  src/lib/services/trips.ts:1:8                   
+server-only  src/lib/smsmisr.ts:1:8                          
+server-only  src/lib/stations/publishDataset.ts:1:8          
+server-only  src/lib/storage/stationDatasetStorage.ts:1:8    
+mongodb      src/lib/tripSpacingLockIndex.ts:1:43            
+Unused exports (87)
+getVehicleSeatGrid                             function  src/components/trips/VehicleSeatMap.tsx:27:17      
+getVehicleChassisStyle                         function  src/components/trips/VehicleSeatMap.tsx:109:17     
+REFERRAL_DESCRIPTION_CATEGORIES                          src/lib/admin/transactionDescriptionFilters.ts:1:14
+buildWaitingListCreatedTripAdminNotifications  function  src/lib/admin/waitingList.ts:229:17                
+ALL_TRANSACTION_PERMISSIONS                              src/lib/auth/permissions.ts:18:14                  
+PHONE_NATIONAL_LENGTH                                    src/lib/auth/validation.ts:2:14                    
+getCutoffDateStr                               function  src/lib/cancellationPolicy.ts:73:17                
+canModifyAvailability                          function  src/lib/cancellationPolicy.ts:106:17               
+CAR_TYPES                                                src/lib/config/driver.ts:9:14                      
+DRIVER_EARNINGS_RATE                                     src/lib/config/earnings.ts:2:14                    
+REGION_SLUGS                                             src/lib/config/regions.ts:6:14                     
+LEGACY_REGION_CODES                                      src/lib/config/regions.ts:9:14                     
+LEGACY_REGION_ALIASES                                    src/lib/config/regions.ts:98:14                    
+getRegionConfig                                function  src/lib/config/regions.ts:139:17                   
+isVehicleAvailableInRegion                     function  src/lib/config/regions.ts:157:17                   
+vehicleKeysForRegion                           function  src/lib/config/regions.ts:166:17                   
+vehiclesForRegion                              function  src/lib/config/regions.ts:172:17                   
+computeTripPriceForSelection                   function  src/lib/config/vehicles.ts:256:17                  
+VERIFICATION_METHODS                                     src/lib/config/verification.ts:9:14                
+questionText                                   function  src/lib/config/verification.ts:59:17               
+runtimeEnvironment                                       src/lib/environment.ts:1:14                        
+isProduction                                             src/lib/environment.ts:6:14                        
+walkingMinutes                                 function  src/lib/geo/stations.ts:79:17                      
+getLocaleFromCookie                            function  src/lib/i18n/client.tsx:16:17                      
+SUPPORTED_LOCALES                                        src/lib/i18n/config.ts:3:14                        
+isLocale                                       function  src/lib/i18n/config.ts:7:17                        
+formatMoney                                              src/lib/i18n/index.ts:4:10                         
+DEFAULT_LOCALE                                           src/lib/i18n/index.ts:8:3                          
+LOCALE_COOKIE                                            src/lib/i18n/index.ts:9:3                          
+SUPPORTED_LOCALES                                        src/lib/i18n/index.ts:10:3                         
+isLocale                                                 src/lib/i18n/index.ts:11:3                         
+parseLocale                                              src/lib/i18n/index.ts:12:3                         
+dashedLinePattern                              function  src/lib/leaflet.ts:47:17                           
+getLocaleFromCookie                                      src/lib/locale.client.tsx:3:10                     
+fetchRoute                                     function  src/lib/openrouteservice.ts:67:23                  
+fetchRoadRoute                                 function  src/lib/osrm.ts:19:23                              
+calendarDaysBeforeCairo                        function  src/lib/passengerCancellationPolicy.ts:27:17       
+evaluatePassengerCancellationTier              function  src/lib/passengerCancellationPolicy.ts:48:17       
+initiateKashierPayout                          function  src/lib/payments/kashierPayout.ts:44:23            
+isStandaloneTripRecord                                   src/lib/payments/resolveBooking.ts:12:3            
+resolvePayableBookingWith                                src/lib/payments/resolveBooking.ts:13:3            
+isRequestPaymentSessionExpired                 function  src/lib/payments/sessionTiming.ts:4:17             
+SETTLEMENT_BLOCKED_STATUSES                              src/lib/pendingRequestHardening.ts:1:14            
+rollbackPromoCodeUsage                         function  src/lib/promoCode.ts:203:23                        
+getOrCreateAdminReferralCampaign               function  src/lib/referral.ts:36:23                          
+legacyDefaultRegion                            function  src/lib/regions/resolveActiveRegion.ts:96:17       
+isPositiveEgpAmount                            function  src/lib/security/request.ts:128:17                 
+MAX_AVAILABILITY_MINUTES                                 src/lib/services/availability.ts:16:10             
+logPaymentInitiated                            function  src/lib/services/logActionHelpers.ts:12:23         
+logPaymentCompleted                            function  src/lib/services/logActionHelpers.ts:32:23         
+logPaymentFailed                               function  src/lib/services/logActionHelpers.ts:52:23         
+logDriverCancelled                             function  src/lib/services/logActionHelpers.ts:120:23        
+logUserCancelled                               function  src/lib/services/logActionHelpers.ts:144:23        
+logTripMatched                                 function  src/lib/services/logActionHelpers.ts:166:23        
+logTripStarted                                 function  src/lib/services/logActionHelpers.ts:188:23        
+logTripCompleted                               function  src/lib/services/logActionHelpers.ts:211:23        
+logTripTimeout                                 function  src/lib/services/logActionHelpers.ts:233:23        
+logTripCreated                                 function  src/lib/services/logActionHelpers.ts:273:23        
+logCustomAction                                function  src/lib/services/logActionHelpers.ts:293:23        
+getTripLogs                                    function  src/lib/services/logService.ts:80:23               
+getLogs                                        function  src/lib/services/logService.ts:116:23              
+getLogById                                     function  src/lib/services/logService.ts:151:23              
+deleteLog                                      function  src/lib/services/logService.ts:180:23              
+getTripLogHistory                              function  src/lib/services/logService.ts:210:23              
+getUserActivityLogs                            function  src/lib/services/logService.ts:238:23              
+getDriverActivityLogs                          function  src/lib/services/logService.ts:276:23              
+getRideByNumber                                          src/lib/services/rideService.ts:1141:3             
+getActiveRideForDriver                                   src/lib/services/rideService.ts:1144:3             
+getRideByAvailability                                    src/lib/services/rideService.ts:1146:3             
+addPassengerToRide                                       src/lib/services/rideService.ts:1149:3             
+recalculateRoute                                         src/lib/services/rideService.ts:1151:3             
+MAX_AVAILABILITY_MINUTES                                 src/lib/time/availabilityWindow.ts:3:14            
+isDateInWindow                                 function  src/lib/time/bookingDates.ts:19:17                 
+getMinutesUntilPickup                          function  src/lib/time/cairoTime.ts:44:17                    
+ARRIVAL_SLOT_STEP_MIN                                    src/lib/time/pickupWindow.ts:24:14                 
+getArrivalSlots                                function  src/lib/time/pickupWindow.ts:26:17                 
+hasDuplicateDates                              function  src/lib/tripBooking.ts:17:17                       
+MIN_TRIP_SPACING_MINUTES                                 src/lib/validation/tripSpacing.ts:6:14             
+debitWallet                                    function  src/lib/wallet/wallet.ts:185:23                    
+reserveWithdrawal                              function  src/lib/wallet/wallet.ts:303:23                    
+LogSchema                                                src/models/Log.ts:3:14                             
+REFERRAL_SETTINGS_ROLES                                  src/models/ReferralSettings.ts:3:14                
+AssignedDriverSchema                                     src/models/Ride.ts:4:14                            
+StopSchema                                               src/models/Trip.ts:43:14                           
+SEAT_COSTS                                               src/types/shared.ts:62:14                          
+SEAT_LABELS                                              src/types/shared.ts:67:14                          
+PRIVATE_SEAT_LABELS                                      src/types/shared.ts:149:14                         
+Unused exported types (75)
+RouteLeg                   interface  src/components/create/TripCycle.tsx:80:18  
+LegacyRegionCode           type       src/lib/config/regions.ts:10:13            
+RegionBounds               interface  src/lib/config/regions.ts:15:18            
+RideType                   type       src/lib/config/vehicles.ts:5:13            
+MessageKey                 type       src/lib/i18n/index.ts:16:15                
+LeafletModule              interface  src/lib/leaflet.ts:1:18                    
+ORSRoute                   interface  src/lib/openrouteservice.ts:4:18           
+PassengerCancellationTier  type       src/lib/passengerCancellationPolicy.ts:9:13
+PayoutRecipient            interface  src/lib/payments/kashierPayout.ts:15:18    
+PayoutResult               interface  src/lib/payments/kashierPayout.ts:23:18    
+PromoUsageReleaseRecord    interface  src/lib/promoUsageRelease.ts:1:18          
+RequestPromoReleaseTrip    interface  src/lib/requestPromoRelease.ts:1:18        
+RequestPromoReleaseState   interface  src/lib/requestPromoRelease.ts:7:18        
+DayOfWeek                  type       src/lib/services/availability.ts:14:13     
+RequestTripDetail          interface  src/lib/services/requests.ts:209:18        
+ListDriverRidesOptions     interface  src/lib/services/rideService.ts:617:18     
+StationValidationIssue     interface  src/lib/stations/validateGeoJson.ts:15:18  
+SupportOption              interface  src/lib/support/decisionTree.ts:10:18      
+TripBatchPromoResult       type       src/lib/tripBatchCreation.ts:9:13          
+HistoryParamsError         type       src/lib/tripHistoryFilters.ts:4:13         
+PassengerTabKey            type       src/lib/tripTabView.ts:7:15                
+AdminReferralAuditLogDoc   type       src/models/AdminReferralAuditLog.ts:32:13  
+AdminReferralCampaignDoc   type       src/models/AdminReferralCampaign.ts:26:13  
+AdminReferralUsageDoc      type       src/models/AdminReferralUsage.ts:32:13     
+AdminSettingsDoc           type       src/models/AdminSettings.ts:132:13         
+AvailabilityDoc            type       src/models/Availability.ts:63:13           
+DriverDoc                  type       src/models/Driver.ts:69:13                 
+LogDoc                     type       src/models/Log.ts:166:13                   
+MapSettingsDoc             type       src/models/MapSettings.ts:40:13            
+MessageDoc                 type       src/models/Message.ts:20:13                
+NotificationDoc            type       src/models/Notification.ts:55:13           
+NotificationTemplateDoc    type       src/models/NotificationTemplate.ts:130:13  
+PromoCodeDoc               type       src/models/PromoCode.ts:62:13              
+PromoCodeUsageDoc          type       src/models/PromoCodeUsage.ts:22:13         
+PushSubscriptionDoc        type       src/models/PushSubscription.ts:19:13       
+RatingDoc                  type       src/models/Rating.ts:20:13                 
+ReferralAuditLogDoc        type       src/models/ReferralAuditLog.ts:38:13       
+ReferralSettingsDoc        type       src/models/ReferralSettings.ts:23:13       
+ReferralUsageDoc           type       src/models/ReferralUsage.ts:25:13          
+RefundRequestDoc           type       src/models/RefundRequest.ts:63:13          
+RideDoc                    type       src/models/Ride.ts:183:13                  
+StationDoc                 type       src/models/Station.ts:36:13                
+StationAuditLogDoc         type       src/models/StationAuditLog.ts:45:13        
+StationDatasetDoc          type       src/models/StationDataset.ts:84:13         
+StationSuggestionDoc       type       src/models/StationSuggestion.ts:72:13      
+SupportConversationDoc     type       src/models/SupportConversation.ts:37:13    
+SupportMessageDoc          type       src/models/SupportMessage.ts:30:13         
+TripDoc                    type       src/models/Trip.ts:326:13                  
+UserDoc                    type       src/models/User.ts:192:13                  
+VehicleDoc                 type       src/models/Vehicle.ts:50:13                
+WalletDoc                  type       src/models/Wallet.ts:55:13                 
+WalletTransactionDoc       type       src/models/WalletTransaction.ts:133:13     
+WithdrawalRequestDoc       type       src/models/WithdrawalRequest.ts:57:13      
+RideRouteStopRow           interface  src/types/booking.ts:66:18                 
+PassengerInput             interface  src/types/forms.ts:7:18                    
+RouteLegInput              interface  src/types/forms.ts:20:18                   
+RideType                   type       src/types/shared.ts:18:13                  
+GenderPref                 type       src/types/shared.ts:19:13                  
+WalkMinutes                type       src/types/shared.ts:20:13                  
+TripType                   type       src/types/shared.ts:21:13                  
+WeekDay                    type       src/types/shared.ts:22:13                  
+GroupType                  type       src/types/shared.ts:23:13                  
+GroupAction                type       src/types/shared.ts:24:13                  
+RequestStatus              type       src/types/shared.ts:26:13                  
+CycleDayRecord             interface  src/types/shared.ts:40:18                  
+SeatId                     type       src/types/shared.ts:50:13                  
+SeatType                   type       src/types/shared.ts:51:13                  
+SelectedSeat               interface  src/types/shared.ts:53:18                  
+SeatPreference             type       src/types/shared.ts:60:13                  
+GeoLocation                interface  src/types/shared.ts:75:18                  
+PickupPoint                interface  src/types/shared.ts:81:18                  
+TimeSlot                   interface  src/types/shared.ts:93:18                  
+PrivateSeatPosition        type       src/types/shared.ts:143:13                 
+RideGroup                  interface  src/types/shared.ts:158:18                 
+CycleRequestCore           interface  src/types/shared.ts:169:18                 
+Duplicate exports (1)
+hasPastTrip|hasPastWaitingListTrip  src/lib/admin/waitingList.ts
