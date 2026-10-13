@@ -649,14 +649,12 @@ function RequestTripGroupCard({
           showTimePerDay={!sameTime}
           paymentAction={
             displayStatus.canPay ? (
-              <div style={{ marginTop: 12 }}>
-                <ContinueCheckoutButton
-                  bookingId={requestId}
-                  amountEgp={firstTrip.bookingAmountEgp}
-                  walletBalance={walletBalance}
-                  label={translate(locale, "my_trips.booking_continue_checkout")}
-                />
-              </div>
+              <ContinueCheckoutButton
+                bookingId={requestId}
+                amountEgp={firstTrip.bookingAmountEgp}
+                walletBalance={walletBalance}
+                label={translate(locale, "my_trips.booking_continue_checkout")}
+              />
             ) : undefined
           }
           waitingNote={translate(locale, "my_trips.booking_waiting_note")}

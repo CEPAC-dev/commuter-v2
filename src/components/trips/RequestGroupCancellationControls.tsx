@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import { formatEgp, translate } from "@/lib/i18n";
 
 interface RequestGroupCancellationControlsProps {
@@ -122,16 +123,9 @@ export default function RequestGroupCancellationControls({
           {trips.map((trip) => (
             <div
               key={trip.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                flexWrap: "wrap",
-                gap: "8px 14px",
-                paddingBlock: 12,
-                borderTop: "1px solid #EDF2F1",
-              }}
+              className="booking-day-row"
             >
-              <div style={{ flex: "1 1 150px", minWidth: 0 }}>
+              <div className="booking-day-date">
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                   <span style={{ color: "#0B1E3D", fontSize: 13, fontWeight: 700 }}>
                     {trip.dateLabel}
@@ -149,6 +143,7 @@ export default function RequestGroupCancellationControls({
                 )}
               </div>
               <span
+                className="booking-day-price"
                 style={{
                   color: "#0B1E3D",
                   fontSize: 13,
@@ -166,36 +161,39 @@ export default function RequestGroupCancellationControls({
                   setError("");
                   setSelectedTrip(trip);
                 }}
-                style={textButtonStyle}
+                className="my-trips-booking-action booking-action-neutral booking-day-cancel"
+                aria-label={`${translate(locale, "my_trips.booking_cancel_day")} ${trip.dateLabel}`}
               >
                 {translate(locale, "my_trips.booking_cancel_day")}
               </button>
               <Link
                 href={`/my-trips/${trip.id}`}
-                style={viewTripStyle}
+                className="my-trips-booking-action booking-action-icon booking-day-view"
                 aria-label={`${translate(locale, "my_trips.view_trip")} · ${trip.dateLabel}`}
               >
-                {translate(locale, "my_trips.view_trip")}
+                <ChevronRight size={17} aria-hidden="true" />
               </Link>
             </div>
           ))}
         </div>
-        {paymentAction ?? (
-          <p style={{ margin: "14px 0 0", color: "#687978", fontSize: 12, lineHeight: 1.5 }}>
-            {waitingNote}
-          </p>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            setNotice("");
-            setError("");
-            setCancelAll(true);
-          }}
-          style={{ ...textButtonStyle, color: "#B54745", marginTop: 8 }}
-        >
-          {translate(locale, "my_trips.booking_cancel_whole")}
-        </button>
+        <div className="my-trips-booking-actions">
+          {paymentAction ?? (
+            <p style={{ margin: 0, color: "#687978", fontSize: 12, lineHeight: 1.5 }}>
+              {waitingNote}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setNotice("");
+              setError("");
+              setCancelAll(true);
+            }}
+            className="my-trips-booking-action booking-action-danger"
+          >
+            {translate(locale, "my_trips.booking_cancel_whole")}
+          </button>
+        </div>
       </fieldset>
 
       {(selectedTrip || cancelAll) && (
@@ -268,14 +266,6 @@ const textButtonStyle = {
   textUnderlineOffset: 3,
   cursor: "pointer",
 } as const;
-
-const viewTripStyle = {
-  color: "#007A6A",
-  fontSize: 12,
-  fontWeight: 700,
-  textDecoration: "none",
-  whiteSpace: "nowrap" as const,
-};
 
 const dialogBackdrop = {
   position: "fixed" as const,

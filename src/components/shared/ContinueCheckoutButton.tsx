@@ -66,24 +66,14 @@ export default function ContinueCheckoutButton({
     <>
       {/* ── CTA button ── */}
       <button
+        type="button"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           setError(null);
           setOpen(true);
         }}
-        style={{
-          display: "block",
-          width: "100%",
-          padding: "13px 16px",
-          background: "#0B1E3D",
-          color: "#fff",
-          border: "none",
-          cursor: "pointer",
-          fontWeight: 700,
-          fontSize: 14,
-          letterSpacing: "0.01em",
-        }}
+        className="my-trips-booking-action booking-action-primary"
       >
         {label ?? "Continue to checkout"}
       </button>
