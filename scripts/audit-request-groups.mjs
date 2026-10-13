@@ -16,17 +16,25 @@ try {
   const requests = database.collection("requests");
   const trips = database.collection("trips");
   const payments = database.collection("payments");
+  const stalePaymentCutoff = new Date(Date.now() - 35 * 60 * 1000);
 
   const [
     unpaidAmountMismatches,
-    activeRequestsWithoutRemainingTrips,
-    orphanedRequestChildren,
+    requestsWithoutRemainingChildren,
+    childrenWithMissingRequest,
     cancelledRequestsWithActiveChildren,
+    paidCancelledChildren,
+    requestsWithStalePayments,
     paymentsWithManualReview,
   ] = await Promise.all([
     requests
       .aggregate([
-        { $match: { paymentStatus: { $ne: "paid" } } },
+        {
+          $match: {
+            status: { $ne: "cancelled" },
+            paymentStatus: { $nin: ["paid", "refunded"] },
+          },
+        },
         {
           $lookup: {
             from: "trips",
@@ -119,6 +127,34 @@ try {
         { $sort: { _id: 1 } },
       ])
       .toArray(),
+    trips
+      .find({ status: "cancelled", paymentStatus: "paid" })
+      .project({ _id: 1 })
+      .sort({ _id: 1 })
+      .toArray(),
+    payments
+      .aggregate([
+        {
+          $match: {
+            overallStatus: {
+              $in: ["created", "wallet_reserved", "kashier_pending"],
+            },
+            createdAt: { $lt: stalePaymentCutoff },
+          },
+        },
+        {
+          $lookup: {
+            from: "requests",
+            localField: "bookingId",
+            foreignField: "_id",
+            as: "parentRequest",
+          },
+        },
+        { $match: { parentRequest: { $ne: [] } } },
+        { $group: { _id: "$bookingId" } },
+        { $sort: { _id: 1 } },
+      ])
+      .toArray(),
     payments
       .aggregate([
         {
@@ -137,27 +173,39 @@ try {
   const reports = [
     {
       report: 1,
-      name: "unpaid_request_amount_mismatches",
+      name: "unpaid_non_cancelled_request_amount_mismatches",
       count: unpaidAmountMismatches.length,
       ids: unpaidAmountMismatches.map(({ _id }) => String(_id)),
     },
     {
       report: 2,
       name: "non_cancelled_requests_without_remaining_children",
-      count: activeRequestsWithoutRemainingTrips.length,
-      ids: activeRequestsWithoutRemainingTrips.map(({ _id }) => String(_id)),
+      count: requestsWithoutRemainingChildren.length,
+      ids: requestsWithoutRemainingChildren.map(({ _id }) => String(_id)),
     },
     {
       report: 3,
       name: "children_with_missing_request",
-      count: orphanedRequestChildren.length,
-      ids: orphanedRequestChildren.map(({ _id }) => String(_id)),
+      count: childrenWithMissingRequest.length,
+      ids: childrenWithMissingRequest.map(({ _id }) => String(_id)),
     },
     {
       report: 4,
       name: "cancelled_requests_with_non_cancelled_children",
       count: cancelledRequestsWithActiveChildren.length,
       ids: cancelledRequestsWithActiveChildren.map(({ _id }) => String(_id)),
+    },
+    {
+      report: 5,
+      name: "cancelled_children_with_paid_payment_status",
+      count: paidCancelledChildren.length,
+      ids: paidCancelledChildren.map(({ _id }) => String(_id)),
+    },
+    {
+      report: 6,
+      name: "requests_with_active_payments_older_than_35_minutes",
+      count: requestsWithStalePayments.length,
+      ids: requestsWithStalePayments.map(({ _id }) => String(_id)),
     },
     {
       report: 7,
@@ -168,6 +216,7 @@ try {
   ];
 
   console.log(JSON.stringify(reports, null, 2));
+  process.exitCode = reports.every((report) => report.count === 0) ? 0 : 1;
 } finally {
   await mongoose.disconnect();
 }
