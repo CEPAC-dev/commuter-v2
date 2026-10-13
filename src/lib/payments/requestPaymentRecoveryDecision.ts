@@ -5,6 +5,7 @@ export type RequestPaymentRecoveryIssue =
   | "request_already_paid"
   | "request_not_payable"
   | "payment_not_recoverable"
+  | "late_payment_amount_mismatch"
   | "wallet_reservation_released"
   | "amount_mismatch"
   | "settlement_not_applied";
@@ -69,6 +70,12 @@ function getUnsettleableReason(
   ) {
     return "wallet_reservation_released";
   }
+  if (
+    !ACTIVE_PAYMENT_STATUSES.has(payment.overallStatus) &&
+    payment.totalEgp !== input.expectedAmountEgp
+  ) {
+    return "late_payment_amount_mismatch";
+  }
   return null;
 }
 
@@ -117,10 +124,23 @@ export async function recoverPaidRequestPayment<TResult extends string>(
   const settlement = await operations.settle();
   if (settlement === "capture_failed") return settlement;
   if (settlement === "not_settled") {
+    const currentExpectedAmountEgp = await getCurrentExpectedAmount();
+    if (
+      !ACTIVE_PAYMENT_STATUSES.has(input.payment.overallStatus) &&
+      paidAmountEgp !== currentExpectedAmountEgp
+    ) {
+      await operations.recordIssue({
+        issue: "late_payment_amount_mismatch",
+        paidAmountEgp,
+        expectedAmountEgp: currentExpectedAmountEgp,
+        manualReview: true,
+      });
+      return "manual_review";
+    }
     await operations.recordIssue({
       issue: "settlement_not_applied",
       paidAmountEgp,
-      expectedAmountEgp,
+      expectedAmountEgp: currentExpectedAmountEgp,
       manualReview: true,
     });
     return "manual_review";

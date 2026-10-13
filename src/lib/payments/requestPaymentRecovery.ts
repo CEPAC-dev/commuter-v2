@@ -18,10 +18,18 @@ const ISSUE_LABELS: Record<RequestPaymentRecoveryIssue, string> = {
   request_already_paid: "Request was already paid by another payment",
   request_not_payable: "Request is not in a payable state",
   payment_not_recoverable: "Payment is in a non-recoverable state",
+  late_payment_amount_mismatch:
+    "Closed Payment amount differs from remaining trip total",
   wallet_reservation_released: "Wallet reservation was already released",
   amount_mismatch: "Payment amount differs from remaining trip total",
   settlement_not_applied: "Payment settlement did not apply",
 };
+
+const ACTIVE_PAYMENT_STATUSES = new Set([
+  "created",
+  "wallet_reserved",
+  "kashier_pending",
+]);
 
 export async function handlePaidRequestPayment(input: {
   paymentId: string;
@@ -74,6 +82,9 @@ export async function handlePaidRequestPayment(input: {
           paymentId: String(payment._id),
           transactionId: input.transactionId,
           allowClosedPayment: true,
+          requireAmountMatch: !ACTIVE_PAYMENT_STATUSES.has(
+            payment.overallStatus,
+          ),
         }),
       async getExpectedAmountEgp() {
         const currentTrips = await Trip.find({

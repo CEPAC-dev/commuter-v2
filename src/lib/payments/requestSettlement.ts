@@ -22,6 +22,7 @@ export async function settleRequestPayment(
     paymentId?: string;
     transactionId?: string;
     allowClosedPayment?: boolean;
+    requireAmountMatch?: boolean;
   } = {},
 ): Promise<RequestSettlementResult> {
   if (
@@ -75,6 +76,20 @@ export async function settleRequestPayment(
             if (!payment) return false;
             requestUserId = payment.userId;
             paidAmountEgp = payment.totalEgp;
+            if (options.requireAmountMatch) {
+              const remainingTrips = await Trip.find({
+                requestId: requestObjectId,
+                status: { $ne: "cancelled" },
+              })
+                .select("priceEgp")
+                .session(session)
+                .lean<{ priceEgp: number }[]>();
+              const expectedAmountEgp = remainingTrips.reduce(
+                (total, trip) => total + trip.priceEgp,
+                0,
+              );
+              if (paidAmountEgp !== expectedAmountEgp) return false;
+            }
           }
 
           const update = await Request.findOneAndUpdate(

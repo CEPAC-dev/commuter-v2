@@ -112,6 +112,62 @@ test("amount mismatch settles an eligible Request and replay adds no duplicate a
   });
 });
 
+test("closed late Payment with an amount mismatch requires manual review", async () => {
+  const harness = createRecoveryHarness(
+    { status: "pending_payment", paymentStatus: "failed" },
+    {
+      overallStatus: "failed",
+      totalEgp: 300,
+      walletAmountEgp: 0,
+      walletStatus: "none",
+    },
+    280,
+  );
+  assert.equal(
+    await recoverPaidRequestPayment(harness.input(), harness.operations),
+    "manual_review",
+  );
+  assert.equal(harness.state.settlementCount, 0);
+  assert.equal(harness.state.issues.size, 1);
+  assert.equal(
+    [...harness.state.issues.values()][0].issue,
+    "late_payment_amount_mismatch",
+  );
+});
+
+test("late closed Payment amount is rechecked when settlement loses a race", async () => {
+  const harness = createRecoveryHarness(
+    { status: "pending_payment", paymentStatus: "failed" },
+    {
+      overallStatus: "failed",
+      totalEgp: 280,
+      walletAmountEgp: 0,
+      walletStatus: "none",
+    },
+    280,
+  );
+  const result = await recoverPaidRequestPayment(harness.input(), {
+    async settle() {
+      return "not_settled";
+    },
+    async getExpectedAmountEgp() {
+      return 200;
+    },
+    async recordIssue(issue) {
+      harness.state.issues.set(issue.issue, issue);
+    },
+  });
+
+  assert.equal(result, "manual_review");
+  assert.equal(harness.state.settlementCount, 0);
+  assert.deepEqual(harness.state.issues.get("late_payment_amount_mismatch"), {
+    issue: "late_payment_amount_mismatch",
+    paidAmountEgp: 280,
+    expectedAmountEgp: 200,
+    manualReview: true,
+  });
+});
+
 test("released wallet reservation prevents late auto-settlement", async () => {
   const harness = createRecoveryHarness(
     { status: "pending_payment", paymentStatus: "failed" },
@@ -163,6 +219,7 @@ test("webhook and callback route Request successes through recoverable settlemen
   assert.match(webhook, /handlePaidRequestPayment\(\s*\{\s*paymentId:[\s\S]*?transactionId/);
   assert.match(kashier, /handlePaidRequestPayment\(\s*\{\s*paymentId:[\s\S]*?\}\)/);
   assert.match(recovery, /allowClosedPayment:\s*true/);
+  assert.match(recovery, /requireAmountMatch:\s*!ACTIVE_PAYMENT_STATUSES\.has/);
   assert.match(recovery, /status:\s*\{\s*\$ne:\s*"cancelled"\s*\}/);
   assert.match(recovery, /request_payment_manual_review/);
   assert.match(recovery, /request_payment_amount_mismatch/);
