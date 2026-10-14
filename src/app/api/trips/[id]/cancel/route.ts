@@ -8,6 +8,10 @@ import { WalletTransaction } from "@/models/WalletTransaction";
 import { Request } from "@/models/Request";
 import { RefundRequest } from "@/models/RefundRequest";
 import { Ride } from "@/models/Ride";
+import {
+  countRidePassengers,
+  decrementRidePassengerCount,
+} from "@/lib/ridePassengerCount";
 import { Log } from "@/models/Log";
 import { evaluateTripCancellation } from "@/lib/passengerCancellationPolicy";
 import { wasMoneyTaken } from "@/lib/requestPaymentState";
@@ -506,26 +510,52 @@ export async function POST(
 
     // Unassign from Ride if matched.
     if (trip.rideId) {
-      try {
+      let rideUpdated = false;
+      for (let attempt = 0; attempt < 3 && !rideUpdated; attempt += 1) {
         const ride = await Ride.findById(trip.rideId);
-        if (ride) {
-          if (Array.isArray(ride.passengers)) {
-            ride.passengers = ride.passengers.filter(
-              (p: {
-                tripId?: { toString(): string } | string;
-                userId?: { toString(): string } | string;
-              }) =>
-                p.tripId?.toString() !== trip._id.toString() &&
-                p.userId?.toString() !== session.userId,
-            );
-          }
-          if (ride.passengersCount && ride.passengersCount > 0) {
-            ride.passengersCount = Math.max(0, ride.passengersCount - 1);
-          }
-          await ride.save();
+        if (!ride) {
+          rideUpdated = true;
+          break;
         }
-      } catch (rideErr) {
-        console.error("Error updating ride after passenger cancellation:", rideErr);
+        const ridePassengers: {
+          tripId?: { toString(): string } | string | null;
+          userId?: { toString(): string } | string | null;
+          numberOfPassengers?: number | null;
+        }[] = Array.isArray(ride.passengers) ? ride.passengers : [];
+        const passengerCounts = ridePassengers.map(
+          (passenger) => passenger.numberOfPassengers,
+        );
+        const currentCount =
+          typeof ride.passengersCount === "number"
+            ? ride.passengersCount
+            : countRidePassengers(passengerCounts);
+        const nextCount = decrementRidePassengerCount(
+          currentCount,
+          trip.numberOfPassengers,
+        );
+        const retainedPassengers = ridePassengers.filter(
+          (passenger) =>
+            passenger.tripId?.toString() !== trip._id.toString() ||
+            passenger.userId?.toString() !== session.userId,
+        );
+        const versionFilter =
+          typeof ride.__v === "number"
+            ? { __v: ride.__v }
+            : { __v: { $exists: false } };
+        const update = await Ride.updateOne(
+          { _id: ride._id, ...versionFilter },
+          {
+            $set: {
+              passengers: retainedPassengers,
+              passengersCount: nextCount,
+            },
+            $inc: { __v: 1 },
+          },
+        );
+        rideUpdated = update.matchedCount > 0;
+      }
+      if (!rideUpdated) {
+        throw new Error("Ride passenger count changed during cancellation");
       }
     }
 

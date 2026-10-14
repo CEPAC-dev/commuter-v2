@@ -25,6 +25,7 @@ import {
 } from "@/lib/passengerNumbers";
 import { sanitizePickupPinFields } from "@/lib/pickupPinSafety";
 import { isRideWithinCapacity } from "@/lib/rideCapacity";
+import { countRidePassengers } from "@/lib/ridePassengerCount";
 
 type MatchResult = {
   availabilityId?: Types.ObjectId | string | null;
@@ -212,6 +213,9 @@ async function createRide(matchResult: MatchResult) {
       startTime: matchResult.startTime,
       endTime: matchResult.endTime,
       passengers: passengersForRide,
+      passengersCount: countRidePassengers(
+        passengersForRide.map((passenger) => passenger.numberOfPassengers),
+      ),
       passengerNumberSequence: passengersForRide.length,
       status: matchResult.status || "matched",
       totalCost: passengersForRide.reduce(

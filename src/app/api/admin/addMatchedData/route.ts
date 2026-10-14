@@ -10,6 +10,7 @@ import { User } from "@/models/User";
 import { getDriverSummaryByUserNumber } from "@/lib/services/trips";
 import { createRide } from "@/lib/services/rideService";
 import { isRideWithinCapacity } from "@/lib/rideCapacity";
+import { countRidePassengers } from "@/lib/ridePassengerCount";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 
 export const dynamic = "force-dynamic";
@@ -1446,6 +1447,9 @@ export async function POST(req: NextRequest) {
           startTime: availability.startTime ?? "00:00",
           endTime: availability.endTime ?? "00:00",
           passengers: [],
+          passengersCount: countRidePassengers([
+            ...passengerCountsByTrip.values(),
+          ]),
           totalCost,
           additionalFees,
           kmRate,
