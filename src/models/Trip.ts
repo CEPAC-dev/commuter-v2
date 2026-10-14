@@ -249,6 +249,9 @@ const TripSchema = new Schema(
       index: true,
       default: null,
     },
+    pinVersion: { type: Number, required: true, min: 0, default: 0 },
+    pinFailedAttempts: { type: Number, required: true, min: 0, default: 0 },
+    pinLockedUntil: { type: Date, required: false },
     summary: {
       type: Schema.Types.Mixed,
       default: null,

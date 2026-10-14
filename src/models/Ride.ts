@@ -27,6 +27,7 @@ const RidePassengerSchema = new Schema(
   {
     tripId: { type: Types.ObjectId, ref: "Trip", required: true },
     userId: { type: Types.ObjectId, ref: "User", required: true },
+    passengerNumber: { type: Number, required: false, min: 1 },
     pickup: { type: PointSchema, required: true },
     dropoff: { type: PointSchema, required: true },
     pickupOrder: { type: Number, required: true, min: 0 },
