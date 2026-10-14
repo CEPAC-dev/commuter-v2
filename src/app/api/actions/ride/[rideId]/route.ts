@@ -10,6 +10,7 @@ import { creditReferralBonusIfEligible } from "@/lib/referral";
 import { normalizeSharedRidePassengers } from "@/lib/services/sharedRideManifest";
 import { notifyAdminsOfCompletedPaidTrip } from "@/lib/notifications/adminActivity";
 import { getRideActionStatusDecision } from "@/lib/rideActionGuards";
+import { getCompletableTripIds } from "@/lib/rideTripCompletion";
 
 interface RideRouteStop {
   address?: string;
@@ -1138,26 +1139,52 @@ export async function POST(
         break;
 
       case "end_ride":
-        await rideActions.logRideCompleted(rideId, tripIds, driverId, metadata);
+        const linkedTrips = await Trip.find({ rideId })
+          .select("_id userId status")
+          .lean<
+            {
+              _id: Types.ObjectId;
+              userId: Types.ObjectId;
+              status: string;
+            }[]
+          >();
+        const completableTripIds = new Set(
+          getCompletableTripIds(actionPassengers, linkedTrips),
+        );
+        const completedTrips = [];
+        for (const trip of linkedTrips) {
+          if (!completableTripIds.has(String(trip._id))) continue;
+          const completedTrip = await Trip.findOneAndUpdate(
+            { _id: trip._id, rideId, status: "active" },
+            { $set: { status: "completed" } },
+            { new: true },
+          )
+            .select("_id userId")
+            .lean<{ _id: Types.ObjectId; userId: Types.ObjectId } | null>();
+          if (completedTrip) completedTrips.push(completedTrip);
+        }
 
-        await Trip.updateMany({ rideId }, { status: "completed" });
+        const completedTripIds = completedTrips.map((trip) => trip._id);
+        if (completedTripIds.length > 0) {
+          await rideActions.logRideCompleted(
+            rideId,
+            completedTripIds,
+            driverId,
+            metadata,
+          );
+        }
         await Promise.all(
-          tripIds.map((completedTripId: unknown) =>
+          completedTripIds.map((completedTripId: unknown) =>
             notifyAdminsOfCompletedPaidTrip(String(completedTripId)),
           ),
         );
         await Promise.all(
-          tripIds.map(async (completedTripId: unknown) => {
-            const completedTrip = await Trip.findById(completedTripId)
-              .select("userId")
-              .lean<{ userId: string } | null>();
-            return completedTrip
-              ? creditReferralBonusIfEligible(
-                  String(completedTrip.userId),
-                  String(completedTripId),
-                )
-              : false;
-          }),
+          completedTrips.map((completedTrip) =>
+            creditReferralBonusIfEligible(
+              String(completedTrip.userId),
+              String(completedTrip._id),
+            ),
+          ),
         );
 
         result = {
