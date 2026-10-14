@@ -18,6 +18,10 @@ import {
   PickupPinConfigError,
 } from "@/lib/pickupPin";
 import { decidePickupPinAttempt } from "@/lib/pickupPinAttempts";
+import {
+  createPickupPinAuditRecord,
+  sanitizePickupPinFields,
+} from "@/lib/pickupPinSafety";
 
 interface RideRouteStop {
   address?: string;
@@ -116,36 +120,16 @@ async function logPickupPinEvent(
   action: "pickup_pin_ok" | "pickup_pin_failed" | "pickup_pin_lockout",
   failedAttempts?: number,
 ) {
-  await Log.create({
-    tripId: trip._id,
-    rideId,
-    userId: trip.userId,
-    driverId,
-    status: trip.status,
-    previousStatus: trip.status,
-    action,
-    description:
-      action === "pickup_pin_ok"
-        ? "Pickup PIN verified."
-        : action === "pickup_pin_lockout"
-          ? "Pickup PIN verification locked after repeated failures."
-          : "Pickup PIN verification failed.",
-    metadata:
-      failedAttempts === undefined ? {} : { failedAttempts },
-    actorType: "driver",
-    actorId: driverId,
-  });
-}
-
-function sanitizePinMetadata(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sanitizePinMetadata);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([key, nested]) =>
-      ["pin", "pickuppin", "pickup_pin"].includes(key.toLowerCase())
-        ? []
-        : [[key, sanitizePinMetadata(nested)]],
-    ),
+  await Log.create(
+    createPickupPinAuditRecord({
+      tripId: trip._id,
+      rideId,
+      userId: trip.userId,
+      driverId,
+      status: trip.status,
+      action,
+      failedAttempts,
+    }),
   );
 }
 
@@ -735,7 +719,7 @@ export async function POST(
       alightingCount,
       metadata = {},
     } = body;
-    const safeMetadata = sanitizePinMetadata(metadata) as Record<
+    const safeMetadata = sanitizePickupPinFields(metadata) as Record<
       string,
       unknown
     >;
@@ -1577,7 +1561,7 @@ export async function POST(
         );
     }
 
-    return NextResponse.json(result, { status: 200 });
+    return NextResponse.json(sanitizePickupPinFields(result), { status: 200 });
   } catch (error) {
     if (error instanceof PickupPinConfigError) {
       console.error("[POST /api/actions/ride/:rideId]", error.code);

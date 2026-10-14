@@ -23,6 +23,7 @@ import {
   assignMissingPassengerNumbers,
   getNextPassengerNumber,
 } from "@/lib/passengerNumbers";
+import { sanitizePickupPinFields } from "@/lib/pickupPinSafety";
 
 type MatchResult = {
   availabilityId?: Types.ObjectId | string | null;
@@ -467,7 +468,7 @@ function mapRideToDetailView(ride: Record<string, unknown>): RideDetailView {
     dropoff: toGeoPoint(p.dropoff),
   }));
 
-  return {
+  return sanitizePickupPinFields({
     id: String(ride._id),
     rideNumber: asNumber(ride.rideNumber),
     date: asString(ride.date),
@@ -503,7 +504,7 @@ function mapRideToDetailView(ride: Record<string, unknown>): RideDetailView {
       ride.createdAt instanceof Date
         ? ride.createdAt.toISOString()
         : String(ride.createdAt ?? new Date().toISOString()),
-  };
+  }) as RideDetailView;
 }
 
 async function getDriverRide(
@@ -690,7 +691,7 @@ function mapRideToListRow(ride: Record<string, unknown>): RideListRow {
       mapPassengerRow(p, index, ridePassengers),
   );
 
-  return {
+  return sanitizePickupPinFields({
     id: String(ride._id),
     rideNumber: asNumber(ride.rideNumber),
     date: asString(ride.date),
@@ -722,7 +723,7 @@ function mapRideToListRow(ride: Record<string, unknown>): RideListRow {
       ride.createdAt instanceof Date
         ? ride.createdAt.toISOString()
         : String(ride.createdAt ?? new Date().toISOString()),
-  };
+  }) as RideListRow;
 }
 
 async function getRidesByDriver(

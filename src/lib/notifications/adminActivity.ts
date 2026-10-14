@@ -8,6 +8,7 @@ import { AdminReferralUsage } from "@/models/AdminReferralUsage";
 import { sendPushPayloadToUser } from "@/lib/notifications/webPush";
 import { latePaymentDedupeKey } from "@/lib/phase8bGuards";
 import { waitingListTripBatchDedupeKey } from "@/lib/admin/waitingList";
+import { sanitizePickupPinFields } from "@/lib/pickupPinSafety";
 
 function isDuplicateKeyError(error: unknown) {
   return Boolean(
@@ -31,29 +32,30 @@ export async function notifyAdmins(input: {
   body: string;
   data: Record<string, unknown>;
 }) {
+  const safeInput = sanitizePickupPinFields(input) as typeof input;
   const admins = await User.find({ role: "admin" }).select("_id").lean();
   await Promise.all(
     admins.map(async (admin) => {
       try {
         const result = await AdminActivityNotification.updateOne(
-          { adminId: admin._id, dedupeKey: input.dedupeKey },
+          { adminId: admin._id, dedupeKey: safeInput.dedupeKey },
           {
             $setOnInsert: {
               adminId: admin._id,
-              ...input,
+              ...safeInput,
             },
           },
           { upsert: true },
         );
         if (result.upsertedCount > 0) {
           await sendPushPayloadToUser(String(admin._id), {
-            id: input.dedupeKey,
-            title: input.title,
-            body: input.body,
-            data: input.data,
+            id: safeInput.dedupeKey,
+            title: safeInput.title,
+            body: safeInput.body,
+            data: safeInput.data,
             url:
-              typeof input.data.href === "string"
-                ? input.data.href
+              typeof safeInput.data.href === "string"
+                ? safeInput.data.href
                 : "/admin/alerts",
           });
         }
