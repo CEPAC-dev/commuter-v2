@@ -13,7 +13,7 @@ export type ChatMessage = {
 export type ChatSnapshot = {
   open: boolean;
   canWrite: boolean;
-  freeTextEnabled: boolean;
+  freeTextAllowed: boolean;
   messages: ChatMessage[];
 };
 

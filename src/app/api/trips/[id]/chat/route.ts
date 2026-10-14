@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { Message } from "@/models/Message";
+import { Log } from "@/models/Log";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { getTripChatAccess } from "@/lib/tripChatAccess";
@@ -11,8 +12,63 @@ import {
   isChatPreset,
   type ChatPresetKey,
 } from "@/lib/chatPresets";
-import { enforceRateLimitByIdentity } from "@/lib/security/rateLimit";
+import {
+  enforceRateLimitByIdentity,
+  getRateLimitCounterByIdentity,
+  incrementRateLimitCounterByIdentity,
+} from "@/lib/security/rateLimit";
 import { checkChatText } from "@/lib/chatTextFilter";
+import {
+  CHAT_FREE_TEXT_STRIKE_LIMIT,
+  CHAT_FREE_TEXT_STRIKE_WINDOW_MS,
+  isChatFreeTextAllowed,
+  isChatFreeTextSuspended,
+} from "@/lib/chatFreeTextStrikes";
+
+const CHAT_STRIKE_SCOPE = "trip-chat-contact-block";
+
+function chatStrikeIdentity(userId: string, tripId: string) {
+  return `${userId}:${tripId}`;
+}
+
+async function logChatStrike(
+  input: {
+    tripId: string;
+    rideId?: unknown;
+    userId: string;
+    status: string;
+    role: "passenger" | "driver";
+    count: number;
+    suspended: boolean;
+  },
+) {
+  const base = {
+    tripId: input.tripId,
+    rideId: input.rideId ?? null,
+    userId: input.userId,
+    status: input.status,
+    metadata: { count: input.count },
+    actorType: input.role === "driver" ? "driver" : "user",
+    actorId: input.userId,
+  };
+  await Log.create([
+    {
+      ...base,
+      action: "chat_contact_blocked",
+      description: "Contact information was blocked in trip chat.",
+    },
+    ...(input.suspended
+      ? [
+          {
+            ...base,
+            action: "chat_free_text_suspended",
+            description:
+              "Free-text chat suspended after repeated contact-information blocks.",
+          },
+        ]
+      : []),
+  ]);
+}
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -121,11 +177,20 @@ export async function GET(req: Request, { params }: RouteContext) {
   const messages = await Message.find(query)
     .sort({ createdAt: 1, _id: 1 })
     .lean<MessageRow[]>();
+  const blockedCount = await getRateLimitCounterByIdentity(
+    CHAT_STRIKE_SCOPE,
+    chatStrikeIdentity(session.userId, id),
+    CHAT_FREE_TEXT_STRIKE_WINDOW_MS,
+  );
 
   return NextResponse.json({
     open: loaded.access.reason === "allowed",
     canWrite: loaded.access.canWrite,
-    freeTextEnabled: isChatFreeTextEnabled(),
+    freeTextAllowed: isChatFreeTextAllowed({
+      enabled: isChatFreeTextEnabled(),
+      canWrite: loaded.access.canWrite,
+      blockedCount,
+    }),
     messages: messages.map((message) => shape(message, session.userId)),
   });
 }
@@ -190,6 +255,21 @@ export async function POST(req: Request, { params }: RouteContext) {
         { status: 403 },
       );
     }
+    const identity = chatStrikeIdentity(session.userId, id);
+    const currentBlockedCount = await getRateLimitCounterByIdentity(
+      CHAT_STRIKE_SCOPE,
+      identity,
+      CHAT_FREE_TEXT_STRIKE_WINDOW_MS,
+    );
+    if (isChatFreeTextSuspended(currentBlockedCount)) {
+      return NextResponse.json(
+        {
+          errorCode: "FREE_TEXT_SUSPENDED",
+          error: "Free-text chat is suspended for this trip.",
+        },
+        { status: 403 },
+      );
+    }
     text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text) {
       return NextResponse.json(
@@ -204,12 +284,31 @@ export async function POST(req: Request, { params }: RouteContext) {
       );
     }
     if (!checkChatText(text).ok) {
+      const blockedCount = await incrementRateLimitCounterByIdentity(
+        CHAT_STRIKE_SCOPE,
+        identity,
+        CHAT_FREE_TEXT_STRIKE_WINDOW_MS,
+      );
+      const suspended = isChatFreeTextSuspended(blockedCount);
+      await logChatStrike({
+        tripId: id,
+        rideId: loaded.trip.rideId,
+        userId: session.userId,
+        status: loaded.trip.status,
+        role: senderRole,
+        count: blockedCount,
+        suspended,
+      });
       return NextResponse.json(
         {
-          errorCode: "CONTACT_INFO_BLOCKED",
-          error: "This message may contain contact information. Please keep chat in the app.",
+          errorCode: suspended
+            ? "FREE_TEXT_SUSPENDED"
+            : "CONTACT_INFO_BLOCKED",
+          error: suspended
+            ? "Free-text chat is suspended for this trip."
+            : "This message may contain contact information. Please keep chat in the app.",
         },
-        { status: 422 },
+        { status: suspended ? 403 : 422 },
       );
     }
   } else {

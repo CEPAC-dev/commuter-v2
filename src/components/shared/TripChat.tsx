@@ -73,7 +73,7 @@ export default function TripChat({
     (snapshot: Awaited<ReturnType<typeof getTripMessages>>, initial: boolean) => {
       setServerOpen(snapshot.open);
       setCanWrite(snapshot.canWrite);
-      setFreeTextEnabled(snapshot.freeTextEnabled);
+      setFreeTextEnabled(snapshot.freeTextAllowed);
       setReady(true);
       setError(null);
       setMessages((current) => {
@@ -158,6 +158,11 @@ export default function TripChat({
       } else if (cause instanceof ChatRequestError && cause.code === "FREE_TEXT_DISABLED") {
         setFreeTextEnabled(false);
         setError(t("chat.free_text_disabled"));
+      } else if (cause instanceof ChatRequestError && cause.code === "CONTACT_INFO_BLOCKED") {
+        setError(t("chat.contact_info_blocked"));
+      } else if (cause instanceof ChatRequestError && cause.code === "FREE_TEXT_SUSPENDED") {
+        setFreeTextEnabled(false);
+        setError(t("chat.free_text_suspended"));
       } else {
         setError(t("chat.send_error"));
       }
