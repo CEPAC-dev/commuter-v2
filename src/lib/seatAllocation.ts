@@ -16,27 +16,6 @@ export type SeatPassengerState = {
   numberOfPassengers?: number;
 };
 
-export function getAvailablePassengerSeatCapacity(
-  vehicleType: string,
-  configuredCapacity: number | undefined,
-): number {
-  const renderedSeatCount =
-    vehicleType === "private_car" ||
-    vehicleType === "taxi_private" ||
-    vehicleType === "taxi_shared"
-      ? 3
-      : vehicleType === "van_shared"
-        ? 5
-        : 10;
-  const capacity =
-    typeof configuredCapacity === "number" &&
-    Number.isInteger(configuredCapacity) &&
-    configuredCapacity > 0
-      ? configuredCapacity
-      : renderedSeatCount;
-  return Math.min(capacity, renderedSeatCount);
-}
-
 export function fillMissingPassengerSeats(
   passengers: readonly SeatPassengerState[],
   capacity: number,

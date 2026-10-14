@@ -153,6 +153,11 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
 
 export const VEHICLE_LIST = Object.values(VEHICLES);
 
+export function getVehiclePassengerCapacity(vehicleType: string): number {
+  const capacity = VEHICLES[vehicleType]?.capacity;
+  return Number.isInteger(capacity) && capacity > 0 ? capacity : 1;
+}
+
 export function priceFor(
   distanceKm: number,
   key: VehicleKey,

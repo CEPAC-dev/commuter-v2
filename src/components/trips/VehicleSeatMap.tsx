@@ -6,6 +6,9 @@ import type { RideDetailView, RidePassengerDetail } from "@/types/booking";
 import { useClientLocale } from "@/lib/i18n/client";
 import { formatEgp } from "@/lib/i18n";
 import { fillMissingPassengerSeats } from "@/lib/seatAllocation";
+import { getVehicleSeatGrid } from "@/lib/vehicleSeatGrid";
+
+export { getVehicleSeatGrid } from "@/lib/vehicleSeatGrid";
 
 interface Props {
   ride?: RideDetailView | null;
@@ -16,95 +19,6 @@ interface Props {
   rideStarted?: boolean;
   confirmedStationIndices?: number[];
   stationSelections?: Record<string, Record<string, "arrived" | "no_show">>;
-}
-
-export interface SeatGridCell {
-  seatNumber: number | null; // null for driver seat
-  isDriverSeat?: boolean;
-  row: number;
-  col: number;
-}
-
-export function getVehicleSeatGrid(vType: string): {
-  rows: SeatGridCell[][];
-  totalSeats: number;
-  label: string;
-  labelKey: string;
-} {
-  const isCarOrTaxi =
-    vType === "private_car" ||
-    vType === "taxi_private" ||
-    vType === "taxi_shared";
-  const isVan = vType === "van_shared";
-
-  if (isCarOrTaxi) {
-    return {
-      label: "Private Car / Taxi",
-      labelKey: "vehicle_seating.vehicle_type_private",
-      totalSeats: 3,
-      rows: [
-        [
-          { seatNumber: null, isDriverSeat: true, row: 0, col: 0 },
-          { seatNumber: 1, row: 0, col: 1 },
-        ],
-        [
-          { seatNumber: 2, row: 1, col: 0 },
-          { seatNumber: 3, row: 1, col: 1 },
-        ],
-      ],
-    };
-  }
-
-  if (isVan) {
-    return {
-      label: "Van",
-      labelKey: "vehicle_seating.vehicle_type_van",
-      totalSeats: 5,
-      rows: [
-        [
-          { seatNumber: null, isDriverSeat: true, row: 0, col: 0 },
-          { seatNumber: 1, row: 0, col: 1 },
-        ],
-        [
-          { seatNumber: 2, row: 1, col: 0 },
-          { seatNumber: 3, row: 1, col: 1 },
-        ],
-        [
-          { seatNumber: 4, row: 2, col: 0 },
-          { seatNumber: 5, row: 2, col: 1 },
-        ],
-      ],
-    };
-  }
-
-  return {
-    label: "Microbus",
-    labelKey: "vehicle_seating.vehicle_type_microbus",
-    totalSeats: 10,
-    rows: [
-      [
-        { seatNumber: null, isDriverSeat: true, row: 0, col: 0 },
-        { seatNumber: 1, row: 0, col: 1 },
-      ],
-      [
-        { seatNumber: 2, row: 1, col: 0 },
-        { seatNumber: 3, row: 1, col: 1 },
-      ],
-      [
-        { seatNumber: 4, row: 2, col: 0 },
-        { seatNumber: 5, row: 2, col: 1 },
-      ],
-      [
-        { seatNumber: 6, row: 3, col: 0 },
-        { seatNumber: 7, row: 3, col: 1 },
-      ],
-      [
-        { seatNumber: 8, row: 4, col: 0 },
-        { seatNumber: 9, row: 4, col: 1 },
-        { seatNumber: 10, row: 4, col: 2 },
-      ],
-    ],
-  };
 }
 
 export function getVehicleChassisStyle(vType: string): {

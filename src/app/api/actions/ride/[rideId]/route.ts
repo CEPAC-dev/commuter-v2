@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
-import { VEHICLES } from "@/lib/config/vehicles";
+import { getVehiclePassengerCapacity } from "@/lib/config/vehicles";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { Log } from "@/models/Log";
@@ -23,7 +23,6 @@ import {
   sanitizePickupPinFields,
 } from "@/lib/pickupPinSafety";
 import {
-  getAvailablePassengerSeatCapacity,
   planBoardingSeatAssignments,
 } from "@/lib/seatAllocation";
 
@@ -397,15 +396,7 @@ function getRemainingStations(ride: RideDocLike | null | undefined) {
 }
 
 function getSeatCapacity(ride: RideDocLike): number {
-  const vehicleType = ride.vehicleType as keyof typeof VEHICLES | undefined;
-  return getAvailablePassengerSeatCapacity(
-    vehicleType ?? "",
-    Number(
-      ride.vehicleCapacity ??
-        (vehicleType ? VEHICLES[vehicleType]?.capacity : undefined) ??
-        4,
-    ),
-  );
+  return getVehiclePassengerCapacity(ride.vehicleType ?? "");
 }
 
 /**

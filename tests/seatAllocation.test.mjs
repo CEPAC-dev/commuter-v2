@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 const {
   allocateSeats,
   fillMissingPassengerSeats,
-  getAvailablePassengerSeatCapacity,
   planBoardingSeatAssignments,
 } = await import("../src/lib/seatAllocation.ts");
 
@@ -250,11 +249,4 @@ test("active group fallback can reuse a seat retained for an alighted passenger"
     ),
     { alighted: [1, 2, 3], "boarding-group": [1, 2, 3] },
   );
-});
-
-test("boarding capacity does not exceed the seat map passenger positions", () => {
-  assert.equal(getAvailablePassengerSeatCapacity("taxi_shared", 4), 3);
-  assert.equal(getAvailablePassengerSeatCapacity("van_shared", 5), 5);
-  assert.equal(getAvailablePassengerSeatCapacity("microbus_shared", 9), 9);
-  assert.equal(getAvailablePassengerSeatCapacity("shared_car", 4), 4);
 });
