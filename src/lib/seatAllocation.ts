@@ -56,10 +56,7 @@ export function fillMissingPassengerSeats(
       (seat) => Number.isInteger(seat) && seat >= 1 && seat <= capacity,
     );
     seatByTrip.set(passenger.tripId, seats);
-    if (
-      occupyingStatuses.has(passenger.status.toLowerCase()) ||
-      passenger.status.toLowerCase() === "dropped_off"
-    ) {
+    if (occupyingStatuses.has(passenger.status.toLowerCase())) {
       for (const seat of seats) occupied.add(seat);
     }
   }
@@ -80,6 +77,9 @@ export function fillMissingPassengerSeats(
 
   for (const passenger of orderedPassengers) {
     const tripSeats = seatByTrip.get(passenger.tripId) ?? [];
+    if (passenger.status.toLowerCase() === "dropped_off") {
+      for (const seat of tripSeats) occupied.add(seat);
+    }
     const requestedCount = Number.isInteger(passenger.numberOfPassengers)
       ? Math.max(1, passenger.numberOfPassengers ?? 1)
       : 1;

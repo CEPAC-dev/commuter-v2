@@ -869,16 +869,14 @@ export async function POST(
           { status: 403 },
         );
       }
+      const passengerAlreadyBoarded = [
+        "boarding",
+        "on_board",
+        "picked_up",
+      ].includes(getPassengerStatus(passenger));
       if (
         action === "station_arrived" &&
-        ["boarding", "on_board", "picked_up"].includes(
-          getPassengerStatus(passenger),
-        )
-      ) {
-        continue;
-      }
-      if (
-        action === "station_arrived" &&
+        !passengerAlreadyBoarded &&
         (passenger.status !== "waiting" ||
           !stationMatchesPassenger(
             passenger,
