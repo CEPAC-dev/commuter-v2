@@ -85,10 +85,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession();
-    const access = getRideCancellationAccess(session, null);
-    if (access === "unauthorized") {
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const access = getRideCancellationAccess(session, null);
 
     const { id } = await params;
     await connectDB();

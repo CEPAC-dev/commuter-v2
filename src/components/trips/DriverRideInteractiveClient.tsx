@@ -140,6 +140,7 @@ export default function DriverRideInteractiveClient({
   const prettyDate = (date: string) => formatDate(locale, date);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [navigationErrorByStation, setNavigationErrorByStation] = useState<Record<number, string>>({});
+  const isRideTerminal = ride.status === "cancelled" || ride.status === "completed";
 
   const handleGoToLocation = async (step: StepItem) => {
     setNavigationErrorByStation((prev) => ({ ...prev, [step.stationIndex]: "" }));
@@ -730,7 +731,7 @@ export default function DriverRideInteractiveClient({
         </div>
 
         {/* Start Ride Action Banner */}
-        {!rideStarted && !isCompleted && (
+        {!isRideTerminal && !rideStarted && !isCompleted && (
           <div
             style={{
               background: "linear-gradient(135deg, #0B1E3D 0%, #1A365D 100%)",
@@ -1049,7 +1050,7 @@ export default function DriverRideInteractiveClient({
                       </div>
 
                       {/* Confirm stop — also opens directions to the next station */}
-                      {!isCompleted && step.type === "station" && isCurrentStep && (
+                      {!isRideTerminal && !isCompleted && step.type === "station" && isCurrentStep && (
                         <>
                           <button
                             type="button"
@@ -1339,7 +1340,7 @@ export default function DriverRideInteractiveClient({
             })}
           </div>
 
-          {rideStarted && !isCompleted && allStationsConfirmed && (
+          {!isRideTerminal && rideStarted && !isCompleted && allStationsConfirmed && (
             <button
               type="button"
               onClick={handleCloseRide}

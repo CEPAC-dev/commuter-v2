@@ -9,6 +9,7 @@ import * as rideActions from "@/lib/services/rideActionHelpers";
 import { creditReferralBonusIfEligible } from "@/lib/referral";
 import { normalizeSharedRidePassengers } from "@/lib/services/sharedRideManifest";
 import { notifyAdminsOfCompletedPaidTrip } from "@/lib/notifications/adminActivity";
+import { getRideActionStatusDecision } from "@/lib/rideActionGuards";
 
 interface RideRouteStop {
   address?: string;
@@ -548,6 +549,120 @@ export async function POST(
       metadata = {},
     } = body;
 
+    const statusDecision = getRideActionStatusDecision(
+      typeof action === "string" ? action : "",
+      ride.status,
+    );
+    if (statusDecision.kind === "unknown_action") {
+      return NextResponse.json(
+        { success: false, error: `Unknown action: ${action}` },
+        { status: 400 },
+      );
+    }
+    if (statusDecision.kind === "idempotent") {
+      return NextResponse.json({
+        success: true,
+        message: action === "start_ride" ? "Ride already started" : "Ride already completed",
+        action: action === "start_ride" ? "ride_started" : "ride_completed",
+        data: ride,
+      });
+    }
+    if (statusDecision.kind === "conflict") {
+      return NextResponse.json(
+        {
+          success: false,
+          errorCode: "RIDE_ACTION_STATUS_CONFLICT",
+          error: `Action ${action} is not allowed when ride status is ${ride.status}.`,
+        },
+        { status: 409 },
+      );
+    }
+
+    const startLocation =
+      action === "start_ride" ? metadata?.currentLocation ?? null : null;
+    const endLocation =
+      action === "end_ride" ? metadata?.currentLocation ?? null : null;
+    const rideLog =
+      action === "start_ride"
+        ? {
+            action: "ride_started",
+            metadata: { currentLocation: startLocation },
+            createdAt: new Date(),
+          }
+        : action === "end_ride"
+          ? {
+              action: "ride_completed",
+              metadata: { currentLocation: endLocation },
+              createdAt: new Date(),
+            }
+          : null;
+    const rideUpdate: Record<string, unknown> = {
+      $inc: { __v: 1 },
+    };
+    if (action === "start_ride") {
+      rideUpdate.$set = {
+        status: "active",
+        ...(startLocation ? { driverOrigin: startLocation } : {}),
+      };
+    } else if (action === "end_ride") {
+      rideUpdate.$set = {
+        status: "completed",
+        ...(endLocation ? { driverDestination: endLocation } : {}),
+      };
+    }
+    if (rideLog) rideUpdate.$push = { logs: rideLog };
+
+    const versionFilter =
+      typeof ride.__v === "number"
+        ? { __v: ride.__v }
+        : { __v: { $exists: false } };
+    const claimedRide = await Ride.findOneAndUpdate(
+      {
+        _id: rideId,
+        driverId: ride.driverId,
+        status: statusDecision.expectedStatus,
+        ...versionFilter,
+      },
+      rideUpdate,
+      { new: true },
+    ).lean();
+
+    if (!claimedRide) {
+      const currentRide = await Ride.findById(rideId).lean();
+      if (!currentRide) {
+        return NextResponse.json(
+          { success: false, error: "Ride not found" },
+          { status: 404 },
+        );
+      }
+      if (currentRide.driverId?.toString() !== session.userId) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden - not your ride" },
+          { status: 403 },
+        );
+      }
+      const currentDecision = getRideActionStatusDecision(
+        action,
+        currentRide.status,
+      );
+      if (currentDecision.kind === "idempotent") {
+        return NextResponse.json({
+          success: true,
+          message: action === "start_ride" ? "Ride already started" : "Ride already completed",
+          action: action === "start_ride" ? "ride_started" : "ride_completed",
+          data: currentRide,
+        });
+      }
+      return NextResponse.json(
+        {
+          success: false,
+          errorCode: "RIDE_ACTION_STATUS_CONFLICT",
+          error: `Ride changed while processing action ${action}; current status is ${currentRide.status}.`,
+        },
+        { status: 409 },
+      );
+    }
+
     const driverId = ride.driverId;
     const actionPassengers = normalizeSharedRidePassengers(
       ride as Record<string, unknown>,
@@ -569,7 +684,7 @@ export async function POST(
         // Log ride start for all trips
         await rideActions.logRideStarted(rideId, tripIds, driverId, metadata);
 
-        const originLoc = metadata?.currentLocation ?? null;
+        const originLoc = startLocation;
         const rideDoc = await Ride.findById(rideId);
         if (rideDoc) {
           materializeSharedRidePassengers(rideDoc);
@@ -581,10 +696,6 @@ export async function POST(
             passenger.status = "waiting";
             passenger.seatNumbers = [];
           }
-          pushRideLog(rideDoc, {
-            action: "ride_started",
-            metadata: { currentLocation: originLoc },
-          });
           await rideDoc.save();
         }
 
@@ -1027,24 +1138,8 @@ export async function POST(
         break;
 
       case "end_ride":
-        // Log ride completion for all trips
         await rideActions.logRideCompleted(rideId, tripIds, driverId, metadata);
 
-        // Update ride status and driverDestination
-        const destLoc = metadata?.currentLocation ?? null;
-        await Ride.findByIdAndUpdate(rideId, {
-          status: "completed",
-          ...(destLoc ? { driverDestination: destLoc } : {}),
-          $push: {
-            logs: {
-              action: "ride_completed",
-              metadata: { currentLocation: destLoc },
-              createdAt: new Date(),
-            },
-          },
-        });
-
-        // Update all trip statuses to completed
         await Trip.updateMany({ rideId }, { status: "completed" });
         await Promise.all(
           tripIds.map((completedTripId: unknown) =>
