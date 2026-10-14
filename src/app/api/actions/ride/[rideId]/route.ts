@@ -22,7 +22,10 @@ import {
   createPickupPinAuditRecord,
   sanitizePickupPinFields,
 } from "@/lib/pickupPinSafety";
-import { planBoardingSeatAssignments } from "@/lib/seatAllocation";
+import {
+  getAvailablePassengerSeatCapacity,
+  planBoardingSeatAssignments,
+} from "@/lib/seatAllocation";
 
 interface RideRouteStop {
   address?: string;
@@ -395,10 +398,13 @@ function getRemainingStations(ride: RideDocLike | null | undefined) {
 
 function getSeatCapacity(ride: RideDocLike): number {
   const vehicleType = ride.vehicleType as keyof typeof VEHICLES | undefined;
-  return Number(
-    ride.vehicleCapacity ??
-      (vehicleType ? VEHICLES[vehicleType]?.capacity : undefined) ??
-      4,
+  return getAvailablePassengerSeatCapacity(
+    vehicleType ?? "",
+    Number(
+      ride.vehicleCapacity ??
+        (vehicleType ? VEHICLES[vehicleType]?.capacity : undefined) ??
+        4,
+    ),
   );
 }
 

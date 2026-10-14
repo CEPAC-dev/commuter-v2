@@ -16,6 +16,84 @@ export type SeatPassengerState = {
   numberOfPassengers?: number;
 };
 
+export function getAvailablePassengerSeatCapacity(
+  vehicleType: string,
+  configuredCapacity: number | undefined,
+): number {
+  const renderedSeatCount =
+    vehicleType === "private_car" ||
+    vehicleType === "taxi_private" ||
+    vehicleType === "taxi_shared"
+      ? 3
+      : vehicleType === "van_shared"
+        ? 5
+        : 10;
+  const capacity =
+    typeof configuredCapacity === "number" &&
+    Number.isInteger(configuredCapacity) &&
+    configuredCapacity > 0
+      ? configuredCapacity
+      : renderedSeatCount;
+  return Math.min(capacity, renderedSeatCount);
+}
+
+export function fillMissingPassengerSeats(
+  passengers: readonly SeatPassengerState[],
+  capacity: number,
+): Record<string, number[]> {
+  const seatByTrip = new Map<string, number[]>();
+  const occupied = new Set<number>();
+  const displayStatuses = new Set([
+    "boarding",
+    "on_board",
+    "picked_up",
+    "dropped_off",
+  ]);
+  const occupyingStatuses = new Set(["boarding", "on_board", "picked_up"]);
+
+  for (const passenger of passengers) {
+    const seats = [...new Set(passenger.seatNumbers ?? [])].filter(
+      (seat) => Number.isInteger(seat) && seat >= 1 && seat <= capacity,
+    );
+    seatByTrip.set(passenger.tripId, seats);
+    if (
+      occupyingStatuses.has(passenger.status.toLowerCase()) ||
+      passenger.status.toLowerCase() === "dropped_off"
+    ) {
+      for (const seat of seats) occupied.add(seat);
+    }
+  }
+
+  const orderedPassengers = passengers
+    .filter((passenger) =>
+      displayStatuses.has(passenger.status.toLowerCase()),
+    )
+    .sort((left, right) => {
+      const order = (status: string) =>
+        status === "boarding"
+          ? 0
+          : status === "on_board" || status === "picked_up"
+            ? 1
+            : 2;
+      return order(left.status.toLowerCase()) - order(right.status.toLowerCase());
+    });
+
+  for (const passenger of orderedPassengers) {
+    const tripSeats = seatByTrip.get(passenger.tripId) ?? [];
+    const requestedCount = Number.isInteger(passenger.numberOfPassengers)
+      ? Math.max(1, passenger.numberOfPassengers ?? 1)
+      : 1;
+    for (let seat = 1; tripSeats.length < requestedCount && seat <= capacity; seat += 1) {
+      if (occupied.has(seat)) continue;
+      tripSeats.push(seat);
+      occupied.add(seat);
+    }
+    seatByTrip.set(passenger.tripId, tripSeats);
+  }
+
+  return Object.fromEntries(seatByTrip);
+}
+
 export function allocateSeats({
   capacity,
   occupiedSeats,

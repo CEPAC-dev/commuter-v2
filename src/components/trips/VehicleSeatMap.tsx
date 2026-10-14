@@ -5,6 +5,7 @@ import { User, X, MapPin, Car, Bus, Truck, Circle } from "lucide-react";
 import type { RideDetailView, RidePassengerDetail } from "@/types/booking";
 import { useClientLocale } from "@/lib/i18n/client";
 import { formatEgp } from "@/lib/i18n";
+import { fillMissingPassengerSeats } from "@/lib/seatAllocation";
 
 interface Props {
   ride?: RideDetailView | null;
@@ -156,12 +157,19 @@ export default function VehicleSeatMap({
     // Server clears seatNumbers once a rider's stop has passed, so a dropped_off
     // rider still holding a seat is one who alighted at the latest stop.
     const seatPassengers = new Map<number, RidePassengerDetail[]>();
+    const displaySeats = fillMissingPassengerSeats(
+      ride.passengers.map((passenger) => ({
+        tripId: passenger.tripId,
+        status: passenger.status ?? "waiting",
+        seatNumbers: passenger.seatNumbers,
+        numberOfPassengers: passenger.numberOfPassengers,
+      })),
+      grid.totalSeats,
+    );
 
     for (const p of ride.passengers) {
       const normalizedStatus = p.status?.toLowerCase?.() ?? "";
-      const seats = (Array.isArray(p.seatNumbers) ? p.seatNumbers : []).filter(
-        (seat): seat is number => typeof seat === "number" && Number.isFinite(seat),
-      );
+      const seats = displaySeats[p.tripId] ?? [];
 
       const shouldShowPassenger =
         rideStarted &&
