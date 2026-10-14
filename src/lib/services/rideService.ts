@@ -19,6 +19,10 @@ import {
   getSharedRouteStopCounts,
   normalizeSharedRidePassengers,
 } from "@/lib/services/sharedRideManifest";
+import {
+  assignMissingPassengerNumbers,
+  getNextPassengerNumber,
+} from "@/lib/passengerNumbers";
 
 type MatchResult = {
   availabilityId?: Types.ObjectId | string | null;
@@ -155,7 +159,7 @@ async function createRide(matchResult: MatchResult) {
     const tripById = new Map(trips.map((trip) => [String(trip._id), trip]));
 
     let currentSeatCounter = 1;
-    const passengersForRide = matchResult.passengers.map((p) => {
+    const passengersForRide = matchResult.passengers.map((p, index) => {
       const trip = tripById.get(String(p.tripId));
       let seats = p.seatNumbers;
       const count = p.numberOfPassengers || 1;
@@ -177,6 +181,7 @@ async function createRide(matchResult: MatchResult) {
         dropoffOrder: p.dropoffOrder,
         tripCost: p.priceEgp || 0,
         numberOfPassengers: count,
+        passengerNumber: index + 1,
         pickupStation: trip?.pickupStation ?? undefined,
         dropoffStation: trip?.dropoffStation ?? undefined,
         seatNumbers: seats,
@@ -196,6 +201,7 @@ async function createRide(matchResult: MatchResult) {
       startTime: matchResult.startTime,
       endTime: matchResult.endTime,
       passengers: passengersForRide,
+      passengerNumberSequence: passengersForRide.length,
       status: matchResult.status || "matched",
       totalCost: passengersForRide.reduce(
         (sum, p) => sum + (p.tripCost || 0),
@@ -442,6 +448,7 @@ function mapPassengerRow(
     numberOfPassengers: asNumber(p.numberOfPassengers, 1),
     tripCost: asNumber(p.tripCost),
     status: asString(p.status, "waiting"),
+    passengerNumber: asNumber(p.passengerNumber, index + 1),
     pickupStation: toStation(p.pickupStation),
     dropoffStation: toStation(p.dropoffStation),
     seatNumbers,
@@ -523,6 +530,9 @@ async function getDriverRide(
 
   if (!ride) return null;
 
+  const numberedRide = await ensureRidePassengerNumbers(String(ride._id));
+  if (numberedRide) ride = numberedRide as typeof ride;
+
   const { User } = await import("@/models/User");
   const { Station } = await import("@/models/Station");
 
@@ -599,9 +609,67 @@ async function getDriverRide(
 async function getRideById(rideId: string): Promise<RideDetailView | null> {
   if (!Types.ObjectId.isValid(rideId)) return null;
   await connectDB();
-  const ride = await Ride.findById(rideId).lean();
+  const ride = await ensureRidePassengerNumbers(rideId);
   if (!ride) return null;
-  return mapRideToDetailView(ride as Record<string, unknown>);
+  return mapRideToDetailView(ride);
+}
+
+export async function ensureRidePassengerNumbers(
+  rideId: string | Types.ObjectId,
+): Promise<Record<string, unknown> | null> {
+  const ride = await Ride.findById(rideId);
+  if (!ride) return null;
+
+  const rawRide = ride.toObject() as unknown as Record<string, unknown>;
+  const normalizedPassengers = getRidePassengers(rawRide);
+  const currentSequence = Number(ride.passengerNumberSequence ?? 0);
+  const { passengers, sequence } = assignMissingPassengerNumbers(
+    normalizedPassengers,
+    currentSequence,
+  );
+  const numberByTripId = new Map(
+    passengers.map((passenger) => [
+      String(passenger.tripId),
+      passenger.passengerNumber,
+    ]),
+  );
+  let changed = sequence !== currentSequence;
+
+  for (const passenger of ride.passengers) {
+    const assignedNumber = numberByTripId.get(String(passenger.tripId));
+    if (assignedNumber && passenger.passengerNumber !== assignedNumber) {
+      passenger.passengerNumber = assignedNumber;
+      changed = true;
+    }
+  }
+
+  const route = ride.route as unknown as Array<Record<string, unknown>>;
+  for (const stop of route ?? []) {
+    for (const key of ["boarding", "alighting"] as const) {
+      const entries = stop[key];
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries) {
+        if (!entry || typeof entry !== "object") continue;
+        const passenger = entry as Record<string, unknown>;
+        const assignedNumber = numberByTripId.get(String(passenger.tripId));
+        if (
+          assignedNumber &&
+          passenger.passengerNumber !== assignedNumber
+        ) {
+          passenger.passengerNumber = assignedNumber;
+          changed = true;
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    ride.passengerNumberSequence = sequence;
+    ride.markModified("route");
+    await ride.save();
+  }
+
+  return ride.toObject() as unknown as Record<string, unknown>;
 }
 
 async function getRideByNumber(rideNumber: number) {
@@ -800,10 +868,18 @@ async function addPassengerToRide(
       pickupOrder: passenger.pickupOrder,
       dropoffOrder: passenger.dropoffOrder,
       numberOfPassengers: passenger.numberOfPassengers || 1,
+      passengerNumber: getNextPassengerNumber(
+        ride.passengers,
+        ride.passengerNumberSequence,
+      ),
       pickupStation: trip?.pickupStation ?? undefined,
       dropoffStation: trip?.dropoffStation ?? undefined,
       status: "waiting",
     });
+    ride.passengerNumberSequence = getNextPassengerNumber(
+      ride.passengers,
+      ride.passengerNumberSequence,
+    ) - 1;
 
     // recompute route
     ride.route = recalculateRouteFromPassengers(

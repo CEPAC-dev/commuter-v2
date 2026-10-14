@@ -24,6 +24,7 @@ import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 import LiveShareControl from "@/components/trips/LiveShareControl";
+import PickupPinCard from "@/components/trips/PickupPinCard";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
 import { getSharedRideStep } from "@/lib/sharedRideStepper.ts";
@@ -538,6 +539,8 @@ export default async function TripDetailPage({
                 interactive
               />
             </div>
+
+            {!isDriver && <PickupPinCard tripId={trip.id} />}
 
             <section className="trip-route-card" aria-labelledby="trip-route-title">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>

@@ -329,6 +329,8 @@ export const ar: Record<MessageKey, string> = {
   "trip_detail.shared_route": "مسار الرحلة المشتركة",
   "trip_detail.private_details": "تفاصيل الرحلة الخاصة",
   "trip_detail.shared_details": "تفاصيل الرحلة المشتركة",
+  "pickup_pin.title": "رمز الركوب · الراكب {n}",
+  "pickup_pin.share_instruction": "شارك هذا الرمز مع السائق فقط عند صعودك",
   "my_trips.no_trips_filters": "لا توجد رحلات مطابقة لهذه المرشحات.",
   "my_trips.no_assigned_trips": "لا توجد رحلات مُسندة بعد.",
   "my_trips.no_trips": "لا توجد رحلات بعد.",

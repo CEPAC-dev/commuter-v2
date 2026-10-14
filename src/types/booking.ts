@@ -57,6 +57,7 @@ export interface RidePassengerRow {
   numberOfPassengers: number;
   tripCost: number;
   status: string;
+  passengerNumber: number;
   pickupStation?: StationSelection | null;
   dropoffStation?: StationSelection | null;
   seatNumbers?: number[];

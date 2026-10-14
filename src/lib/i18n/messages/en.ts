@@ -330,6 +330,8 @@ export const en = {
   "trip_detail.shared_route": "Shared ride route",
   "trip_detail.private_details": "Private ride details",
   "trip_detail.shared_details": "Shared ride details",
+  "pickup_pin.title": "Pickup code · Passenger {n}",
+  "pickup_pin.share_instruction": "Share this code with the driver only when you board",
   "my_trips.no_trips_filters": "No trips match these filters.",
   "my_trips.no_assigned_trips": "No assigned trips yet.",
   "my_trips.no_trips": "No trips yet.",
