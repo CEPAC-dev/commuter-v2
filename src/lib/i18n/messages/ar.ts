@@ -600,6 +600,7 @@ export const ar: Record<MessageKey, string> = {
   "my_trips.other_dates_in_booking": "مواعيد تانية في نفس الحجز",
   "my_trips.no_phone": "لا يوجد رقم هاتف",
   "my_trips.call": "اتصال",
+  "my_trips.call_driver": "اتصل بالسائق",
   "my_trips.vehicle_pending": "تفاصيل المركبة غير جاهزة بعد",
   "my_trips.plate_pending": "رقم اللوحة غير جاهز بعد",
   "status.pending_payment": "الدفع مطلوب",

@@ -654,8 +654,28 @@ export default async function TripDetailPage({
             {!isDriver && trip.rideType === "private" && trip.assignedDriver && (
               <DriverCard
                 driver={{ ...trip.assignedDriver, rating: trip.rating }}
-                showCall={isOngoing && Boolean(trip.assignedDriver.phone)}
+                showCall={false}
               />
+            )}
+            {!isDriver && trip.assignedDriver?.phone && isOngoing && (
+              <a
+                href={`tel:${trip.assignedDriver.phone}`}
+                aria-label={`${translate(locale, "my_trips.call_driver")} ${trip.assignedDriver.name ?? ""}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "12px 16px",
+                  borderRadius: 12,
+                  background: "#E2F8F5",
+                  color: "#006D60",
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                <span>{translate(locale, "my_trips.call_driver")}</span>
+                <span dir="ltr">{trip.assignedDriver.phone}</span>
+              </a>
             )}
             {!isDriver && <TripChat tripId={id} role="user" />}
           </div>

@@ -606,6 +606,7 @@ export const en = {
   "my_trips.other_dates_in_booking": "Other dates in this booking",
   "my_trips.no_phone": "No phone on file",
   "my_trips.call": "Call",
+  "my_trips.call_driver": "Call driver",
   "my_trips.vehicle_pending": "Vehicle details pending",
   "my_trips.plate_pending": "Plate pending",
   "status.pending_payment": "Pending payment",
