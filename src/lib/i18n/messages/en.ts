@@ -431,6 +431,7 @@ export const en = {
   "chat.type_placeholder": "Type a message…",
   "chat.load_error": "Couldn't load messages. Try again.",
   "chat.send_error": "Couldn't send that message. Try again.",
+  "chat.contact_info_blocked": "This message may contain contact information. Please keep chat in the app.",
   "chat.closed": "This chat is now read-only.",
   "chat.free_text_disabled": "Free-text messages are currently unavailable.",
   "chat.preset.arrived": "I've arrived",

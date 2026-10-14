@@ -12,6 +12,7 @@ import {
   type ChatPresetKey,
 } from "@/lib/chatPresets";
 import { enforceRateLimitByIdentity } from "@/lib/security/rateLimit";
+import { checkChatText } from "@/lib/chatTextFilter";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -200,6 +201,15 @@ export async function POST(req: Request, { params }: RouteContext) {
       return NextResponse.json(
         { errorCode: "MESSAGE_TOO_LONG", error: "Message is too long." },
         { status: 400 },
+      );
+    }
+    if (!checkChatText(text).ok) {
+      return NextResponse.json(
+        {
+          errorCode: "CONTACT_INFO_BLOCKED",
+          error: "This message may contain contact information. Please keep chat in the app.",
+        },
+        { status: 422 },
       );
     }
   } else {

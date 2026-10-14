@@ -427,6 +427,7 @@ export const ar: Record<MessageKey, string> = {
   "chat.type_placeholder": "اكتب رسالة…",
   "chat.load_error": "تعذّر تحميل الرسائل. حاول مرة أخرى.",
   "chat.send_error": "تعذّر إرسال الرسالة. حاول مرة أخرى.",
+  "chat.contact_info_blocked": "قد تحتوي الرسالة على معلومات اتصال. يُرجى إبقاء المحادثة داخل التطبيق.",
   "chat.closed": "أصبحت هذه المحادثة للقراءة فقط.",
   "chat.free_text_disabled": "الرسائل النصية غير متاحة حاليًا.",
   "chat.preset.arrived": "وصلت",
