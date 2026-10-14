@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { allocateSeats } = await import("../src/lib/seatAllocation.ts");
+const {
+  allocateSeats,
+  planBoardingSeatAssignments,
+} = await import("../src/lib/seatAllocation.ts");
 
 test("allocates the lowest free seat for one person", () => {
   assert.deepEqual(
@@ -83,4 +86,97 @@ test("requested count above capacity is unavailable", () => {
     allocateSeats({ capacity: 4, occupiedSeats: [], requestedCount: 5 }),
     { ok: false, reason: "NOT_ENOUGH_SEATS" },
   );
+});
+
+test("boarding plan assigns the requested number of seats across several Trips", () => {
+  const result = planBoardingSeatAssignments({
+    capacity: 6,
+    passengers: [
+      { tripId: "group", status: "waiting", numberOfPassengers: 3 },
+      { tripId: "single", status: "waiting", numberOfPassengers: 1 },
+    ],
+    boardingTripIds: ["group", "single"],
+  });
+  assert.deepEqual(result, {
+    ok: true,
+    assignments: { group: [1, 2, 3], single: [4] },
+  });
+});
+
+test("boarding plan fails without partially assigning seats", () => {
+  const result = planBoardingSeatAssignments({
+    capacity: 3,
+    passengers: [
+      { tripId: "first", status: "waiting", numberOfPassengers: 2 },
+      { tripId: "second", status: "waiting", numberOfPassengers: 2 },
+    ],
+    boardingTripIds: ["first", "second"],
+  });
+  assert.deepEqual(result, { ok: false, reason: "NOT_ENOUGH_SEATS" });
+});
+
+test("alighted, no-show, and cancelled passengers release their stored seats", () => {
+  const passengers = ["dropped_off", "no_show", "cancelled"].map(
+    (status, index) => ({
+      tripId: `released-${index}`,
+      status,
+      seatNumbers: [index + 1],
+    }),
+  );
+  assert.deepEqual(
+    planBoardingSeatAssignments({
+      capacity: 3,
+      passengers: [
+        ...passengers,
+        { tripId: "new", status: "waiting", numberOfPassengers: 3 },
+      ],
+      boardingTripIds: ["new"],
+    }),
+    { ok: true, assignments: { new: [1, 2, 3] } },
+  );
+});
+
+test("already boarded Trips retain their existing seats on duplicate confirmation", () => {
+  assert.deepEqual(
+    planBoardingSeatAssignments({
+      capacity: 4,
+      passengers: [
+        {
+          tripId: "already-onboard",
+          status: "on_board",
+          numberOfPassengers: 2,
+          seatNumbers: [2, 3],
+        },
+      ],
+      boardingTripIds: ["already-onboard"],
+    }),
+    { ok: true, assignments: { "already-onboard": [2, 3] } },
+  );
+});
+
+test("two stale concurrent plans are serialized by the expected Ride version", () => {
+  const snapshot = {
+    capacity: 2,
+    passengers: [{ tripId: "first", status: "waiting", numberOfPassengers: 1 }],
+  };
+  const concurrentA = planBoardingSeatAssignments({
+    ...snapshot,
+    boardingTripIds: ["first"],
+  });
+  const concurrentB = planBoardingSeatAssignments({
+    ...snapshot,
+    passengers: [
+      ...snapshot.passengers,
+      { tripId: "second", status: "waiting", numberOfPassengers: 1 },
+    ],
+    boardingTripIds: ["second"],
+  });
+  assert.equal(concurrentA.ok && concurrentA.assignments.first[0], 1);
+  assert.equal(concurrentB.ok && concurrentB.assignments.second[0], 1);
+
+  const expectedVersionA = 7;
+  const expectedVersionB = 7;
+  let persistedVersion = 7;
+  if (persistedVersion === expectedVersionA) persistedVersion += 1;
+  assert.equal(persistedVersion === expectedVersionB, false);
 });

@@ -458,6 +458,7 @@ export const ar: Record<MessageKey, string> = {
   "ride.driver_destination": "وجهة السائق النهائية",
   "ride.station_fallback": "الخطوة {n}",
   "ride.confirm_station_error": "حدث خطأ أثناء تأكيد المحطة {stationIndex}",
+  "ride.seats_unavailable": "لا توجد مقاعد متاحة كافية لهذه المجموعة. لا يزال بإمكانك تسجيل عدم الحضور.",
   "ride.start_error": "تعذّر بدء الرحلة. يُرجى المحاولة مرة أخرى.",
   "ride.end_error": "تعذّر إنهاء الرحلة. يُرجى المحاولة مرة أخرى.",
   "ride.action_network_error": "خطأ في الشبكة. تحقق من اتصالك وحاول مرة أخرى.",

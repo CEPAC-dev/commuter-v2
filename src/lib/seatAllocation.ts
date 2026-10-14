@@ -9,6 +9,13 @@ export type SeatAllocationResult =
   | { ok: true; seats: number[] }
   | { ok: false; reason: "NOT_ENOUGH_SEATS" | "INVALID_COUNT" };
 
+export type SeatPassengerState = {
+  tripId: string;
+  status: string;
+  seatNumbers?: readonly number[] | null;
+  numberOfPassengers?: number;
+};
+
 export function allocateSeats({
   capacity,
   occupiedSeats,
@@ -74,4 +81,56 @@ export function allocateSeats({
   return selected.length === requestedCount
     ? { ok: true, seats: selected.sort((a, b) => a - b) }
     : { ok: false, reason: "NOT_ENOUGH_SEATS" };
+}
+
+export function planBoardingSeatAssignments(input: {
+  capacity: number;
+  passengers: readonly SeatPassengerState[];
+  boardingTripIds: readonly string[];
+  releasingTripIds?: readonly string[];
+}):
+  | { ok: true; assignments: Record<string, number[]> }
+  | { ok: false; reason: "NOT_ENOUGH_SEATS" | "INVALID_COUNT" } {
+  const releasing = new Set(input.releasingTripIds ?? []);
+  const occupiedSeats = input.passengers.flatMap((passenger) => {
+    if (
+      releasing.has(passenger.tripId) ||
+      !["boarding", "on_board", "picked_up"].includes(
+        passenger.status.toLowerCase(),
+      )
+    ) {
+      return [];
+    }
+    return [...(passenger.seatNumbers ?? [])];
+  });
+  const passengerByTripId = new Map(
+    input.passengers.map((passenger) => [passenger.tripId, passenger]),
+  );
+  const assignments: Record<string, number[]> = {};
+
+  for (const tripId of input.boardingTripIds) {
+    const passenger = passengerByTripId.get(tripId);
+    if (!passenger) continue;
+    if (
+      ["boarding", "on_board", "picked_up"].includes(
+        passenger.status.toLowerCase(),
+      )
+    ) {
+      assignments[tripId] = [...(passenger.seatNumbers ?? [])];
+      continue;
+    }
+    if (passenger.status.toLowerCase() !== "waiting") continue;
+
+    const allocation = allocateSeats({
+      capacity: input.capacity,
+      occupiedSeats,
+      requestedCount: passenger.numberOfPassengers ?? 1,
+      preferredSeats: passenger.seatNumbers ?? [],
+    });
+    if (!allocation.ok) return allocation;
+    assignments[tripId] = allocation.seats;
+    occupiedSeats.push(...allocation.seats);
+  }
+
+  return { ok: true, assignments };
 }

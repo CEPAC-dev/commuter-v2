@@ -462,6 +462,7 @@ export const en = {
   "ride.driver_destination": "Driver final destination",
   "ride.station_fallback": "Step {n}",
   "ride.confirm_station_error": "Failed to confirm station {stationIndex}",
+  "ride.seats_unavailable": "There are not enough available seats for this group. You can still mark no-show.",
   "ride.start_error": "Could not start the ride. Please try again.",
   "ride.end_error": "Could not close the ride. Please try again.",
   "ride.action_network_error": "Network error. Please check your connection and try again.",

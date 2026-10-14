@@ -501,34 +501,6 @@ export default function DriverRideInteractiveClient({
       return;
     }
 
-    const assignedSeatNumbers = new Set<number>();
-    for (const passenger of ride.passengers) {
-      if (["boarding", "picked_up", "on_board"].includes(passenger.status ?? "")) {
-        for (const seat of passenger.seatNumbers ?? []) {
-          if (typeof seat === "number" && Number.isFinite(seat)) {
-            assignedSeatNumbers.add(seat);
-          }
-        }
-      }
-    }
-
-    const vehicleType = ride.vehicleType as VehicleKey;
-    const seatCapacity = Number(
-      vehicleType && VEHICLES[vehicleType]?.capacity
-        ? VEHICLES[vehicleType].capacity
-        : 4,
-    );
-
-    const getNextSeatNumber = () => {
-      for (let seat = 1; seat <= seatCapacity; seat += 1) {
-        if (!assignedSeatNumbers.has(seat)) {
-          assignedSeatNumbers.add(seat);
-          return seat;
-        }
-      }
-      return 1;
-    };
-
     setLoadingAction(`confirm-${stationIndex}`);
     try {
       const confirmations = boardingPassengersForStation.map((passenger) => ({
@@ -557,14 +529,17 @@ export default function DriverRideInteractiveClient({
         }),
       });
 
+      const responseData = await res.json().catch(() => null);
       if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
         throw new Error(
-          errorData?.errorCode ||
-            errorData?.error ||
+          responseData?.errorCode ||
+            responseData?.error ||
             t("ride.confirm_station_error", { stationIndex }),
         );
       }
+      const seatAssignments = responseData?.seatAssignments as
+        | Record<string, number[]>
+        | undefined;
 
       const isLastStation =
         visibleRouteStops.length > 0 &&
@@ -615,7 +590,7 @@ export default function DriverRideInteractiveClient({
         } else if (isPickupStation && confirmationStatus === "arrived") {
           nextStatus = "boarding";
           nextSeatNumbers =
-            nextSeatNumbers && nextSeatNumbers.length > 0 ? nextSeatNumbers : [getNextSeatNumber()];
+            seatAssignments?.[passenger.tripId] ?? nextSeatNumbers ?? [];
         }
 
         // 4. Anyone on board reaching their dropoff (or the ride's last stop) alights here.
@@ -663,7 +638,9 @@ export default function DriverRideInteractiveClient({
     } catch (err) {
       const errorCode = err instanceof Error ? err.message : "";
       setRideActionError(
-        errorCode === "PICKUP_PIN_INVALID"
+        errorCode === "SEATS_UNAVAILABLE"
+          ? t("ride.seats_unavailable")
+          : errorCode === "PICKUP_PIN_INVALID"
           ? t("pickup_pin.invalid")
           : errorCode === "PICKUP_PIN_LOCKED"
             ? t("pickup_pin.locked")
