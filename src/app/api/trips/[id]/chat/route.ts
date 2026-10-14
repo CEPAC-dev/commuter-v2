@@ -18,6 +18,8 @@ import {
   incrementRateLimitCounterByIdentity,
 } from "@/lib/security/rateLimit";
 import { checkChatText } from "@/lib/chatTextFilter";
+import { buildChatNotificationPlan } from "@/lib/chatNotification";
+import { createNotification } from "@/lib/notifications/createNotification";
 import {
   CHAT_FREE_TEXT_STRIKE_LIMIT,
   CHAT_FREE_TEXT_STRIKE_WINDOW_MS,
@@ -326,6 +328,48 @@ export async function POST(req: Request, { params }: RouteContext) {
     ...(presetKey ? { presetKey } : {}),
     text,
   });
+
+  const ride = loaded.ride;
+  const passengerManifest = (ride?.passengers ?? []) as Array<{
+    tripId: unknown;
+    passengerNumber?: number;
+  }>;
+  const passengerIndex =
+    passengerManifest.findIndex((passenger) => String(passenger.tripId) === id);
+  const passengerNumber =
+    passengerIndex >= 0
+      ? passengerManifest[passengerIndex]?.passengerNumber ?? passengerIndex + 1
+      : 1;
+  const recipientId =
+    senderRole === "driver"
+      ? String(loaded.trip.userId)
+      : ride?.driverId
+        ? String(ride.driverId)
+        : null;
+  if (ride && recipientId) {
+    const notification = buildChatNotificationPlan({
+      senderRole: senderRole === "driver" ? "driver" : "user",
+      recipientId,
+      tripId: id,
+      rideId: String(ride._id),
+      kind,
+      presetKey,
+      passengerNumber,
+    });
+    if (notification) {
+      try {
+        const limited = await enforceRateLimitByIdentity(
+          "trip-chat-notification",
+          `${notification.recipientId}:${id}:${notification.throttleKey}`,
+          { limit: 1, windowMs: notification.windowMs },
+          "CHAT_NOTIFICATION_THROTTLED",
+        );
+        if (!limited) await createNotification(notification.payload);
+      } catch {
+        console.error("Trip chat notification delivery failed.");
+      }
+    }
+  }
 
   return NextResponse.json(
     {
