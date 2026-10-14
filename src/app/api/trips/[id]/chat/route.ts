@@ -11,6 +11,7 @@ import {
   isChatPreset,
   type ChatPresetKey,
 } from "@/lib/chatPresets";
+import { enforceRateLimitByIdentity } from "@/lib/security/rateLimit";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -100,6 +101,14 @@ export async function GET(req: Request, { params }: RouteContext) {
   }
   if (!loaded.access.allowed) return accessError(loaded.access.reason);
 
+  const limited = await enforceRateLimitByIdentity(
+    "trip-chat-read",
+    session.userId,
+    { limit: 600, windowMs: 5 * 60_000 },
+    "CHAT_RATE_LIMITED",
+  );
+  if (limited) return limited;
+
   const after = afterFilter(new URL(req.url).searchParams.get("after"));
   if (after === null) {
     return NextResponse.json(
@@ -144,6 +153,13 @@ export async function POST(req: Request, { params }: RouteContext) {
       { status: 403 },
     );
   }
+  const limited = await enforceRateLimitByIdentity(
+    "trip-chat-write",
+    `${session.userId}:${id}`,
+    { limit: 30, windowMs: 5 * 60_000 },
+    "CHAT_RATE_LIMITED",
+  );
+  if (limited) return limited;
 
   let body: { kind?: unknown; presetKey?: unknown; text?: unknown };
   try {
