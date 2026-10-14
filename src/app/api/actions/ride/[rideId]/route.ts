@@ -795,20 +795,21 @@ export async function POST(
       );
     }
 
-    const pinConfirmations: Array<{ tripId: unknown; pin: unknown }> =
+    const arrivedConfirmations: Array<{ tripId?: unknown; pin?: unknown }> =
       action === "station_arrived" && Array.isArray(metadata?.confirmations)
-        ? metadata.confirmations
-            .filter(
-              (confirmation: { status?: unknown }) =>
-                confirmation?.status === "arrived",
-            )
-            .map((confirmation: { tripId?: unknown; pin?: unknown }) => ({
-              tripId: confirmation.tripId,
-              pin: confirmation.pin,
-            }))
+        ? metadata.confirmations.filter(
+            (confirmation: { status?: unknown }) =>
+              confirmation?.status === "arrived",
+          )
         : action === "passenger_picked_up"
           ? [{ tripId, pin: body.pin }]
           : [];
+    const pinConfirmations = arrivedConfirmations.map((confirmation) => ({
+      tripId: confirmation.tripId,
+      pin:
+        confirmation.pin ??
+        (arrivedConfirmations.length === 1 ? body.pin : undefined),
+    }));
     const verifiedPinTrips: Array<{
       tripId: Types.ObjectId;
       pinVersion: number;

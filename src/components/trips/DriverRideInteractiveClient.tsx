@@ -129,6 +129,7 @@ export default function DriverRideInteractiveClient({
   const [isCompleted, setIsCompleted] = useState(ride.status === "completed");
   const [confirmedStationIndices, setConfirmedStationIndices] = useState<number[]>([]);
   const [stationSelections, setStationSelections] = useState<Record<string, Record<string, "arrived" | "no_show">>>({});
+  const [pickupPins, setPickupPins] = useState<Record<string, string>>({});
   const [driverOrigin, setDriverOrigin] = useState<GeoPoint | null>(
     ride.driverOrigin ?? null,
   );
@@ -138,6 +139,18 @@ export default function DriverRideInteractiveClient({
   const { t, locale, dir } = useClientLocale();
   const to12h = (hhmm: string) => formatTime(locale, hhmm);
   const prettyDate = (date: string) => formatDate(locale, date);
+  const passengerLabel = (passenger: RideDetailView["passengers"][number]) => {
+    const label = t("driver.passenger_fallback", {
+      n:
+        passenger.passengerNumber ??
+        ride.passengers.indexOf(passenger) + 1,
+    });
+    return passenger.numberOfPassengers > 1
+      ? `${label} ${t("driver.passenger_group_size", {
+          count: passenger.numberOfPassengers,
+        })}`
+      : label;
+  };
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [navigationErrorByStation, setNavigationErrorByStation] = useState<Record<number, string>>({});
   const [rideActionError, setRideActionError] = useState<string | null>(null);
@@ -418,7 +431,6 @@ export default function DriverRideInteractiveClient({
         throw new Error(errorData?.error || t("ride.start_error"));
       }
     } catch (err) {
-      console.error(err);
       setRideActionError(
         err instanceof TypeError
           ? t("ride.action_network_error")
@@ -478,6 +490,15 @@ export default function DriverRideInteractiveClient({
       requiresPassengerSelections &&
       boardingPassengersForStation.some((passenger) => !selections[passenger.tripId]);
     if (missingSelection) return;
+    const missingPin = boardingPassengersForStation.some(
+      (passenger) =>
+        selections[passenger.tripId] === "arrived" &&
+        !/^\d{4}$/.test(pickupPins[passenger.tripId] ?? ""),
+    );
+    if (missingPin) {
+      setRideActionError(t("pickup_pin.required"));
+      return;
+    }
 
     const assignedSeatNumbers = new Set<number>();
     for (const passenger of ride.passengers) {
@@ -512,7 +533,14 @@ export default function DriverRideInteractiveClient({
       const confirmations = boardingPassengersForStation.map((passenger) => ({
         tripId: passenger.tripId,
         status: selections[passenger.tripId],
+        ...(selections[passenger.tripId] === "arrived"
+          ? { pin: pickupPins[passenger.tripId] }
+          : {}),
       }));
+      setRideActionError(null);
+      const arrivalConfirmations = confirmations.filter(
+        (confirmation) => confirmation.status === "arrived",
+      );
 
       const res = await fetch(`/api/actions/ride/${ride.id}`, {
         method: "POST",
@@ -521,6 +549,9 @@ export default function DriverRideInteractiveClient({
           action: "station_arrived",
           stationIndex,
           stationName,
+          ...(arrivalConfirmations.length === 1
+            ? { pin: arrivalConfirmations[0].pin }
+            : {}),
           metadata: { confirmations },
         }),
       });
@@ -528,7 +559,9 @@ export default function DriverRideInteractiveClient({
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
         throw new Error(
-          errorData?.error || t("ride.confirm_station_error", { stationIndex }),
+          errorData?.errorCode ||
+            errorData?.error ||
+            t("ride.confirm_station_error", { stationIndex }),
         );
       }
 
@@ -609,6 +642,13 @@ export default function DriverRideInteractiveClient({
         ...prevRide,
         passengers: nextPassengers,
       }));
+      setPickupPins((previous) => {
+        const next = { ...previous };
+        for (const passenger of boardingPassengersForStation) {
+          if (selections[passenger.tripId]) delete next[passenger.tripId];
+        }
+        return next;
+      });
       setConfirmedStationIndices((prev) =>
         prev.includes(stationIndex) ? prev : [...prev, stationIndex],
       );
@@ -620,7 +660,18 @@ export default function DriverRideInteractiveClient({
       );
       if (nextStationStep) await handleGoToLocation(nextStationStep);
     } catch (err) {
-      console.error(err);
+      const errorCode = err instanceof Error ? err.message : "";
+      setRideActionError(
+        errorCode === "PICKUP_PIN_INVALID"
+          ? t("pickup_pin.invalid")
+          : errorCode === "PICKUP_PIN_LOCKED"
+            ? t("pickup_pin.locked")
+            : errorCode === "PICKUP_PIN_REQUIRED"
+              ? t("pickup_pin.required")
+              : err instanceof TypeError
+                ? t("pickup_pin.network_error")
+                : t("ride.confirm_station_error", { stationIndex }),
+      );
     } finally {
       setLoadingAction(null);
     }
@@ -989,6 +1040,11 @@ export default function DriverRideInteractiveClient({
                 boardingPassengersForStation.every((passenger) =>
                   Boolean(stationSelectionsForStep[passenger.tripId]),
                 );
+              const isPickupPinComplete = boardingPassengersForStation.every(
+                (passenger) =>
+                  stationSelectionsForStep[passenger.tripId] !== "arrived" ||
+                  /^\d{4}$/.test(pickupPins[passenger.tripId] ?? ""),
+              );
               const hasNoShowAtStation =
                 noShowPassengersForStation.length > 0 || noShowAlightingForStation.length > 0;
 
@@ -1098,6 +1154,7 @@ export default function DriverRideInteractiveClient({
                             disabled={
                               loadingAction === `confirm-${step.stationIndex}` ||
                               (requiresPassengerSelections && !isDecisionComplete)
+                              || (requiresPassengerSelections && !isPickupPinComplete)
                             }
                             style={{
                               display: "inline-flex",
@@ -1113,10 +1170,15 @@ export default function DriverRideInteractiveClient({
                               cursor:
                                 loadingAction === `confirm-${step.stationIndex}` ||
                                 (requiresPassengerSelections && !isDecisionComplete)
+                                || (requiresPassengerSelections && !isPickupPinComplete)
                                   ? "not-allowed"
                                   : "pointer",
                               boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                              opacity: requiresPassengerSelections && !isDecisionComplete ? 0.7 : 1,
+                              opacity:
+                                requiresPassengerSelections &&
+                                (!isDecisionComplete || !isPickupPinComplete)
+                                  ? 0.7
+                                  : 1,
                             }}
                           >
                             <CheckCircle2 size={13} color={isActiveStation ? "#27AE60" : "#00C2A8"} />
@@ -1219,9 +1281,7 @@ export default function DriverRideInteractiveClient({
                             }}
                           >
                             {t("driver.no_show_alighting_note", {
-                              name:
-                                passenger.passengerName ??
-                                t("driver.passenger_fallback", { n: passenger.pickupOrder ?? 1 }),
+                              name: passengerLabel(passenger),
                             })}
                           </div>
                         ))}
@@ -1245,7 +1305,7 @@ export default function DriverRideInteractiveClient({
                             }}
                           >
                             <span style={{ fontSize: 12, fontWeight: 700, color: "#C0392B" }}>
-                              {passenger.passengerName ?? t("driver.passenger_fallback", { n: passenger.pickupOrder ?? 1 })}
+                              {passengerLabel(passenger)}
                             </span>
                             <span style={{ fontSize: 11, fontWeight: 800, color: "#C0392B" }}>
                               {t("driver.no_show")}
@@ -1298,14 +1358,14 @@ export default function DriverRideInteractiveClient({
                               >
                                 <div>
                                   <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
-                                    {passenger.passengerName ?? t("driver.passenger_fallback", { n: passenger.pickupOrder ?? 1 })}
+                                    {passengerLabel(passenger)}
                                   </span>
                                   <div style={{ marginTop: 4, fontSize: 11, color: "#5A6A7A" }}>
                                     {isBoardingPassenger ? t("driver.status_boarding") : isAlightingPassenger ? t("driver.status_alighting") : t("driver.status_pending")}
                                   </div>
                                 </div>
                                 {isBoardingPassenger ? (
-                                  <div style={{ display: "flex", gap: 8 }}>
+                                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -1332,15 +1392,20 @@ export default function DriverRideInteractiveClient({
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() =>
+                                      onClick={() => {
+                                        setPickupPins((previous) => {
+                                          const next = { ...previous };
+                                          delete next[passenger.tripId];
+                                          return next;
+                                        });
                                         setStationSelections((prev) => ({
                                           ...prev,
                                           [String(step.stationIndex)]: {
                                             ...(prev[String(step.stationIndex)] ?? {}),
                                             [passenger.tripId]: "no_show",
                                           },
-                                        }))
-                                      }
+                                        }));
+                                      }}
                                       style={{
                                         padding: "6px 10px",
                                         borderRadius: 8,
@@ -1359,6 +1424,49 @@ export default function DriverRideInteractiveClient({
                                   <span style={{ fontSize: 12, fontWeight: 700, color: "#00806E" }}>
                                     {t("driver.will_alight_here")}
                                   </span>
+                                )}
+                                {isBoardingPassenger && selectedStatus === "arrived" && (
+                                  <label
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                      width: "100%",
+                                      fontSize: 12,
+                                      fontWeight: 700,
+                                      color: "#0B1E3D",
+                                    }}
+                                  >
+                                    {t("pickup_pin.driver_prompt")}
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      maxLength={4}
+                                      autoComplete="off"
+                                      pattern="[0-9]{4}"
+                                      aria-label={t("pickup_pin.driver_prompt")}
+                                      value={pickupPins[passenger.tripId] ?? ""}
+                                      onChange={(event) => {
+                                        setRideActionError(null);
+                                        setPickupPins((previous) => ({
+                                          ...previous,
+                                          [passenger.tripId]: event.target.value
+                                            .replace(/\D/g, "")
+                                            .slice(0, 4),
+                                        }));
+                                      }}
+                                      style={{
+                                        width: 88,
+                                        padding: "7px 9px",
+                                        border: "1px solid #cbd5e1",
+                                        borderRadius: 8,
+                                        fontSize: 16,
+                                        fontWeight: 800,
+                                        letterSpacing: "0.2em",
+                                        textAlign: "center",
+                                      }}
+                                    />
+                                  </label>
                                 )}
                               </div>
                             );

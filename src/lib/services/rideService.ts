@@ -533,15 +533,9 @@ async function getDriverRide(
   const numberedRide = await ensureRidePassengerNumbers(String(ride._id));
   if (numberedRide) ride = numberedRide as typeof ride;
 
-  const { User } = await import("@/models/User");
   const { Station } = await import("@/models/Station");
 
   const ridePassengers = getRidePassengers(ride as Record<string, unknown>);
-  const userIds = ridePassengers.map((p) => p.userId).filter(Boolean);
-  const users = await User.find({ _id: { $in: userIds } })
-    .select("name phone")
-    .lean<{ _id: unknown; name?: string; phone?: string }[]>();
-  const userById = new Map(users.map((u) => [String(u._id), u]));
 
   // Look up station details from Station collection
   const stationIds: number[] = [];
@@ -598,8 +592,6 @@ async function getDriverRide(
       ...p,
       pickupStation: enrichStation(p.pickupStation),
       dropoffStation: enrichStation(p.dropoffStation),
-      passengerName:
-        userById.get(String(p.userId))?.name ?? `Passenger #${p.pickupOrder}`,
     })),
   };
 
