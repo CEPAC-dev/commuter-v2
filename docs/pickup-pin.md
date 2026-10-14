@@ -11,3 +11,7 @@ secret or include it in client-side environment variables.
 
 The derived PIN is four decimal digits. The HMAC result is mapped modulo
 10,000, with negligible modulo bias.
+
+The driver verification endpoint counts failed attempts atomically. Five
+incorrect attempts lock verification for ten minutes; a successful verification
+resets the failure counter. PIN values are not included in ride or security logs.
