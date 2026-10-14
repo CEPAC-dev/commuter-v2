@@ -69,6 +69,47 @@ and add a private admin note; admins cannot post into a chat. The admin page is
 `/admin/chat-reports`. New-report notifications contain report, Trip, and Ride
 IDs only, never chat text.
 
+## Read state and unread indicators
+
+`POST /api/trips/{tripId}/chat/read` records the authenticated participant's
+`lastReadAt`. It is limited to 120 calls per user per five minutes and is called
+only while the chat panel is open and the browser tab is visible. The unique
+`(tripId, userId)` index prevents duplicate read-state records; read states expire
+seven days after the message-retention period, based on `updatedAt`.
+
+`GET /api/chat/unread?tripIds=id1,id2` accepts at most 10 Trip IDs and returns
+counts only for Trips the caller can access as a passenger or assigned driver.
+Other IDs are silently omitted. Counts include only messages from the other
+participant, newer than `lastReadAt` (or all such messages when no read state
+exists). The endpoint is limited to 120 calls per user per five minutes and
+counts messages in one aggregation.
+
+The client refreshes unread counts every 15 seconds only when the tab is
+visible, the server says the chat is open, and the panel is closed. Message
+polling remains every five seconds while the panel is open; unread polling is
+stopped during that time. Badges cap their visible count at `9+`.
+
+## In-app chat notifications
+
+Chat messages use the existing localized in-app notification center for both
+passengers and drivers. The server creates notifications only for these preset
+keys:
+
+- Driver to passenger: `arrived`, `cant_find_you`, `where_are_you`,
+  `running_late_2`, `running_late_5`.
+- Passenger to driver: `at_pickup`, `running_late`, `on_my_way`.
+- Free text: a generic “You have a new message”; message content is never copied
+  into the notification.
+
+Other presets do not notify. Preset notifications are throttled by recipient,
+Trip, and preset key to one per five-minute rate-limit window. Free-text
+notifications use a separate key and a two-minute window. Passenger links open
+`/my-trips/{tripId}`; driver links open the Ride Action Center at
+`/my-trips/{rideId}`. Notifications use server-generated English and Arabic
+templates and identify the other side only as “Driver” or “Passenger N”.
+Message text and client-supplied labels are not included in notification
+payloads or logs. Notification failures do not fail message submission.
+
 ## Message retention
 
 `CHAT_RETENTION_DAYS` is an optional whole-number environment variable from 1
@@ -84,7 +125,7 @@ node scripts/ensureIndexes.mjs --check
 ```
 
 Create or update the managed indexes (including the open-report uniqueness
-index and message retention TTL index):
+index, message retention TTL index, and ChatReadState indexes):
 
 ```sh
 node scripts/ensureIndexes.mjs
@@ -94,8 +135,9 @@ node scripts/ensureIndexes.mjs
 
 1. Keep `CHAT_FREE_TEXT_ENABLED=false` in all environments until the contact
    filter and strike tests pass in the deployment build.
-2. Run the index check and ensure the `chat_reports` unique index and Message
-   TTL index are ready; run the index command if they are missing or mismatched.
+2. Run the index check and ensure the `chat_reports` unique index, Message TTL
+   index, and `chat_read_states` unique and TTL indexes are ready; run the index
+   command if they are missing or mismatched.
 3. Confirm `/admin/chat-reports` is reachable only to admins and assign staff to
    review reports promptly.
 4. Verify chat text is not written to application logs and is rendered as plain
