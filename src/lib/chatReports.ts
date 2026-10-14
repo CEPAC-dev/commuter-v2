@@ -10,6 +10,7 @@ export const CHAT_REPORT_OPEN_UNIQUE_INDEX = {
   options: {
     unique: true as const,
     partialFilterExpression: { status: "open" as const },
+    name: "chat_reporter_trip_one_open",
   },
 };
 

@@ -45,6 +45,7 @@ test("only an existing open report triggers the duplicate-report rule", () => {
     options: {
       unique: true,
       partialFilterExpression: { status: "open" },
+      name: "chat_reporter_trip_one_open",
     },
   });
 });

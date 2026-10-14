@@ -1,6 +1,8 @@
 import { loadEnvConfig } from "@next/env";
 import mongoose from "mongoose";
 
+loadEnvConfig(process.cwd());
+
 const TRIP_SHARE_ACTIVE_INDEX = {
   keys: { tripId: 1, userId: 1 },
   options: {
@@ -24,8 +26,26 @@ const CHAT_REPORT_OPEN_UNIQUE_INDEX = {
     name: "chat_reporter_trip_one_open",
   },
 };
-
-loadEnvConfig(process.cwd());
+const chatRetentionDays = Number(
+  process.env.CHAT_RETENTION_DAYS?.trim() || "30",
+);
+const maxChatRetentionDays = Math.floor(2_147_483_647 / (24 * 60 * 60));
+if (
+  !Number.isSafeInteger(chatRetentionDays) ||
+  chatRetentionDays < 1 ||
+  chatRetentionDays > maxChatRetentionDays
+) {
+  throw new Error(
+    `CHAT_RETENTION_DAYS must be a whole number between 1 and ${maxChatRetentionDays}.`,
+  );
+}
+const MESSAGE_RETENTION_TTL_INDEX = {
+  keys: { createdAt: 1 },
+  options: {
+    expireAfterSeconds: chatRetentionDays * 24 * 60 * 60,
+    name: "chat_messages_created_at_ttl",
+  },
+};
 
 const production =
   (process.env.APP_ENV ?? process.env.NODE_ENV ?? "development").toLowerCase() ===
@@ -49,6 +69,7 @@ try {
   const walletTransactions = database.collection("wallettransactions");
   const tripShares = database.collection("tripshares");
   const chatReports = database.collection("chat_reports");
+  const messages = database.collection("messages");
 
   if (checkOnly) {
     const [duplicate] = await walletTransactions
@@ -74,8 +95,12 @@ try {
         ? "wallettransactions unique-index duplicates: yes"
         : "wallettransactions unique-index duplicates: no",
     );
-    const [duplicateOpenChatReport] = await chatReports
-      .aggregate([
+    const chatReportsExist = await database
+      .listCollections({ name: "chat_reports" })
+      .hasNext();
+    const [duplicateOpenChatReport] = chatReportsExist
+      ? await chatReports
+          .aggregate([
         { $match: { status: "open" } },
         {
           $group: {
@@ -86,12 +111,46 @@ try {
         { $match: { count: { $gt: 1 } } },
         { $limit: 1 },
       ])
-      .toArray();
+          .toArray()
+      : [];
     console.log(
       duplicateOpenChatReport
         ? "chat_reports open-report unique-index duplicates: yes"
         : "chat_reports open-report unique-index duplicates: no",
     );
+    if (duplicateOpenChatReport) process.exitCode = 1;
+    const indexesFor = async (name) => {
+      const exists = await database.listCollections({ name }).hasNext();
+      return exists
+        ? await database.collection(name).listIndexes().toArray()
+        : [];
+    };
+    const [messageIndexes, chatReportIndexes] = await Promise.all([
+      indexesFor("messages"),
+      indexesFor("chat_reports"),
+    ]);
+    const messageTtlReady = messageIndexes.some(
+      (index) =>
+        index.name === MESSAGE_RETENTION_TTL_INDEX.options.name &&
+        index.key.createdAt === 1 &&
+        index.expireAfterSeconds ===
+          MESSAGE_RETENTION_TTL_INDEX.options.expireAfterSeconds,
+    );
+    const chatReportUniqueReady = chatReportIndexes.some(
+      (index) =>
+        index.name === CHAT_REPORT_OPEN_UNIQUE_INDEX.options.name &&
+        index.key.reporterId === 1 &&
+        index.key.tripId === 1 &&
+        index.unique === true &&
+        index.partialFilterExpression?.status === "open",
+    );
+    console.log(
+      `messages retention TTL index (${chatRetentionDays} days): ${messageTtlReady ? "ready" : "missing or mismatched"}`,
+    );
+    console.log(
+      `chat_reports open-report unique index: ${chatReportUniqueReady ? "ready" : "missing"}`,
+    );
+    if (!messageTtlReady || !chatReportUniqueReady) process.exitCode = 1;
   } else {
     await database.collection("trip_spacing_locks").createIndex(
       { updatedAt: 1 },
@@ -111,6 +170,27 @@ try {
     await chatReports.createIndex(
       CHAT_REPORT_OPEN_UNIQUE_INDEX.keys,
       CHAT_REPORT_OPEN_UNIQUE_INDEX.options,
+    );
+    const messagesExist = await database
+      .listCollections({ name: "messages" })
+      .hasNext();
+    const currentMessageIndexes = messagesExist
+      ? await messages.listIndexes().toArray()
+      : [];
+    const currentMessageTtl = currentMessageIndexes.find(
+      (index) => index.name === MESSAGE_RETENTION_TTL_INDEX.options.name,
+    );
+    if (
+      currentMessageTtl &&
+      (currentMessageTtl.expireAfterSeconds !==
+        MESSAGE_RETENTION_TTL_INDEX.options.expireAfterSeconds ||
+        currentMessageTtl.key.createdAt !== 1)
+    ) {
+      await messages.dropIndex(MESSAGE_RETENTION_TTL_INDEX.options.name);
+    }
+    await messages.createIndex(
+      MESSAGE_RETENTION_TTL_INDEX.keys,
+      MESSAGE_RETENTION_TTL_INDEX.options,
     );
     await walletTransactions.createIndex(
       { paymentId: 1, tripId: 1, type: 1 },

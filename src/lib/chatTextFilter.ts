@@ -20,7 +20,7 @@ const LONG_DIGIT_RUN = new RegExp(
 const URL_OR_DOMAIN =
   /(?:https?:\/\/|www\.|(?:^|[\s([{])(?:[a-z0-9-]+\.)+(?:com|net|org|me|io|app|co|eg)\b|(?:^|[\s([{])(?:wa\.me|t\.me|bit\.ly)\b)/iu;
 const EMAIL = /\b[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}\b/iu;
-const HANDLE = /(?<![\p{L}\p{N}])@[\p{L}\p{N}_]{2,}/u;
+const HANDLE = /(?<![\p{L}\p{N}])@[\p{L}\p{N}_]+/u;
 const MESSAGING_KEYWORDS =
   /(?<![\p{L}\p{N}])(?:whatsapp|واتس|واتساب|telegram|تيليجرام|signal|viber|فايبر|imo)(?![\p{L}\p{N}])/iu;
 
