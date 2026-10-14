@@ -1088,6 +1088,8 @@ export const en = {
     "Trip {n}: route is still calculating — wait a moment.",
   "create.validate_passenger_count":
     "Trip {n}: passenger count must be between 1 and {max}.",
+  "create.vehicle_capacity_exceeded":
+    "This vehicle supports up to {max} passengers.",
   "create.validate_max_stops": "Trip {n}: no more than 4 stop points allowed.",
   "create.validate_stop_location_required":
     "Trip {n}, stop {stop}: location required.",

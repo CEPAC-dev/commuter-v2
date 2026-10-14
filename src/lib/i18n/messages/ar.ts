@@ -1077,6 +1077,8 @@ export const ar: Record<MessageKey, string> = {
     "الرحلة {n}: جارٍ حساب المسار — يرجى الانتظار قليلاً.",
   "create.validate_passenger_count":
     "الرحلة {n}: يجب أن يكون عدد الركاب بين 1 و{max}.",
+  "create.vehicle_capacity_exceeded":
+    "تستوعب هذه المركبة حتى {max} ركاب.",
   "create.validate_max_stops": "الرحلة {n}: غير مسموح بأكثر من 4 محطات.",
   "create.validate_stop_location_required":
     "الرحلة {n}، المحطة {stop}: الموقع مطلوب.",

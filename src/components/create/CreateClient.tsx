@@ -40,6 +40,7 @@ import { haversineKm } from "@/lib/geo/stations";
 import type { Station } from "@/lib/geo/stations";
 import {
   computeTripPriceEgp,
+  getVehiclePassengerCapacity,
   priceForSelectedDate,
   priceForSelectedDates,
 } from "@/lib/config/vehicles";
@@ -509,7 +510,11 @@ export default function CreateClient({
       const data = await res.json();
       if (!res.ok) {
         setSubmitError(
-          data.error === "TRIP_SPACING_CONFLICT" &&
+          data.error === "VEHICLE_CAPACITY_EXCEEDED"
+            ? t("create.vehicle_capacity_exceeded", {
+                max: Number(data.max) || 1,
+              })
+            : data.error === "TRIP_SPACING_CONFLICT" &&
             typeof data.conflict?.date === "string" &&
             typeof data.conflict?.arrivalTime === "string" &&
             typeof data.conflict?.window?.start === "string" &&
@@ -930,6 +935,7 @@ export default function CreateClient({
       if (!trip.dropoff) return t("create.validate_dropoff_required", { n });
       const vehicle =
         vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType];
+      const vehicleCapacity = getVehiclePassengerCapacity(trip.vehicleType);
       const isPrivate = vehicle.ride === "private";
       if (trip.sameGenderPreference && !userGender) {
         return t("create.gender_required");
@@ -943,11 +949,11 @@ export default function CreateClient({
         if (
           !Number.isInteger(trip.numberOfPassengers) ||
           trip.numberOfPassengers < 1 ||
-          trip.numberOfPassengers > vehicle.occupancy
+          trip.numberOfPassengers > vehicleCapacity
         )
           return t("create.validate_passenger_count", {
             n,
-            max: vehicle.occupancy,
+            max: vehicleCapacity,
           });
         if (trip.stops.length > 4) return t("create.validate_max_stops", { n });
 
@@ -972,7 +978,7 @@ export default function CreateClient({
           if (stop.alighting > onboard - 1)
             return t("create.validate_stop_min_passenger", { n, stop: stopN });
           const afterAlighting = onboard - stop.alighting;
-          if (stop.boarding > vehicle.occupancy - afterAlighting)
+          if (stop.boarding > vehicleCapacity - afterAlighting)
             return t("create.validate_stop_occupancy", { n, stop: stopN });
           onboard = afterAlighting + stop.boarding;
         }

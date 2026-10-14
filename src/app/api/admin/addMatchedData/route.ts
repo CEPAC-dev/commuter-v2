@@ -9,6 +9,7 @@ import { Ride } from "@/models/Ride";
 import { User } from "@/models/User";
 import { getDriverSummaryByUserNumber } from "@/lib/services/trips";
 import { createRide } from "@/lib/services/rideService";
+import { isRideWithinCapacity } from "@/lib/rideCapacity";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 
 export const dynamic = "force-dynamic";
@@ -733,6 +734,15 @@ async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
       };
     });
 
+    if (
+      !isRideWithinCapacity(
+        summary.vehicleType,
+        passengers.map((passenger) => passenger.numberOfPassengers),
+      )
+    ) {
+      continue;
+    }
+
     const ride = await createRide({
       availabilityId: null,
       driverId: null,
@@ -1342,6 +1352,23 @@ export async function POST(req: NextRequest) {
             const passenger = buildPassenger(record, ref);
             if (passenger) stop.alighting.push(passenger);
           }
+        }
+
+        const passengerCountsByTrip = new Map<string, number>();
+        for (const stop of route) {
+          for (const passenger of [...stop.boarding, ...stop.alighting]) {
+            passengerCountsByTrip.set(
+              String(passenger.tripId),
+              Math.max(1, Number(passenger.numberOfPassengers ?? 1) || 1),
+            );
+          }
+        }
+        if (
+          !isRideWithinCapacity(vehicleType, [
+            ...passengerCountsByTrip.values(),
+          ])
+        ) {
+          continue;
         }
 
         const rideNumber = await nextSequence("rideNumber");

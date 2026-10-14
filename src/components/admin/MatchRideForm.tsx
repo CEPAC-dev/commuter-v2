@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { getVehiclePassengerCapacity } from "@/lib/config/vehicles";
+import { isRideWithinCapacity } from "@/lib/rideCapacity";
 
 type PointLike = {
   address?: string;
@@ -60,6 +62,7 @@ const VEHICLE_OPTIONS = [
   { value: "taxi_shared", label: "Shared Taxi" },
   { value: "van_shared", label: "Shared Van" },
   { value: "microbus_shared", label: "Shared Microbus" },
+  { value: "mini_bus", label: "Mini Bus" },
 ];
 
 export default function MatchRideForm({
@@ -269,6 +272,17 @@ export default function MatchRideForm({
       return;
     }
 
+    const selectedPassengerCounts = selectedTripIds.map(
+      (tripId) => passengerInputs[tripId]?.numberOfPassengers ?? 1,
+    );
+    if (!isRideWithinCapacity(vehicleType, selectedPassengerCounts)) {
+      setFeedback({
+        type: "error",
+        message: `Selected trips exceed this vehicle's capacity of ${getVehiclePassengerCapacity(vehicleType)} passengers.`,
+      });
+      return;
+    }
+
     const route = orderedPoints.map((pt) => {
       const input = passengerInputs[pt.tripId] ?? { numberOfPassengers: 1 };
       const paxCount = input.numberOfPassengers || 1;
@@ -357,9 +371,12 @@ export default function MatchRideForm({
     }
   }
 
-  const totalSelectedPassengers = selectedTripIds.reduce((sum, tripId) => {
-    return sum + (passengerInputs[tripId]?.numberOfPassengers ?? 0);
-  }, 0);
+  const totalSelectedPassengers = selectedTripIds.reduce(
+    (sum, tripId) => sum + (passengerInputs[tripId]?.numberOfPassengers ?? 1),
+    0,
+  );
+  const capacityExceeded =
+    totalSelectedPassengers > getVehiclePassengerCapacity(vehicleType);
 
   return (
     <section className="match-form">
@@ -1071,7 +1088,17 @@ export default function MatchRideForm({
           </div>
         )}
 
-        <button type="submit" disabled={submitting} className="submit-btn">
+        {capacityExceeded && (
+          <p role="alert">
+            Selected trips exceed this vehicle's capacity of{" "}
+            {getVehiclePassengerCapacity(vehicleType)} passengers.
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={submitting || capacityExceeded}
+          className="submit-btn"
+        >
           {submitting ? "Creating ride…" : "Create ride"}
         </button>
       </form>

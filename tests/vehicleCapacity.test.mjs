@@ -5,6 +5,11 @@ const { VEHICLES, getVehiclePassengerCapacity } = await import(
   "../src/lib/config/vehicles.ts"
 );
 const { getVehicleSeatGrid } = await import("../src/lib/vehicleSeatGrid.ts");
+const { allocateSeats } = await import("../src/lib/seatAllocation.ts");
+const {
+  isRideWithinCapacity,
+  isVehiclePassengerCountAllowed,
+} = await import("../src/lib/rideCapacity.ts");
 
 test("unknown vehicle types use a conservative capacity fallback", () => {
   assert.equal(getVehiclePassengerCapacity("unknown_vehicle"), 1);
@@ -23,5 +28,39 @@ test("every vehicle grid has exactly its configured passenger capacity", () => {
       `${vehicleType} grid passenger-seat count`,
     );
     assert.equal(grid.totalSeats, vehicle.capacity, `${vehicleType} totalSeats`);
+  }
+});
+
+test("Trip creation rejects groups above configured vehicle capacity", () => {
+  assert.equal(isVehiclePassengerCountAllowed("private_car", 4), true);
+  assert.equal(isVehiclePassengerCountAllowed("private_car", 5), false);
+});
+
+test("Ride matching rejects passenger sums above the selected vehicle capacity", () => {
+  assert.equal(isRideWithinCapacity("van_shared", [2, 3]), true);
+  assert.equal(isRideWithinCapacity("van_shared", [2, 2, 2]), false);
+});
+
+test("seat allocation uses the same capacity as each vehicle grid", () => {
+  for (const vehicleType of Object.keys(VEHICLES)) {
+    const capacity = getVehiclePassengerCapacity(vehicleType);
+    assert.equal(
+      allocateSeats({
+        capacity,
+        occupiedSeats: [],
+        requestedCount: capacity,
+      }).ok,
+      true,
+      `${vehicleType} can allocate its configured capacity`,
+    );
+    assert.equal(
+      allocateSeats({
+        capacity,
+        occupiedSeats: [],
+        requestedCount: capacity + 1,
+      }).ok,
+      false,
+      `${vehicleType} rejects beyond configured capacity`,
+    );
   }
 });

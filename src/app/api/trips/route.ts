@@ -18,8 +18,10 @@ import {
   VEHICLES,
   computePrivateTripPriceEgp,
   computeTripPriceEgp,
+  getVehiclePassengerCapacity,
   priceForSelectedDate,
 } from "@/lib/config/vehicles";
+import { isVehiclePassengerCountAllowed } from "@/lib/rideCapacity";
 import { resolveActiveRegion } from "@/lib/regions/resolveActiveRegion";
 import { bookingWindow } from "@/lib/time/bookingDates";
 import {
@@ -395,6 +397,17 @@ export async function POST(req: NextRequest) {
     const vKey = t.vehicleType;
     const vehicle = vehiclesMap[vKey];
     const tripRideType = vehicle.ride;
+    const vehicleCapacity = getVehiclePassengerCapacity(vKey);
+    const numberOfPassengers = Number(t.numberOfPassengers ?? 1);
+    if (!isVehiclePassengerCountAllowed(vKey, numberOfPassengers)) {
+      return NextResponse.json(
+        {
+          error: "VEHICLE_CAPACITY_EXCEEDED",
+          max: vehicleCapacity,
+        },
+        { status: 400 },
+      );
+    }
     let routeCoordinates: [number, number][] | undefined;
     if (t.routeCoordinates != null) {
       if (
@@ -428,18 +441,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const numberOfPassengers = Number(t.numberOfPassengers);
-      if (
-        !Number.isInteger(numberOfPassengers) ||
-        numberOfPassengers < 1 ||
-        numberOfPassengers > vehicle.occupancy
-      ) {
-        return NextResponse.json(
-          { error: "Invalid numberOfPassengers" },
-          { status: 400 },
-        );
-      }
-
       if (!Array.isArray(t.stops) || t.stops.length > 4) {
         return NextResponse.json({ error: "Invalid stops" }, { status: 400 });
       }
@@ -467,9 +468,9 @@ export async function POST(req: NextRequest) {
           );
         }
         const afterAlighting = onboard - stop.alighting;
-        if (stop.boarding > vehicle.occupancy - afterAlighting) {
+        if (stop.boarding > vehicleCapacity - afterAlighting) {
           return NextResponse.json(
-            { error: "Vehicle occupancy exceeded" },
+            { error: "VEHICLE_CAPACITY_EXCEEDED", max: vehicleCapacity },
             { status: 400 },
           );
         }

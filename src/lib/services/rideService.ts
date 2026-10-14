@@ -24,6 +24,7 @@ import {
   getNextPassengerNumber,
 } from "@/lib/passengerNumbers";
 import { sanitizePickupPinFields } from "@/lib/pickupPinSafety";
+import { isRideWithinCapacity } from "@/lib/rideCapacity";
 
 type MatchResult = {
   availabilityId?: Types.ObjectId | string | null;
@@ -138,6 +139,15 @@ function normalizeRoutePayload(route: unknown[] = []): unknown[] {
 }
 
 async function createRide(matchResult: MatchResult) {
+  if (
+    !isRideWithinCapacity(
+      matchResult.vehicleType,
+      matchResult.passengers.map((passenger) => passenger.numberOfPassengers),
+    )
+  ) {
+    throw new Error("Selected trips exceed this vehicle's passenger capacity.");
+  }
+
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
