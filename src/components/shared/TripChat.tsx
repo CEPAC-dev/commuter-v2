@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChatRequestError, getTripMessages, markTripChatRead, sendMessage, submitChatReport, type ChatMessage } from "@/lib/api/chat";
+import { ChatRequestError, getChatUnreadCounts, getTripMessages, markTripChatRead, sendMessage, submitChatReport, type ChatMessage } from "@/lib/api/chat";
 import { useClientLocale } from "@/lib/i18n/client";
 import { translate } from "@/lib/i18n";
 
@@ -60,6 +60,7 @@ export default function TripChat({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tabVisible, setTabVisible] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportConfirm, setReportConfirm] = useState(false);
   const [reportSubmitted, setReportSubmitted] = useState(false);
@@ -134,6 +135,28 @@ export default function TripChat({
     const timer = setInterval(() => void refresh(), 5000);
     return () => clearInterval(timer);
   }, [panelOpen, refresh, serverOpen, tabVisible]);
+
+  useEffect(() => {
+    if (!serverOpen || !tabVisible || panelOpen) {
+      if (panelOpen) setUnreadCount(0);
+      return;
+    }
+    let cancelled = false;
+    const updateUnread = async () => {
+      try {
+        const counts = await getChatUnreadCounts([tripId]);
+        if (!cancelled) setUnreadCount(counts[tripId] ?? 0);
+      } catch {
+        if (!cancelled) setUnreadCount(0);
+      }
+    };
+    void updateUnread();
+    const timer = setInterval(() => void updateUnread(), 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [panelOpen, serverOpen, tabVisible, tripId]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -236,6 +259,7 @@ export default function TripChat({
         <button
           type="button"
           onClick={() => setPanelOpen(true)}
+          aria-label={title}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -256,6 +280,27 @@ export default function TripChat({
         >
           <MessageIcon />
           {title}
+          {unreadCount > 0 && (
+            <span
+              role="status"
+              aria-label={t("chat.unread_aria", { count: unreadCount })}
+              style={{
+                display: "inline-flex",
+                minWidth: 22,
+                height: 22,
+                padding: "0 6px",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 999,
+                background: "#F5A623",
+                color: "#0B1E3D",
+                fontSize: 12,
+                fontWeight: 800,
+              }}
+            >
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
         </button>
       )}
 

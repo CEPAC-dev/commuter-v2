@@ -86,3 +86,14 @@ export async function markTripChatRead(
   });
   return parseResponse<{ lastReadAt: string }>(res);
 }
+
+export async function getChatUnreadCounts(
+  tripIds: string[],
+): Promise<Record<string, number>> {
+  const query = new URLSearchParams({ tripIds: tripIds.join(",") });
+  const res = await fetch(`/api/chat/unread?${query.toString()}`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  return parseResponse<Record<string, number>>(res);
+}
