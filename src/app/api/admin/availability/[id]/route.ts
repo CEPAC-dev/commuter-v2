@@ -16,7 +16,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!auth.authorized) return auth.response;
   await connectDB();
   const record = await Availability.findById((await params).id).populate("driverId", "name phone email").lean();
-  return record ? NextResponse.json({ data: record }) : NextResponse.json({ error: "Availability not found" }, { status: 404 });
+  return record
+    ? NextResponse.json(
+        { data: record },
+        { headers: { "Cache-Control": "private, no-store" } },
+      )
+    : NextResponse.json({ error: "Availability not found" }, { status: 404 });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -50,7 +55,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       );
     }
     const updated = await Availability.findByIdAndUpdate(id, { $set: { dayOfWeek, origin, startTime, endTime, active: body.active ?? existing.active } }, { returnDocument: "after" }).populate("driverId", "name phone email").lean();
-    return NextResponse.json({ ok: true, data: updated });
+    return NextResponse.json(
+      { ok: true, data: updated },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch {
     return NextResponse.json({ error: "Could not update availability." }, { status: 500 });
   }

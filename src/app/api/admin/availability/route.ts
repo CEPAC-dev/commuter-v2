@@ -41,7 +41,10 @@ export async function GET(req: NextRequest) {
     .sort({ driverId: 1, dayOfWeek: 1 })
     .populate("driverId", "name phone email")
     .lean();
-  return NextResponse.json({ records, totalCount: records.length });
+  return NextResponse.json(
+    { records, totalCount: records.length },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }
 
 export async function POST(req: NextRequest) {

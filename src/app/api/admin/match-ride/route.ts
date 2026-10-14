@@ -32,7 +32,10 @@ export async function GET(req: NextRequest) {
         .lean(),
     ]);
 
-    return NextResponse.json({ data: { availabilities, drivers, trips } });
+    return NextResponse.json(
+      { data: { availabilities, drivers, trips } },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (error) {
     const message =
       error instanceof Error

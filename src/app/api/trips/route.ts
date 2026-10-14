@@ -178,7 +178,7 @@ export async function GET(req: NextRequest) {
     pageSize: 12,
     total: result.total,
     totalPages: Math.ceil(result.total / 12),
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(req: NextRequest) {

@@ -7,6 +7,11 @@ import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
 import { Rating } from "@/models/Rating";
 import { Payment } from "@/models/Payment";
+import { Ride } from "@/models/Ride";
+import {
+  canPassengerSeeDriverPhone,
+  serializePassengerAssignedDriver,
+} from "@/lib/driverPhoneVisibility";
 import type {
   BookingStatus,
   PaymentStatus,
@@ -373,9 +378,11 @@ export async function listUserTrips(
 
   type UserTripListDocument = {
     _id: unknown;
+    userId?: unknown;
     tripNumber: number;
     requestId: unknown;
     driverId?: unknown;
+    rideId?: unknown;
     date: string;
     paymentStatus: string;
     status: string;
@@ -533,6 +540,32 @@ export async function listUserTrips(
       .map(([driverId, assignedDriver]) => [driverId, assignedDriver]),
   );
 
+  const rideIds = Array.from(
+    new Set(rawTrips.map((trip) => trip.rideId).filter(Boolean).map(String)),
+  );
+  const rides = rideIds.length
+    ? await Ride.find({ _id: { $in: rideIds } })
+        .select("_id driverId status passengers.tripId passengers.status")
+        .lean<{
+          _id: unknown;
+          driverId?: unknown;
+          status?: string;
+          passengers?: { tripId?: unknown; status?: string }[];
+        }[]>()
+    : [];
+  const rideById = new Map(rides.map((ride) => [String(ride._id), ride]));
+  const currentRideDriverIds = Array.from(
+    new Set(rides.map((ride) => ride.driverId).filter(Boolean).map(String)),
+  );
+  const currentDriverUsers = currentRideDriverIds.length
+    ? await User.find({ _id: { $in: currentRideDriverIds } })
+        .select("_id phone")
+        .lean<{ _id: unknown; phone?: string }[]>()
+    : [];
+  const currentPhoneByDriverId = new Map(
+    currentDriverUsers.map((driver) => [String(driver._id), driver.phone]),
+  );
+
   const requestIds = Array.from(
     new Set(rawTrips.flatMap((trip) => trip.requestId ? [String(trip.requestId)] : [])),
   );
@@ -648,9 +681,23 @@ export async function listUserTrips(
         trip.createdAt instanceof Date
           ? trip.createdAt.toISOString()
           : String(trip.createdAt),
-      assignedDriver: trip.driverId
-        ? (assignedDriverById.get(String(trip.driverId)) ?? null)
-        : null,
+      assignedDriver: (() => {
+        const driver = trip.driverId
+          ? assignedDriverById.get(String(trip.driverId)) ?? null
+          : null;
+        const ride = trip.rideId
+          ? rideById.get(String(trip.rideId)) ?? null
+          : null;
+        const visibility = canPassengerSeeDriverPhone({
+          userId,
+          trip,
+          ride,
+        });
+        const currentPhone = ride?.driverId
+          ? currentPhoneByDriverId.get(String(ride.driverId))
+          : undefined;
+        return serializePassengerAssignedDriver(driver, visibility, currentPhone) ?? null;
+      })(),
       rating: ratingByTripId.get(String(trip._id)) ?? null,
       };
     }),
@@ -939,6 +986,32 @@ export async function getUserTrip(
     ? await buildAssignedDriver(trip.driverId)
     : null;
 
+  const rideForPhone = trip.rideId
+    ? await Ride.findById(trip.rideId)
+        .select("_id driverId status passengers.tripId passengers.status")
+        .lean<{
+          _id: unknown;
+          driverId?: unknown;
+          status?: string;
+          passengers?: { tripId?: unknown; status?: string }[];
+        } | null>()
+    : null;
+  const currentDriver = rideForPhone?.driverId
+    ? await User.findById(rideForPhone.driverId)
+        .select("phone")
+        .lean<{ phone?: string } | null>()
+    : null;
+  const passengerPhoneVisibility = canPassengerSeeDriverPhone({
+    userId,
+    trip,
+    ride: rideForPhone,
+  });
+  const passengerAssignedDriver = serializePassengerAssignedDriver(
+    assignedDriver,
+    passengerPhoneVisibility,
+    currentDriver?.phone,
+  );
+
   const { getRideById } = await import("./rideService");
   const rideDetails = trip.rideId
     ? await getRideById(String(trip.rideId))
@@ -986,6 +1059,6 @@ export async function getUserTrip(
       trip.createdAt instanceof Date
         ? trip.createdAt.toISOString()
         : String(trip.createdAt),
-    assignedDriver,
+    assignedDriver: passengerAssignedDriver,
   };
 }

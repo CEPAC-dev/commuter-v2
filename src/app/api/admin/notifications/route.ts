@@ -180,7 +180,7 @@ export async function GET(req: NextRequest) {
         isRead: false,
       }),
     },
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(req: NextRequest) {
