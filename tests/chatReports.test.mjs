@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 const {
   buildChatReportSnapshot,
   CHAT_REPORT_OPEN_UNIQUE_INDEX,
   isAlreadyReported,
   validateChatReportInput,
+  validateChatReportReviewInput,
 } = await import("../src/lib/chatReports.ts");
 
 test("chat report validation permits supported reasons and trims optional notes", () => {
@@ -83,4 +85,39 @@ test("report snapshots contain only the approved message evidence fields", () =>
   ]);
   assert.equal("senderId" in snapshot[0], false);
   assert.equal("_id" in snapshot[0], false);
+});
+
+test("admin review accepts only reviewed or dismissed and trims notes", () => {
+  assert.deepEqual(
+    validateChatReportReviewInput({ status: "reviewed", adminNote: "  checked  " }),
+    { ok: true, status: "reviewed", adminNote: "checked" },
+  );
+  assert.deepEqual(
+    validateChatReportReviewInput({ status: "open" }),
+    { ok: false, errorCode: "INVALID_REVIEW_STATUS" },
+  );
+  assert.deepEqual(
+    validateChatReportReviewInput({ status: "dismissed", adminNote: "x".repeat(1001) }),
+    { ok: false, errorCode: "ADMIN_NOTE_TOO_LONG" },
+  );
+});
+
+test("both admin chat-report routes reject requests denied by adminAuth", async () => {
+  const routes = [
+    "../src/app/api/admin/chat-reports/route.ts",
+    "../src/app/api/admin/chat-reports/[id]/route.ts",
+  ];
+  for (const path of routes) {
+    const source = await readFile(new URL(path, import.meta.url), "utf8");
+    assert.match(source, /const authorization = await adminAuth\(\);/);
+    assert.match(
+      source,
+      /if \(!authorization\.authorized\) return authorization\.response;/,
+    );
+  }
+  const authSource = await readFile(
+    new URL("../src/lib/middleware/adminAuth.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(authSource, /user\.role !== "admin"/);
 });

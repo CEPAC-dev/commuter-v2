@@ -16,6 +16,14 @@ const TRIP_SHARE_DELETE_AT_INDEX = {
     name: "trip_share_delete_at_ttl",
   },
 };
+const CHAT_REPORT_OPEN_UNIQUE_INDEX = {
+  keys: { reporterId: 1, tripId: 1 },
+  options: {
+    unique: true,
+    partialFilterExpression: { status: "open" },
+    name: "chat_reporter_trip_one_open",
+  },
+};
 
 loadEnvConfig(process.cwd());
 
@@ -40,6 +48,7 @@ try {
   if (!database) throw new Error("MongoDB connection is unavailable.");
   const walletTransactions = database.collection("wallettransactions");
   const tripShares = database.collection("tripshares");
+  const chatReports = database.collection("chat_reports");
 
   if (checkOnly) {
     const [duplicate] = await walletTransactions
@@ -65,6 +74,24 @@ try {
         ? "wallettransactions unique-index duplicates: yes"
         : "wallettransactions unique-index duplicates: no",
     );
+    const [duplicateOpenChatReport] = await chatReports
+      .aggregate([
+        { $match: { status: "open" } },
+        {
+          $group: {
+            _id: { reporterId: "$reporterId", tripId: "$tripId" },
+            count: { $sum: 1 },
+          },
+        },
+        { $match: { count: { $gt: 1 } } },
+        { $limit: 1 },
+      ])
+      .toArray();
+    console.log(
+      duplicateOpenChatReport
+        ? "chat_reports open-report unique-index duplicates: yes"
+        : "chat_reports open-report unique-index duplicates: no",
+    );
   } else {
     await database.collection("trip_spacing_locks").createIndex(
       { updatedAt: 1 },
@@ -80,6 +107,10 @@ try {
     await tripShares.createIndex(
       TRIP_SHARE_DELETE_AT_INDEX.keys,
       TRIP_SHARE_DELETE_AT_INDEX.options,
+    );
+    await chatReports.createIndex(
+      CHAT_REPORT_OPEN_UNIQUE_INDEX.keys,
+      CHAT_REPORT_OPEN_UNIQUE_INDEX.options,
     );
     await walletTransactions.createIndex(
       { paymentId: 1, tripId: 1, type: 1 },

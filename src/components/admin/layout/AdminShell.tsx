@@ -19,6 +19,7 @@ import {
   MessageCircle,
   Route,
   Settings,
+  ShieldAlert,
   SlidersHorizontal,
   TicketPercent,
   Users,
@@ -82,6 +83,12 @@ const sections = [
   },
   { href: "/admin/maps", label: "Maps", icon: MapPinned, statKey: null },
   { href: "/admin/rides", label: "Rides", icon: Car, statKey: "rides" },
+  {
+    href: "/admin/chat-reports",
+    label: "Chat reports",
+    icon: ShieldAlert,
+    statKey: null,
+  },
   { href: "/admin/vehicles", label: "Vehicles", icon: CarFront, statKey: null },
   {
     href: "/admin/availability",

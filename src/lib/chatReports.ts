@@ -15,6 +15,10 @@ export const CHAT_REPORT_OPEN_UNIQUE_INDEX = {
 
 export type ChatReportReason = (typeof CHAT_REPORT_REASONS)[number];
 
+export type ChatReportReviewInput =
+  | { ok: true; status: "reviewed" | "dismissed"; adminNote: string }
+  | { ok: false; errorCode: string };
+
 export type ChatReportInput =
   | { ok: true; reason: ChatReportReason; note?: string }
   | { ok: false; errorCode: string };
@@ -45,6 +49,24 @@ export function validateChatReportInput(input: {
 
 export function isAlreadyReported(hasOpenReport: boolean): boolean {
   return hasOpenReport;
+}
+
+export function validateChatReportReviewInput(input: {
+  status?: unknown;
+  adminNote?: unknown;
+}): ChatReportReviewInput {
+  if (input.status !== "reviewed" && input.status !== "dismissed") {
+    return { ok: false, errorCode: "INVALID_REVIEW_STATUS" };
+  }
+  if (input.adminNote !== undefined && typeof input.adminNote !== "string") {
+    return { ok: false, errorCode: "INVALID_ADMIN_NOTE" };
+  }
+  const adminNote =
+    typeof input.adminNote === "string" ? input.adminNote.trim() : "";
+  if (adminNote.length > 1000) {
+    return { ok: false, errorCode: "ADMIN_NOTE_TOO_LONG" };
+  }
+  return { ok: true, status: input.status, adminNote };
 }
 
 export function buildChatReportSnapshot<
