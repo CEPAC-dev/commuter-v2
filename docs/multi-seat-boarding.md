@@ -18,11 +18,15 @@ when committing the passenger seat assignments, so only one allocation based
 on a given Ride version can be persisted.
 
 `src/lib/config/vehicles.ts` is the single source for passenger capacity.
-Booking validation, matching, boarding allocation, and the seat-map layout use
-`getVehiclePassengerCapacity`; the grid renders exactly that many passenger
-positions. New Trips above capacity are rejected, and over-capacity matching
-groups remain unmatched rather than creating a Ride. Existing records are not
-rewritten automatically.
+`getVehiclePassengerCapacity` supplies the limit used by booking validation,
+matching, boarding allocation, and the seat-map layout; the grid renders exactly
+that many passenger positions. `maxExtraPassengers` is derived as capacity minus
+the booker. A private Trip's people count is its `numberOfPassengers`. A shared
+Trip's people count is the greater of its stored `numberOfPassengers` and one
+booker plus `extraPassengers`; `getTripPassengerCount` applies this definition
+at booking, matching, Ride creation, audit, and cancellation. New Trips above
+capacity are rejected, and over-capacity matching groups remain unmatched
+rather than creating a Ride. Existing records are not rewritten automatically.
 
 For legacy Ride data whose active Trip has fewer stored seats than people, the
 seat map fills missing display positions from unused seats when possible. If

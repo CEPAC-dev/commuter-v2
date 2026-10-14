@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { loadEnvConfig } from "@next/env";
 import { getVehiclePassengerCapacity } from "../src/lib/config/vehicles.ts";
+import { getTripPassengerCount } from "../src/lib/rideCapacity.ts";
 
 loadEnvConfig(process.cwd());
 
@@ -36,6 +37,7 @@ try {
             tripNumber: 1,
             vehicleType: 1,
             numberOfPassengers: 1,
+            extraPassengers: 1,
           },
         },
       )
@@ -44,7 +46,11 @@ try {
   const tripPeopleById = new Map(
     tripDocs.map((trip) => [
       String(trip._id),
-      Math.max(1, Number(trip.numberOfPassengers ?? 1) || 1),
+      getTripPassengerCount(
+        trip.vehicleType ?? "",
+        Math.max(1, Number(trip.numberOfPassengers ?? 1) || 1),
+        Number(trip.extraPassengers ?? 0) || 0,
+      ),
     ]),
   );
 
@@ -58,16 +64,13 @@ try {
         : passenger;
       if (tripId != null && String(tripId)) {
         const tripKey = String(tripId);
+        const ridePassengerCount = Math.max(
+          1,
+          Number(isObject ? passenger.numberOfPassengers : undefined) || 1,
+        );
         peopleByTripId.set(
           tripKey,
-          Math.max(
-            1,
-            Number(
-              (isObject ? passenger.numberOfPassengers : undefined) ??
-                tripPeopleById.get(tripKey) ??
-                1,
-            ) || 1,
-          ),
+          Math.max(ridePassengerCount, tripPeopleById.get(tripKey) ?? 1),
         );
       } else if (
         includeUnattributed &&
@@ -109,7 +112,11 @@ try {
       : [];
   });
   const overCapacityTrips = tripDocs.flatMap((trip) => {
-    const passengers = Math.max(1, Number(trip.numberOfPassengers ?? 1) || 1);
+    const passengers = getTripPassengerCount(
+      trip.vehicleType ?? "",
+      Math.max(1, Number(trip.numberOfPassengers ?? 1) || 1),
+      Number(trip.extraPassengers ?? 0) || 0,
+    );
     const capacity = getVehiclePassengerCapacity(trip.vehicleType ?? "");
     return passengers > capacity
       ? [{ tripId: String(trip._id), tripNumber: trip.tripNumber, vehicleType: trip.vehicleType, passengers, capacity }]

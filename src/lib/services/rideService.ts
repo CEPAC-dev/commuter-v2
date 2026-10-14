@@ -24,7 +24,10 @@ import {
   getNextPassengerNumber,
 } from "@/lib/passengerNumbers";
 import { sanitizePickupPinFields } from "@/lib/pickupPinSafety";
-import { isRideWithinCapacity } from "@/lib/rideCapacity";
+import {
+  getTripPassengerCount,
+  isRideWithinCapacity,
+} from "@/lib/rideCapacity";
 import { countRidePassengers } from "@/lib/ridePassengerCount";
 
 type MatchResult = {
@@ -140,15 +143,6 @@ function normalizeRoutePayload(route: unknown[] = []): unknown[] {
 }
 
 async function createRide(matchResult: MatchResult) {
-  if (
-    !isRideWithinCapacity(
-      matchResult.vehicleType,
-      matchResult.passengers.map((passenger) => passenger.numberOfPassengers),
-    )
-  ) {
-    throw new Error("Selected trips exceed this vehicle's passenger capacity.");
-  }
-
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -159,13 +153,17 @@ async function createRide(matchResult: MatchResult) {
 
     const tripIds = matchResult.passengers.map((p) => p.tripId);
     const trips = await Trip.find({ _id: { $in: tripIds } })
-      .select("pickupStation dropoffStation")
+      .select(
+        "pickupStation dropoffStation numberOfPassengers extraPassengers",
+      )
       .session(session)
       .lean<
         {
           _id: unknown;
           pickupStation?: StationSelection;
           dropoffStation?: StationSelection;
+          numberOfPassengers?: number;
+          extraPassengers?: number;
         }[]
       >();
     const tripById = new Map(trips.map((trip) => [String(trip._id), trip]));
@@ -174,8 +172,15 @@ async function createRide(matchResult: MatchResult) {
     const passengersForRide = matchResult.passengers.map((p, index) => {
       const trip = tripById.get(String(p.tripId));
       let seats = p.seatNumbers;
-      const count = p.numberOfPassengers || 1;
-      if (!Array.isArray(seats) || seats.length === 0) {
+      const count = Math.max(
+        p.numberOfPassengers || 1,
+        getTripPassengerCount(
+          matchResult.vehicleType,
+          trip?.numberOfPassengers ?? p.numberOfPassengers,
+          trip?.extraPassengers ?? 0,
+        ),
+      );
+      if (!Array.isArray(seats) || seats.length !== count) {
         seats = Array.from({ length: count }, (_, i) => currentSeatCounter + i);
         currentSeatCounter += count;
       } else {
@@ -200,6 +205,14 @@ async function createRide(matchResult: MatchResult) {
         status: "waiting",
       };
     });
+    if (
+      !isRideWithinCapacity(
+        matchResult.vehicleType,
+        passengersForRide.map((passenger) => passenger.numberOfPassengers),
+      )
+    ) {
+      throw new Error("Selected trips exceed this vehicle's passenger capacity.");
+    }
 
     const firstTrip = tripById.get(String(matchResult.passengers[0]?.tripId));
     const rideNumber = await getNextSequence("rideNumber", session);

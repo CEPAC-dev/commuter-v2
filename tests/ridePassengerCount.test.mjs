@@ -14,6 +14,12 @@ test("cancelling a three-person Trip removes all three people atomically", () =>
   assert.equal(decrementRidePassengerCount(7, 3), 4);
 });
 
+test("cancelling a three-person shared Trip uses the shared booking definition", async () => {
+  const { getTripPassengerCount } = await import("../src/lib/rideCapacity.ts");
+  const cancelledPeople = getTripPassengerCount("van_shared", 1, 2);
+  assert.equal(decrementRidePassengerCount(7, cancelledPeople), 4);
+});
+
 test("Ride passenger counts are people, not RidePassenger entries", () => {
   assert.equal(countRidePassengers([1, 3, 2]), 6);
 });

@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
         paymentStatus: "paid",
       })
         .select(
-          "_id tripNumber date pickupTime arrivalTime pickup dropoff vehicleType rideType priceEgp numberOfPassengers userId",
+          "_id tripNumber date pickupTime arrivalTime pickup dropoff vehicleType rideType priceEgp numberOfPassengers extraPassengers userId",
         )
         .sort({ date: 1, pickupTime: 1 })
         .lean(),

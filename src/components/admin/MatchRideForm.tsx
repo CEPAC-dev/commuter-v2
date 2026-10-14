@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { getVehiclePassengerCapacity } from "@/lib/config/vehicles";
-import { isRideWithinCapacity } from "@/lib/rideCapacity";
+import {
+  getTripPassengerCount,
+  isRideWithinCapacity,
+} from "@/lib/rideCapacity";
 
 type PointLike = {
   address?: string;
@@ -31,6 +34,7 @@ type TripOption = {
   rideType: string;
   priceEgp: number;
   numberOfPassengers?: number;
+  extraPassengers?: number;
   userId: string;
 };
 
@@ -137,8 +141,11 @@ export default function MatchRideForm({
           dropoffOrder: existing.dropoffOrder ?? dropoffOrder,
           numberOfPassengers:
             existing.numberOfPassengers ??
-            selectedTrip?.numberOfPassengers ??
-            1,
+            getTripPassengerCount(
+              vehicleType,
+              selectedTrip?.numberOfPassengers ?? 1,
+              selectedTrip?.extraPassengers ?? 0,
+            ),
           priceEgp: existing.priceEgp ?? selectedTrip?.priceEgp ?? 0,
         };
       });
@@ -272,9 +279,14 @@ export default function MatchRideForm({
       return;
     }
 
-    const selectedPassengerCounts = selectedTripIds.map(
-      (tripId) => passengerInputs[tripId]?.numberOfPassengers ?? 1,
-    );
+    const selectedPassengerCounts = selectedTripIds.map((tripId) => {
+      const trip = trips.find((item) => String(item._id) === tripId);
+      return getTripPassengerCount(
+        vehicleType,
+        passengerInputs[tripId]?.numberOfPassengers ?? 1,
+        trip?.extraPassengers ?? 0,
+      );
+    });
     if (!isRideWithinCapacity(vehicleType, selectedPassengerCounts)) {
       setFeedback({
         type: "error",
@@ -285,7 +297,12 @@ export default function MatchRideForm({
 
     const route = orderedPoints.map((pt) => {
       const input = passengerInputs[pt.tripId] ?? { numberOfPassengers: 1 };
-      const paxCount = input.numberOfPassengers || 1;
+      const trip = trips.find((item) => String(item._id) === pt.tripId);
+      const paxCount = getTripPassengerCount(
+        vehicleType,
+        input.numberOfPassengers || 1,
+        trip?.extraPassengers ?? 0,
+      );
       return {
         point: pt.point,
         boarding: pt.type === "pickup" ? paxCount : 0,
@@ -311,7 +328,11 @@ export default function MatchRideForm({
         dropoff: trip?.dropoff,
         pickupOrder: pIdx >= 0 ? pIdx + 1 : input.pickupOrder,
         dropoffOrder: dIdx >= 0 ? dIdx + 1 : input.dropoffOrder,
-        numberOfPassengers: input.numberOfPassengers,
+        numberOfPassengers: getTripPassengerCount(
+          vehicleType,
+          input.numberOfPassengers,
+          trip?.extraPassengers ?? 0,
+        ),
         priceEgp: input.priceEgp,
         seatNumbers: input.seatNumbers ?? [],
       };
@@ -371,10 +392,17 @@ export default function MatchRideForm({
     }
   }
 
-  const totalSelectedPassengers = selectedTripIds.reduce(
-    (sum, tripId) => sum + (passengerInputs[tripId]?.numberOfPassengers ?? 1),
-    0,
-  );
+  const totalSelectedPassengers = selectedTripIds.reduce((sum, tripId) => {
+    const trip = trips.find((item) => String(item._id) === tripId);
+    return (
+      sum +
+      getTripPassengerCount(
+        vehicleType,
+        passengerInputs[tripId]?.numberOfPassengers ?? 1,
+        trip?.extraPassengers ?? 0,
+      )
+    );
+  }, 0);
   const capacityExceeded =
     totalSelectedPassengers > getVehiclePassengerCapacity(vehicleType);
 
@@ -714,9 +742,18 @@ export default function MatchRideForm({
                 const input = passengerInputs[tripId] ?? {
                   pickupOrder: 1,
                   dropoffOrder: 1,
-                  numberOfPassengers: trip.numberOfPassengers ?? 1,
+                  numberOfPassengers: getTripPassengerCount(
+                    vehicleType,
+                    trip.numberOfPassengers ?? 1,
+                    trip.extraPassengers ?? 0,
+                  ),
                   priceEgp: trip.priceEgp ?? 0,
                 };
+                const passengerCount = getTripPassengerCount(
+                  vehicleType,
+                  input.numberOfPassengers,
+                  trip.extraPassengers ?? 0,
+                );
                 return (
                   <div
                     key={tripId}
@@ -787,7 +824,7 @@ export default function MatchRideForm({
                               value={input.seatNumbers?.[0] ?? ""}
                               onChange={(e) => {
                                 const startSeat = Number(e.target.value);
-                                const count = input.numberOfPassengers || 1;
+                                const count = passengerCount;
                                 const seats = startSeat
                                   ? Array.from(
                                       { length: count },
@@ -805,11 +842,12 @@ export default function MatchRideForm({
                               <option value="">Auto Seat</option>
                               {Array.from(
                                 {
-                                  length: vehicleType.includes("microbus")
-                                    ? 9
-                                    : vehicleType.includes("van")
-                                      ? 5
-                                      : 3,
+                                  length: Math.max(
+                                    0,
+                                    getVehiclePassengerCapacity(vehicleType) -
+                                      passengerCount +
+                                      1,
+                                  ),
                                 },
                                 (_, i) => i + 1,
                               ).map((sNo) => (

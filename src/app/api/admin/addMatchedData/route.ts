@@ -9,7 +9,10 @@ import { Ride } from "@/models/Ride";
 import { User } from "@/models/User";
 import { getDriverSummaryByUserNumber } from "@/lib/services/trips";
 import { createRide } from "@/lib/services/rideService";
-import { isRideWithinCapacity } from "@/lib/rideCapacity";
+import {
+  getTripPassengerCount,
+  isRideWithinCapacity,
+} from "@/lib/rideCapacity";
 import { countRidePassengers } from "@/lib/ridePassengerCount";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 
@@ -428,6 +431,8 @@ type TripRecord = {
   pickup?: { address?: string; lat?: number; lng?: number } | null;
   dropoff?: { address?: string; lat?: number; lng?: number } | null;
   numberOfPassengers?: number;
+  extraPassengers?: number;
+  vehicleType?: string;
   summary?: Record<string, unknown> | null;
   details?: Record<string, unknown> | null;
 };
@@ -729,7 +734,11 @@ async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
         dropoff: trip.dropoff,
         pickupOrder: pickupOrder.get(number) ?? 0,
         dropoffOrder: dropoffOrder.get(number) ?? 0,
-        numberOfPassengers: trip.numberOfPassengers ?? 1,
+        numberOfPassengers: getTripPassengerCount(
+          summary.vehicleType,
+          trip.numberOfPassengers ?? 1,
+          trip.extraPassengers ?? 0,
+        ),
         tripCost: trip.priceEgp ?? 0,
         seatNumbers: trip.seatNumbers ?? [],
       };
@@ -1329,9 +1338,13 @@ export async function POST(req: NextRequest) {
             },
             pickupOrder: pickupOrderByTrip.get(tripNumber) ?? 0,
             dropoffOrder: dropoffOrderByTrip.get(tripNumber) ?? 0,
-            numberOfPassengers: Math.max(
-              1,
-              Number(tripRecord.numberOfPassengers ?? 1) || 1,
+            numberOfPassengers: getTripPassengerCount(
+              String(summary.vehicleType ?? vehicleType),
+              Math.max(
+                1,
+                Number(tripRecord.numberOfPassengers ?? 1) || 1,
+              ),
+              Number(tripRecord.extraPassengers ?? 0) || 0,
             ),
             tripCost: Number(summary.totalFees ?? 0) || 0,
             seatNumber:
@@ -1471,11 +1484,14 @@ export async function POST(req: NextRequest) {
 
         if (matchedTripIds.length > 0) {
           const tripDocs = await Trip.find({ _id: { $in: matchedTripIds } })
-            .select("_id tripNumber summary details")
+            .select("_id tripNumber summary details numberOfPassengers extraPassengers vehicleType")
             .lean<
               {
                 _id: unknown;
                 tripNumber: number | string;
+                numberOfPassengers?: number;
+                extraPassengers?: number;
+                vehicleType?: string;
                 summary?: Record<string, unknown>;
                 details?: Record<string, unknown>;
               }[]

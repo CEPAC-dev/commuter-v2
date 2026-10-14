@@ -191,11 +191,7 @@ export function waitingCostEgp(
 
 /** Max extra passengers allowed per vehicle type */
 export function maxExtraPassengers(key: VehicleKey | ""): number {
-  if (key === "taxi_shared" || key === "shared_car") return 2;
-  if (key === "van_shared") return 4;
-  if (key === "microbus_shared") return 9;
-  if (key === "mini_bus") return 13;
-  return 2; // private_car, taxi_private, taxi_shared, or unset
+  return Math.max(0, getVehiclePassengerCapacity(key) - 1);
 }
 
 /**

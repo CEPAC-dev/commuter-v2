@@ -21,7 +21,10 @@ import {
   getVehiclePassengerCapacity,
   priceForSelectedDate,
 } from "@/lib/config/vehicles";
-import { isVehiclePassengerCountAllowed } from "@/lib/rideCapacity";
+import {
+  getTripPassengerCount,
+  isVehiclePassengerCountAllowed,
+} from "@/lib/rideCapacity";
 import { resolveActiveRegion } from "@/lib/regions/resolveActiveRegion";
 import { bookingWindow } from "@/lib/time/bookingDates";
 import {
@@ -398,8 +401,17 @@ export async function POST(req: NextRequest) {
     const vehicle = vehiclesMap[vKey];
     const tripRideType = vehicle.ride;
     const vehicleCapacity = getVehiclePassengerCapacity(vKey);
-    const numberOfPassengers = Number(t.numberOfPassengers ?? 1);
-    if (!isVehiclePassengerCountAllowed(vKey, numberOfPassengers)) {
+    const requestedPassengerCount = Number(t.numberOfPassengers ?? 1);
+    const numberOfPassengers = getTripPassengerCount(
+      vKey,
+      requestedPassengerCount,
+      Number(t.extraPassengers ?? 0),
+    );
+    if (
+      !Number.isInteger(requestedPassengerCount) ||
+      requestedPassengerCount < 1 ||
+      !isVehiclePassengerCountAllowed(vKey, numberOfPassengers)
+    ) {
       return NextResponse.json(
         {
           error: "VEHICLE_CAPACITY_EXCEEDED",
@@ -779,7 +791,7 @@ export async function POST(req: NextRequest) {
       priceEgp,
       extraPassengers,
       preferedGender,
-      numberOfPassengers: 1,
+      numberOfPassengers,
       stops: [],
       passengers: [],
       ...(selectedPickup && {

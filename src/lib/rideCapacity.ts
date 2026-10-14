@@ -1,4 +1,24 @@
-import { getVehiclePassengerCapacity } from "./config/vehicles.ts";
+import {
+  getVehiclePassengerCapacity,
+  VEHICLES,
+} from "./config/vehicles.ts";
+
+export function getTripPassengerCount(
+  vehicleType: string,
+  numberOfPassengers: number,
+  extraPassengers = 0,
+): number {
+  const baseCount =
+    Number.isInteger(numberOfPassengers) && numberOfPassengers > 0
+      ? numberOfPassengers
+      : 0;
+  if (VEHICLES[vehicleType]?.ride !== "shared") return baseCount;
+
+  const extraCount = Number.isFinite(extraPassengers)
+    ? Math.max(0, Math.round(extraPassengers))
+    : 0;
+  return Math.max(baseCount, 1 + extraCount);
+}
 
 export function isVehiclePassengerCountAllowed(
   vehicleType: string,

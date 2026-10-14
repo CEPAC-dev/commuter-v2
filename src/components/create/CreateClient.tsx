@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { getTripPassengerCount, isVehiclePassengerCountAllowed } from "@/lib/rideCapacity";
 import {
   Plus,
   Eye,
@@ -937,6 +938,23 @@ export default function CreateClient({
         vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType];
       const vehicleCapacity = getVehiclePassengerCapacity(trip.vehicleType);
       const isPrivate = vehicle.ride === "private";
+      if (
+        !Number.isInteger(trip.numberOfPassengers) ||
+        trip.numberOfPassengers < 1 ||
+        !isVehiclePassengerCountAllowed(
+          trip.vehicleType,
+          getTripPassengerCount(
+            trip.vehicleType,
+            trip.numberOfPassengers,
+            trip.extraPassengers,
+          ),
+        )
+      ) {
+        return t("create.validate_passenger_count", {
+          n,
+          max: vehicleCapacity,
+        });
+      }
       if (trip.sameGenderPreference && !userGender) {
         return t("create.gender_required");
       }
@@ -946,15 +964,6 @@ export default function CreateClient({
           return t("create.validate_pickup_time_required", { n });
         if (!trip.arrivalTime || !trip.distanceKm || !trip.durationMinutes)
           return t("create.validate_route_calculating", { n });
-        if (
-          !Number.isInteger(trip.numberOfPassengers) ||
-          trip.numberOfPassengers < 1 ||
-          trip.numberOfPassengers > vehicleCapacity
-        )
-          return t("create.validate_passenger_count", {
-            n,
-            max: vehicleCapacity,
-          });
         if (trip.stops.length > 4) return t("create.validate_max_stops", { n });
 
         let onboard = trip.numberOfPassengers;

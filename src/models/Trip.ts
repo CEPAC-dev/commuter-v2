@@ -194,7 +194,8 @@ const TripSchema = new Schema(
       ref: "Payment",
       required: false,
     },
-    extraPassengers: { type: Number, default: 0, min: 0, max: 9 },
+    // Vehicle-specific limits are validated against vehicles.ts at booking time.
+    extraPassengers: { type: Number, default: 0, min: 0 },
     preferedGender: {
       type: String,
       enum: ["male", "female", null],

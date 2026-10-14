@@ -12,6 +12,7 @@ import {
   countRidePassengers,
   decrementRidePassengerCount,
 } from "@/lib/ridePassengerCount";
+import { getTripPassengerCount } from "@/lib/rideCapacity";
 import { Log } from "@/models/Log";
 import { evaluateTripCancellation } from "@/lib/passengerCancellationPolicy";
 import { wasMoneyTaken } from "@/lib/requestPaymentState";
@@ -531,7 +532,11 @@ export async function POST(
             : countRidePassengers(passengerCounts);
         const nextCount = decrementRidePassengerCount(
           currentCount,
-          trip.numberOfPassengers,
+          getTripPassengerCount(
+            trip.vehicleType,
+            trip.numberOfPassengers,
+            trip.extraPassengers,
+          ),
         );
         const retainedPassengers = ridePassengers.filter(
           (passenger) =>
