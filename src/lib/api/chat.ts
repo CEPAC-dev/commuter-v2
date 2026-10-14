@@ -62,3 +62,16 @@ export async function sendMessage(
   });
   return parseResponse<{ message: ChatMessage }>(res);
 }
+
+export async function submitChatReport(
+  tripId: string,
+  body: { reason: "abuse" | "contact_sharing" | "harassment" | "other"; note?: string },
+): Promise<{ reportId: string; status: "open" }> {
+  const res = await fetch(`/api/trips/${tripId}/chat/report`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseResponse<{ reportId: string; status: "open" }>(res);
+}

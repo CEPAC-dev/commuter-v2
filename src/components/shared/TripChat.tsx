@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChatRequestError, getTripMessages, sendMessage, type ChatMessage } from "@/lib/api/chat";
+import { ChatRequestError, getTripMessages, sendMessage, submitChatReport, type ChatMessage } from "@/lib/api/chat";
 import { useClientLocale } from "@/lib/i18n/client";
 import { translate } from "@/lib/i18n";
 
@@ -60,6 +60,13 @@ export default function TripChat({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tabVisible, setTabVisible] = useState(true);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportConfirm, setReportConfirm] = useState(false);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
+  const [reportSending, setReportSending] = useState(false);
+  const [reportReason, setReportReason] = useState<"abuse" | "contact_sharing" | "harassment" | "other">("abuse");
+  const [reportNote, setReportNote] = useState("");
+  const [reportError, setReportError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastMessageId = useRef<string | undefined>(undefined);
@@ -178,6 +185,35 @@ export default function TripChat({
     }
   };
 
+  const handleReport = async () => {
+    if (reportSending) return;
+    setReportSending(true);
+    setReportError(null);
+    try {
+      await submitChatReport(tripId, {
+        reason: reportReason,
+        ...(reportNote.trim() ? { note: reportNote.trim() } : {}),
+      });
+      setReportSubmitted(true);
+      setReportConfirm(false);
+      setReportOpen(false);
+    } catch (cause) {
+      if (cause instanceof ChatRequestError && cause.code === "CHAT_CLOSED") {
+        setServerOpen(false);
+        setCanWrite(false);
+        setReportError(t("chat.closed"));
+      } else if (cause instanceof ChatRequestError && cause.code === "ALREADY_REPORTED") {
+        setReportError(t("chat.report_already_submitted"));
+      } else if (cause instanceof ChatRequestError && cause.code === "CHAT_REPORT_RATE_LIMITED") {
+        setReportError(t("chat.report_rate_limited"));
+      } else {
+        setReportError(t("chat.report_error"));
+      }
+    } finally {
+      setReportSending(false);
+    }
+  };
+
   return (
     <>
       {!ready ? (
@@ -273,6 +309,45 @@ export default function TripChat({
           {error && <p role="alert" style={{ margin: "0 14px 8px", color: "#B42318", fontSize: 12 }}>{error}</p>}
           {serverOpen && canWrite && (
             <div style={{ padding: "10px 12px 14px", borderTop: "1px solid #F1F5F9", display: "flex", flexDirection: "column", gap: 9, maxHeight: "38vh", overflowY: "auto" }}>
+              {reportSubmitted ? (
+                <p role="status" style={{ margin: 0, color: "#26734D", fontSize: 13 }}>
+                  {t("chat.report_submitted")}
+                </p>
+              ) : reportOpen ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {reportConfirm ? (
+                    <>
+                      <p style={{ margin: 0, color: "#0B1E3D", fontSize: 13 }}>{t("chat.report_confirm")}</p>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button type="button" disabled={reportSending} onClick={() => setReportConfirm(false)} style={{ minHeight: 44, padding: "8px 12px", border: "1px solid #CBD5E1", borderRadius: 10, background: "#fff", cursor: "pointer" }}>{t("chat.report_edit")}</button>
+                        <button type="button" disabled={reportSending} onClick={() => void handleReport()} style={{ minHeight: 44, padding: "8px 12px", border: 0, borderRadius: 10, background: "#B42318", color: "#fff", fontWeight: 700, cursor: "pointer" }}>{reportSending ? t("chat.report_sending") : t("chat.report_confirm_action")}</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <label style={{ display: "grid", gap: 5, fontSize: 12, color: "#5A6A7A" }}>
+                        {t("chat.report_reason")}
+                        <select value={reportReason} onChange={(event) => setReportReason(event.target.value as typeof reportReason)} style={{ minHeight: 44, border: "1px solid #CBD5E1", borderRadius: 10, padding: "8px 10px", font: "inherit" }}>
+                          {(["abuse", "contact_sharing", "harassment", "other"] as const).map((reason) => (
+                            <option key={reason} value={reason}>{t(`chat.report_reason.${reason}`)}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: "grid", gap: 5, fontSize: 12, color: "#5A6A7A" }}>
+                        {t("chat.report_note")}
+                        <textarea maxLength={300} value={reportNote} onChange={(event) => setReportNote(event.target.value)} rows={3} style={{ border: "1px solid #CBD5E1", borderRadius: 10, padding: 10, resize: "vertical", font: "inherit" }} />
+                      </label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button type="button" onClick={() => { setReportOpen(false); setReportError(null); }} style={{ minHeight: 44, padding: "8px 12px", border: "1px solid #CBD5E1", borderRadius: 10, background: "#fff", cursor: "pointer" }}>{t("chat.report_cancel")}</button>
+                        <button type="button" onClick={() => { setReportConfirm(true); setReportError(null); }} style={{ minHeight: 44, padding: "8px 12px", border: 0, borderRadius: 10, background: "#B42318", color: "#fff", fontWeight: 700, cursor: "pointer" }}>{t("chat.report_review")}</button>
+                      </div>
+                    </>
+                  )}
+                  {reportError && <p role="alert" style={{ margin: 0, color: "#B42318", fontSize: 12 }}>{reportError}</p>}
+                </div>
+              ) : (
+                <button type="button" onClick={() => { setReportOpen(true); setReportError(null); }} style={{ alignSelf: "flex-start", minHeight: 40, padding: "7px 12px", border: "1px solid #F1B8B4", borderRadius: 10, background: "#FFF8F7", color: "#B42318", fontWeight: 700, cursor: "pointer" }}>{t("chat.report")}</button>
+              )}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
                 {presets.map((presetKey) => (
                   <button

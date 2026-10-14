@@ -26,7 +26,8 @@ export async function notifyAdmins(input: {
     | "waiting_list_trip_created"
     | "admin_campaign_claim"
     | "late_gateway_payment"
-    | "station_suggestion_requested";
+    | "station_suggestion_requested"
+    | "trip_chat_reported";
   dedupeKey: string;
   title: string;
   body: string;
