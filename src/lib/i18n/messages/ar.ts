@@ -470,6 +470,7 @@ export const ar: Record<MessageKey, string> = {
   "chat.send_error": "تعذّر إرسال الرسالة. حاول مرة أخرى.",
   "chat.contact_info_blocked": "قد تحتوي الرسالة على معلومات اتصال. يُرجى إبقاء المحادثة داخل التطبيق.",
   "chat.free_text_suspended": "تم تعليق الرسائل النصية لهذه الرحلة. لا تزال الرسائل الجاهزة متاحة.",
+  "chat.mark_read_error": "تعذر تحديث حالة القراءة.",
   "chat.report": "الإبلاغ عن المحادثة",
   "chat.report_reason": "السبب",
   "chat.report_reason.abuse": "إساءة",

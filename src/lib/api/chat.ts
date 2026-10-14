@@ -75,3 +75,14 @@ export async function submitChatReport(
   });
   return parseResponse<{ reportId: string; status: "open" }>(res);
 }
+
+export async function markTripChatRead(
+  tripId: string,
+): Promise<{ lastReadAt: string }> {
+  const res = await fetch(`/api/trips/${tripId}/chat/read`, {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+  });
+  return parseResponse<{ lastReadAt: string }>(res);
+}

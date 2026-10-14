@@ -46,6 +46,20 @@ const MESSAGE_RETENTION_TTL_INDEX = {
     name: "chat_messages_created_at_ttl",
   },
 };
+const CHAT_READ_STATE_UNIQUE_INDEX = {
+  keys: { tripId: 1, userId: 1 },
+  options: {
+    unique: true,
+    name: "chat_read_state_trip_user_unique",
+  },
+};
+const CHAT_READ_STATE_TTL_INDEX = {
+  keys: { updatedAt: 1 },
+  options: {
+    expireAfterSeconds: (chatRetentionDays + 7) * 24 * 60 * 60,
+    name: "chat_read_state_updated_at_ttl",
+  },
+};
 
 const production =
   (process.env.APP_ENV ?? process.env.NODE_ENV ?? "development").toLowerCase() ===
@@ -70,6 +84,7 @@ try {
   const tripShares = database.collection("tripshares");
   const chatReports = database.collection("chat_reports");
   const messages = database.collection("messages");
+  const chatReadStates = database.collection("chat_read_states");
 
   if (checkOnly) {
     const [duplicate] = await walletTransactions
@@ -129,6 +144,7 @@ try {
       indexesFor("messages"),
       indexesFor("chat_reports"),
     ]);
+    const readStateIndexes = await indexesFor("chat_read_states");
     const messageTtlReady = messageIndexes.some(
       (index) =>
         index.name === MESSAGE_RETENTION_TTL_INDEX.options.name &&
@@ -150,7 +166,32 @@ try {
     console.log(
       `chat_reports open-report unique index: ${chatReportUniqueReady ? "ready" : "missing"}`,
     );
-    if (!messageTtlReady || !chatReportUniqueReady) process.exitCode = 1;
+    const chatReadStateUniqueReady = readStateIndexes.some(
+      (index) =>
+        index.name === CHAT_READ_STATE_UNIQUE_INDEX.options.name &&
+        index.key.tripId === 1 &&
+        index.key.userId === 1 &&
+        index.unique === true,
+    );
+    const chatReadStateTtlReady = readStateIndexes.some(
+      (index) =>
+        index.name === CHAT_READ_STATE_TTL_INDEX.options.name &&
+        index.key.updatedAt === 1 &&
+        index.expireAfterSeconds ===
+          CHAT_READ_STATE_TTL_INDEX.options.expireAfterSeconds,
+    );
+    console.log(
+      `chat_read_states unique trip/user index: ${chatReadStateUniqueReady ? "ready" : "missing"}`,
+    );
+    console.log(
+      `chat_read_states TTL index (+7 days): ${chatReadStateTtlReady ? "ready" : "missing or mismatched"}`,
+    );
+    if (
+      !messageTtlReady ||
+      !chatReportUniqueReady ||
+      !chatReadStateUniqueReady ||
+      !chatReadStateTtlReady
+    ) process.exitCode = 1;
   } else {
     await database.collection("trip_spacing_locks").createIndex(
       { updatedAt: 1 },
@@ -191,6 +232,26 @@ try {
     await messages.createIndex(
       MESSAGE_RETENTION_TTL_INDEX.keys,
       MESSAGE_RETENTION_TTL_INDEX.options,
+    );
+    await chatReadStates.createIndex(
+      CHAT_READ_STATE_UNIQUE_INDEX.keys,
+      CHAT_READ_STATE_UNIQUE_INDEX.options,
+    );
+    const currentReadStateIndexes = await chatReadStates.listIndexes().toArray();
+    const currentReadStateTtl = currentReadStateIndexes.find(
+      (index) => index.name === CHAT_READ_STATE_TTL_INDEX.options.name,
+    );
+    if (
+      currentReadStateTtl &&
+      (currentReadStateTtl.expireAfterSeconds !==
+        CHAT_READ_STATE_TTL_INDEX.options.expireAfterSeconds ||
+        currentReadStateTtl.key.updatedAt !== 1)
+    ) {
+      await chatReadStates.dropIndex(CHAT_READ_STATE_TTL_INDEX.options.name);
+    }
+    await chatReadStates.createIndex(
+      CHAT_READ_STATE_TTL_INDEX.keys,
+      CHAT_READ_STATE_TTL_INDEX.options,
     );
     await walletTransactions.createIndex(
       { paymentId: 1, tripId: 1, type: 1 },

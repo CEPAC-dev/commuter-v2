@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChatRequestError, getTripMessages, sendMessage, submitChatReport, type ChatMessage } from "@/lib/api/chat";
+import { ChatRequestError, getTripMessages, markTripChatRead, sendMessage, submitChatReport, type ChatMessage } from "@/lib/api/chat";
 import { useClientLocale } from "@/lib/i18n/client";
 import { translate } from "@/lib/i18n";
 
@@ -138,6 +138,14 @@ export default function TripChat({
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+
+  const latestMessageId = messages.at(-1)?.id;
+  useEffect(() => {
+    if (!panelOpen || !tabVisible || !serverOpen) return;
+    void markTripChatRead(tripId).catch(() => {
+      setError(t("chat.mark_read_error"));
+    });
+  }, [latestMessageId, panelOpen, serverOpen, t, tabVisible, tripId]);
 
   useEffect(() => {
     if (panelOpen && freeTextEnabled) inputRef.current?.focus();

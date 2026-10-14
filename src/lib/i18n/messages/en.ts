@@ -474,6 +474,7 @@ export const en = {
   "chat.send_error": "Couldn't send that message. Try again.",
   "chat.contact_info_blocked": "This message may contain contact information. Please keep chat in the app.",
   "chat.free_text_suspended": "Free-text messages are suspended for this trip. Preset messages are still available.",
+  "chat.mark_read_error": "Couldn't update the read status.",
   "chat.report": "Report chat",
   "chat.report_reason": "Reason",
   "chat.report_reason.abuse": "Abuse",
