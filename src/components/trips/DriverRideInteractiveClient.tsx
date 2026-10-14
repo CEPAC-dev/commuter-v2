@@ -140,6 +140,7 @@ export default function DriverRideInteractiveClient({
   const prettyDate = (date: string) => formatDate(locale, date);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [navigationErrorByStation, setNavigationErrorByStation] = useState<Record<number, string>>({});
+  const [rideActionError, setRideActionError] = useState<string | null>(null);
   const isRideTerminal = ride.status === "cancelled" || ride.status === "completed";
 
   const handleGoToLocation = async (step: StepItem) => {
@@ -382,6 +383,7 @@ export default function DriverRideInteractiveClient({
   // Geolocation helpers
   const handleStartRide = async () => {
     setLoadingAction("start");
+    setRideActionError(null);
     let loc: GeoPoint | null = null;
     try {
       if (typeof window !== "undefined" && "geolocation" in navigator) {
@@ -403,7 +405,7 @@ export default function DriverRideInteractiveClient({
     }
 
     try {
-      await fetch(`/api/actions/ride/${ride.id}`, {
+      const response = await fetch(`/api/actions/ride/${ride.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -411,8 +413,21 @@ export default function DriverRideInteractiveClient({
           metadata: { currentLocation: loc },
         }),
       });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || t("ride.start_error"));
+      }
     } catch (err) {
       console.error(err);
+      setRideActionError(
+        err instanceof TypeError
+          ? t("ride.action_network_error")
+          : err instanceof Error
+            ? err.message
+            : t("ride.start_error"),
+      );
+      setLoadingAction(null);
+      return;
     }
 
     if (loc) setDriverOrigin(loc);
@@ -613,6 +628,7 @@ export default function DriverRideInteractiveClient({
 
   const handleCloseRide = async () => {
     setLoadingAction("close");
+    setRideActionError(null);
     let loc: GeoPoint | null = null;
     try {
       if (typeof window !== "undefined" && "geolocation" in navigator) {
@@ -634,7 +650,7 @@ export default function DriverRideInteractiveClient({
     }
 
     try {
-      await fetch(`/api/actions/ride/${ride.id}`, {
+      const response = await fetch(`/api/actions/ride/${ride.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -642,8 +658,21 @@ export default function DriverRideInteractiveClient({
           metadata: { currentLocation: loc },
         }),
       });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || t("ride.end_error"));
+      }
     } catch (err) {
       console.error(err);
+      setRideActionError(
+        err instanceof TypeError
+          ? t("ride.action_network_error")
+          : err instanceof Error
+            ? err.message
+            : t("ride.end_error"),
+      );
+      setLoadingAction(null);
+      return;
     }
 
     if (loc) setDriverDestination(loc);
@@ -663,6 +692,15 @@ export default function DriverRideInteractiveClient({
       />
 
       <main style={{ maxWidth: 640, margin: "0 auto", padding: "24px 20px 56px" }}>
+        {rideActionError && (
+          <div
+            role="alert"
+            className="mb-4 rounded-lg bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700"
+          >
+            {rideActionError}
+          </div>
+        )}
+
         {/* Header summary */}
         <div style={{ marginBottom: 20 }}>
           <span
