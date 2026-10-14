@@ -16,6 +16,7 @@ import {
 import { useClientLocale } from "@/lib/i18n/client";
 import { formatDate, formatTime, formatEgp } from "@/lib/i18n";
 import AppHeader from "@/components/layout/AppHeader";
+import TripChat from "@/components/shared/TripChat";
 import RouteMap from "@/components/shared/RouteMap";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import { VEHICLES, type VehicleKey } from "@/lib/config/vehicles";
@@ -922,6 +923,48 @@ export default function DriverRideInteractiveClient({
           confirmedStationIndices={confirmedStationIndices}
           stationSelections={stationSelections}
         />
+
+        <section
+          aria-label={t("chat.manifest_title")}
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            border: "1px solid #eef0f3",
+            padding: 18,
+            marginBottom: 16,
+          }}
+        >
+          <h2 style={{ margin: "0 0 12px", color: "#0B1E3D", fontSize: 15 }}>
+            {t("chat.manifest_title")}
+          </h2>
+          <div style={{ display: "grid", gap: 10 }}>
+            {ride.passengers.map((passenger) => (
+              <div
+                key={`chat-passenger-${passenger.tripId}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  padding: 10,
+                  border: "1px solid #E7ECEF",
+                  borderRadius: 12,
+                }}
+              >
+                <strong style={{ color: "#0B1E3D", fontSize: 14 }}>
+                  {passengerLabel(passenger)}
+                </strong>
+                <TripChat
+                  tripId={passenger.tripId}
+                  role="driver"
+                  passengerNumber={passenger.passengerNumber}
+                  triggerLabel={t("chat.open")}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
 
         {/* Route Details Section */}
         <div

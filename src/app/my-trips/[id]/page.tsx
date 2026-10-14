@@ -657,9 +657,7 @@ export default async function TripDetailPage({
                 showCall={isOngoing && Boolean(trip.assignedDriver.phone)}
               />
             )}
-            {isOngoing && Boolean(trip.assignedDriver || trip.rideId) && (
-              <TripChat tripId={id} role={isDriver ? "driver" : "user"} />
-            )}
+            {!isDriver && <TripChat tripId={id} role="user" />}
           </div>
 
           {/* Secondary Column: Breakdown, Passenger stops & timestamp */}
