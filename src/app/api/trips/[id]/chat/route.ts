@@ -6,6 +6,11 @@ import { Message } from "@/models/Message";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { getTripChatAccess } from "@/lib/tripChatAccess";
+import {
+  isChatFreeTextEnabled,
+  isChatPreset,
+  type ChatPresetKey,
+} from "@/lib/chatPresets";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -15,14 +20,18 @@ type MessageRow = {
   _id: unknown;
   senderId: unknown;
   senderRole: "user" | "driver";
-  text: string;
+  kind: "text" | "preset";
+  presetKey?: string;
+  text?: string;
   createdAt: Date | string;
 };
 
 function shape(message: MessageRow, currentUserId: string) {
   return {
     id: String(message._id),
-    text: message.text,
+    kind: message.kind ?? "text",
+    presetKey: message.presetKey,
+    text: message.text ?? "",
     senderRole: message.senderRole,
     isMine: String(message.senderId) === currentUserId,
     createdAt:
@@ -106,6 +115,7 @@ export async function GET(req: Request, { params }: RouteContext) {
   return NextResponse.json({
     open: loaded.access.reason === "allowed",
     canWrite: loaded.access.canWrite,
+    freeTextEnabled: isChatFreeTextEnabled(),
     messages: messages.map((message) => shape(message, session.userId)),
   });
 }
@@ -135,7 +145,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     );
   }
 
-  let body: { text?: unknown };
+  let body: { kind?: unknown; presetKey?: unknown; text?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -144,16 +154,41 @@ export async function POST(req: Request, { params }: RouteContext) {
       { status: 400 },
     );
   }
-  const text = typeof body.text === "string" ? body.text.trim() : "";
-  if (!text) {
+  const kind = body.kind ?? "text";
+  const senderRole = loaded.access.role === "driver" ? "driver" : "passenger";
+  let text: string | undefined;
+  let presetKey: ChatPresetKey | undefined;
+  if (kind === "preset") {
+    if (!isChatPreset(senderRole, body.presetKey)) {
+      return NextResponse.json(
+        { errorCode: "INVALID_PRESET", error: "This preset is not available to you." },
+        { status: 400 },
+      );
+    }
+    presetKey = body.presetKey;
+  } else if (kind === "text") {
+    if (!isChatFreeTextEnabled()) {
+      return NextResponse.json(
+        { errorCode: "FREE_TEXT_DISABLED", error: "Free-text chat is disabled." },
+        { status: 403 },
+      );
+    }
+    text = typeof body.text === "string" ? body.text.trim() : "";
+    if (!text) {
+      return NextResponse.json(
+        { errorCode: "MESSAGE_EMPTY", error: "Message is empty." },
+        { status: 400 },
+      );
+    }
+    if (text.length > 500) {
+      return NextResponse.json(
+        { errorCode: "MESSAGE_TOO_LONG", error: "Message is too long." },
+        { status: 400 },
+      );
+    }
+  } else {
     return NextResponse.json(
-      { errorCode: "MESSAGE_EMPTY", error: "Message is empty." },
-      { status: 400 },
-    );
-  }
-  if (text.length > 2000) {
-    return NextResponse.json(
-      { errorCode: "MESSAGE_TOO_LONG", error: "Message is too long." },
+      { errorCode: "INVALID_MESSAGE_KIND", error: "Unsupported message kind." },
       { status: 400 },
     );
   }
@@ -161,7 +196,9 @@ export async function POST(req: Request, { params }: RouteContext) {
   const created = await Message.create({
     tripId: id,
     senderId: session.userId,
-    senderRole: loaded.access.role === "driver" ? "driver" : "user",
+    senderRole: senderRole === "driver" ? "driver" : "user",
+    kind,
+    ...(presetKey ? { presetKey } : {}),
     text,
   });
 
@@ -172,6 +209,8 @@ export async function POST(req: Request, { params }: RouteContext) {
           _id: created._id,
           senderId: created.senderId,
           senderRole: created.senderRole,
+          kind: created.kind,
+          presetKey: created.presetKey,
           text: created.text,
           createdAt: created.createdAt,
         },
