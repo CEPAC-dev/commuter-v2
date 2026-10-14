@@ -28,6 +28,7 @@ export function getVehicleChassisStyle(vType: string): {
 } {
   const isCarOrTaxi =
     vType === "private_car" ||
+    vType === "shared_car" ||
     vType === "taxi_private" ||
     vType === "taxi_shared";
   const isVan = vType === "van_shared";

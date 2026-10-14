@@ -17,7 +17,25 @@ available to the driver. Concurrent station actions use a Ride version check
 when committing the passenger seat assignments, so only one allocation based
 on a given Ride version can be persisted.
 
+`src/lib/config/vehicles.ts` is the single source for passenger capacity.
+Booking validation, matching, boarding allocation, and the seat-map layout use
+`getVehiclePassengerCapacity`; the grid renders exactly that many passenger
+positions. New Trips above capacity are rejected, and over-capacity matching
+groups remain unmatched rather than creating a Ride. Existing records are not
+rewritten automatically.
+
 For legacy Ride data whose active Trip has fewer stored seats than people, the
 seat map fills missing display positions from unused seats when possible. If
 there are not enough unused display positions, it shows the seats already
 stored rather than failing or assigning the same fallback seat twice.
+
+The Ride `passengersCount` field counts people, not RidePassenger entries. Ride
+creation initializes it from each Trip's `numberOfPassengers`; cancelling a
+Trip subtracts that Trip's full group size using a version-checked atomic update
+and clamps the result at zero.
+
+To inspect existing data without modifying it, run
+`node scripts/checkVehicleCapacity.mjs` in an environment with `MONGODB_URI`
+set. The script reports Rides whose combined passenger count exceeds capacity
+and Trips whose own group exceeds their vehicle capacity. It was not run as part
+of this change.

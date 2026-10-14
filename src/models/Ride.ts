@@ -183,6 +183,11 @@ const existingRideModel = models.Ride;
 if (existingRideModel && !existingRideModel.schema.path("regionCode")) {
   existingRideModel.schema.add({ regionCode: RideSchema.obj.regionCode });
 }
+if (existingRideModel && !existingRideModel.schema.path("passengersCount")) {
+  existingRideModel.schema.add({
+    passengersCount: RideSchema.obj.passengersCount,
+  });
+}
 
 export type RideDoc = InferSchemaType<typeof RideSchema>;
 export const Ride = existingRideModel || model("Ride", RideSchema);
