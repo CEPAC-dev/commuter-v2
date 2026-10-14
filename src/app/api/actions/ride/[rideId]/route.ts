@@ -978,6 +978,7 @@ export async function POST(
     } else if (action === "end_ride") {
       rideUpdate.$set = {
         status: "completed",
+        completedAt: new Date(),
         ...(endLocation ? { driverDestination: endLocation } : {}),
       };
     }

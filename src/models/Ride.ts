@@ -165,6 +165,7 @@ const RideSchema = new Schema(
       default: "matched",
       enum: ["matched", "confirmed", "active", "completed", "cancelled"],
     },
+    completedAt: { type: Date, required: false },
     // Broadcast ride-offer bookkeeping — does not change the status enum above.
     offeredToDriverIds: { type: [Types.ObjectId], ref: "User", default: [] },
     rejectedByDriverIds: { type: [Types.ObjectId], ref: "User", default: [] },
