@@ -20,7 +20,9 @@ try {
   const vehicles = mongoose.connection.db.collection("vehicles");
   const query = { key: { $in: targetKeys } };
   const before = await vehicles
-    .find(query, { projection: { key: 1, occupancy: 1 } })
+    .find(query, {
+      projection: { key: 1, occupancy: 1, regionConfigs: 1 },
+    })
     .sort({ key: 1 })
     .toArray();
 
@@ -29,8 +31,30 @@ try {
   );
   const changes = targetKeys.map((key) => ({
     key,
-    before: beforeByKey.get(key) ?? "not found",
-    after: beforeByKey.has(key) ? 3 : "not found",
+    before:
+      beforeByKey.get(key) === undefined
+        ? "not found"
+        : {
+            occupancy: beforeByKey.get(key),
+            regionConfigs: before
+              .find((vehicle) => vehicle.key === key)
+              ?.regionConfigs?.map((config) => ({
+                regionCode: config.regionCode,
+                occupancy: config.occupancy ?? null,
+              })),
+          },
+    after:
+      beforeByKey.has(key)
+        ? {
+            occupancy: 3,
+            regionConfigs: before
+              .find((vehicle) => vehicle.key === key)
+              ?.regionConfigs?.map((config) => ({
+                regionCode: config.regionCode,
+                occupancy: 3,
+              })),
+          }
+        : "not found",
   }));
   console.log(
     JSON.stringify(
@@ -42,8 +66,15 @@ try {
 
   if (apply) {
     await vehicles.updateMany(query, { $set: { occupancy: 3 } });
+    await vehicles.updateMany(
+      { ...query, regionConfigs: { $type: "array" } },
+      { $set: { "regionConfigs.$[region].occupancy": 3 } },
+      { arrayFilters: [{ "region.occupancy": { $ne: 3 } }] },
+    );
     const after = await vehicles
-      .find(query, { projection: { key: 1, occupancy: 1 } })
+      .find(query, {
+        projection: { key: 1, occupancy: 1, regionConfigs: 1 },
+      })
       .sort({ key: 1 })
       .toArray();
     console.log(
@@ -52,10 +83,19 @@ try {
           mode: "after",
           changes: targetKeys.map((key) => ({
             key,
-            before: beforeByKey.get(key) ?? "not found",
-            after:
-              after.find((vehicle) => vehicle.key === key)?.occupancy ??
-              "not found",
+            before: changes.find((change) => change.key === key)?.before,
+            after: after.find((vehicle) => vehicle.key === key)
+              ? {
+                  occupancy: after.find((vehicle) => vehicle.key === key)
+                    ?.occupancy,
+                  regionConfigs: after
+                    .find((vehicle) => vehicle.key === key)
+                    ?.regionConfigs?.map((config) => ({
+                      regionCode: config.regionCode,
+                      occupancy: config.occupancy ?? null,
+                    })),
+                }
+              : "not found",
           })),
         },
         null,

@@ -55,6 +55,65 @@ test("Trip creation rejects groups above configured vehicle capacity", () => {
   );
 });
 
+test("shared cars have three seats while private cars remain at four", () => {
+  for (const vehicleType of ["shared_car", "taxi_shared"]) {
+    assert.equal(getVehiclePassengerCapacity(vehicleType), 3);
+    assert.equal(
+      getVehicleSeatGrid(vehicleType).rows
+        .flat()
+        .filter((cell) => cell.seatNumber !== null).length,
+      3,
+    );
+    assert.equal(maxExtraPassengers(vehicleType), 2);
+    assert.equal(
+      isVehiclePassengerCountAllowed(
+        vehicleType,
+        getTripPassengerCount(vehicleType, 1, 2),
+      ),
+      true,
+    );
+    assert.equal(
+      isVehiclePassengerCountAllowed(
+        vehicleType,
+        getTripPassengerCount(vehicleType, 1, 3),
+      ),
+      false,
+    );
+    assert.equal(
+      isVehiclePassengerCountAllowed(vehicleType, 4),
+      false,
+      `${vehicleType} rejects a four-person booking`,
+    );
+    assert.deepEqual(
+      allocateSeats({
+        capacity: getVehiclePassengerCapacity(vehicleType),
+        occupiedSeats: [],
+        requestedCount: 3,
+      }),
+      { ok: true, seats: [1, 2, 3] },
+    );
+  }
+
+  for (const vehicleType of ["private_car", "taxi_private"]) {
+    assert.equal(getVehiclePassengerCapacity(vehicleType), 4);
+    assert.equal(
+      getVehicleSeatGrid(vehicleType).rows
+        .flat()
+        .filter((cell) => cell.seatNumber !== null).length,
+      4,
+    );
+    assert.equal(isVehiclePassengerCountAllowed(vehicleType, 4), true);
+    assert.deepEqual(
+      allocateSeats({
+        capacity: getVehiclePassengerCapacity(vehicleType),
+        occupiedSeats: [],
+        requestedCount: 4,
+      }),
+      { ok: true, seats: [1, 2, 3, 4] },
+    );
+  }
+});
+
 test("per-booking and shared extra-passenger limits follow configured capacity", () => {
   for (const [vehicleType, vehicle] of Object.entries(VEHICLES)) {
     assert.equal(

@@ -28,6 +28,22 @@ at booking, matching, Ride creation, audit, and cancellation. New Trips above
 capacity are rejected, and over-capacity matching groups remain unmatched
 rather than creating a Ride. Existing records are not rewritten automatically.
 
+| Vehicle type | Capacity | Grid passenger seats | Max people per booking |
+| --- | ---: | ---: | ---: |
+| `private_car` | 4 | 4 | 4 |
+| `shared_car` | 3 | 3 | 3 |
+| `taxi_private` | 4 | 4 | 4 |
+| `taxi_shared` | 3 | 3 | 3 |
+| `van_shared` | 5 | 5 | 5 |
+| `microbus_shared` | 9 | 9 | 9 |
+| `mini_bus` | 14 | 14 | 14 |
+
+The admin vehicle editor keeps the configured capacity and occupancy fixed for
+these built-in vehicle types. To update existing database occupancy values for
+`shared_car` and `taxi_shared`, first review the dry-run output, then run
+`node scripts/updateSharedCarCapacity.mjs --apply`. The script only changes
+those two keys.
+
 For legacy Ride data whose active Trip has fewer stored seats than people, the
 seat map fills missing display positions from unused seats when possible. If
 there are not enough unused display positions, it shows the seats already
