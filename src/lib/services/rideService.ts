@@ -16,6 +16,7 @@ import { getAdminSettings, getCancellationTier } from "@/lib/cancellationPolicy"
 import { getDriverRideCancellationDecision } from "@/lib/rideCancellationAccess";
 import { isRegionCode } from "@/lib/config/regions";
 import { NO_SHOW_MIN_WAIT_MINUTES } from "@/lib/noShowRules";
+import { getAdminRideCancellationPlan } from "@/lib/rideIncidentAdminGuards";
 import type {
   RideDetailView,
   RideListRow,
@@ -1065,6 +1066,27 @@ async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
 
     // unlink trips
     const tripIds = collectRideTripIds(ride);
+    const ridePickupStatusByTripId = new Map(
+      ((ride.passengers || []) as Array<{
+        tripId?: unknown;
+        status?: string | null;
+      }>).map((passenger) => [
+        String(passenger.tripId),
+        String(passenger.status ?? "waiting"),
+      ]),
+    );
+    const linkedTrips = await Trip.find({ _id: { $in: tripIds } })
+      .select("_id status")
+      .session(session)
+      .lean<{ _id: Types.ObjectId; status: string }[]>();
+    const cancellationPlan = getAdminRideCancellationPlan(
+      linkedTrips.map((trip) => ({
+        id: String(trip._id),
+        status: trip.status,
+        pickupStatus:
+          ridePickupStatusByTripId.get(String(trip._id)) ?? "waiting",
+      })),
+    );
     const notificationTripIds = await Trip.find({
       _id: { $in: tripIds },
       status: { $ne: "cancelled" },
@@ -1073,19 +1095,33 @@ async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
       .session(session)
       .lean<{ _id: Types.ObjectId }[]>();
 
-    await Trip.updateMany(
-      { _id: { $in: tripIds } },
-      {
-        $set: {
-          rideId: null,
-          status: "submitted",
-          driverId: null,
-          assignedDriver: null,
-          seatNumbers: [],
+    if (cancellationPlan.resetTripIds.length > 0) {
+      await Trip.updateMany(
+        {
+          _id: { $in: cancellationPlan.resetTripIds },
+          rideId: ride._id,
+          status: { $in: ["matched", "confirmed", "active"] },
         },
-      },
-      { session },
-    );
+        {
+          $set: {
+            rideId: null,
+            status: "submitted",
+            driverId: null,
+            assignedDriver: null,
+            seatNumbers: [],
+          },
+        },
+        { session },
+      );
+    }
+    const preservedTrips = await Trip.find({
+      _id: { $in: tripIds },
+      rideId: ride._id,
+    })
+      .select("_id")
+      .session(session)
+      .lean<{ _id: Types.ObjectId }[]>();
+    const preservedTripIds = preservedTrips.map((trip) => String(trip._id));
 
     // Recurring driver Availability is never released/mutated by ride cancellation.
 
@@ -1095,7 +1131,7 @@ async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
       rideId: String(ride._id),
       tripIds: notificationTripIds.map((trip) => String(trip._id)),
     });
-    return ride;
+    return { ride, preservedTripIds };
   } catch (err) {
     await session.abortTransaction();
     session.endSession();

@@ -98,3 +98,33 @@ export function needsIncidentFollowUp(
     PICKED_UP_OR_FINISHED_PICKUP_STATES.has(pickupStatus)
   );
 }
+
+export interface AdminRideCancellationTrip {
+  id: string;
+  status: string;
+  pickupStatus: string;
+}
+
+export function getAdminRideCancellationPlan(
+  trips: readonly AdminRideCancellationTrip[],
+) {
+  const resetTripIds: string[] = [];
+  const preservedTripIds: string[] = [];
+
+  for (const trip of trips) {
+    if (
+      trip.status === "no_show" ||
+      trip.pickupStatus === "no_show" ||
+      !shouldResetTripForIncidentCancellation(
+        trip.status,
+        trip.pickupStatus,
+      )
+    ) {
+      preservedTripIds.push(trip.id);
+    } else {
+      resetTripIds.push(trip.id);
+    }
+  }
+
+  return { resetTripIds, preservedTripIds };
+}

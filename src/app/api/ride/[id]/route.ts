@@ -98,8 +98,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { reason } = await req.json().catch(() => ({ reason: undefined }));
 
     if (access === "admin") {
-      const ride = await cancelRide(id, reason);
-      return NextResponse.json({ data: ride });
+      const result = await cancelRide(id, reason);
+      return NextResponse.json({
+        data: result.ride,
+        preservedTripIds: result.preservedTripIds,
+      });
     }
 
     if (session.role !== "driver") {
