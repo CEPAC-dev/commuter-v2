@@ -27,6 +27,12 @@ const RideIncidentSchema = new Schema(
       required: true,
       default: [],
     },
+    needsFollowUpTripIds: {
+      type: [Types.ObjectId],
+      ref: "Trip",
+      required: true,
+      default: [],
+    },
     status: {
       type: String,
       required: true,
