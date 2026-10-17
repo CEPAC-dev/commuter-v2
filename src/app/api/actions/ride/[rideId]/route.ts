@@ -14,7 +14,10 @@ import {
   getRideActionStatusDecision,
   shouldBlockRideActionForOpenIncident,
 } from "@/lib/rideActionGuards";
-import { getCompletableTripIds } from "@/lib/rideTripCompletion";
+import {
+  getCompletableTripIds,
+  getNoShowTripIds,
+} from "@/lib/rideTripCompletion";
 import {
   canMarkNoShow,
   NO_SHOW_MIN_WAIT_MINUTES,
@@ -1880,6 +1883,49 @@ export async function POST(
               status: string;
             }[]
           >();
+        const noShowTripIds = new Set(
+          getNoShowTripIds(actionPassengers, linkedTrips),
+        );
+        for (const trip of linkedTrips) {
+          if (!noShowTripIds.has(String(trip._id))) continue;
+          const passenger = actionPassengers.find(
+            (entry) => String(entry.tripId) === String(trip._id),
+          );
+          const embeddedNoShowAt = passenger?.noShowAt;
+          const noShowAt =
+            embeddedNoShowAt instanceof Date
+              ? embeddedNoShowAt
+              : typeof embeddedNoShowAt === "string" &&
+                  Number.isFinite(Date.parse(embeddedNoShowAt))
+                ? new Date(embeddedNoShowAt)
+                : new Date();
+          const markedTrip = await Trip.findOneAndUpdate(
+            {
+              _id: trip._id,
+              rideId,
+              status: { $in: ["matched", "confirmed"] },
+            },
+            { $set: { status: "no_show", noShowAt } },
+            { new: true },
+          )
+            .select("_id userId")
+            .lean<{ _id: Types.ObjectId; userId: Types.ObjectId } | null>();
+          if (markedTrip) {
+            await Log.create({
+              tripId: markedTrip._id,
+              rideId,
+              userId: markedTrip.userId,
+              driverId,
+              status: "no_show",
+              previousStatus: trip.status,
+              action: "trip_no_show_marked",
+              description: "Trip marked as no-show at ride end.",
+              actorType: "driver",
+              actorId: driverId,
+            });
+          }
+        }
+
         const completableTripIds = new Set(
           getCompletableTripIds(actionPassengers, linkedTrips),
         );

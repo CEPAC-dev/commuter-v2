@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { getCompletableTripIds } = await import("../src/lib/rideTripCompletion.ts");
+const {
+  getCompletableTripIds,
+  getNoShowTripIds,
+} = await import("../src/lib/rideTripCompletion.ts");
 
 test("only active trips without cancelled or no-show ride passengers are completable", () => {
   const result = getCompletableTripIds(
@@ -31,5 +34,49 @@ test("returns no completion candidates when no active trips exist", () => {
       { _id: "cancelled", status: "cancelled" },
     ]),
     [],
+  );
+});
+
+test("only matched or confirmed no-show passengers move to terminal Trip status", () => {
+  assert.deepEqual(
+    getNoShowTripIds(
+      [
+        { tripId: "matched", status: "no_show" },
+        { tripId: "confirmed", status: "no_show" },
+        { tripId: "active", status: "no_show" },
+        { tripId: "completed", status: "no_show" },
+        { tripId: "cancelled", status: "no_show" },
+        { tripId: "refunded", status: "no_show" },
+        { tripId: "present", status: "on_board" },
+      ],
+      [
+        { _id: "matched", status: "matched" },
+        { _id: "confirmed", status: "confirmed" },
+        { _id: "active", status: "active" },
+        { _id: "completed", status: "completed" },
+        { _id: "cancelled", status: "cancelled" },
+        { _id: "refunded", status: "refunded" },
+        { _id: "present", status: "matched" },
+      ],
+    ),
+    ["matched", "confirmed"],
+  );
+});
+
+test("end-ride no-show transition has guarded status and IDs-only audit", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const route = await readFile(
+    new URL("../src/app/api/actions/ride/[rideId]/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /getNoShowTripIds\(actionPassengers, linkedTrips\)/);
+  assert.match(
+    route,
+    /status: \{ \$in: \["matched", "confirmed"\] \}[\s\S]*?\$set: \{ status: "no_show", noShowAt \}/,
+  );
+  assert.match(route, /action: "trip_no_show_marked"/);
+  assert.match(
+    route,
+    /description: "Trip marked as no-show at ride end\."/,
   );
 });

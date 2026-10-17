@@ -20,3 +20,26 @@ export function getCompletableTripIds(
     )
     .map((trip) => String(trip._id));
 }
+
+export function getNoShowTripIds(
+  ridePassengers: readonly { tripId?: unknown; status?: unknown }[],
+  trips: readonly { _id: unknown; status?: unknown }[],
+): string[] {
+  const noShowTripIds = new Set(
+    ridePassengers
+      .filter(
+        (passenger) =>
+          String(passenger.status ?? "").toLowerCase() === "no_show",
+      )
+      .map((passenger) => String(passenger.tripId ?? ""))
+      .filter(Boolean),
+  );
+
+  return trips
+    .filter(
+      (trip) =>
+        noShowTripIds.has(String(trip._id)) &&
+        ["matched", "confirmed"].includes(String(trip.status ?? "")),
+    )
+    .map((trip) => String(trip._id));
+}
