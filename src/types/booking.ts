@@ -63,6 +63,8 @@ export interface RidePassengerRow {
   pickupStation?: StationSelection | null;
   dropoffStation?: StationSelection | null;
   seatNumbers?: number[];
+  arrivedAt?: string | null;
+  noShowAt?: string | null;
   passengerName?: string;
 }
 
@@ -108,6 +110,7 @@ export interface RideDetailView
   route: RideRouteStopDetail[];
   chatTripId: string | null;
   hasOpenIncident: boolean;
+  noShowMinWaitMinutes: number;
   driverOrigin?: GeoPoint | null;
   driverDestination?: GeoPoint | null;
 }

@@ -5,6 +5,7 @@ export const RIDE_ACTION_ALLOWED_STATUSES = {
   pickup_arrived: ["active"],
   passenger_picked_up: ["active"],
   no_show: ["active"],
+  confirm_no_show_arrival: ["active"],
   stop_point_arrived: ["active"],
   end_ride: ["active"],
 } as const;

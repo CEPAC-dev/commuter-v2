@@ -238,6 +238,18 @@ export const ar: Record<MessageKey, string> = {
   "driver.status_pending": "قيد الانتظار",
   "driver.arrived": "وصل",
   "driver.no_show": "لم يحضر",
+  "driver.confirm_arrival_for_wait": "تأكيد الوصول لبدء انتظار عدم الحضور",
+  "driver.no_show_wait_countdown": "الوقت المتبقي لانتظار عدم الحضور: {time}",
+  "driver.no_show_wait_complete":
+    "اكتمل الانتظار. يمكنك الآن تسجيل عدم الحضور.",
+  "driver.no_show_wait_error":
+    "انتظر {time} بعد تأكيد الوصول قبل تسجيل عدم الحضور.",
+  "driver.no_show_arrival_required":
+    "أكد الوصول إلى نقطة الركوب لبدء انتظار عدم الحضور.",
+  "driver.no_show_arrival_unavailable":
+    "لم يعد هذا الراكب منتظرًا عند نقطة الركوب هذه.",
+  "driver.no_show_arrival_error":
+    "تعذر تأكيد الوصول. يرجى المحاولة مرة أخرى.",
   "driver.no_show_alighting_note":
     "{name} لن يصل هنا — لم يحضر، وتم استبعاده بالفعل من عدد النازلين.",
   "driver.will_alight_here": "سينزل هنا",

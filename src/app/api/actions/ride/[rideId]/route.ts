@@ -16,6 +16,10 @@ import {
 } from "@/lib/rideActionGuards";
 import { getCompletableTripIds } from "@/lib/rideTripCompletion";
 import {
+  canMarkNoShow,
+  NO_SHOW_MIN_WAIT_MINUTES,
+} from "@/lib/noShowRules";
+import {
   assertPickupPinSecret,
   verifyPin,
   PickupPinConfigError,
@@ -41,6 +45,8 @@ interface RidePassengerLike {
   tripId?: string | { toString(): string } | null;
   userId?: string | { toString(): string } | null;
   status?: string | null;
+  arrivedAt?: Date | string | null;
+  noShowAt?: Date | string | null;
   numberOfPassengers?: number | null;
   pickupOrder?: number | null;
   dropoffOrder?: number | null;
@@ -82,6 +88,33 @@ function pushRideLog(
   },
 ) {
   rideDoc.logs?.push({ ...entry, createdAt: new Date() });
+}
+
+function noShowTooEarlyResponse(
+  arrivedAt: Date | string | null | undefined,
+  tripId?: string,
+) {
+  const decision = canMarkNoShow({
+    arrivedAt,
+    now: new Date(),
+    minWaitMinutes: NO_SHOW_MIN_WAIT_MINUTES,
+  });
+  return NextResponse.json(
+    {
+      success: false,
+      errorCode: "NO_SHOW_TOO_EARLY",
+      error: "Wait at the pickup before marking the passenger as not present.",
+      remainingSeconds: decision.remainingSeconds,
+      arrivedAt:
+        arrivedAt instanceof Date
+          ? arrivedAt.toISOString()
+          : typeof arrivedAt === "string" && Number.isFinite(Date.parse(arrivedAt))
+            ? new Date(arrivedAt).toISOString()
+            : null,
+      ...(tripId ? { tripId } : {}),
+    },
+    { status: 409 },
+  );
 }
 
 function materializeSharedRidePassengers(ride: {
@@ -1148,6 +1181,117 @@ export async function POST(
         };
         break;
 
+      case "confirm_no_show_arrival": {
+        const parsedTripId = Types.ObjectId.isValid(String(tripId))
+          ? new Types.ObjectId(String(tripId))
+          : null;
+        const parsedStationIndex = Number(stationIndex);
+        if (
+          !parsedTripId ||
+          !Number.isInteger(parsedStationIndex) ||
+          parsedStationIndex < 1
+        ) {
+          return NextResponse.json(
+            { success: false, errorCode: "INVALID_ARRIVAL", error: "A valid passenger and pickup stop are required." },
+            { status: 400 },
+          );
+        }
+
+        const passenger = actionPassengers.find(
+          (candidate) =>
+            candidate.tripId?.toString?.() === parsedTripId.toString(),
+        );
+        if (
+          !passenger ||
+          passenger.status !== "waiting" ||
+          !stationMatchesPassenger(
+            passenger,
+            parsedStationIndex,
+            stationName,
+            "pickup",
+          )
+        ) {
+          return NextResponse.json(
+            { success: false, errorCode: "PASSENGER_NOT_WAITING", error: "The passenger is not waiting at this pickup stop." },
+            { status: 409 },
+          );
+        }
+
+        const arrivedAt = new Date();
+        const arrivalUpdate = await Ride.updateOne(
+          {
+            _id: rideId,
+            driverId: ride.driverId,
+            status: "active",
+            passengers: {
+              $elemMatch: {
+                tripId: parsedTripId,
+                status: "waiting",
+                arrivedAt: null,
+              },
+            },
+          },
+          {
+            $set: { "passengers.$.arrivedAt": arrivedAt },
+            $push: {
+              logs: {
+                action: "no_show_wait_started",
+                tripId: parsedTripId,
+                userId: passenger.userId,
+                stationIndex: parsedStationIndex,
+                previousStatus: "waiting",
+                newStatus: "waiting",
+                createdAt: arrivedAt,
+              },
+            },
+          },
+        );
+
+        let recordedArrival: Date | string | null | undefined;
+        if (arrivalUpdate.modifiedCount > 0) {
+          recordedArrival = arrivedAt;
+        } else {
+          const latestRide = await Ride.findById(rideId)
+            .select("passengers")
+            .lean();
+          const latestPassenger = (
+            latestRide?.passengers as unknown as
+              | RidePassengerLike[]
+              | undefined
+          )?.find(
+            (candidate) =>
+              candidate.tripId?.toString?.() === parsedTripId.toString(),
+          );
+          if (
+            latestPassenger?.status === "waiting" &&
+            latestPassenger.arrivedAt
+          ) {
+            recordedArrival = latestPassenger.arrivedAt;
+          }
+        }
+        if (!recordedArrival) {
+          return NextResponse.json(
+            { success: false, errorCode: "PASSENGER_NOT_WAITING", error: "The passenger is no longer waiting at this pickup stop." },
+            { status: 409 },
+          );
+        }
+        const decision = canMarkNoShow({
+          arrivedAt: recordedArrival,
+          now: new Date(),
+          minWaitMinutes: NO_SHOW_MIN_WAIT_MINUTES,
+        });
+        result = {
+          success: true,
+          action: "no_show_wait_started",
+          arrivedAt:
+            recordedArrival instanceof Date
+              ? recordedArrival.toISOString()
+              : recordedArrival,
+          remainingSeconds: decision.remainingSeconds,
+        };
+        break;
+      }
+
       case "station_arrived":
         if (
           stationIndex === undefined ||
@@ -1188,6 +1332,35 @@ export async function POST(
             const tripId = entry.tripId?.toString?.() ?? "";
             if (tripId) {
               confirmationMap.set(tripId, entry.status);
+            }
+          }
+          for (const [confirmedTripId, confirmationStatus] of confirmationMap) {
+            if (confirmationStatus !== "no_show") continue;
+            const passenger = currentPassengers.find(
+              (candidate) =>
+                candidate.tripId?.toString?.() === confirmedTripId,
+            );
+            if (
+              passenger &&
+              passenger.status === "waiting" &&
+              stationMatchesPassenger(
+                passenger,
+                stationIndex,
+                stationName,
+                "pickup",
+              )
+            ) {
+              const decision = canMarkNoShow({
+                arrivedAt: passenger.arrivedAt,
+                now: new Date(),
+                minWaitMinutes: NO_SHOW_MIN_WAIT_MINUTES,
+              });
+              if (!decision.allowed) {
+                return noShowTooEarlyResponse(
+                  passenger.arrivedAt,
+                  confirmedTripId,
+                );
+              }
             }
           }
 
@@ -1311,13 +1484,13 @@ export async function POST(
             if (confirmationStatus === "no_show") {
               passenger.status = "no_show";
               passenger.seatNumbers = [];
+              passenger.noShowAt = new Date();
               updatedPassengers = true;
               pushRideLog(currentRideDoc, {
                 action: "no_show",
                 tripId: passenger.tripId,
                 userId: passenger.userId,
                 stationIndex,
-                stationName,
                 previousStatus: "waiting",
                 newStatus: "no_show",
               });
@@ -1618,31 +1791,37 @@ export async function POST(
           );
         }
 
-        await rideActions.logNoShow(
-          rideId,
-          tripId,
-          driverId,
-          metadata.reason,
-          safeMetadata,
-        );
-
         const currentRideDocNoShow = await Ride.findById(rideId);
         if (currentRideDocNoShow) {
           const passenger = currentRideDocNoShow.passengers.find(
             (p: RidePassengerLike) =>
               p.tripId?.toString?.() === tripId.toString(),
           );
-          if (passenger) {
+          if (!passenger || passenger.status !== "waiting") {
+            return NextResponse.json(
+              { success: false, errorCode: "PASSENGER_NOT_WAITING", error: "The passenger is not waiting at pickup." },
+              { status: 409 },
+            );
+          }
+          const waitDecision = canMarkNoShow({
+            arrivedAt: passenger.arrivedAt,
+            now: new Date(),
+            minWaitMinutes: NO_SHOW_MIN_WAIT_MINUTES,
+          });
+          if (!waitDecision.allowed) {
+            return noShowTooEarlyResponse(passenger.arrivedAt, String(tripId));
+          }
+          {
             const previousStatus = passenger.status;
             passenger.status = "no_show";
             passenger.seatNumbers = [];
+            passenger.noShowAt = new Date();
             pushRideLog(currentRideDocNoShow, {
               action: "no_show",
               tripId: passenger.tripId,
               userId: passenger.userId,
               previousStatus,
               newStatus: "no_show",
-              metadata: { reason: safeMetadata?.reason },
             });
             await currentRideDocNoShow.save();
           }

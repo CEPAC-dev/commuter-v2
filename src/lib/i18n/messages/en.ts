@@ -237,6 +237,17 @@ export const en = {
   "driver.status_pending": "Pending",
   "driver.arrived": "Arrived",
   "driver.no_show": "No show",
+  "driver.confirm_arrival_for_wait": "Confirm arrival to start no-show wait",
+  "driver.no_show_wait_countdown": "No-show wait remaining: {time}",
+  "driver.no_show_wait_complete": "Wait complete. No-show can now be marked.",
+  "driver.no_show_wait_error":
+    "Wait {time} after confirming arrival before marking no-show.",
+  "driver.no_show_arrival_required":
+    "Confirm arrival at the pickup stop to start the no-show wait.",
+  "driver.no_show_arrival_unavailable":
+    "This passenger is no longer waiting at this pickup stop.",
+  "driver.no_show_arrival_error":
+    "Could not confirm arrival. Please try again.",
   "driver.no_show_alighting_note":
     "{name} won't be arriving here — no-show, already excluded from Alighting.",
   "driver.will_alight_here": "Will alight here",

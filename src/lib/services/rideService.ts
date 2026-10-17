@@ -15,6 +15,7 @@ import { getEligibleDriverIds } from "@/lib/services/rideMatching";
 import { getAdminSettings, getCancellationTier } from "@/lib/cancellationPolicy";
 import { getDriverRideCancellationDecision } from "@/lib/rideCancellationAccess";
 import { isRegionCode } from "@/lib/config/regions";
+import { NO_SHOW_MIN_WAIT_MINUTES } from "@/lib/noShowRules";
 import type {
   RideDetailView,
   RideListRow,
@@ -516,6 +517,18 @@ function mapPassengerRow(
     pickupStation: toStation(p.pickupStation),
     dropoffStation: toStation(p.dropoffStation),
     seatNumbers,
+    arrivedAt:
+      p.arrivedAt instanceof Date
+        ? p.arrivedAt.toISOString()
+        : typeof p.arrivedAt === "string"
+          ? p.arrivedAt
+          : null,
+    noShowAt:
+      p.noShowAt instanceof Date
+        ? p.noShowAt.toISOString()
+        : typeof p.noShowAt === "string"
+          ? p.noShowAt
+          : null,
     passengerName: asString(
       p.passengerName,
       `Passenger #${pickupOrder || index + 1}`,
@@ -547,6 +560,7 @@ function mapRideToDetailView(ride: Record<string, unknown>): RideDetailView {
       0,
     ),
     hasOpenIncident: ride.hasOpenIncident === true,
+    noShowMinWaitMinutes: NO_SHOW_MIN_WAIT_MINUTES,
     passengers,
     route: recordArray(ride.route).map((stop) => {
       const counts = getSharedRouteStopCounts(stop);

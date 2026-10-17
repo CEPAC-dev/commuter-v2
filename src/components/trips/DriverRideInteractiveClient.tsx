@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CalendarDays,
   Users,
@@ -71,6 +71,26 @@ function stationMatchesPassenger(
   return Boolean(normalizedStationName) && normalizedStationName === normalizedReferenceName;
 }
 
+function noShowRemainingSeconds(
+  arrivedAt: string | null | undefined,
+  minWaitMinutes: number,
+  now: number,
+): number | null {
+  if (!arrivedAt) return null;
+  const arrivalMs = Date.parse(arrivedAt);
+  if (!Number.isFinite(arrivalMs)) return null;
+  return Math.max(
+    0,
+    Math.ceil((arrivalMs + minWaitMinutes * 60_000 - now) / 1000),
+  );
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function Detail({
   icon,
   label,
@@ -124,6 +144,7 @@ export default function DriverRideInteractiveClient({
   email,
 }: { ride: RideDetailView; email: string }) {
   const [ride, setRide] = useState(rideProp);
+  const [clockNow, setClockNow] = useState(Date.now());
   const [rideStarted, setRideStarted] = useState(
     ride.status === "active" || ride.status === "completed",
   );
@@ -163,6 +184,11 @@ export default function DriverRideInteractiveClient({
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
   const [incidentWithdrawn, setIncidentWithdrawn] = useState(false);
   const isRideTerminal = ride.status === "cancelled" || ride.status === "completed";
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const handleGoToLocation = async (step: StepItem) => {
     setNavigationErrorByStation((prev) => ({ ...prev, [step.stationIndex]: "" }));
@@ -542,6 +568,28 @@ export default function DriverRideInteractiveClient({
 
       const responseData = await res.json().catch(() => null);
       if (!res.ok) {
+        if (responseData?.errorCode === "NO_SHOW_TOO_EARLY") {
+          if (typeof responseData.arrivedAt === "string") {
+            setRide((current) => ({
+              ...current,
+              passengers: current.passengers.map((passenger) =>
+                passenger.tripId === responseData.tripId
+                  ? { ...passenger, arrivedAt: responseData.arrivedAt }
+                  : passenger,
+              ),
+            }));
+          }
+          setRideActionError(
+            typeof responseData.arrivedAt === "string"
+              ? t("driver.no_show_wait_error", {
+                  time: formatCountdown(
+                    Math.max(0, Number(responseData.remainingSeconds) || 0),
+                  ),
+                })
+              : t("driver.no_show_arrival_required"),
+          );
+          return;
+        }
         throw new Error(
           responseData?.errorCode ||
             responseData?.error ||
@@ -622,7 +670,14 @@ export default function DriverRideInteractiveClient({
           return passenger;
         }
 
-        return { ...passenger, status: nextStatus, seatNumbers: nextSeatNumbers };
+        return {
+          ...passenger,
+          status: nextStatus,
+          seatNumbers: nextSeatNumbers,
+          ...(nextStatus === "no_show"
+            ? { noShowAt: new Date().toISOString() }
+            : {}),
+        };
       });
 
       setRide((prevRide) => ({
@@ -659,9 +714,55 @@ export default function DriverRideInteractiveClient({
             ? t("pickup_pin.locked")
             : errorCode === "PICKUP_PIN_REQUIRED"
               ? t("pickup_pin.required")
-              : err instanceof TypeError
+                : err instanceof TypeError
                 ? t("pickup_pin.network_error")
                 : t("ride.confirm_station_error", { stationIndex }),
+      );
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleConfirmNoShowArrival = async (
+    passenger: RideDetailView["passengers"][number],
+    step: StepItem,
+  ) => {
+    setLoadingAction(`no-show-arrival-${passenger.tripId}`);
+    setRideActionError(null);
+    try {
+      const response = await fetch(`/api/actions/ride/${ride.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm_no_show_arrival",
+          tripId: passenger.tripId,
+          stationIndex: step.stationIndex,
+          stationName: step.name,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.errorCode || "ARRIVAL_CONFIRMATION_FAILED");
+      }
+      setRide((current) => ({
+        ...current,
+        passengers: current.passengers.map((item) =>
+          item.tripId === passenger.tripId
+            ? { ...item, arrivedAt: data.arrivedAt }
+            : item,
+        ),
+      }));
+      setClockNow(Date.now());
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      setRideActionError(
+        code === "INCIDENT_OPEN"
+          ? t("driver.incident.paused")
+          : code === "PASSENGER_NOT_WAITING"
+            ? t("driver.no_show_arrival_unavailable")
+            : error instanceof TypeError
+              ? t("ride.action_network_error")
+              : t("driver.no_show_arrival_error"),
       );
     } finally {
       setLoadingAction(null);
@@ -1487,6 +1588,11 @@ export default function DriverRideInteractiveClient({
                         ) : (
                           passengersForStation.map((passenger) => {
                             const selectedStatus = stationSelectionsForStep[passenger.tripId];
+                            const noShowRemaining = noShowRemainingSeconds(
+                              passenger.arrivedAt,
+                              ride.noShowMinWaitMinutes,
+                              clockNow,
+                            );
                             const isBoardingPassenger =
                               passenger.status === "waiting" &&
                               (passenger.pickupOrder ?? 0) === step.stationIndex;
@@ -1543,6 +1649,10 @@ export default function DriverRideInteractiveClient({
                                     </button>
                                     <button
                                       type="button"
+                                      disabled={
+                                        noShowRemaining === null ||
+                                        noShowRemaining > 0
+                                      }
                                       onClick={() => {
                                         setPickupPins((previous) => {
                                           const next = { ...previous };
@@ -1565,7 +1675,16 @@ export default function DriverRideInteractiveClient({
                                         color: selectedStatus === "no_show" ? "#C0392B" : "#5A6A7A",
                                         fontWeight: 700,
                                         fontSize: 12,
-                                        cursor: "pointer",
+                                        cursor:
+                                          noShowRemaining === null ||
+                                          noShowRemaining > 0
+                                            ? "not-allowed"
+                                            : "pointer",
+                                        opacity:
+                                          noShowRemaining === null ||
+                                          noShowRemaining > 0
+                                            ? 0.55
+                                            : 1,
                                       }}
                                     >
                                       {t("driver.no_show")}
@@ -1575,6 +1694,57 @@ export default function DriverRideInteractiveClient({
                                   <span style={{ fontSize: 12, fontWeight: 700, color: "#00806E" }}>
                                     {t("driver.will_alight_here")}
                                   </span>
+                                )}
+                                {isBoardingPassenger && (
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                      width: "100%",
+                                      flexWrap: "wrap",
+                                      fontSize: 11,
+                                      color: "#5A6A7A",
+                                    }}
+                                  >
+                                    {noShowRemaining === null ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleConfirmNoShowArrival(
+                                            passenger,
+                                            step,
+                                          )
+                                        }
+                                        disabled={
+                                          loadingAction ===
+                                          `no-show-arrival-${passenger.tripId}`
+                                        }
+                                        style={{
+                                          border: "1px solid #dbe2e8",
+                                          borderRadius: 7,
+                                          background: "#fff",
+                                          color: "#0B1E3D",
+                                          padding: "5px 8px",
+                                          fontWeight: 700,
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        {loadingAction ===
+                                        `no-show-arrival-${passenger.tripId}`
+                                          ? t("driver.confirming")
+                                          : t("driver.confirm_arrival_for_wait")}
+                                      </button>
+                                    ) : noShowRemaining > 0 ? (
+                                      <span>
+                                        {t("driver.no_show_wait_countdown", {
+                                          time: formatCountdown(noShowRemaining),
+                                        })}
+                                      </span>
+                                    ) : (
+                                      <span>{t("driver.no_show_wait_complete")}</span>
+                                    )}
+                                  </div>
                                 )}
                                 {isBoardingPassenger && selectedStatus === "arrived" && (
                                   <label

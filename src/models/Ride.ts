@@ -37,6 +37,8 @@ const RidePassengerSchema = new Schema(
     pickupStation: { type: StationSchema, required: false },
     dropoffStation: { type: StationSchema, required: false },
     seatNumbers: { type: [Number], default: [] },
+    arrivedAt: { type: Date, required: false, default: null },
+    noShowAt: { type: Date, required: false, default: null },
     status: {
       type: String,
       required: true,
