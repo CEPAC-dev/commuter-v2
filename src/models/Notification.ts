@@ -22,6 +22,7 @@ const NOTIFICATION_TYPES = [
   "station_suggestion_submitted",
   "station_suggestion_reviewed",
   "ride_incident",
+  "ride_incident_resolution",
 ] as const;
 
 const NotificationSchema = new Schema(

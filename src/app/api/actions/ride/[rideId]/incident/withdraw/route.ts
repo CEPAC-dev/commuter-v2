@@ -2,8 +2,7 @@ import mongoose, { Types } from "mongoose";
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { getSession } from "@/lib/auth/session";
-import { notifyAdminsOfRideIncidentWithdrawn } from "@/lib/notifications/adminActivity";
-import { notifyRideIncidentOutcome } from "@/lib/notifications/rideIncident";
+import { notifyRideIncidentWithdrawn } from "@/lib/notifications/rideIncident";
 import { getRideIncidentWithdrawalDecision } from "@/lib/rideIncidentGuards";
 import { Ride } from "@/models/Ride";
 import { RideIncident } from "@/models/RideIncident";
@@ -129,7 +128,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
             needsFollowUpTripIds: [],
           },
         },
-        { new: true, session },
+        { new: true, session: dbSession },
       )
         .lean<IncidentRecord | null>();
       if (!currentIncident) throw new WithdrawConflictError();
@@ -146,7 +145,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
           ...rideVersionFilter,
         },
         { $set: { hasOpenIncident: false }, $inc: { __v: 1 } },
-        { session },
+        { session: dbSession },
       );
       if (updatedRide.matchedCount !== 1) throw new WithdrawConflictError();
     });
@@ -182,19 +181,13 @@ export async function POST(_request: Request, { params }: RouteContext) {
     await dbSession.endSession();
   }
 
-  await Promise.all([
-    notifyAdminsOfRideIncidentWithdrawn({
-      incidentId: String(openIncident._id),
-      rideId,
-      rideNumber: Number(ride.rideNumber ?? 0),
-    }),
-    notifyRideIncidentOutcome({
-      incidentId: String(openIncident._id),
-      outcome: "continue",
-      driverId: session.userId,
-      tripIds: openIncident.affectedTripIds.map(String),
-    }),
-  ]);
+  await notifyRideIncidentWithdrawn({
+    incidentId: String(openIncident._id),
+    rideId,
+    rideNumber: Number(ride.rideNumber ?? 0),
+    driverId: session.userId,
+    tripIds: openIncident.affectedTripIds.map(String),
+  });
   return NextResponse.json({
     success: true,
     resolution: "withdrawn_by_driver",

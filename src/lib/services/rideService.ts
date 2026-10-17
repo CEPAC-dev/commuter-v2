@@ -10,6 +10,7 @@ import {
   computePenaltyApplication,
 } from "@/lib/walletPenalty";
 import { createNotification } from "@/lib/notifications/createNotification";
+import { notifyRideCancellationPassengers } from "@/lib/notifications/rideIncident";
 import { getEligibleDriverIds } from "@/lib/services/rideMatching";
 import { getAdminSettings, getCancellationTier } from "@/lib/cancellationPolicy";
 import { getDriverRideCancellationDecision } from "@/lib/rideCancellationAccess";
@@ -1050,6 +1051,13 @@ async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
 
     // unlink trips
     const tripIds = collectRideTripIds(ride);
+    const notificationTripIds = await Trip.find({
+      _id: { $in: tripIds },
+      status: { $ne: "cancelled" },
+    })
+      .select("_id")
+      .session(session)
+      .lean<{ _id: Types.ObjectId }[]>();
 
     await Trip.updateMany(
       { _id: { $in: tripIds } },
@@ -1069,6 +1077,10 @@ async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
 
     await session.commitTransaction();
     session.endSession();
+    await notifyRideCancellationPassengers({
+      rideId: String(ride._id),
+      tripIds: notificationTripIds.map((trip) => String(trip._id)),
+    });
     return ride;
   } catch (err) {
     await session.abortTransaction();
@@ -1270,6 +1282,13 @@ async function cancelRideByDriver(
     const tripIds = ridePassengers
       .map((p) => String(p.tripId))
       .filter((id) => Types.ObjectId.isValid(id));
+    const notificationTripIds = await Trip.find({
+      _id: { $in: tripIds },
+      status: { $ne: "cancelled" },
+    })
+      .select("_id")
+      .session(session)
+      .lean<{ _id: Types.ObjectId }[]>();
 
     if (tripIds.length > 0) {
       await Trip.updateMany(
@@ -1289,6 +1308,10 @@ async function cancelRideByDriver(
 
     await session.commitTransaction();
     session.endSession();
+    await notifyRideCancellationPassengers({
+      rideId: String(ride._id),
+      tripIds: notificationTripIds.map((trip) => String(trip._id)),
+    });
     return ride;
   } catch (err) {
     await session.abortTransaction();

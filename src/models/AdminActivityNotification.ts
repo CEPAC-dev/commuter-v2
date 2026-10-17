@@ -15,6 +15,7 @@ const AdminActivityNotificationSchema = new Schema(
         "late_gateway_payment",
         "trip_chat_reported",
         "ride_incident_reported",
+        "ride_incident_withdrawn",
       ],
       index: true,
     },

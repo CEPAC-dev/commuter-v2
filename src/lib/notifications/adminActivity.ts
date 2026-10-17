@@ -28,7 +28,8 @@ export async function notifyAdmins(input: {
     | "late_gateway_payment"
     | "station_suggestion_requested"
     | "trip_chat_reported"
-    | "ride_incident_reported";
+    | "ride_incident_reported"
+    | "ride_incident_withdrawn";
   dedupeKey: string;
   title: string;
   body: string;
@@ -89,6 +90,29 @@ export async function notifyAdminsOfRideIncident(input: {
       href: "/admin/alerts",
     },
   });
+}
+
+export async function notifyAdminsOfRideIncidentWithdrawn(input: {
+  incidentId: string;
+  rideId: string;
+  rideNumber: number;
+}) {
+  try {
+    await notifyAdmins({
+      eventType: "ride_incident_withdrawn",
+      dedupeKey: `ride-incident:${input.incidentId}:withdrawn`,
+      title: `Incident report withdrawn for ride #${input.rideNumber}`,
+      body: `The driver withdrew the report for ride #${input.rideNumber}.`,
+      data: {
+        incidentId: input.incidentId,
+        rideId: input.rideId,
+        rideNumber: input.rideNumber,
+        href: "/admin/incidents",
+      },
+    });
+  } catch {
+    console.error("[ride-incident] Admin withdrawal notification failed");
+  }
 }
 
 export async function notifyAdminsOfCompletedPaidTrip(tripId: string) {

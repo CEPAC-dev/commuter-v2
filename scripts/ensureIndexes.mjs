@@ -76,6 +76,14 @@ const RIDE_INCIDENT_NOTIFICATION_UNIQUE_INDEX = {
     name: "ride_incident_passenger_notification_unique",
   },
 };
+const RIDE_INCIDENT_OUTCOME_NOTIFICATION_UNIQUE_INDEX = {
+  keys: { userId: 1, "data.dedupeKey": 1 },
+  options: {
+    unique: true,
+    partialFilterExpression: { type: "ride_incident_resolution" },
+    name: "ride_incident_outcome_notification_unique",
+  },
+};
 
 const production =
   (process.env.APP_ENV ?? process.env.NODE_ENV ?? "development").toLowerCase() ===
@@ -223,11 +231,24 @@ try {
         index.unique === true &&
         index.partialFilterExpression?.type === "ride_incident",
     );
+    const rideIncidentOutcomeNotificationUniqueReady =
+      notificationIndexes.some(
+        (index) =>
+        index.name ===
+          RIDE_INCIDENT_OUTCOME_NOTIFICATION_UNIQUE_INDEX.options.name &&
+        index.key.userId === 1 &&
+        index.key["data.dedupeKey"] === 1 &&
+        index.unique === true &&
+        index.partialFilterExpression?.type === "ride_incident_resolution",
+      );
     console.log(
       `ride_incidents one-open-per-ride unique index: ${rideIncidentUniqueReady ? "ready" : "missing"}`,
     );
     console.log(
       `ride incident passenger notification unique index: ${rideIncidentNotificationUniqueReady ? "ready" : "missing"}`,
+    );
+    console.log(
+      `ride incident outcome notification unique index: ${rideIncidentOutcomeNotificationUniqueReady ? "ready" : "missing"}`,
     );
     if (
       !messageTtlReady ||
@@ -235,7 +256,8 @@ try {
       !chatReadStateUniqueReady ||
       !chatReadStateTtlReady ||
       !rideIncidentUniqueReady ||
-      !rideIncidentNotificationUniqueReady
+      !rideIncidentNotificationUniqueReady ||
+      !rideIncidentOutcomeNotificationUniqueReady
     ) process.exitCode = 1;
   } else {
     await database.collection("trip_spacing_locks").createIndex(
@@ -305,6 +327,10 @@ try {
     await notifications.createIndex(
       RIDE_INCIDENT_NOTIFICATION_UNIQUE_INDEX.keys,
       RIDE_INCIDENT_NOTIFICATION_UNIQUE_INDEX.options,
+    );
+    await notifications.createIndex(
+      RIDE_INCIDENT_OUTCOME_NOTIFICATION_UNIQUE_INDEX.keys,
+      RIDE_INCIDENT_OUTCOME_NOTIFICATION_UNIQUE_INDEX.options,
     );
     await walletTransactions.createIndex(
       { paymentId: 1, tripId: 1, type: 1 },
