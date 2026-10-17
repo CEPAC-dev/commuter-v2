@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { getAdminSettings, getNomatchSweepFilter } from "@/lib/cancellationPolicy";
+import { logTripNomatch } from "@/lib/services/logActionHelpers";
 import { expireStandaloneTrips } from "@/lib/services/standaloneTripExpiry";
 import {
   buildUnlinkedTripExpiryFilter,
@@ -11,6 +12,7 @@ import {
   buildPendingTripExpiryFilter,
 } from "@/lib/pendingRequestHardening";
 import { isMatchingEndpointAuthorized, isValidCronSecret } from "@/lib/matchingEndpointGuards";
+import { selectModifiedNomatchTrips } from "@/lib/nomatchLogging";
 import { releasePromoForRequest } from "@/lib/promoCode";
 
 const EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -88,20 +90,25 @@ export async function POST(req: NextRequest) {
   const nomatchFilter = buildUnlinkedTripExpiryFilter("submitted", {
     $or: nomatchOr,
   });
-  const nomatchCandidates = await Trip.find(nomatchFilter).select("_id");
-
-  let nomatchedTrips = 0;
-  if (nomatchCandidates.length > 0) {
-    const update = await Trip.updateMany(
-      {
-        _id: { $in: nomatchCandidates.map((t) => t._id) },
-        ...nomatchFilter,
-        $or: nomatchOr,
-      },
-      { $set: { status: "nomatch" } },
-    );
-    nomatchedTrips = update.modifiedCount;
-  }
+  const nomatchCandidates = await Trip.find(nomatchFilter)
+    .select("_id userId")
+    .lean<{ _id: Types.ObjectId; userId: Types.ObjectId }[]>();
+  const nomatchUpdates = await Promise.all(
+    nomatchCandidates.map(async (trip) => {
+      const result = await Trip.updateOne(
+        { _id: trip._id, ...nomatchFilter },
+        { $set: { status: "nomatch" } },
+      );
+      return result.modifiedCount === 1 ? String(trip._id) : null;
+    }),
+  );
+  const transitionedTrips = selectModifiedNomatchTrips(
+    nomatchCandidates,
+    nomatchUpdates.filter((tripId): tripId is string => tripId !== null),
+  );
+  await Promise.all(
+    transitionedTrips.map((trip) => logTripNomatch(trip._id, trip.userId)),
+  );
 
   return NextResponse.json({
     expiredRequests,
@@ -110,7 +117,7 @@ export async function POST(req: NextRequest) {
     cancelledStandalonePayments: standaloneExpiry.cancelledPayments,
     releasedStandaloneWalletReservations:
       standaloneExpiry.releasedWalletReservations,
-    nomatchedTrips,
+    nomatchedTrips: transitionedTrips.length,
   });
 }
 

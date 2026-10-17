@@ -27,6 +27,8 @@ succeeds.
 
 The existing 23:00 Cairo nomatch cutoff remains unchanged. The D-1
 17:00–19:00 cancellation-policy window is not a matching-endpoint time gate.
+Trips changed from `submitted` to `nomatch` are logged with the existing
+`logTripNomatch` helper only when the guarded write modifies that Trip.
 
 ## Driver availability lock (read-only audit)
 
