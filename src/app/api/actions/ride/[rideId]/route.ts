@@ -10,7 +10,10 @@ import * as rideActions from "@/lib/services/rideActionHelpers";
 import { creditReferralBonusIfEligible } from "@/lib/referral";
 import { normalizeSharedRidePassengers } from "@/lib/services/sharedRideManifest";
 import { notifyAdminsOfCompletedPaidTrip } from "@/lib/notifications/adminActivity";
-import { getRideActionStatusDecision } from "@/lib/rideActionGuards";
+import {
+  getRideActionStatusDecision,
+  shouldBlockRideActionForOpenIncident,
+} from "@/lib/rideActionGuards";
 import { getCompletableTripIds } from "@/lib/rideTripCompletion";
 import {
   assertPickupPinSecret,
@@ -692,9 +695,19 @@ export async function POST(
       unknown
     >;
 
+    const boardingIntent =
+      (action === "boarding_alighting" && Number(boardingCount) > 0) ||
+      (action === "station_arrived" &&
+        Array.isArray(metadata?.confirmations) &&
+        metadata.confirmations.some(
+          (confirmation: { status?: unknown }) =>
+            confirmation?.status === "arrived",
+        ));
     const statusDecision = getRideActionStatusDecision(
       typeof action === "string" ? action : "",
       ride.status,
+      ride.hasOpenIncident === true,
+      boardingIntent,
     );
     if (statusDecision.kind === "unknown_action") {
       return NextResponse.json(
@@ -709,6 +722,16 @@ export async function POST(
         action: action === "start_ride" ? "ride_started" : "ride_completed",
         data: ride,
       });
+    }
+    if (statusDecision.kind === "incident_open") {
+      return NextResponse.json(
+        {
+          success: false,
+          errorCode: "INCIDENT_OPEN",
+          error: "Ride actions are paused while the incident is being reviewed.",
+        },
+        { status: 409 },
+      );
     }
     if (statusDecision.kind === "conflict") {
       return NextResponse.json(
@@ -1027,11 +1050,19 @@ export async function POST(
       typeof ride.__v === "number"
         ? { __v: ride.__v }
         : { __v: { $exists: false } };
+    const incidentGuard = shouldBlockRideActionForOpenIncident(
+      action,
+      true,
+      boardingIntent,
+    )
+      ? { hasOpenIncident: { $ne: true } }
+      : {};
     const claimedRide = await Ride.findOneAndUpdate(
       {
         _id: rideId,
         driverId: ride.driverId,
         status: statusDecision.expectedStatus,
+        ...incidentGuard,
         ...versionFilter,
       },
       rideUpdate,
@@ -1055,6 +1086,8 @@ export async function POST(
       const currentDecision = getRideActionStatusDecision(
         action,
         currentRide.status,
+        currentRide.hasOpenIncident === true,
+        boardingIntent,
       );
       if (currentDecision.kind === "idempotent") {
         return NextResponse.json({
@@ -1063,6 +1096,16 @@ export async function POST(
           action: action === "start_ride" ? "ride_started" : "ride_completed",
           data: currentRide,
         });
+      }
+      if (currentDecision.kind === "incident_open") {
+        return NextResponse.json(
+          {
+            success: false,
+            errorCode: "INCIDENT_OPEN",
+            error: "Ride actions are paused while the incident is being reviewed.",
+          },
+          { status: 409 },
+        );
       }
       return NextResponse.json(
         {
@@ -1376,7 +1419,11 @@ export async function POST(
 
           if (updatedPassengers) {
             const persisted = await Ride.updateOne(
-              { _id: rideId, __v: claimedRide.__v },
+              {
+                _id: rideId,
+                __v: claimedRide.__v,
+                ...incidentGuard,
+              },
               {
                 $set: {
                   passengers: currentRideDoc.passengers,
@@ -1386,6 +1433,19 @@ export async function POST(
               },
             );
             if (persisted.matchedCount !== 1) {
+              const latestRide = await Ride.findById(rideId)
+                .select("hasOpenIncident")
+                .lean();
+              if (latestRide?.hasOpenIncident) {
+                return NextResponse.json(
+                  {
+                    success: false,
+                    errorCode: "INCIDENT_OPEN",
+                    error: "Ride actions are paused while the incident is being reviewed.",
+                  },
+                  { status: 409 },
+                );
+              }
               return NextResponse.json(
                 {
                   success: false,

@@ -14,12 +14,34 @@ export type RideActionName = keyof typeof RIDE_ACTION_ALLOWED_STATUSES;
 export type RideActionStatusDecision =
   | { kind: "allowed"; expectedStatus: string }
   | { kind: "idempotent" }
+  | { kind: "incident_open" }
   | { kind: "conflict" }
   | { kind: "unknown_action" };
+
+export function shouldBlockRideActionForOpenIncident(
+  action: string,
+  hasOpenIncident: boolean,
+  hasBoardingIntent = false,
+): boolean {
+  if (!hasOpenIncident) return false;
+  if (
+    action === "start_ride" ||
+    action === "pickup_arrived" ||
+    action === "passenger_picked_up"
+  ) {
+    return true;
+  }
+  return (
+    hasBoardingIntent &&
+    (action === "station_arrived" || action === "boarding_alighting")
+  );
+}
 
 export function getRideActionStatusDecision(
   action: string,
   status: string,
+  hasOpenIncident = false,
+  hasBoardingIntent = false,
 ): RideActionStatusDecision {
   if (!Object.prototype.hasOwnProperty.call(RIDE_ACTION_ALLOWED_STATUSES, action)) {
     return { kind: "unknown_action" };
@@ -33,6 +55,16 @@ export function getRideActionStatusDecision(
 
   const allowedStatuses =
     RIDE_ACTION_ALLOWED_STATUSES[action as RideActionName] as readonly string[];
+  if (
+    allowedStatuses.includes(status) &&
+    shouldBlockRideActionForOpenIncident(
+      action,
+      hasOpenIncident,
+      hasBoardingIntent,
+    )
+  ) {
+    return { kind: "incident_open" };
+  }
   return allowedStatuses.includes(status)
     ? { kind: "allowed", expectedStatus: status }
     : { kind: "conflict" };
