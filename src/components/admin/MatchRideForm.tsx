@@ -122,7 +122,6 @@ export default function MatchRideForm({
     if (pickupTimes.length === 0 || arrivalTimes.length === 0) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStartTime(pickupTimes.sort()[0]);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEndTime(arrivalTimes.sort().at(-1)!);
   }, [selectedTripIds, trips, timeTouched]);
 
@@ -1128,7 +1127,7 @@ export default function MatchRideForm({
 
         {capacityExceeded && (
           <p role="alert">
-            Selected trips exceed this vehicle's capacity of{" "}
+            Selected trips exceed this vehicle&apos;s capacity of{" "}
             {getVehiclePassengerCapacity(vehicleType)} passengers.
           </p>
         )}

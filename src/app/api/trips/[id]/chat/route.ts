@@ -21,7 +21,6 @@ import { checkChatText } from "@/lib/chatTextFilter";
 import { buildChatNotificationPlan } from "@/lib/chatNotification";
 import { createNotification } from "@/lib/notifications/createNotification";
 import {
-  CHAT_FREE_TEXT_STRIKE_LIMIT,
   CHAT_FREE_TEXT_STRIKE_WINDOW_MS,
   isChatFreeTextAllowed,
   isChatFreeTextSuspended,

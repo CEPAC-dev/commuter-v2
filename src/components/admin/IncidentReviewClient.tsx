@@ -162,11 +162,15 @@ export default function IncidentReviewClient() {
   );
 
   useEffect(() => {
+    // This effect starts an async fetch; its state updates follow the response.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadIncidents();
   }, [loadIncidents]);
 
   useEffect(() => {
     if (!selectedId) {
+      // Clear stale detail when the selected incident is removed from the list.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDetail(null);
       return;
     }

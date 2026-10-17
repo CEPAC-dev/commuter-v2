@@ -13,7 +13,6 @@ import { Log } from "@/models/Log";
 import { Ride } from "@/models/Ride";
 import { RideIncident } from "@/models/RideIncident";
 import { Trip } from "@/models/Trip";
-import { User } from "@/models/User";
 import { Wallet } from "@/models/Wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { buildPenaltyWalletUpdate, computePenaltyApplication } from "@/lib/walletPenalty";

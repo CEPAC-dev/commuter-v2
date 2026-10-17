@@ -138,7 +138,6 @@ export default function TripChat({
 
   useEffect(() => {
     if (!serverOpen || !tabVisible || panelOpen) {
-      if (panelOpen) setUnreadCount(0);
       return;
     }
     let cancelled = false;
@@ -258,7 +257,10 @@ export default function TripChat({
       ) : (
         <button
           type="button"
-          onClick={() => setPanelOpen(true)}
+          onClick={() => {
+            setUnreadCount(0);
+            setPanelOpen(true);
+          }}
           aria-label={title}
           style={{
             display: "inline-flex",

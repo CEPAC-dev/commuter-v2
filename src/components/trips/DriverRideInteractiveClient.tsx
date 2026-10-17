@@ -144,7 +144,7 @@ export default function DriverRideInteractiveClient({
   email,
 }: { ride: RideDetailView; email: string }) {
   const [ride, setRide] = useState(rideProp);
-  const [clockNow, setClockNow] = useState(Date.now());
+  const [clockNow, setClockNow] = useState(0);
   const [rideStarted, setRideStarted] = useState(
     ride.status === "active" || ride.status === "completed",
   );
@@ -186,8 +186,13 @@ export default function DriverRideInteractiveClient({
   const isRideTerminal = ride.status === "cancelled" || ride.status === "completed";
 
   useEffect(() => {
-    const interval = window.setInterval(() => setClockNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
+    const updateClock = () => setClockNow(Date.now());
+    const initialUpdate = window.setTimeout(updateClock, 0);
+    const interval = window.setInterval(updateClock, 1000);
+    return () => {
+      window.clearTimeout(initialUpdate);
+      window.clearInterval(interval);
+    };
   }, []);
 
   const handleGoToLocation = async (step: StepItem) => {
@@ -752,7 +757,6 @@ export default function DriverRideInteractiveClient({
             : item,
         ),
       }));
-      setClockNow(Date.now());
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
       setRideActionError(

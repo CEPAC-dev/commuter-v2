@@ -89,11 +89,15 @@ export default function ChatReportsClient() {
   }, [page, status, t]);
 
   useEffect(() => {
+    // This effect starts an async fetch; its state updates follow the response.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadReports();
   }, [loadReports]);
 
   const selected = reports.find((report) => report.id === selectedId) ?? null;
   useEffect(() => {
+    // Keep the editable note aligned with the selected report.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAdminNote(selected?.adminNote ?? "");
   }, [selected?.id, selected?.adminNote]);
 

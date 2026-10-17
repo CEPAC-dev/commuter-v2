@@ -91,7 +91,8 @@ export function serializePassengerAssignedDriver<
   currentDriverPhone?: string | null,
 ): Omit<T, "phone"> & { phone?: string } | null | undefined {
   if (!assignedDriver) return assignedDriver;
-  const { phone: _snapshotPhone, ...otherDriverDetails } = assignedDriver;
+  const otherDriverDetails = { ...assignedDriver };
+  Reflect.deleteProperty(otherDriverDetails, "phone");
   if (!visibility.allowed || !currentDriverPhone) {
     return otherDriverDetails as Omit<T, "phone">;
   }
