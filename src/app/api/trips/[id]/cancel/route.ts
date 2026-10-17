@@ -183,6 +183,110 @@ export async function POST(
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
     }
 
+    if (body.action === "request_no_show_review") {
+      if (trip.status !== "no_show") {
+        return NextResponse.json(
+          {
+            errorCode: "TRIP_NOT_NO_SHOW",
+            error: "Review requests are only available for no-show trips.",
+          },
+          { status: 409 },
+        );
+      }
+      if (trip.paymentStatus !== "paid") {
+        return NextResponse.json(
+          {
+            errorCode: "TRIP_NOT_PAID",
+            error: "Only paid trips can be submitted for review.",
+          },
+          { status: 409 },
+        );
+      }
+
+      const existingRequest = await RefundRequest.findOne({
+        tripId: trip._id,
+        passengerId: session.userId,
+      })
+        .sort({ requestedAt: -1 })
+        .lean();
+      if (existingRequest) {
+        return NextResponse.json({
+          success: true,
+          alreadyRequested: true,
+          requestStatus: existingRequest.status,
+        });
+      }
+
+      const requestTime = new Date();
+      const refundAmount = Number(trip.priceEgp);
+      if (!Number.isFinite(refundAmount) || refundAmount < 0) {
+        return NextResponse.json(
+          {
+            errorCode: "INVALID_TRIP_AMOUNT",
+            error: "The trip amount is unavailable for review.",
+          },
+          { status: 409 },
+        );
+      }
+
+      const dbSession = await mongoose.startSession();
+      let createdReviewRequest = false;
+      try {
+        await dbSession.withTransaction(async () => {
+          const claimedTrip = await Trip.findOneAndUpdate(
+            {
+              _id: trip._id,
+              userId: session.userId,
+              status: "no_show",
+              paymentStatus: "paid",
+              noShowReviewRequestedAt: null,
+            },
+            { $set: { noShowReviewRequestedAt: requestTime } },
+            { new: true, session: dbSession },
+          );
+          if (!claimedTrip) return;
+          await RefundRequest.create(
+            [
+              {
+                tripId: trip._id,
+                passengerId: session.userId,
+                requestedAt: requestTime,
+                refundAmount,
+                retainedAmount: 0,
+                tier: "no_show_review",
+                status: "pending",
+              },
+            ],
+            { session: dbSession },
+          );
+          createdReviewRequest = true;
+        });
+      } finally {
+        await dbSession.endSession();
+      }
+
+      const submittedRequest = await RefundRequest.findOne({
+        tripId: trip._id,
+        passengerId: session.userId,
+      })
+        .sort({ requestedAt: -1 })
+        .lean();
+      if (!submittedRequest) {
+        return NextResponse.json(
+          {
+            errorCode: "REVIEW_ALREADY_REQUESTED",
+            error: "A review request has already been submitted for this trip.",
+          },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        alreadyRequested: !createdReviewRequest,
+        requestStatus: submittedRequest.status,
+      });
+    }
+
     if (trip.status === "no_show") {
       return NextResponse.json(
         {

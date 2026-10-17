@@ -460,6 +460,14 @@ export const ar: Record<MessageKey, string> = {
   "trip_detail.seats": "المقاعد {seats}",
   "trip_detail.refund_rejected": "طلب الاسترداد اترفض",
   "trip_detail.refund_pending": "طلب الاسترداد قيد المراجعة",
+  "trip_detail.no_show_review_note":
+    "تم تسجيل عدم حضورك عند نقطة الركوب. إذا كان ذلك بالخطأ، يمكنك طلب المراجعة.",
+  "trip_detail.no_show_review_action": "طلب مراجعة استرداد المبلغ",
+  "trip_detail.no_show_review_submitting": "جارٍ إرسال طلب المراجعة...",
+  "trip_detail.no_show_review_submitted":
+    "تم إرسال طلب المراجعة إلى الإدارة. لم يتم إصدار أي استرداد بعد.",
+  "trip_detail.no_show_review_error":
+    "تعذر إرسال طلب المراجعة. يرجى المحاولة مرة أخرى.",
   "trip_detail.actions": "إجراءات الرحلة",
   "trip_detail.load_error": "ماقدرناش نحمل بيانات الرحلة.",
   "trip_detail.try_again": "حاول تاني",

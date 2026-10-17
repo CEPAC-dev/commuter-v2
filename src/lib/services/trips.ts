@@ -404,6 +404,7 @@ export async function listUserTrips(
       refundAmount?: number;
       reason?: string;
     } | null;
+    noShowReviewRequestedAt?: Date | string | null;
   };
 
   let total: number;
@@ -677,6 +678,12 @@ export async function listUserTrips(
       cancelledBy: trip.cancelledBy,
       cancelReason: trip.cancelReason,
       cancellation: trip.cancellation,
+      noShowReviewRequestedAt:
+        trip.noShowReviewRequestedAt instanceof Date
+          ? trip.noShowReviewRequestedAt.toISOString()
+          : typeof trip.noShowReviewRequestedAt === "string"
+            ? trip.noShowReviewRequestedAt
+            : null,
       createdAt:
         trip.createdAt instanceof Date
           ? trip.createdAt.toISOString()
@@ -726,6 +733,7 @@ export interface UserTripDetail {
     refundAmount?: number;
     reason?: string;
   } | null;
+  noShowReviewRequestedAt?: string | null;
   date: string;
   cycleIndex: number;
   pickup: GeoPoint;
@@ -816,6 +824,7 @@ export async function getDriverTrip(
     status: string;
     rejectionReason?: string | null;
     reviewedAt?: Date | string | null;
+    noShowReviewRequestedAt?: Date | string | null;
     cancelledBy?: string;
     cancelReason?: string;
     cancellation?: {
@@ -859,6 +868,12 @@ export async function getDriverTrip(
       : trip.reviewedAt instanceof Date
         ? trip.reviewedAt.toISOString()
         : trip.reviewedAt ?? null,
+    noShowReviewRequestedAt:
+      trip.noShowReviewRequestedAt instanceof Date
+        ? trip.noShowReviewRequestedAt.toISOString()
+        : typeof trip.noShowReviewRequestedAt === "string"
+          ? trip.noShowReviewRequestedAt
+          : null,
     paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
     pickupStationOptions: trip.pickupStationOptions ?? [],
     dropoffStationOptions: trip.dropoffStationOptions ?? [],

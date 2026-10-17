@@ -10,6 +10,7 @@ import * as rideActions from "@/lib/services/rideActionHelpers";
 import { creditReferralBonusIfEligible } from "@/lib/referral";
 import { normalizeSharedRidePassengers } from "@/lib/services/sharedRideManifest";
 import { notifyAdminsOfCompletedPaidTrip } from "@/lib/notifications/adminActivity";
+import { notifyPassengersOfNoShowTrips } from "@/lib/notifications/noShowTrip";
 import {
   getRideActionStatusDecision,
   shouldBlockRideActionForOpenIncident,
@@ -1886,6 +1887,7 @@ export async function POST(
         const noShowTripIds = new Set(
           getNoShowTripIds(actionPassengers, linkedTrips),
         );
+        const markedNoShowTripIds: string[] = [];
         for (const trip of linkedTrips) {
           if (!noShowTripIds.has(String(trip._id))) continue;
           const passenger = actionPassengers.find(
@@ -1911,6 +1913,7 @@ export async function POST(
             .select("_id userId")
             .lean<{ _id: Types.ObjectId; userId: Types.ObjectId } | null>();
           if (markedTrip) {
+            markedNoShowTripIds.push(String(markedTrip._id));
             await Log.create({
               tripId: markedTrip._id,
               rideId,
@@ -1964,6 +1967,7 @@ export async function POST(
             ),
           ),
         );
+        await notifyPassengersOfNoShowTrips(markedNoShowTripIds);
 
         result = {
           success: true,

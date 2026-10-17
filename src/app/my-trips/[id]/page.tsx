@@ -20,6 +20,7 @@ import PrivateRideDetails from "@/components/trips/PrivateRideDetails";
 import SharedRideDetails from "@/components/trips/SharedRideDetails";
 import RateTripModal from "@/components/trips/RateTripModal";
 import CancelTripModal from "@/components/trips/CancelTripModal";
+import NoShowReviewNotice from "@/components/trips/NoShowReviewNotice";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
@@ -706,6 +707,14 @@ export default async function TripDetailPage({
                   )}
                 </div>
               </div>
+
+              {!isDriver && status === "no_show" && (
+                <NoShowReviewNotice
+                  tripId={trip.id}
+                  paymentStatus={trip.paymentStatus}
+                  requestedAt={trip.noShowReviewRequestedAt}
+                />
+              )}
 
               <div>
                 <p className="trip-summary-label">{translate(locale, "trip_detail.trip_price")}</p>

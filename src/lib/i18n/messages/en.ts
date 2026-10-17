@@ -461,6 +461,14 @@ export const en = {
   "trip_detail.seats": "Seats {seats}",
   "trip_detail.refund_rejected": "Refund rejected",
   "trip_detail.refund_pending": "Refund pending review",
+  "trip_detail.no_show_review_note":
+    "You were marked as not present at pickup. If this is a mistake, you can request a review.",
+  "trip_detail.no_show_review_action": "Request refund review",
+  "trip_detail.no_show_review_submitting": "Submitting review request...",
+  "trip_detail.no_show_review_submitted":
+    "Your review request has been submitted for admin review. No refund has been issued yet.",
+  "trip_detail.no_show_review_error":
+    "Could not submit the review request. Please try again.",
   "trip_detail.actions": "Trip actions",
   "trip_detail.load_error": "We couldn't load this trip.",
   "trip_detail.try_again": "Try again",
