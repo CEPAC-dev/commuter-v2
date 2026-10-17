@@ -1331,6 +1331,8 @@ export const en = {
   "wallet.reserve_floor": "Reserve (Floor)",
   "wallet.pending_withdrawal": "Pending Withdrawal",
   "wallet.withdrawable": "Withdrawable",
+  "wallet.outstanding_amount": "Outstanding amount, deducted from your future earnings",
+  "wallet.debt_repayment_description": "Earnings applied to outstanding debt",
   "wallet.max_withdrawal_limit_prefix": "Max withdrawal limit per request:",
   "wallet.withdrawal_requests_title": "Withdrawal Requests",
   "wallet.destination_prefix": "To:",

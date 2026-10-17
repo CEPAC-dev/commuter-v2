@@ -44,14 +44,5 @@ const WalletSchema = new Schema(
   { timestamps: true },
 );
 
-WalletSchema.pre("validate", function () {
-  if (this.reservedBalanceEgp > this.balanceEgp) {
-    this.invalidate(
-      "reservedBalanceEgp",
-      "Reserved balance cannot exceed balance.",
-    );
-  }
-});
-
 export type WalletDoc = InferSchemaType<typeof WalletSchema>;
 export const Wallet = models.Wallet || model("Wallet", WalletSchema);

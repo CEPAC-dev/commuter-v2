@@ -18,6 +18,7 @@ import {
 
 interface WalletContext {
   balanceEgp: number;
+  owedEgp: number;
   reserveAmount: number;
   pendingWithdrawalAmount: number;
   withdrawableEgp: number;
@@ -282,6 +283,7 @@ export default function WithdrawalQueueClient() {
                       <td style={{ padding: "14px 16px" }}>
                         <div style={{ fontSize: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
                           <span>Balance: <strong>{r.wallet.balanceEgp}</strong></span>
+                          <span>Owed: <strong>{r.wallet.owedEgp}</strong></span>
                           <span>Reserve: <strong>{r.wallet.reserveAmount}</strong></span>
                           <span>Pending: <strong style={{ color: "var(--color-accent)" }}>{r.wallet.pendingWithdrawalAmount}</strong></span>
                           <span>Withdrawable: <strong style={{ color: "var(--color-secondary)" }}>{r.wallet.withdrawableEgp}</strong></span>

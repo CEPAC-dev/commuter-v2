@@ -4,6 +4,7 @@ import { Types } from "mongoose";
 
 const {
   applyEarningWithDebt,
+  buildEarningWalletUpdate,
   buildPenaltyWalletUpdate,
   computePenaltyApplication,
   computeWithdrawable,
@@ -200,6 +201,33 @@ test("penalty update is one upsertable pipeline with an atomic balance floor", (
         ],
       },
     ],
+  });
+
+  test("earning update applies debt before increasing balance atomically", () => {
+    const pipeline = buildEarningWalletUpdate(
+      new Types.ObjectId("507f1f77bcf86cd799439011"),
+      25,
+      new Date("2026-10-17T00:00:00.000Z"),
+    );
+    const set = pipeline[0].$set;
+
+    assert.deepEqual(set.balanceEgp, {
+      $add: [
+        { $ifNull: ["$balanceEgp", 0] },
+        {
+          $subtract: [
+            25,
+            { $min: [{ $ifNull: ["$owedEgp", 0] }, 25] },
+          ],
+        },
+      ],
+    });
+    assert.deepEqual(set.owedEgp, {
+      $max: [
+        0,
+        { $subtract: [{ $ifNull: ["$owedEgp", 0] }, 25] },
+      ],
+    });
   });
   assert.deepEqual(set.owedEgp, {
     $add: [

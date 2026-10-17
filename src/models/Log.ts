@@ -104,6 +104,7 @@ export const LogSchema = new Schema(
         "chat_contact_blocked",
         "chat_free_text_suspended",
         "driver_penalty_applied",
+        "driver_earning_debt_repaid",
         "admin_wallet_adjusted",
         "status_changed",
         "custom_action",

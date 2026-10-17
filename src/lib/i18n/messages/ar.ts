@@ -1318,6 +1318,8 @@ export const ar: Record<MessageKey, string> = {
   "wallet.reserve_floor": "الحد الأدنى المحجوز",
   "wallet.pending_withdrawal": "سحب قيد الانتظار",
   "wallet.withdrawable": "قابل للسحب",
+  "wallet.outstanding_amount": "المبلغ المستحق، ويُخصم من أرباحك المستقبلية",
+  "wallet.debt_repayment_description": "أرباح خُصمت لسداد المبلغ المستحق",
   "wallet.max_withdrawal_limit_prefix": "الحد الأقصى للسحب لكل طلب:",
   "wallet.withdrawal_requests_title": "طلبات السحب",
   "wallet.destination_prefix": "إلى:",

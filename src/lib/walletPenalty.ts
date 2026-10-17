@@ -58,6 +58,47 @@ export function buildPenaltyWalletUpdate(
   ];
 }
 
+export function buildEarningWalletUpdate(
+  userId: Types.ObjectId,
+  earningEgp: number,
+  appliedAt: Date,
+): PipelineStage[] {
+  const earning = egp(toPiasters(earningEgp, "earningEgp"));
+  if (earning <= 0) {
+    throw new RangeError("earningEgp must be greater than zero.");
+  }
+
+  const owed = { $ifNull: ["$owedEgp", 0] };
+  const repaid = { $min: [owed, earning] };
+
+  return [
+    {
+      $set: {
+        userId,
+        balanceEgp: {
+          $add: [
+            { $ifNull: ["$balanceEgp", 0] },
+            { $subtract: [earning, repaid] },
+          ],
+        },
+        owedEgp: { $max: [0, { $subtract: [owed, earning] }] },
+        totalCreditedEgp: {
+          $add: [{ $ifNull: ["$totalCreditedEgp", 0] }, earning],
+        },
+        totalDebitedEgp: {
+          $add: [{ $ifNull: ["$totalDebitedEgp", 0] }, repaid],
+        },
+        pendingWithdrawalAmount: {
+          $ifNull: ["$pendingWithdrawalAmount", 0],
+        },
+        reservedBalanceEgp: { $ifNull: ["$reservedBalanceEgp", 0] },
+        status: { $ifNull: ["$status", "active"] },
+        lastTransactionAt: appliedAt,
+      },
+    },
+  ];
+}
+
 export function computePenaltyApplication({
   balanceEgp,
   owedEgp,
