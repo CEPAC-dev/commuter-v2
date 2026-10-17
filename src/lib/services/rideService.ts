@@ -29,6 +29,11 @@ import {
   isRideWithinCapacity,
 } from "@/lib/rideCapacity";
 import { countRidePassengers } from "@/lib/ridePassengerCount";
+import {
+  evaluateTripClaim,
+  isTripClaimTransactionConflict,
+  TripClaimConflictError,
+} from "@/lib/matchingEndpointGuards";
 
 type MatchResult = {
   availabilityId?: Types.ObjectId | string | null;
@@ -145,6 +150,7 @@ function normalizeRoutePayload(route: unknown[] = []): unknown[] {
 async function createRide(matchResult: MatchResult) {
   const session = await mongoose.startSession();
   session.startTransaction();
+  let sessionClosed = false;
   try {
     // availabilityId is optional and purely informational under the recurring-
     // availability model — a broadcast-matched ride may not originate from any
@@ -251,17 +257,21 @@ async function createRide(matchResult: MatchResult) {
       );
     }
 
-    await rideDoc.save({ session });
-
-    // Recurring driver Availability is never mutated/consumed by ride lifecycle.
-
-    // update trips with seatNumbers and driver assignment
+    const expectedTripIds = matchResult.passengers.map((passenger) =>
+      String(passenger.tripId),
+    );
+    const claimedTripIds: string[] = [];
     for (const p of matchResult.passengers) {
       const assigned = passengersForRide.find(
         (pr) => String(pr.tripId) === String(p.tripId),
       );
-      await Trip.findByIdAndUpdate(
-        p.tripId,
+      const claim = await Trip.updateOne(
+        {
+          _id: p.tripId,
+          status: "submitted",
+          paymentStatus: "paid",
+          rideId: null,
+        },
         {
           $set: {
             rideId: rideDoc._id,
@@ -272,10 +282,22 @@ async function createRide(matchResult: MatchResult) {
         },
         { session },
       );
+      if (claim.modifiedCount === 1) {
+        claimedTripIds.push(String(p.tripId));
+      }
     }
+    const claimResult = evaluateTripClaim(expectedTripIds, claimedTripIds);
+    if (!claimResult.ok) {
+      throw new TripClaimConflictError(claimResult.skippedCount);
+    }
+
+    await rideDoc.save({ session });
+
+    // Recurring driver Availability is never mutated/consumed by ride lifecycle.
 
     await session.commitTransaction();
     session.endSession();
+    sessionClosed = true;
 
     if (!matchResult.driverId) {
       const savedRide = await Ride.findById(rideDoc._id);
@@ -301,8 +323,15 @@ async function createRide(matchResult: MatchResult) {
     }
     return rideDoc;
   } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    if (!sessionClosed) {
+      session.endSession();
+    }
+    if (!sessionClosed && isTripClaimTransactionConflict(err)) {
+      throw new TripClaimConflictError(matchResult.passengers.length);
+    }
     throw err;
   }
 }

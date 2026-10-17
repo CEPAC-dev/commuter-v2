@@ -22,8 +22,9 @@ export async function GET(req: NextRequest) {
         .sort({ name: 1 })
         .lean(),
       Trip.find({
-        status: { $in: ["submitted", "pending_payment", "matched"] },
+        status: "submitted",
         paymentStatus: "paid",
+        rideId: null,
       })
         .select(
           "_id tripNumber date pickupTime arrivalTime pickup dropoff vehicleType rideType priceEgp numberOfPassengers extraPassengers userId",
