@@ -10,6 +10,7 @@ import {
 import { Ride } from "@/models/Ride";
 import { RideIncident } from "@/models/RideIncident";
 import { Trip } from "@/models/Trip";
+import { notifyRideIncidentCreated } from "@/lib/notifications/rideIncident";
 
 class IncidentConflictError extends Error {
   constructor() {
@@ -197,6 +198,7 @@ export async function POST(
       await dbSession.endSession();
     }
 
+    await notifyRideIncidentCreated(incidentId);
     return NextResponse.json(
       { success: true, incidentId, status: "open" },
       { status: 201 },

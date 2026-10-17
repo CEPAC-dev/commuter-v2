@@ -27,7 +27,8 @@ export async function notifyAdmins(input: {
     | "admin_campaign_claim"
     | "late_gateway_payment"
     | "station_suggestion_requested"
-    | "trip_chat_reported";
+    | "trip_chat_reported"
+    | "ride_incident_reported";
   dedupeKey: string;
   title: string;
   body: string;
@@ -65,6 +66,29 @@ export async function notifyAdmins(input: {
       }
     }),
   );
+}
+
+export async function notifyAdminsOfRideIncident(input: {
+  incidentId: string;
+  rideId: string;
+  rideNumber: number;
+  incidentType: string;
+  rideStatusAtReport: "confirmed" | "active";
+}) {
+  await notifyAdmins({
+    eventType: "ride_incident_reported",
+    dedupeKey: `ride-incident:${input.incidentId}`,
+    title: `Problem reported for ride #${input.rideNumber}`,
+    body: `${input.incidentType} reported while ride was ${input.rideStatusAtReport}.`,
+    data: {
+      incidentId: input.incidentId,
+      rideId: input.rideId,
+      rideNumber: input.rideNumber,
+      incidentType: input.incidentType,
+      rideStatusAtReport: input.rideStatusAtReport,
+      href: "/admin/alerts",
+    },
+  });
 }
 
 export async function notifyAdminsOfCompletedPaidTrip(tripId: string) {
