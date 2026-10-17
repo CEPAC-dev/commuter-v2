@@ -17,6 +17,7 @@ import type {
   PaymentStatus,
   RideDetailView,
   TripListRow,
+  TripStatus,
 } from "@/types/booking";
 import type { GeoPoint, StationSelection } from "@/types/geo";
 import { getCairoNowParts, hasPastPickup } from "@/lib/time/cairoTime";
@@ -188,7 +189,7 @@ const STATUS_GROUPS = {
   upcoming: ["submitted", "confirmed"],
   ongoing: ["active", "matched"],
   previous: ["completed", "no_show", "cancelled", "time_out", "nomatch"],
-} satisfies Record<StatusGroup, BookingStatus[]>;
+} satisfies Record<StatusGroup, TripStatus[]>;
 
 export interface ListUserTripsOptions {
   page: number;
@@ -306,7 +307,7 @@ export async function listDriverTrips(
       isStandalone: trip.requestId == null,
       date: trip.date,
       paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
-      status: (trip.status as BookingStatus) ?? "pending_payment",
+      status: (trip.status as TripStatus) ?? "pending_payment",
       vehicleType: trip.vehicleType,
       pickupAddress: trip.pickup?.address ?? "—",
       dropoffAddress: trip.dropoff?.address ?? "—",
@@ -639,7 +640,7 @@ export async function listUserTrips(
       isStandalone,
       date: trip.date,
       paymentStatus: (trip.paymentStatus as PaymentStatus) ?? "pending",
-      status: (trip.status as BookingStatus) ?? "pending_payment",
+      status: (trip.status as TripStatus) ?? "pending_payment",
       vehicleType: trip.vehicleType,
       pickupAddress: trip.pickup?.address ?? "—",
       dropoffAddress: trip.dropoff?.address ?? "—",

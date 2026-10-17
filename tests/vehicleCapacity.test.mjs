@@ -36,6 +36,12 @@ test("every vehicle grid has exactly its configured passenger capacity", () => {
   }
 });
 
+test("mini buses keep their own seat-map label", () => {
+  const grid = getVehicleSeatGrid("mini_bus");
+  assert.equal(grid.label, "Mini Bus");
+  assert.equal(grid.labelKey, "vehicle_seating.vehicle_type_mini_bus");
+});
+
 test("Trip creation rejects groups above configured vehicle capacity", () => {
   for (const vehicleType of Object.keys(VEHICLES)) {
     const capacity = getVehiclePassengerCapacity(vehicleType);

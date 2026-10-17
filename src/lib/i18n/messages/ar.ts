@@ -649,8 +649,8 @@ export const ar: Record<MessageKey, string> = {
   "vehicle_seating.boarding": "صعود",
   "vehicle_seating.on_board": "على متن المركبة",
   "vehicle_seating.alighted": "تم النزول",
-  "vehicle_seating.legend_empty": "فارغ / بانتظار",
-  "vehicle_seating.legend_arrived": "وصول",
+  "vehicle_seating.legend_empty": "فارغ",
+  "vehicle_seating.legend_arrived": "جارٍ الصعود",
   "vehicle_seating.legend_on_board": "على متن المركبة",
   "vehicle_seating.legend_alighted": "تم النزول",
   "vehicle_seating.legend_other": "مقاعد أخرى",
@@ -664,6 +664,7 @@ export const ar: Record<MessageKey, string> = {
   "vehicle_seating.vehicle_type_private": "سيارة خاصة / تاكسي",
   "vehicle_seating.vehicle_type_van": "فان (تمناية)",
   "vehicle_seating.vehicle_type_microbus": "ميكروباص",
+  "vehicle_seating.vehicle_type_mini_bus": "ميني باص",
   "navigation.location_unavailable": "الموقع غير متاح لهذه المحطة.",
   "navigation.unable_access_location": "تعذّر الوصول إلى موقعك الحالي.",
   "navigation.unable_get_location":

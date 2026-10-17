@@ -440,7 +440,7 @@ function getSeatCapacity(ride: RideDocLike): number {
 }
 
 /**
- * GET /api/actions/ride/:rideId/next
+ * GET /api/actions/ride/:rideId
  * Get the next action/prompt for the driver based on current ride state
  * Returns:
  * - For shared rides: station information and boarding/alighting counts
@@ -509,7 +509,7 @@ export async function GET(
       { status: 200 },
     );
   } catch (error) {
-    console.error("[GET /api/actions/ride/:rideId/next]", error);
+    console.error("[GET /api/actions/ride/:rideId]", error);
     return NextResponse.json(
       { success: false, error: "Failed to get next action" },
       { status: 500 },

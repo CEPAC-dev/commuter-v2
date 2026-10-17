@@ -20,7 +20,6 @@ export type BookingStatus =
   | "confirmed"
   | "active"
   | "completed"
-  | "no_show"
   | "cancelled"
   | "time_out";
 

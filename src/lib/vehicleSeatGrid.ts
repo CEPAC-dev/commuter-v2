@@ -20,6 +20,7 @@ export function getVehicleSeatGrid(vType: string): {
     "taxi_shared",
   ].includes(vType);
   const isVan = vType === "van_shared";
+  const isMiniBus = vType === "mini_bus";
   const capacity = getVehiclePassengerCapacity(vType);
   const rearSeatsPerRow = isCarOrTaxi ? 3 : isVan ? 2 : 3;
   const rows: SeatGridCell[][] = [
@@ -43,12 +44,20 @@ export function getVehicleSeatGrid(vType: string): {
   }
 
   return {
-    label: isCarOrTaxi ? "Private Car / Taxi" : isVan ? "Van" : "Microbus",
+    label: isCarOrTaxi
+      ? "Private Car / Taxi"
+      : isVan
+        ? "Van"
+        : isMiniBus
+          ? "Mini Bus"
+          : "Microbus",
     labelKey: isCarOrTaxi
       ? "vehicle_seating.vehicle_type_private"
       : isVan
         ? "vehicle_seating.vehicle_type_van"
-        : "vehicle_seating.vehicle_type_microbus",
+        : isMiniBus
+          ? "vehicle_seating.vehicle_type_mini_bus"
+          : "vehicle_seating.vehicle_type_microbus",
     totalSeats: capacity,
     rows,
   };

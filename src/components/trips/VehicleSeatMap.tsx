@@ -10,6 +10,44 @@ import { getVehicleSeatGrid } from "@/lib/vehicleSeatGrid";
 
 export { getVehicleSeatGrid } from "@/lib/vehicleSeatGrid";
 
+const DRIVER_SEAT_STYLES = {
+  empty: {
+    background: "#ffffff",
+    border: "#CBD5E1",
+    color: "#64748B",
+    labelKey: "vehicle_seating.empty",
+    legendKey: "vehicle_seating.legend_empty",
+  },
+  boarding: {
+    background: "#E8F8F5",
+    border: "#27AE60",
+    color: "#196F3D",
+    labelKey: "vehicle_seating.boarding",
+    legendKey: "vehicle_seating.legend_arrived",
+  },
+  on_board: {
+    background: "#EFF6FF",
+    border: "#2F80ED",
+    color: "#1D4ED8",
+    labelKey: "vehicle_seating.on_board",
+    legendKey: "vehicle_seating.legend_on_board",
+  },
+  alighted: {
+    background: "#FFEBEE",
+    border: "#E74C3C",
+    color: "#C0392B",
+    labelKey: "vehicle_seating.alighted",
+    legendKey: "vehicle_seating.legend_alighted",
+  },
+} as const;
+
+const DRIVER_SEAT_LEGEND = [
+  DRIVER_SEAT_STYLES.empty,
+  DRIVER_SEAT_STYLES.boarding,
+  DRIVER_SEAT_STYLES.on_board,
+  DRIVER_SEAT_STYLES.alighted,
+];
+
 interface Props {
   ride?: RideDetailView | null;
   vehicleType?: string;
@@ -277,6 +315,14 @@ export default function VehicleSeatMap({
                 };
                 const isSelected = selectedSeat === seatNo;
                 const isMySeat = !isDriver && assignedSeatNumbers.includes(seatNo);
+                const driverSeatStyle =
+                  seatState.state === "green"
+                    ? DRIVER_SEAT_STYLES.boarding
+                    : seatState.state === "blue"
+                      ? DRIVER_SEAT_STYLES.on_board
+                      : seatState.state === "red"
+                        ? DRIVER_SEAT_STYLES.alighted
+                        : DRIVER_SEAT_STYLES.empty;
 
                 let bg = "#ffffff";
                 let borderColor = "#CBD5E1";
@@ -289,27 +335,10 @@ export default function VehicleSeatMap({
                   color = "#00806E";
                   labelText = t("vehicle_seating.your_seat");
                 } else if (isDriver) {
-                  if (!rideStarted || seatState.state === "grey") {
-                    bg = "#ffffff";
-                    borderColor = "#CBD5E1";
-                    color = "#64748B";
-                    labelText = t("vehicle_seating.empty");
-                  } else if (seatState.state === "green") {
-                    bg = "#E8F8F5";
-                    borderColor = "#27AE60";
-                    color = "#196F3D";
-                    labelText = t("vehicle_seating.boarding");
-                  } else if (seatState.state === "blue") {
-                    bg = "#EFF6FF";
-                    borderColor = "#2F80ED";
-                    color = "#1D4ED8";
-                    labelText = t("vehicle_seating.on_board");
-                  } else if (seatState.state === "red") {
-                    bg = "#FFEBEE";
-                    borderColor = "#E74C3C";
-                    color = "#C0392B";
-                    labelText = t("vehicle_seating.alighted");
-                  }
+                  bg = driverSeatStyle.background;
+                  borderColor = driverSeatStyle.border;
+                  color = driverSeatStyle.color;
+                  labelText = t(driverSeatStyle.labelKey);
                 }
 
                 if (isSelected) {
@@ -392,64 +421,25 @@ export default function VehicleSeatMap({
         }}
       >
         {isDriver ? (
-          <>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          DRIVER_SEAT_LEGEND.map((style) => (
+            <div
+              key={style.legendKey}
+              style={{ display: "flex", alignItems: "center", gap: 5 }}
+            >
               <span
                 style={{
                   width: 10,
                   height: 10,
                   borderRadius: 3,
-                  background: "#F8FAFC",
-                  border: "1px solid #CBD5E1",
+                  background: style.background,
+                  border: `1px solid ${style.border}`,
                 }}
               />
-              <span style={{ fontSize: 11, color: "#5A6A7A", fontWeight: 600 }}>
-                {t("vehicle_seating.legend_empty")}
+              <span style={{ fontSize: 11, color: style.color, fontWeight: 700 }}>
+                {t(style.legendKey)}
               </span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 3,
-                  background: "#E8F8F5",
-                  border: "1px solid #27AE60",
-                }}
-              />
-              <span style={{ fontSize: 11, color: "#196F3D", fontWeight: 700 }}>
-                {t("vehicle_seating.legend_arrived")}
-              </span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 3,
-                  background: "#EFF6FF",
-                  border: "1px solid #2F80ED",
-                }}
-              />
-              <span style={{ fontSize: 11, color: "#1D4ED8", fontWeight: 700 }}>
-                {t("vehicle_seating.legend_on_board")}
-              </span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 3,
-                  background: "#FFEBEE",
-                  border: "1px solid #E74C3C",
-                }}
-              />
-              <span style={{ fontSize: 11, color: "#C0392B", fontWeight: 700 }}>
-                {t("vehicle_seating.legend_alighted")}
-              </span>
-            </div>
-          </>
+          ))
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>

@@ -652,8 +652,8 @@ export const en = {
   "vehicle_seating.boarding": "Boarding",
   "vehicle_seating.on_board": "On Board",
   "vehicle_seating.alighted": "Alighted",
-  "vehicle_seating.legend_empty": "Empty / Waiting",
-  "vehicle_seating.legend_arrived": "Arrived",
+  "vehicle_seating.legend_empty": "Empty",
+  "vehicle_seating.legend_arrived": "Boarding",
   "vehicle_seating.legend_on_board": "On Board",
   "vehicle_seating.legend_alighted": "Alighted",
   "vehicle_seating.legend_other": "Other Seats",
@@ -668,6 +668,7 @@ export const en = {
   "vehicle_seating.vehicle_type_private": "Private Car / Taxi",
   "vehicle_seating.vehicle_type_van": "Van",
   "vehicle_seating.vehicle_type_microbus": "Microbus",
+  "vehicle_seating.vehicle_type_mini_bus": "Mini Bus",
   "navigation.location_unavailable":
     "Location is unavailable for this station.",
   "navigation.unable_access_location":
