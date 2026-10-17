@@ -123,7 +123,31 @@ try {
       : [];
   });
 
-  console.log(JSON.stringify({ overCapacityRides, overCapacityTrips }, null, 2));
+  const sharedCarOverCapacityRides = overCapacityRides.filter(
+    (ride) =>
+      (ride.vehicleType === "shared_car" ||
+        ride.vehicleType === "taxi_shared") &&
+      ride.totalPeople > 3,
+  );
+  const sharedCarOverCapacityTrips = overCapacityTrips.filter(
+    (trip) =>
+      (trip.vehicleType === "shared_car" ||
+        trip.vehicleType === "taxi_shared") &&
+      trip.passengers > 3,
+  );
+
+  console.log(
+    JSON.stringify(
+      {
+        overCapacityRides,
+        overCapacityTrips,
+        sharedCarOverCapacityRides,
+        sharedCarOverCapacityTrips,
+      },
+      null,
+      2,
+    ),
+  );
 } finally {
   await mongoose.disconnect();
 }
