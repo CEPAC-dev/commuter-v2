@@ -4,42 +4,40 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { getAdminSettings, getNomatchSweepFilter } from "@/lib/cancellationPolicy";
-import { logTripNomatch } from "@/lib/services/logActionHelpers";
 import { expireStandaloneTrips } from "@/lib/services/standaloneTripExpiry";
 import {
+  buildUnlinkedTripExpiryFilter,
   buildPendingRequestExpiryFilter,
   buildPendingTripExpiryFilter,
 } from "@/lib/pendingRequestHardening";
-import { isAuthorizedExpiryRequest } from "@/lib/phase8bGuards";
+import { isMatchingEndpointAuthorized, isValidCronSecret } from "@/lib/matchingEndpointGuards";
 import { releasePromoForRequest } from "@/lib/promoCode";
 
 const EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 /**
- * Expires bookings that have been in pending_payment / pending state for
- * more than 2 hours.  Safe to call multiple times (idempotent).
- *
- * Protected by an optional CRON_SECRET env var.
- * Set Authorization: Bearer <CRON_SECRET> when calling from a cron service.
- * Production requests fail closed when CRON_SECRET is missing.
+ * Expires eligible pending bookings and unmatched Trips.
+ * Scheduler requests must send the x-cron-secret header.
  */
 export async function POST(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get("authorization") ?? "";
-  if (!isAuthorizedExpiryRequest(secret, process.env.NODE_ENV === "production", auth)) {
+  if (
+    process.env.NODE_ENV === "production" &&
+    !isValidCronSecret(secret, secret)
+  ) {
     return NextResponse.json(
-      {
-        error: secret
-          ? "Unauthorized"
-          : "CRON_SECRET is required in production.",
-      },
-      { status: secret ? 401 : 500 },
+      { error: "CRON_SECRET must be configured with at least 32 characters." },
+      { status: 500 },
     );
   }
-  if (secret) {
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (
+    !isMatchingEndpointAuthorized({
+      isAdmin: false,
+      configuredCronSecret: secret,
+      providedCronSecret: req.headers.get("x-cron-secret") ?? undefined,
+    })
+  ) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   await connectDB();
@@ -87,19 +85,22 @@ export async function POST(req: NextRequest) {
   // Auto-mark unmatched "submitted" trips as "nomatch" past the admin-configured cutoff.
   const settings = await getAdminSettings();
   const nomatchOr = getNomatchSweepFilter(new Date(), settings.nomatchCutoffTime);
-  const nomatchCandidates = await Trip.find({
-    status: "submitted",
+  const nomatchFilter = buildUnlinkedTripExpiryFilter("submitted", {
     $or: nomatchOr,
-  }).select("_id userId");
+  });
+  const nomatchCandidates = await Trip.find(nomatchFilter).select("_id");
 
+  let nomatchedTrips = 0;
   if (nomatchCandidates.length > 0) {
-    await Trip.updateMany(
-      { _id: { $in: nomatchCandidates.map((t) => t._id) } },
+    const update = await Trip.updateMany(
+      {
+        _id: { $in: nomatchCandidates.map((t) => t._id) },
+        ...nomatchFilter,
+        $or: nomatchOr,
+      },
       { $set: { status: "nomatch" } },
     );
-    await Promise.all(
-      nomatchCandidates.map((t) => logTripNomatch(t._id, t.userId)),
-    );
+    nomatchedTrips = update.modifiedCount;
   }
 
   return NextResponse.json({
@@ -109,9 +110,10 @@ export async function POST(req: NextRequest) {
     cancelledStandalonePayments: standaloneExpiry.cancelledPayments,
     releasedStandaloneWalletReservations:
       standaloneExpiry.releasedWalletReservations,
-    nomatchedTrips: nomatchCandidates.length,
+    nomatchedTrips,
   });
 }
 
-// Allow Vercel Cron to call via GET as well
-export const GET = POST;
+export async function GET() {
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}

@@ -5,17 +5,26 @@ import {
   getRidesByDriver,
   getRideByPassengerIncluded,
 } from "@/lib/services/rideService";
+import { adminAuth } from "@/lib/middleware/adminAuth";
+import { TripClaimConflictError } from "@/lib/matchingEndpointGuards";
 
 export async function POST(req: NextRequest) {
+  const auth = await adminAuth();
+  if (!auth.authorized) return auth.response;
+
   try {
     await connectDB();
     const body = await req.json();
     const ride = await createRide(body);
     return NextResponse.json({ data: ride }, { status: 201 });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const claimConflict = err instanceof TripClaimConflictError;
     return NextResponse.json(
-      { error: err.message || "Failed to create ride" },
-      { status: 400 },
+      {
+        error: err instanceof Error ? err.message : "Failed to create ride",
+        ...(claimConflict ? { skippedCount: err.skippedCount } : {}),
+      },
+      { status: claimConflict ? 409 : 400 },
     );
   }
 }
