@@ -924,13 +924,23 @@ async function addPassengerToRide(
     if (!ride) throw new Error("Ride not found");
     // Recurring driver Availability is never mutated/consumed by ride lifecycle.
 
-    const trip = await Trip.findById(passenger.tripId)
+    const trip = await Trip.findOneAndUpdate(
+      {
+        _id: passenger.tripId,
+        status: "submitted",
+        paymentStatus: "paid",
+        rideId: null,
+      },
+      { $set: { rideId: ride._id, status: "matched" } },
+      { session, new: true },
+    )
       .select("pickupStation dropoffStation")
       .session(session)
       .lean<{
         pickupStation?: StationSelection;
         dropoffStation?: StationSelection;
       }>();
+    if (!trip) throw new Error("Trip is no longer eligible for ride assignment");
 
     ride.passengers.push({
       tripId: passenger.tripId,
@@ -958,11 +968,6 @@ async function addPassengerToRide(
       ride.passengers as unknown as RoutePassenger[],
     );
 
-    await Trip.findByIdAndUpdate(
-      passenger.tripId,
-      { $set: { rideId: ride._id, status: "matched" } },
-      { session },
-    );
     await ride.save({ session });
 
     await session.commitTransaction();
@@ -1168,9 +1173,8 @@ function collectRideTripIds(ride: {
 }
 
 /**
- * Admin-only hard delete: restores every linked trip back to "submitted" (the
- * matchable pool) and then permanently removes the ride document, unlike
- * cancelRide() which only soft-cancels and keeps the ride record around.
+ * Admin-only hard delete: restores linked Trips except terminal no-shows, then
+ * permanently removes the Ride document.
  */
 async function deleteRideAndRestoreTrips(rideId: string | Types.ObjectId) {
   const session = await mongoose.startSession();
@@ -1185,7 +1189,7 @@ async function deleteRideAndRestoreTrips(rideId: string | Types.ObjectId) {
     const tripIds = collectRideTripIds(ride);
 
     await Trip.updateMany(
-      { _id: { $in: tripIds } },
+      { _id: { $in: tripIds }, status: { $ne: "no_show" } },
       {
         $set: {
           rideId: null,
@@ -1195,6 +1199,11 @@ async function deleteRideAndRestoreTrips(rideId: string | Types.ObjectId) {
           seatNumbers: [],
         },
       },
+      { session },
+    );
+    await Trip.updateMany(
+      { _id: { $in: tripIds }, status: "no_show" },
+      { $set: { rideId: null, seatNumbers: [] } },
       { session },
     );
 

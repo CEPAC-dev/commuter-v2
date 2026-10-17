@@ -18,11 +18,13 @@ const {
 const secret = "a".repeat(32);
 
 test("matching options expose only paid submitted Trips without a Ride", async () => {
-  assert.deepEqual(buildEligibleMatchTripFilter(), {
+  const matchFilter = buildEligibleMatchTripFilter();
+  assert.deepEqual(matchFilter, {
     status: "submitted",
     paymentStatus: "paid",
     rideId: null,
   });
+  assert.notEqual(matchFilter.status, "no_show");
 
   const dashboard = await readFile(
     new URL("../src/app/admin/dashboard/page.tsx", import.meta.url),
@@ -119,8 +121,19 @@ test("expiry filters are status-conditional and exclude Trips with a Ride", asyn
     new URL("../src/app/api/trips/expire/route.ts", import.meta.url),
     "utf8",
   );
+  const standaloneExpiry = await readFile(
+    new URL("../src/lib/services/standaloneTripExpiry.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(route, /buildUnlinkedTripExpiryFilter\("submitted"/);
   assert.match(route, /\.\.\.nomatchFilter/);
   assert.match(route, /export async function GET[\s\S]*status: 405/);
   assert.doesNotMatch(route, /export const GET = POST/);
+  for (const status of ["pending_payment", "approved", "waiting_list"]) {
+    assert.match(
+      standaloneExpiry,
+      new RegExp(`buildUnlinkedTripExpiryFilter\\("${status}"`),
+    );
+  }
+  assert.doesNotMatch(standaloneExpiry, /buildUnlinkedTripExpiryFilter\("no_show"/);
 });

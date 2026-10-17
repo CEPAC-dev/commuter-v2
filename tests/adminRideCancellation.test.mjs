@@ -48,10 +48,30 @@ test("plain admin cancellation returns preserved Trip IDs and retains notificati
     "utf8",
   );
   assert.match(service, /getAdminRideCancellationPlan/);
+  assert.match(
+    service,
+    /_id: \{ \$in: tripIds \},\s*status: \{ \$ne: "no_show" \}/,
+  );
+  assert.match(
+    service,
+    /status: "no_show"[\s\S]*?\$set: \{ rideId: null, seatNumbers: \[\] \}/,
+  );
   assert.match(service, /rideId: ride\._id,\s*status: \{ \$in: \["matched", "confirmed", "active"\] \}/);
   assert.match(service, /notifyRideCancellationPassengers/);
   assert.match(service, /return \{ ride, preservedTripIds \}/);
   assert.match(route, /preservedTripIds: result\.preservedTripIds/);
+});
+
+test("ride assignment conditionally claims only paid submitted Trips", async () => {
+  const service = await readFile(
+    new URL("../src/lib/services/rideService.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    service,
+    /Trip\.findOneAndUpdate\(\s*\{\s*_id: passenger\.tripId,\s*status: "submitted",\s*paymentStatus: "paid",\s*rideId: null,\s*\}/,
+  );
+  assert.match(service, /if \(!trip\) throw new Error\("Trip is no longer eligible for ride assignment"\)/);
 });
 
 test("admin no-show count endpoint authenticates, avoids passenger data, and disables caching", async () => {
