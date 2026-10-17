@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Types } from "mongoose";
 
 const {
   applyEarningWithDebt,
+  buildPenaltyWalletUpdate,
   computePenaltyApplication,
   computeWithdrawable,
 } = await import("../src/lib/walletPenalty.ts");
@@ -148,4 +150,71 @@ test("money rules reject negative, non-finite, or unsafe amounts", () => {
       RangeError,
     );
   }
+});
+
+test("a cancellation penalty applies for low or missing wallets", () => {
+  assert.deepEqual(
+    computePenaltyApplication({
+      balanceEgp: 5,
+      owedEgp: 0,
+      penaltyEgp: 20,
+    }),
+    {
+      deductedEgp: 5,
+      newBalanceEgp: 0,
+      addedDebtEgp: 15,
+      newOwedEgp: 15,
+    },
+  );
+  assert.deepEqual(
+    computePenaltyApplication({
+      balanceEgp: 0,
+      owedEgp: 0,
+      penaltyEgp: 20,
+    }),
+    {
+      deductedEgp: 0,
+      newBalanceEgp: 0,
+      addedDebtEgp: 20,
+      newOwedEgp: 20,
+    },
+  );
+});
+
+test("penalty update is one upsertable pipeline with an atomic balance floor", () => {
+  const pipeline = buildPenaltyWalletUpdate(
+    new Types.ObjectId("507f1f77bcf86cd799439011"),
+    30,
+    new Date("2026-10-17T00:00:00.000Z"),
+  );
+  const set = pipeline[0].$set;
+
+  assert.equal(pipeline.length, 1);
+  assert.deepEqual(set.balanceEgp, {
+    $max: [
+      0,
+      {
+        $subtract: [
+          { $ifNull: ["$balanceEgp", 0] },
+          30,
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(set.owedEgp, {
+    $add: [
+      { $ifNull: ["$owedEgp", 0] },
+      {
+        $max: [
+          0,
+          {
+            $subtract: [
+              30,
+              { $ifNull: ["$balanceEgp", 0] },
+            ],
+          },
+        ],
+      },
+    ],
+  });
 });

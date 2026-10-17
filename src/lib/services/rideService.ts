@@ -4,6 +4,11 @@ import { Ride } from "../../models/Ride";
 import { Trip } from "../../models/Trip";
 import { Wallet } from "../../models/Wallet";
 import { WalletTransaction } from "../../models/WalletTransaction";
+import { Log } from "../../models/Log";
+import {
+  buildPenaltyWalletUpdate,
+  computePenaltyApplication,
+} from "@/lib/walletPenalty";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { getEligibleDriverIds } from "@/lib/services/rideMatching";
 import { getAdminSettings, getCancellationTier } from "@/lib/cancellationPolicy";
@@ -1183,33 +1188,58 @@ async function cancelRideByDriver(
       penaltyAmount = Math.round((ride.totalCost * evaluation.penaltyPercent) / 100);
 
       if (penaltyAmount > 0) {
-        let wallet = await Wallet.findOne({ userId: driverUserId }).session(session);
-        if (!wallet) {
-          wallet = new Wallet({
-            userId: driverUserId,
-            balanceEgp: 0,
-            reservedBalanceEgp: 0,
-            totalCreditedEgp: 0,
-            totalDebitedEgp: 0,
-            status: "active",
-          });
+        const userId = new Types.ObjectId(String(driverUserId));
+        const appliedAt = new Date();
+        const walletBefore = await Wallet.findOneAndUpdate(
+          { userId },
+          buildPenaltyWalletUpdate(userId, penaltyAmount, appliedAt),
+          { returnDocument: "before", upsert: true, session },
+        );
+        const application = computePenaltyApplication({
+          balanceEgp: walletBefore?.balanceEgp ?? 0,
+          owedEgp: walletBefore?.owedEgp ?? 0,
+          penaltyEgp: penaltyAmount,
+        });
+
+        if (application.deductedEgp > 0) {
+          await WalletTransaction.create(
+            [
+              {
+                userId,
+                type: "cancellation_penalty",
+                amountEgp: application.deductedEgp,
+                status: "completed",
+                description: `Cancellation penalty (${evaluation.penaltyPercent}%) for ride #${ride.rideNumber || ride._id}`,
+                balanceAfterEgp: application.newBalanceEgp,
+                rideId: ride._id,
+              },
+            ],
+            { session },
+          );
         }
 
-        wallet.balanceEgp -= penaltyAmount;
-        wallet.totalDebitedEgp = (wallet.totalDebitedEgp || 0) + penaltyAmount;
-        wallet.lastTransactionAt = new Date();
-        await wallet.save({ session });
-
-        const tx = new WalletTransaction({
-          userId: driverUserId,
-          type: "cancellation_penalty",
-          amountEgp: penaltyAmount,
-          status: "completed",
-          description: `Cancellation penalty (${evaluation.penaltyPercent}%) for ride #${ride.rideNumber || ride._id}`,
-          balanceAfterEgp: wallet.balanceEgp,
-          rideId: ride._id,
-        });
-        await tx.save({ session });
+        await Log.create(
+          [
+            {
+              userId,
+              driverId: userId,
+              rideId: ride._id,
+              status: "cancelled",
+              action: "driver_penalty_applied",
+              description: "Driver cancellation penalty applied.",
+              actorType: "driver",
+              actorId: userId,
+              actionTimestamp: appliedAt,
+              metadata: {
+                tier: evaluation.tierLabel,
+                penaltyEgp: penaltyAmount,
+                deductedEgp: application.deductedEgp,
+                addedDebtEgp: application.addedDebtEgp,
+              },
+            },
+          ],
+          { session },
+        );
       }
 
       // Recurring driver Availability stays untouched regardless of penalty.

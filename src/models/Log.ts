@@ -5,7 +5,7 @@ export const LogSchema = new Schema(
     tripId: {
       type: Types.ObjectId,
       ref: "Trip",
-      required: true,
+      required: false,
       index: true,
     },
     rideId: {
@@ -103,6 +103,8 @@ export const LogSchema = new Schema(
         "pickup_pin_lockout",
         "chat_contact_blocked",
         "chat_free_text_suspended",
+        "driver_penalty_applied",
+        "admin_wallet_adjusted",
         "status_changed",
         "custom_action",
       ],
