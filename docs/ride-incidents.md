@@ -23,7 +23,7 @@ be cancelled directly; `DELETE /api/ride/{id}` returns HTTP 409 with
 `USE_INCIDENT_REPORT`. Cancellation of a confirmed ride retains its existing
 behavior. Admin cancellation is unchanged.
 
-## Notifications and review
+## Notifications and admin review
 
 The driver receives a localized confirmation after a successful report.
 Passengers whose Trips were not cancelled when the incident was reported
@@ -32,9 +32,29 @@ receive an activity notification containing the ride number, incident type, and
 ride status at report time. Notifications omit the driver's phone and the
 report note. Notification failures do not undo or fail incident creation.
 
-There is no incident resolution endpoint or admin review screen in this
-release; those belong to the subsequent admin-review work. The model includes
-resolution fields for that follow-up.
+Admins can review open and resolved incidents at `/admin/incidents`. Each
+resolution requires an admin note of at most 500 characters:
+
+| Action | Ride and Trip behavior | Wallet behavior |
+| --- | --- | --- |
+| `continue` | Clear the open-incident flag; leave the Ride and Trips unchanged. | None. |
+| `cancel_no_penalty` | Cancel a confirmed or active Ride. Reset only not-yet-picked-up Trips; preserve picked-up or finished Trips and return their IDs for follow-up. | None. |
+| `cancel_with_penalty` | Same cancellation and Trip behavior as `cancel_no_penalty`. | Apply the entered amount using the existing atomic penalty/debt rule; the amount must not exceed the maximum configured cancellation tier for the Ride price. |
+
+All incident resolution writes (incident, Ride, eligible Trips, optional
+wallet changes, and audit Log) run in one MongoDB transaction. A resolved
+incident cannot be resolved again. After commit, the driver and non-cancelled
+affected passengers receive localized outcome notifications. Notifications
+contain no phone numbers or admin/driver free-text notes.
+
+### Manual refund follow-up for picked-up Trips
+
+Trips whose passenger is already boarding, on board, picked up, or dropped off,
+and completed Trips, are not reset by an incident cancellation. Their IDs are
+stored as `needsFollowUpTripIds` and shown to the admin after resolution. Review
+those Trips in the existing refund requests screen and process any refund
+separately through the established refund workflow. Incident resolution does
+not automatically refund passengers.
 
 ## Index release step
 
@@ -50,6 +70,7 @@ If it reports missing indexes, apply the managed indexes:
 node scripts/ensureIndexes.mjs
 ```
 
-This manages the unique partial index allowing one open incident per Ride and
-the unique passenger-notification key allowing one incident notice per
-passenger. Request handlers do not create indexes.
+This manages the unique partial index allowing one open incident per Ride,
+the unique passenger-notification key allowing one initial incident notice per
+passenger, and the unique recipient/outcome key used to deduplicate resolution
+notifications. Request handlers do not create indexes.
