@@ -141,6 +141,16 @@ export const en = {
   "driver.incident.paused":
     "This ride is paused until the team resolves the report. You can still drop off passengers, mark no-shows, and finish the ride.",
   "driver.incident.report_error": "Could not send the report. Please try again.",
+  "driver.incident.withdraw": "Withdraw report",
+  "driver.incident.withdrawing": "Withdrawing...",
+  "driver.incident.withdraw_confirm":
+    "Withdraw this report? Confirm only if the problem is fixed or was reported by mistake.",
+  "driver.incident.withdrawn": "Report withdrawn. The ride may continue.",
+  "driver.incident.withdraw_forbidden":
+    "Only the assigned driver can withdraw this report.",
+  "driver.incident.withdraw_no_open": "There is no open report to withdraw.",
+  "driver.incident.withdraw_error":
+    "Could not withdraw the report. Please try again.",
   "driver.vehicle": "Vehicle",
   "driver.window_prefix": "Window",
   "driver.route_details": "Route Details",

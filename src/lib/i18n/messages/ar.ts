@@ -143,6 +143,15 @@ export const ar: Record<MessageKey, string> = {
   "driver.incident.paused":
     "الرحلة متوقفة مؤقتًا حتى يعالج الفريق البلاغ. لا يزال بإمكانك إنزال الركاب وتسجيل عدم الحضور وإنهاء الرحلة.",
   "driver.incident.report_error": "تعذر إرسال البلاغ. يرجى المحاولة مرة أخرى.",
+  "driver.incident.withdraw": "سحب البلاغ",
+  "driver.incident.withdrawing": "جارٍ سحب البلاغ...",
+  "driver.incident.withdraw_confirm":
+    "هل تريد سحب هذا البلاغ؟ أكّد فقط إذا تم حل المشكلة أو أُرسل البلاغ بالخطأ.",
+  "driver.incident.withdrawn": "تم سحب البلاغ. يمكن أن تستمر الرحلة.",
+  "driver.incident.withdraw_forbidden":
+    "يمكن للسائق المعيّن فقط سحب هذا البلاغ.",
+  "driver.incident.withdraw_no_open": "لا يوجد بلاغ مفتوح لسحبه.",
+  "driver.incident.withdraw_error": "تعذر سحب البلاغ. يرجى المحاولة مرة أخرى.",
   "driver.vehicle": "المركبة",
   "driver.window_prefix": "النافذة",
   "driver.route_details": "تفاصيل الطريق",

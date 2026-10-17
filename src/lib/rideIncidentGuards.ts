@@ -45,3 +45,23 @@ export function getRideIncidentReportDecision(input: {
   if (input.hasOpenIncident) return { kind: "already_reported" };
   return { kind: "allowed", note };
 }
+
+export function getRideIncidentWithdrawalDecision(input: {
+  isAssignedDriver: boolean;
+  incidentStatus: string | null;
+  resolution?: string | null;
+}):
+  | { kind: "allowed" }
+  | { kind: "forbidden" }
+  | { kind: "no_open_incident" }
+  | { kind: "already_withdrawn" } {
+  if (!input.isAssignedDriver) return { kind: "forbidden" };
+  if (input.incidentStatus === "open") return { kind: "allowed" };
+  if (
+    input.incidentStatus === "resolved" &&
+    input.resolution === "withdrawn_by_driver"
+  ) {
+    return { kind: "already_withdrawn" };
+  }
+  return { kind: "no_open_incident" };
+}

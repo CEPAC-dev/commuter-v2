@@ -160,6 +160,8 @@ export default function DriverRideInteractiveClient({
   const [reportNote, setReportNote] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [incidentReported, setIncidentReported] = useState(false);
+  const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
+  const [incidentWithdrawn, setIncidentWithdrawn] = useState(false);
   const isRideTerminal = ride.status === "cancelled" || ride.status === "completed";
 
   const handleGoToLocation = async (step: StepItem) => {
@@ -758,6 +760,47 @@ export default function DriverRideInteractiveClient({
     }
   };
 
+  const handleWithdrawIncident = async () => {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(t("driver.incident.withdraw_confirm"))
+    ) {
+      return;
+    }
+    setWithdrawSubmitting(true);
+    setRideActionError(null);
+    try {
+      const response = await fetch(
+        `/api/actions/ride/${ride.id}/incident/withdraw`,
+        { method: "POST" },
+      );
+      const responseData = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorCode = responseData?.errorCode;
+        throw new Error(
+          errorCode === "FORBIDDEN"
+            ? t("driver.incident.withdraw_forbidden")
+            : errorCode === "NO_OPEN_INCIDENT"
+              ? t("driver.incident.withdraw_no_open")
+              : t("driver.incident.withdraw_error"),
+        );
+      }
+      setRide((current) => ({ ...current, hasOpenIncident: false }));
+      setIncidentReported(false);
+      setIncidentWithdrawn(true);
+    } catch (error) {
+      setRideActionError(
+        error instanceof TypeError
+          ? t("ride.action_network_error")
+          : error instanceof Error
+            ? error.message
+            : t("driver.incident.withdraw_error"),
+      );
+    } finally {
+      setWithdrawSubmitting(false);
+    }
+  };
+
   return (
     <div dir={dir} style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
       <AppHeader
@@ -772,11 +815,27 @@ export default function DriverRideInteractiveClient({
         {(ride.hasOpenIncident || incidentReported) && (
           <div
             role="status"
-            className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900"
+            className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900"
           >
-            {incidentReported
-              ? t("driver.incident.reported")
-              : t("driver.incident.paused")}
+            <span>{t("driver.incident.paused")}</span>
+            <button
+              type="button"
+              onClick={() => void handleWithdrawIncident()}
+              disabled={withdrawSubmitting}
+              className="rounded-lg border border-amber-700 px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-60"
+            >
+              {withdrawSubmitting
+                ? t("driver.incident.withdrawing")
+                : t("driver.incident.withdraw")}
+            </button>
+          </div>
+        )}
+        {incidentWithdrawn && !ride.hasOpenIncident && (
+          <div
+            role="status"
+            className="mb-4 rounded-lg border border-[var(--color-secondary)] bg-[var(--color-secondary-tint)] px-3 py-2.5 text-sm font-semibold text-[var(--color-primary)]"
+          >
+            {t("driver.incident.withdrawn")}
           </div>
         )}
         {rideActionError && (
