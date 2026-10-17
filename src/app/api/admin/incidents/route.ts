@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
+import { Ride } from "@/models/Ride";
 import { RideIncident } from "@/models/RideIncident";
 
 const INCIDENT_STATUSES = ["open", "resolved"] as const;
@@ -39,12 +40,23 @@ export async function GET(request: Request) {
     RideIncident.countDocuments(filter),
     RideIncident.countDocuments({ status: "open" }),
   ]);
+  const rides = incidents.length
+    ? await Ride.find({
+        _id: { $in: incidents.map((incident) => incident.rideId) },
+      })
+        .select("_id rideNumber")
+        .lean<{ _id: import("mongoose").Types.ObjectId; rideNumber?: number }[]>()
+    : [];
+  const rideNumbers = new Map(
+    rides.map((ride) => [String(ride._id), ride.rideNumber ?? null]),
+  );
 
   return NextResponse.json(
     {
       incidents: incidents.map((incident) => ({
         id: String(incident._id),
         rideId: String(incident.rideId),
+        rideNumber: rideNumbers.get(String(incident.rideId)) ?? null,
         driverId: String(incident.driverId),
         type: incident.type,
         rideStatusAtReport: incident.rideStatusAtReport,
