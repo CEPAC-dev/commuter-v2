@@ -4,6 +4,7 @@ import { Availability } from "@/models/Availability";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { adminAuth } from "@/lib/middleware/adminAuth";
+import { buildEligibleMatchTripFilter } from "@/lib/matchingEndpointGuards";
 
 export async function GET(req: NextRequest) {
   const auth = await adminAuth();
@@ -21,11 +22,7 @@ export async function GET(req: NextRequest) {
         .select("_id name phone email")
         .sort({ name: 1 })
         .lean(),
-      Trip.find({
-        status: "submitted",
-        paymentStatus: "paid",
-        rideId: null,
-      })
+      Trip.find(buildEligibleMatchTripFilter())
         .select(
           "_id tripNumber date pickupTime arrivalTime pickup dropoff vehicleType rideType priceEgp numberOfPassengers extraPassengers userId",
         )

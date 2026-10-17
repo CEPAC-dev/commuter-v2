@@ -2,6 +2,14 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 const CRON_SECRET_MIN_LENGTH = 32;
 
+export function buildEligibleMatchTripFilter(): Record<string, unknown> {
+  return {
+    status: "submitted",
+    paymentStatus: "paid",
+    rideId: null,
+  };
+}
+
 export class TripClaimConflictError extends Error {
   readonly skippedCount: number;
 

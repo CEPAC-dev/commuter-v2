@@ -6,6 +6,7 @@ import { User } from "@/models/User";
 import { Trip } from "@/models/Trip";
 import { Ride } from "@/models/Ride";
 import { Availability } from "@/models/Availability";
+import { buildEligibleMatchTripFilter } from "@/lib/matchingEndpointGuards";
 import LanguageToggle from "@/components/layout/LanguageToggle";
 import MatchRideForm from "@/components/admin/MatchRideForm";
 import DashboardCharts from "@/components/admin/DashboardCharts";
@@ -96,10 +97,7 @@ export default async function AdminDashboardPage() {
       .select("_id name phone email")
       .sort({ name: 1 })
       .lean(),
-    Trip.find({
-      status: { $in: ["submitted", "pending_payment", "matched"] },
-      paymentStatus: "paid",
-    })
+    Trip.find(buildEligibleMatchTripFilter())
       .select(
         "_id tripNumber date pickupTime arrivalTime pickup dropoff pickupStation dropoffStation vehicleType rideType priceEgp numberOfPassengers userId",
       )

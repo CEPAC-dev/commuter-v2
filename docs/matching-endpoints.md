@@ -30,6 +30,16 @@ The existing 23:00 Cairo nomatch cutoff remains unchanged. The D-1
 Trips changed from `submitted` to `nomatch` are logged with the existing
 `logTripNomatch` helper only when the guarded write modifies that Trip.
 
+## Match-ride candidate status
+
+At base commit `adf4837`, `GET /api/admin/match-ride` returned paid
+`submitted`, `pending_payment`, and `matched` Trips. It now returns only paid
+`submitted` Trips with no Ride link. The admin dashboard's initial list uses
+the same filter. No explicit unmatch/re-match action is provided; correction
+would require an admin-only atomic action that checks Ride/Trip states and
+history, unlinks the Trip and seat allocation consistently, then makes the
+Trip eligible for a new match without allowing duplicate offers or logs.
+
 ## Driver availability lock (read-only audit)
 
 `canModifyAvailability` has no call sites. Driver availability PUT/DELETE,

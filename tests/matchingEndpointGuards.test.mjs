@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const {
+  buildEligibleMatchTripFilter,
   evaluateTripClaim,
   isMatchingEndpointAuthorized,
   isTripClaimTransactionConflict,
@@ -15,6 +16,25 @@ const {
 } = await import("../src/lib/pendingRequestHardening.ts");
 
 const secret = "a".repeat(32);
+
+test("matching options expose only paid submitted Trips without a Ride", async () => {
+  assert.deepEqual(buildEligibleMatchTripFilter(), {
+    status: "submitted",
+    paymentStatus: "paid",
+    rideId: null,
+  });
+
+  const dashboard = await readFile(
+    new URL("../src/app/admin/dashboard/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const matchRide = await readFile(
+    new URL("../src/app/api/admin/match-ride/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(dashboard, /Trip\.find\(buildEligibleMatchTripFilter\(\)\)/);
+  assert.match(matchRide, /Trip\.find\(buildEligibleMatchTripFilter\(\)\)/);
+});
 
 test("matching authorization accepts admins and configured scheduler secrets only", () => {
   assert.equal(isMatchingEndpointAuthorized({ isAdmin: true }), true);
