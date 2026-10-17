@@ -706,6 +706,7 @@ export const en = {
   "status.confirmed": "Confirmed",
   "status.in_progress": "In progress",
   "status.completed": "Completed",
+  "status.no_show": "Marked as not present",
   "status.cancelled": "Cancelled",
   "status.refunded": "Refunded",
   "status.expired": "Expired",

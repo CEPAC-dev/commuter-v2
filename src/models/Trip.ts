@@ -232,6 +232,7 @@ const TripSchema = new Schema(
         "confirmed",
         "active",
         "completed",
+        "no_show",
         "refunded",
         "cancelled",
         "time_out",

@@ -699,6 +699,7 @@ export const ar: Record<MessageKey, string> = {
   "status.confirmed": "تم التأكيد",
   "status.in_progress": "جارية",
   "status.completed": "مكتملة",
+  "status.no_show": "تم تسجيل عدم الحضور",
   "status.cancelled": "ملغاة",
   "status.refunded": "تم استرداد المبلغ",
   "status.expired": "منتهية",

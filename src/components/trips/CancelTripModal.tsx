@@ -66,7 +66,12 @@ export default function CancelTripModal({
     }).kind === "unpaid";
 
   // Exclude cancelled and completed trips
-  if (status === "cancelled" || status === "completed" || status === "time_out") {
+  if (
+    status === "cancelled" ||
+    status === "completed" ||
+    status === "no_show" ||
+    status === "time_out"
+  ) {
     return null;
   }
 

@@ -20,6 +20,7 @@ export type BookingStatus =
   | "confirmed"
   | "active"
   | "completed"
+  | "no_show"
   | "cancelled"
   | "time_out";
 
@@ -34,6 +35,7 @@ export type TripStatus =
   | "confirmed"
   | "active"
   | "completed"
+  | "no_show"
   | "refunded"
   | "cancelled"
   | "time_out";

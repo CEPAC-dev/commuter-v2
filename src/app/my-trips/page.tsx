@@ -99,6 +99,7 @@ function getStatusPill(locale: "en" | "ar") {
     confirmed: { label: translate(locale, "status.upcoming"), bg: "#E2E8F0", color: "#5A6A7A" },
     active: { label: translate(locale, "status.ongoing"), bg: "#00C2A8", color: "#fff" },
     completed: { label: translate(locale, "status.completed"), bg: "#0B1E3D", color: "#fff" },
+    no_show: { label: translate(locale, "status.no_show"), bg: "#FFEBEE", color: "#C0392B" },
     cancelled: { label: translate(locale, "status.cancelled"), bg: "#0B1E3D", color: "#fff" },
     time_out: { label: translate(locale, "status.expired"), bg: "#0B1E3D", color: "#fff" },
     nomatch: { label: translate(locale, "status.nomatch"), bg: "#FFEBEE", color: "#E74C3C" },

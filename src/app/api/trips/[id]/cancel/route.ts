@@ -82,6 +82,16 @@ export async function GET(
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
     }
 
+    if (trip.status === "no_show") {
+      return NextResponse.json(
+        {
+          errorCode: "TRIP_NO_SHOW",
+          error: "Trips marked as not present cannot be cancelled.",
+        },
+        { status: 409 },
+      );
+    }
+
     if (isStandaloneTripForCancellation(trip)) {
       const mode = getStandaloneTripCancellationMode({
         id: String(trip._id),
@@ -171,6 +181,16 @@ export async function POST(
 
     if (!trip) {
       return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    }
+
+    if (trip.status === "no_show") {
+      return NextResponse.json(
+        {
+          errorCode: "TRIP_NO_SHOW",
+          error: "Trips marked as not present cannot be cancelled.",
+        },
+        { status: 409 },
+      );
     }
 
     if (trip.requestId) {

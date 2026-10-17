@@ -123,7 +123,7 @@ function createMongooseStore(): RequestGroupCancellationStore<ClientSession> {
         {
           _id: new Types.ObjectId(tripId),
           requestId: new Types.ObjectId(requestId),
-          status: { $ne: "cancelled" },
+          status: { $nin: ["cancelled", "no_show"] },
           paymentStatus: { $ne: "paid" },
         },
         {
@@ -152,7 +152,7 @@ function createMongooseStore(): RequestGroupCancellationStore<ClientSession> {
       const result = await Trip.updateMany(
         {
           requestId: new Types.ObjectId(requestId),
-          status: { $ne: "cancelled" },
+          status: { $nin: ["cancelled", "no_show"] },
           paymentStatus: { $ne: "paid" },
         },
         {
