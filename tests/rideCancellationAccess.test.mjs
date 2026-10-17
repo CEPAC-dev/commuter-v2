@@ -58,3 +58,23 @@ test("other authenticated roles cannot cancel rides", () => {
     "forbidden",
   );
 });
+
+test("passenger mutation access is limited to admins and the assigned driver", () => {
+  assert.equal(getRideCancellationAccess(null, "driver-1"), "unauthorized");
+  assert.equal(
+    getRideCancellationAccess({ role: "passenger", userId: "passenger-1" }, "driver-1"),
+    "forbidden",
+  );
+  assert.equal(
+    getRideCancellationAccess({ role: "driver", userId: "driver-2" }, "driver-1"),
+    "forbidden",
+  );
+  assert.equal(
+    getRideCancellationAccess({ role: "driver", userId: "driver-1" }, "driver-1"),
+    "driver",
+  );
+  assert.equal(
+    getRideCancellationAccess({ role: "admin", userId: "admin-1" }, "driver-1"),
+    "admin",
+  );
+});
