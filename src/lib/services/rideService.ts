@@ -544,6 +544,7 @@ function mapRideToDetailView(ride: Record<string, unknown>): RideDetailView {
         sum + (p.numberOfPassengers || 1),
       0,
     ),
+    hasOpenIncident: ride.hasOpenIncident === true,
     passengers,
     route: recordArray(ride.route).map((stop) => {
       const counts = getSharedRouteStopCounts(stop);

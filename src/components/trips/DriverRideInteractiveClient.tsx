@@ -155,6 +155,11 @@ export default function DriverRideInteractiveClient({
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [navigationErrorByStation, setNavigationErrorByStation] = useState<Record<number, string>>({});
   const [rideActionError, setRideActionError] = useState<string | null>(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [reportType, setReportType] = useState("vehicle_breakdown");
+  const [reportNote, setReportNote] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [incidentReported, setIncidentReported] = useState(false);
   const isRideTerminal = ride.status === "cancelled" || ride.status === "completed";
 
   const handleGoToLocation = async (step: StepItem) => {
@@ -429,11 +434,15 @@ export default function DriverRideInteractiveClient({
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error || t("ride.start_error"));
+        throw new Error(
+          errorData?.errorCode || errorData?.error || t("ride.start_error"),
+        );
       }
     } catch (err) {
       setRideActionError(
-        err instanceof TypeError
+        err instanceof Error && err.message === "INCIDENT_OPEN"
+          ? t("driver.incident.paused")
+          : err instanceof TypeError
           ? t("ride.action_network_error")
           : err instanceof Error
             ? err.message
@@ -638,7 +647,9 @@ export default function DriverRideInteractiveClient({
     } catch (err) {
       const errorCode = err instanceof Error ? err.message : "";
       setRideActionError(
-        errorCode === "SEATS_UNAVAILABLE"
+        errorCode === "INCIDENT_OPEN"
+          ? t("driver.incident.paused")
+          : errorCode === "SEATS_UNAVAILABLE"
           ? t("ride.seats_unavailable")
           : errorCode === "PICKUP_PIN_INVALID"
           ? t("pickup_pin.invalid")
@@ -710,6 +721,43 @@ export default function DriverRideInteractiveClient({
     setLoadingAction(null);
   };
 
+  const handleReportIncident = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setReportSubmitting(true);
+    setRideActionError(null);
+    try {
+      const response = await fetch(
+        `/api/actions/ride/${ride.id}/incident`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: reportType,
+            ...(reportNote.trim() ? { note: reportNote.trim() } : {}),
+          }),
+        },
+      );
+      const responseData = await response.json().catch(() => null);
+      if (!response.ok) {
+        if (responseData?.errorCode === "ALREADY_REPORTED") {
+          setRide((current) => ({ ...current, hasOpenIncident: true }));
+          setReportDialogOpen(false);
+          setRideActionError(t("driver.incident.paused"));
+          return;
+        }
+        throw new Error(responseData?.errorCode || "REPORT_FAILED");
+      }
+      setRide((current) => ({ ...current, hasOpenIncident: true }));
+      setIncidentReported(true);
+      setReportDialogOpen(false);
+      setReportNote("");
+    } catch {
+      setRideActionError(t("driver.incident.report_error"));
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
   return (
     <div dir={dir} style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
       <AppHeader
@@ -721,6 +769,16 @@ export default function DriverRideInteractiveClient({
       />
 
       <main style={{ maxWidth: 640, margin: "0 auto", padding: "24px 20px 56px" }}>
+        {(ride.hasOpenIncident || incidentReported) && (
+          <div
+            role="status"
+            className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900"
+          >
+            {incidentReported
+              ? t("driver.incident.reported")
+              : t("driver.incident.paused")}
+          </div>
+        )}
         {rideActionError && (
           <div
             role="alert"
@@ -796,6 +854,20 @@ export default function DriverRideInteractiveClient({
             </span>
           </div>
         </div>
+
+        {(ride.status === "confirmed" || ride.status === "active") &&
+          !ride.hasOpenIncident && (
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={() => setReportDialogOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-bold text-amber-900 shadow-sm"
+              >
+                <Flag size={16} aria-hidden="true" />
+                {t("driver.incident.report_problem")}
+              </button>
+            </div>
+          )}
 
         {/* Start Ride Action Banner */}
         {!isRideTerminal && !rideStarted && !isCompleted && (
@@ -1532,6 +1604,79 @@ export default function DriverRideInteractiveClient({
           )}
         </div>
       </main>
+      {reportDialogOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !reportSubmitting) {
+              setReportDialogOpen(false);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ride-incident-dialog-title"
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"
+          >
+            <h2
+              id="ride-incident-dialog-title"
+              className="mb-4 text-lg font-extrabold text-slate-900"
+            >
+              {t("driver.incident.dialog_title")}
+            </h2>
+            <form onSubmit={handleReportIncident} className="grid gap-4">
+              <label className="grid gap-1.5 text-sm font-semibold text-slate-800">
+                {t("driver.incident.type_label")}
+                <select
+                  value={reportType}
+                  onChange={(event) => setReportType(event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2.5"
+                >
+                  <option value="vehicle_breakdown">
+                    {t("driver.incident.type.vehicle_breakdown")}
+                  </option>
+                  <option value="accident">{t("driver.incident.type.accident")}</option>
+                  <option value="emergency">{t("driver.incident.type.emergency")}</option>
+                  <option value="passenger_issue">
+                    {t("driver.incident.type.passenger_issue")}
+                  </option>
+                  <option value="other">{t("driver.incident.type.other")}</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm font-semibold text-slate-800">
+                {t("driver.incident.note_label")}
+                <textarea
+                  value={reportNote}
+                  onChange={(event) => setReportNote(event.target.value)}
+                  maxLength={300}
+                  rows={3}
+                  className="resize-y rounded-lg border border-slate-300 px-3 py-2.5"
+                />
+              </label>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReportDialogOpen(false)}
+                  disabled={reportSubmitting}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60"
+                >
+                  {t("driver.incident.cancel")}
+                </button>
+                <button
+                  type="submit"
+                  disabled={reportSubmitting}
+                  className="rounded-lg bg-[#0B1E3D] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                >
+                  {reportSubmitting
+                    ? t("driver.incident.submitting")
+                    : t("driver.incident.submit")}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

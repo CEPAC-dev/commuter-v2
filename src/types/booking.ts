@@ -105,6 +105,7 @@ export interface RideDetailView
   passengers: RidePassengerDetail[];
   route: RideRouteStopDetail[];
   chatTripId: string | null;
+  hasOpenIncident: boolean;
   driverOrigin?: GeoPoint | null;
   driverDestination?: GeoPoint | null;
 }
