@@ -171,6 +171,7 @@ const RideSchema = new Schema(
     offeredToDriverIds: { type: [Types.ObjectId], ref: "User", default: [] },
     rejectedByDriverIds: { type: [Types.ObjectId], ref: "User", default: [] },
     needsManualAssignment: { type: Boolean, required: true, default: false },
+    hasOpenIncident: { type: Boolean, required: true, default: false },
   },
   { timestamps: true, collection: "rides" },
 );
@@ -186,6 +187,11 @@ if (existingRideModel && !existingRideModel.schema.path("regionCode")) {
 if (existingRideModel && !existingRideModel.schema.path("passengersCount")) {
   existingRideModel.schema.add({
     passengersCount: RideSchema.obj.passengersCount,
+  });
+}
+if (existingRideModel && !existingRideModel.schema.path("hasOpenIncident")) {
+  existingRideModel.schema.add({
+    hasOpenIncident: RideSchema.obj.hasOpenIncident,
   });
 }
 

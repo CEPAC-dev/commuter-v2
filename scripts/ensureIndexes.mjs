@@ -60,6 +60,22 @@ const CHAT_READ_STATE_TTL_INDEX = {
     name: "chat_read_state_updated_at_ttl",
   },
 };
+const RIDE_INCIDENT_OPEN_UNIQUE_INDEX = {
+  keys: { rideId: 1 },
+  options: {
+    unique: true,
+    partialFilterExpression: { status: "open" },
+    name: "ride_one_open_incident",
+  },
+};
+const RIDE_INCIDENT_NOTIFICATION_UNIQUE_INDEX = {
+  keys: { userId: 1, "data.incidentId": 1 },
+  options: {
+    unique: true,
+    partialFilterExpression: { type: "ride_incident" },
+    name: "ride_incident_passenger_notification_unique",
+  },
+};
 
 const production =
   (process.env.APP_ENV ?? process.env.NODE_ENV ?? "development").toLowerCase() ===
@@ -85,6 +101,8 @@ try {
   const chatReports = database.collection("chat_reports");
   const messages = database.collection("messages");
   const chatReadStates = database.collection("chat_read_states");
+  const rideIncidents = database.collection("ride_incidents");
+  const notifications = database.collection("notifications");
 
   if (checkOnly) {
     const [duplicate] = await walletTransactions
@@ -145,6 +163,10 @@ try {
       indexesFor("chat_reports"),
     ]);
     const readStateIndexes = await indexesFor("chat_read_states");
+    const [rideIncidentIndexes, notificationIndexes] = await Promise.all([
+      indexesFor("ride_incidents"),
+      indexesFor("notifications"),
+    ]);
     const messageTtlReady = messageIndexes.some(
       (index) =>
         index.name === MESSAGE_RETENTION_TTL_INDEX.options.name &&
@@ -186,11 +208,34 @@ try {
     console.log(
       `chat_read_states TTL index (+7 days): ${chatReadStateTtlReady ? "ready" : "missing or mismatched"}`,
     );
+    const rideIncidentUniqueReady = rideIncidentIndexes.some(
+      (index) =>
+        index.name === RIDE_INCIDENT_OPEN_UNIQUE_INDEX.options.name &&
+        index.key.rideId === 1 &&
+        index.unique === true &&
+        index.partialFilterExpression?.status === "open",
+    );
+    const rideIncidentNotificationUniqueReady = notificationIndexes.some(
+      (index) =>
+        index.name === RIDE_INCIDENT_NOTIFICATION_UNIQUE_INDEX.options.name &&
+        index.key.userId === 1 &&
+        index.key["data.incidentId"] === 1 &&
+        index.unique === true &&
+        index.partialFilterExpression?.type === "ride_incident",
+    );
+    console.log(
+      `ride_incidents one-open-per-ride unique index: ${rideIncidentUniqueReady ? "ready" : "missing"}`,
+    );
+    console.log(
+      `ride incident passenger notification unique index: ${rideIncidentNotificationUniqueReady ? "ready" : "missing"}`,
+    );
     if (
       !messageTtlReady ||
       !chatReportUniqueReady ||
       !chatReadStateUniqueReady ||
-      !chatReadStateTtlReady
+      !chatReadStateTtlReady ||
+      !rideIncidentUniqueReady ||
+      !rideIncidentNotificationUniqueReady
     ) process.exitCode = 1;
   } else {
     await database.collection("trip_spacing_locks").createIndex(
@@ -252,6 +297,14 @@ try {
     await chatReadStates.createIndex(
       CHAT_READ_STATE_TTL_INDEX.keys,
       CHAT_READ_STATE_TTL_INDEX.options,
+    );
+    await rideIncidents.createIndex(
+      RIDE_INCIDENT_OPEN_UNIQUE_INDEX.keys,
+      RIDE_INCIDENT_OPEN_UNIQUE_INDEX.options,
+    );
+    await notifications.createIndex(
+      RIDE_INCIDENT_NOTIFICATION_UNIQUE_INDEX.keys,
+      RIDE_INCIDENT_NOTIFICATION_UNIQUE_INDEX.options,
     );
     await walletTransactions.createIndex(
       { paymentId: 1, tripId: 1, type: 1 },
