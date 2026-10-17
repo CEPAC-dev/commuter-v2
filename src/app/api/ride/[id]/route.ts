@@ -132,6 +132,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const ride = await cancelRideByDriver(id, session.userId, reason);
     return NextResponse.json({ data: ride });
   } catch (err: any) {
+    if (err?.message === "USE_INCIDENT_REPORT") {
+      return NextResponse.json(
+        {
+          errorCode: "USE_INCIDENT_REPORT",
+          error: "Active rides must report a problem instead of cancelling.",
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: err.message || "Failed to cancel ride" },
       { status: 400 },

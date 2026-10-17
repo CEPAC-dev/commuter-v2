@@ -12,6 +12,7 @@ import {
 import { createNotification } from "@/lib/notifications/createNotification";
 import { getEligibleDriverIds } from "@/lib/services/rideMatching";
 import { getAdminSettings, getCancellationTier } from "@/lib/cancellationPolicy";
+import { getDriverRideCancellationDecision } from "@/lib/rideCancellationAccess";
 import { isRegionCode } from "@/lib/config/regions";
 import type {
   RideDetailView,
@@ -1158,6 +1159,12 @@ async function cancelRideByDriver(
   try {
     const ride = await Ride.findById(rideId).session(session);
     if (!ride) throw new Error("Ride not found");
+    if (
+      getDriverRideCancellationDecision("driver", ride.status) ===
+      "use_incident_report"
+    ) {
+      throw new Error("USE_INCIDENT_REPORT");
+    }
     if (ride.status === "completed") {
       throw new Error("Completed rides cannot be cancelled");
     }
