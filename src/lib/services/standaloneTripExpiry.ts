@@ -7,6 +7,7 @@ import {
   type StandaloneTripExpiryCandidate,
   type StandaloneTripExpiryStore,
 } from "@/lib/standaloneTripExpiry";
+import { buildUnlinkedTripExpiryFilter } from "@/lib/pendingRequestHardening";
 import { Payment } from "@/models/Payment";
 import { Trip } from "@/models/Trip";
 import { releaseReservation } from "@/lib/wallet/wallet";
@@ -111,44 +112,41 @@ function activeOrReservedPaymentFilter() {
 
 const mongoExpiryStore: StandaloneTripExpiryStore = {
   async findPendingTripCandidates(cutoff, userId) {
-    const trips = await Trip.find({
+    const trips = await Trip.find(buildUnlinkedTripExpiryFilter("pending_payment", {
       requestId: null,
-      status: "pending_payment",
       paymentStatus: { $in: UNPAID_STATUSES },
       createdAt: { $lte: cutoff },
       ...userFilter(userId),
-    })
+    }))
       .select("_id status paymentStatus date pickupTime createdAt")
       .lean<TripCandidateDocument[]>();
     return trips.map(mapTripCandidate);
   },
 
   async findApprovedTripCandidates(now, userId) {
-    const trips = await Trip.find({
+    const trips = await Trip.find(buildUnlinkedTripExpiryFilter("approved", {
       requestId: null,
-      status: "approved",
       paymentStatus: { $in: UNPAID_STATUSES },
       $or: [
         { date: { $lt: now.dateStr } },
         { date: now.dateStr, pickupTime: { $lt: now.timeStr } },
       ],
       ...userFilter(userId),
-    })
+    }))
       .select("_id status paymentStatus date pickupTime createdAt")
       .lean<TripCandidateDocument[]>();
     return trips.map(mapTripCandidate);
   },
 
   async findWaitingListTripCandidates(now, userId) {
-    const trips = await Trip.find({
+    const trips = await Trip.find(buildUnlinkedTripExpiryFilter("waiting_list", {
       requestId: null,
-      status: "waiting_list",
       $or: [
         { date: { $lt: now.dateStr } },
         { date: now.dateStr, pickupTime: { $lt: now.timeStr } },
       ],
       ...userFilter(userId),
-    })
+    }))
       .select("_id status paymentStatus date pickupTime createdAt")
       .lean<TripCandidateDocument[]>();
     return trips.map(mapTripCandidate);
@@ -165,14 +163,13 @@ const mongoExpiryStore: StandaloneTripExpiryStore = {
             session,
             tripId: id,
             userId,
-            filter: {
+            filter: buildUnlinkedTripExpiryFilter("pending_payment", {
               _id: new Types.ObjectId(id),
               requestId: null,
-              status: "pending_payment",
               paymentStatus: { $in: UNPAID_STATUSES },
               createdAt: { $lte: cutoff },
               ...userFilter(userId),
-            },
+            }),
           });
         });
       } catch (error) {
@@ -195,17 +192,16 @@ const mongoExpiryStore: StandaloneTripExpiryStore = {
             session,
             tripId: id,
             userId,
-            filter: {
+            filter: buildUnlinkedTripExpiryFilter("approved", {
               _id: new Types.ObjectId(id),
               requestId: null,
-              status: "approved",
               paymentStatus: { $in: UNPAID_STATUSES },
               $or: [
                 { date: { $lt: now.dateStr } },
                 { date: now.dateStr, pickupTime: { $lt: now.timeStr } },
               ],
               ...userFilter(userId),
-            },
+            }),
           });
         });
       } catch (error) {
@@ -228,16 +224,15 @@ const mongoExpiryStore: StandaloneTripExpiryStore = {
             session,
             tripId: id,
             userId,
-            filter: {
+            filter: buildUnlinkedTripExpiryFilter("waiting_list", {
               _id: new Types.ObjectId(id),
               requestId: null,
-              status: "waiting_list",
               $or: [
                 { date: { $lt: now.dateStr } },
                 { date: now.dateStr, pickupTime: { $lt: now.timeStr } },
               ],
               ...userFilter(userId),
-            },
+            }),
           });
         });
       } catch (error) {
@@ -273,13 +268,12 @@ const mongoExpiryStore: StandaloneTripExpiryStore = {
     );
     if (bookingIds.length === 0) return [];
 
-    const trips = await Trip.find({
+    const trips = await Trip.find(buildUnlinkedTripExpiryFilter("time_out", {
       _id: { $in: bookingIds },
       requestId: null,
-      status: "time_out",
       paymentStatus: "expired",
       ...userFilter(userId),
-    })
+    }))
       .select("_id")
       .lean<{ _id: Types.ObjectId }[]>();
     return trips.map((trip) => String(trip._id));
