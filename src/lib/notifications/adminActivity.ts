@@ -8,6 +8,7 @@ import { AdminReferralUsage } from "@/models/AdminReferralUsage";
 import { sendPushPayloadToUser } from "@/lib/notifications/webPush";
 import { latePaymentDedupeKey } from "@/lib/phase8bGuards";
 import { waitingListTripBatchDedupeKey } from "@/lib/admin/waitingList";
+import { sanitizePickupPinFields } from "@/lib/pickupPinSafety";
 
 function isDuplicateKeyError(error: unknown) {
   return Boolean(
@@ -25,35 +26,39 @@ export async function notifyAdmins(input: {
     | "waiting_list_trip_created"
     | "admin_campaign_claim"
     | "late_gateway_payment"
-    | "station_suggestion_requested";
+    | "station_suggestion_requested"
+    | "trip_chat_reported"
+    | "ride_incident_reported"
+    | "ride_incident_withdrawn";
   dedupeKey: string;
   title: string;
   body: string;
   data: Record<string, unknown>;
 }) {
+  const safeInput = sanitizePickupPinFields(input) as typeof input;
   const admins = await User.find({ role: "admin" }).select("_id").lean();
   await Promise.all(
     admins.map(async (admin) => {
       try {
         const result = await AdminActivityNotification.updateOne(
-          { adminId: admin._id, dedupeKey: input.dedupeKey },
+          { adminId: admin._id, dedupeKey: safeInput.dedupeKey },
           {
             $setOnInsert: {
               adminId: admin._id,
-              ...input,
+              ...safeInput,
             },
           },
           { upsert: true },
         );
         if (result.upsertedCount > 0) {
           await sendPushPayloadToUser(String(admin._id), {
-            id: input.dedupeKey,
-            title: input.title,
-            body: input.body,
-            data: input.data,
+            id: safeInput.dedupeKey,
+            title: safeInput.title,
+            body: safeInput.body,
+            data: safeInput.data,
             url:
-              typeof input.data.href === "string"
-                ? input.data.href
+              typeof safeInput.data.href === "string"
+                ? safeInput.data.href
                 : "/admin/alerts",
           });
         }
@@ -62,6 +67,52 @@ export async function notifyAdmins(input: {
       }
     }),
   );
+}
+
+export async function notifyAdminsOfRideIncident(input: {
+  incidentId: string;
+  rideId: string;
+  rideNumber: number;
+  incidentType: string;
+  rideStatusAtReport: "confirmed" | "active";
+}) {
+  await notifyAdmins({
+    eventType: "ride_incident_reported",
+    dedupeKey: `ride-incident:${input.incidentId}`,
+    title: `Problem reported for ride #${input.rideNumber}`,
+    body: `${input.incidentType} reported while ride was ${input.rideStatusAtReport}.`,
+    data: {
+      incidentId: input.incidentId,
+      rideId: input.rideId,
+      rideNumber: input.rideNumber,
+      incidentType: input.incidentType,
+      rideStatusAtReport: input.rideStatusAtReport,
+      href: "/admin/alerts",
+    },
+  });
+}
+
+export async function notifyAdminsOfRideIncidentWithdrawn(input: {
+  incidentId: string;
+  rideId: string;
+  rideNumber: number;
+}) {
+  try {
+    await notifyAdmins({
+      eventType: "ride_incident_withdrawn",
+      dedupeKey: `ride-incident:${input.incidentId}:withdrawn`,
+      title: `Incident report withdrawn for ride #${input.rideNumber}`,
+      body: `The driver withdrew the report for ride #${input.rideNumber}.`,
+      data: {
+        incidentId: input.incidentId,
+        rideId: input.rideId,
+        rideNumber: input.rideNumber,
+        href: "/admin/incidents",
+      },
+    });
+  } catch {
+    console.error("[ride-incident] Admin withdrawal notification failed");
+  }
 }
 
 export async function notifyAdminsOfCompletedPaidTrip(tripId: string) {

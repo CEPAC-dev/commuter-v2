@@ -10,8 +10,8 @@ export default function MyTripsLoading() {
           <i />
           <i />
         </div>
-        <i className="loading-action" />
-      </div>
+        <i className="loading-action" />  
+      </div>  
       <div className="loading-tabs"><i /><i /><i /><i /></div>
       <div className="loading-layout">
         <div className="loading-list">

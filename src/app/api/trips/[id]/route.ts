@@ -15,5 +15,8 @@ export async function GET(
 
   if (!trip) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  return NextResponse.json({ data: trip });
+  return NextResponse.json(
+    { data: trip },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }

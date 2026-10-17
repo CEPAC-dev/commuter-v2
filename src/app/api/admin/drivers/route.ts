@@ -45,5 +45,5 @@ export async function GET(req: NextRequest) {
       verificationStatus:
         detailByUserId.get(String(user._id))?.verificationStatus ?? "",
     })),
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }

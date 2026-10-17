@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CalendarDays,
   Users,
@@ -16,6 +16,7 @@ import {
 import { useClientLocale } from "@/lib/i18n/client";
 import { formatDate, formatTime, formatEgp } from "@/lib/i18n";
 import AppHeader from "@/components/layout/AppHeader";
+import TripChat from "@/components/shared/TripChat";
 import RouteMap from "@/components/shared/RouteMap";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import { VEHICLES, type VehicleKey } from "@/lib/config/vehicles";
@@ -68,6 +69,26 @@ function stationMatchesPassenger(
   const normalizedStationName = normalizeStationValue(stationName);
   const normalizedReferenceName = normalizeStationValue(stationReference.value);
   return Boolean(normalizedStationName) && normalizedStationName === normalizedReferenceName;
+}
+
+function noShowRemainingSeconds(
+  arrivedAt: string | null | undefined,
+  minWaitMinutes: number,
+  now: number,
+): number | null {
+  if (!arrivedAt) return null;
+  const arrivalMs = Date.parse(arrivedAt);
+  if (!Number.isFinite(arrivalMs)) return null;
+  return Math.max(
+    0,
+    Math.ceil((arrivalMs + minWaitMinutes * 60_000 - now) / 1000),
+  );
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function Detail({
@@ -123,12 +144,14 @@ export default function DriverRideInteractiveClient({
   email,
 }: { ride: RideDetailView; email: string }) {
   const [ride, setRide] = useState(rideProp);
+  const [clockNow, setClockNow] = useState(0);
   const [rideStarted, setRideStarted] = useState(
     ride.status === "active" || ride.status === "completed",
   );
   const [isCompleted, setIsCompleted] = useState(ride.status === "completed");
   const [confirmedStationIndices, setConfirmedStationIndices] = useState<number[]>([]);
   const [stationSelections, setStationSelections] = useState<Record<string, Record<string, "arrived" | "no_show">>>({});
+  const [pickupPins, setPickupPins] = useState<Record<string, string>>({});
   const [driverOrigin, setDriverOrigin] = useState<GeoPoint | null>(
     ride.driverOrigin ?? null,
   );
@@ -138,8 +161,39 @@ export default function DriverRideInteractiveClient({
   const { t, locale, dir } = useClientLocale();
   const to12h = (hhmm: string) => formatTime(locale, hhmm);
   const prettyDate = (date: string) => formatDate(locale, date);
+  const passengerLabel = (passenger: RideDetailView["passengers"][number]) => {
+    const label = t("driver.passenger_fallback", {
+      n:
+        passenger.passengerNumber ??
+        ride.passengers.indexOf(passenger) + 1,
+    });
+    return passenger.numberOfPassengers > 1
+      ? `${label} ${t("driver.passenger_group_size", {
+          count: passenger.numberOfPassengers,
+        })}`
+      : label;
+  };
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [navigationErrorByStation, setNavigationErrorByStation] = useState<Record<number, string>>({});
+  const [rideActionError, setRideActionError] = useState<string | null>(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [reportType, setReportType] = useState("vehicle_breakdown");
+  const [reportNote, setReportNote] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [incidentReported, setIncidentReported] = useState(false);
+  const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
+  const [incidentWithdrawn, setIncidentWithdrawn] = useState(false);
+  const isRideTerminal = ride.status === "cancelled" || ride.status === "completed";
+
+  useEffect(() => {
+    const updateClock = () => setClockNow(Date.now());
+    const initialUpdate = window.setTimeout(updateClock, 0);
+    const interval = window.setInterval(updateClock, 1000);
+    return () => {
+      window.clearTimeout(initialUpdate);
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const handleGoToLocation = async (step: StepItem) => {
     setNavigationErrorByStation((prev) => ({ ...prev, [step.stationIndex]: "" }));
@@ -381,6 +435,7 @@ export default function DriverRideInteractiveClient({
   // Geolocation helpers
   const handleStartRide = async () => {
     setLoadingAction("start");
+    setRideActionError(null);
     let loc: GeoPoint | null = null;
     try {
       if (typeof window !== "undefined" && "geolocation" in navigator) {
@@ -402,7 +457,7 @@ export default function DriverRideInteractiveClient({
     }
 
     try {
-      await fetch(`/api/actions/ride/${ride.id}`, {
+      const response = await fetch(`/api/actions/ride/${ride.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -410,8 +465,24 @@ export default function DriverRideInteractiveClient({
           metadata: { currentLocation: loc },
         }),
       });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          errorData?.errorCode || errorData?.error || t("ride.start_error"),
+        );
+      }
     } catch (err) {
-      console.error(err);
+      setRideActionError(
+        err instanceof Error && err.message === "INCIDENT_OPEN"
+          ? t("driver.incident.paused")
+          : err instanceof TypeError
+          ? t("ride.action_network_error")
+          : err instanceof Error
+            ? err.message
+            : t("ride.start_error"),
+      );
+      setLoadingAction(null);
+      return;
     }
 
     if (loc) setDriverOrigin(loc);
@@ -462,41 +533,29 @@ export default function DriverRideInteractiveClient({
       requiresPassengerSelections &&
       boardingPassengersForStation.some((passenger) => !selections[passenger.tripId]);
     if (missingSelection) return;
-
-    const assignedSeatNumbers = new Set<number>();
-    for (const passenger of ride.passengers) {
-      if (["boarding", "picked_up", "on_board"].includes(passenger.status ?? "")) {
-        for (const seat of passenger.seatNumbers ?? []) {
-          if (typeof seat === "number" && Number.isFinite(seat)) {
-            assignedSeatNumbers.add(seat);
-          }
-        }
-      }
-    }
-
-    const vehicleType = ride.vehicleType as VehicleKey;
-    const seatCapacity = Number(
-      vehicleType && VEHICLES[vehicleType]?.capacity
-        ? VEHICLES[vehicleType].capacity
-        : 4,
+    const missingPin = boardingPassengersForStation.some(
+      (passenger) =>
+        selections[passenger.tripId] === "arrived" &&
+        !/^\d{4}$/.test(pickupPins[passenger.tripId] ?? ""),
     );
-
-    const getNextSeatNumber = () => {
-      for (let seat = 1; seat <= seatCapacity; seat += 1) {
-        if (!assignedSeatNumbers.has(seat)) {
-          assignedSeatNumbers.add(seat);
-          return seat;
-        }
-      }
-      return 1;
-    };
+    if (missingPin) {
+      setRideActionError(t("pickup_pin.required"));
+      return;
+    }
 
     setLoadingAction(`confirm-${stationIndex}`);
     try {
       const confirmations = boardingPassengersForStation.map((passenger) => ({
         tripId: passenger.tripId,
         status: selections[passenger.tripId],
+        ...(selections[passenger.tripId] === "arrived"
+          ? { pin: pickupPins[passenger.tripId] }
+          : {}),
       }));
+      setRideActionError(null);
+      const arrivalConfirmations = confirmations.filter(
+        (confirmation) => confirmation.status === "arrived",
+      );
 
       const res = await fetch(`/api/actions/ride/${ride.id}`, {
         method: "POST",
@@ -505,16 +564,46 @@ export default function DriverRideInteractiveClient({
           action: "station_arrived",
           stationIndex,
           stationName,
+          ...(arrivalConfirmations.length === 1
+            ? { pin: arrivalConfirmations[0].pin }
+            : {}),
           metadata: { confirmations },
         }),
       });
 
+      const responseData = await res.json().catch(() => null);
       if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
+        if (responseData?.errorCode === "NO_SHOW_TOO_EARLY") {
+          if (typeof responseData.arrivedAt === "string") {
+            setRide((current) => ({
+              ...current,
+              passengers: current.passengers.map((passenger) =>
+                passenger.tripId === responseData.tripId
+                  ? { ...passenger, arrivedAt: responseData.arrivedAt }
+                  : passenger,
+              ),
+            }));
+          }
+          setRideActionError(
+            typeof responseData.arrivedAt === "string"
+              ? t("driver.no_show_wait_error", {
+                  time: formatCountdown(
+                    Math.max(0, Number(responseData.remainingSeconds) || 0),
+                  ),
+                })
+              : t("driver.no_show_arrival_required"),
+          );
+          return;
+        }
         throw new Error(
-          errorData?.error || t("ride.confirm_station_error", { stationIndex }),
+          responseData?.errorCode ||
+            responseData?.error ||
+            t("ride.confirm_station_error", { stationIndex }),
         );
       }
+      const seatAssignments = responseData?.seatAssignments as
+        | Record<string, number[]>
+        | undefined;
 
       const isLastStation =
         visibleRouteStops.length > 0 &&
@@ -565,7 +654,7 @@ export default function DriverRideInteractiveClient({
         } else if (isPickupStation && confirmationStatus === "arrived") {
           nextStatus = "boarding";
           nextSeatNumbers =
-            nextSeatNumbers && nextSeatNumbers.length > 0 ? nextSeatNumbers : [getNextSeatNumber()];
+            seatAssignments?.[passenger.tripId] ?? nextSeatNumbers ?? [];
         }
 
         // 4. Anyone on board reaching their dropoff (or the ride's last stop) alights here.
@@ -586,13 +675,27 @@ export default function DriverRideInteractiveClient({
           return passenger;
         }
 
-        return { ...passenger, status: nextStatus, seatNumbers: nextSeatNumbers };
+        return {
+          ...passenger,
+          status: nextStatus,
+          seatNumbers: nextSeatNumbers,
+          ...(nextStatus === "no_show"
+            ? { noShowAt: new Date().toISOString() }
+            : {}),
+        };
       });
 
       setRide((prevRide) => ({
         ...prevRide,
         passengers: nextPassengers,
       }));
+      setPickupPins((previous) => {
+        const next = { ...previous };
+        for (const passenger of boardingPassengersForStation) {
+          if (selections[passenger.tripId]) delete next[passenger.tripId];
+        }
+        return next;
+      });
       setConfirmedStationIndices((prev) =>
         prev.includes(stationIndex) ? prev : [...prev, stationIndex],
       );
@@ -604,7 +707,67 @@ export default function DriverRideInteractiveClient({
       );
       if (nextStationStep) await handleGoToLocation(nextStationStep);
     } catch (err) {
-      console.error(err);
+      const errorCode = err instanceof Error ? err.message : "";
+      setRideActionError(
+        errorCode === "INCIDENT_OPEN"
+          ? t("driver.incident.paused")
+          : errorCode === "SEATS_UNAVAILABLE"
+          ? t("ride.seats_unavailable")
+          : errorCode === "PICKUP_PIN_INVALID"
+          ? t("pickup_pin.invalid")
+          : errorCode === "PICKUP_PIN_LOCKED"
+            ? t("pickup_pin.locked")
+            : errorCode === "PICKUP_PIN_REQUIRED"
+              ? t("pickup_pin.required")
+                : err instanceof TypeError
+                ? t("pickup_pin.network_error")
+                : t("ride.confirm_station_error", { stationIndex }),
+      );
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleConfirmNoShowArrival = async (
+    passenger: RideDetailView["passengers"][number],
+    step: StepItem,
+  ) => {
+    setLoadingAction(`no-show-arrival-${passenger.tripId}`);
+    setRideActionError(null);
+    try {
+      const response = await fetch(`/api/actions/ride/${ride.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm_no_show_arrival",
+          tripId: passenger.tripId,
+          stationIndex: step.stationIndex,
+          stationName: step.name,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.errorCode || "ARRIVAL_CONFIRMATION_FAILED");
+      }
+      setRide((current) => ({
+        ...current,
+        passengers: current.passengers.map((item) =>
+          item.tripId === passenger.tripId
+            ? { ...item, arrivedAt: data.arrivedAt }
+            : item,
+        ),
+      }));
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      setRideActionError(
+        code === "INCIDENT_OPEN"
+          ? t("driver.incident.paused")
+          : code === "PASSENGER_NOT_WAITING"
+            ? t("driver.no_show_arrival_unavailable")
+            : error instanceof TypeError
+              ? t("ride.action_network_error")
+              : t("driver.no_show_arrival_error"),
+      );
     } finally {
       setLoadingAction(null);
     }
@@ -612,6 +775,7 @@ export default function DriverRideInteractiveClient({
 
   const handleCloseRide = async () => {
     setLoadingAction("close");
+    setRideActionError(null);
     let loc: GeoPoint | null = null;
     try {
       if (typeof window !== "undefined" && "geolocation" in navigator) {
@@ -633,7 +797,7 @@ export default function DriverRideInteractiveClient({
     }
 
     try {
-      await fetch(`/api/actions/ride/${ride.id}`, {
+      const response = await fetch(`/api/actions/ride/${ride.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -641,14 +805,105 @@ export default function DriverRideInteractiveClient({
           metadata: { currentLocation: loc },
         }),
       });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || t("ride.end_error"));
+      }
     } catch (err) {
       console.error(err);
+      setRideActionError(
+        err instanceof TypeError
+          ? t("ride.action_network_error")
+          : err instanceof Error
+            ? err.message
+            : t("ride.end_error"),
+      );
+      setLoadingAction(null);
+      return;
     }
 
     if (loc) setDriverDestination(loc);
     setRide((prevRide) => ({ ...prevRide, status: "completed" }));
     setIsCompleted(true);
     setLoadingAction(null);
+  };
+
+  const handleReportIncident = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setReportSubmitting(true);
+    setRideActionError(null);
+    try {
+      const response = await fetch(
+        `/api/actions/ride/${ride.id}/incident`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: reportType,
+            ...(reportNote.trim() ? { note: reportNote.trim() } : {}),
+          }),
+        },
+      );
+      const responseData = await response.json().catch(() => null);
+      if (!response.ok) {
+        if (responseData?.errorCode === "ALREADY_REPORTED") {
+          setRide((current) => ({ ...current, hasOpenIncident: true }));
+          setReportDialogOpen(false);
+          setRideActionError(t("driver.incident.paused"));
+          return;
+        }
+        throw new Error(responseData?.errorCode || "REPORT_FAILED");
+      }
+      setRide((current) => ({ ...current, hasOpenIncident: true }));
+      setIncidentReported(true);
+      setReportDialogOpen(false);
+      setReportNote("");
+    } catch {
+      setRideActionError(t("driver.incident.report_error"));
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
+  const handleWithdrawIncident = async () => {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(t("driver.incident.withdraw_confirm"))
+    ) {
+      return;
+    }
+    setWithdrawSubmitting(true);
+    setRideActionError(null);
+    try {
+      const response = await fetch(
+        `/api/actions/ride/${ride.id}/incident/withdraw`,
+        { method: "POST" },
+      );
+      const responseData = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorCode = responseData?.errorCode;
+        throw new Error(
+          errorCode === "FORBIDDEN"
+            ? t("driver.incident.withdraw_forbidden")
+            : errorCode === "NO_OPEN_INCIDENT"
+              ? t("driver.incident.withdraw_no_open")
+              : t("driver.incident.withdraw_error"),
+        );
+      }
+      setRide((current) => ({ ...current, hasOpenIncident: false }));
+      setIncidentReported(false);
+      setIncidentWithdrawn(true);
+    } catch (error) {
+      setRideActionError(
+        error instanceof TypeError
+          ? t("ride.action_network_error")
+          : error instanceof Error
+            ? error.message
+            : t("driver.incident.withdraw_error"),
+      );
+    } finally {
+      setWithdrawSubmitting(false);
+    }
   };
 
   return (
@@ -662,6 +917,41 @@ export default function DriverRideInteractiveClient({
       />
 
       <main style={{ maxWidth: 640, margin: "0 auto", padding: "24px 20px 56px" }}>
+        {(ride.hasOpenIncident || incidentReported) && (
+          <div
+            role="status"
+            className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900"
+          >
+            <span>{t("driver.incident.paused")}</span>
+            <button
+              type="button"
+              onClick={() => void handleWithdrawIncident()}
+              disabled={withdrawSubmitting}
+              className="rounded-lg border border-amber-700 px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-60"
+            >
+              {withdrawSubmitting
+                ? t("driver.incident.withdrawing")
+                : t("driver.incident.withdraw")}
+            </button>
+          </div>
+        )}
+        {incidentWithdrawn && !ride.hasOpenIncident && (
+          <div
+            role="status"
+            className="mb-4 rounded-lg border border-[var(--color-secondary)] bg-[var(--color-secondary-tint)] px-3 py-2.5 text-sm font-semibold text-[var(--color-primary)]"
+          >
+            {t("driver.incident.withdrawn")}
+          </div>
+        )}
+        {rideActionError && (
+          <div
+            role="alert"
+            className="mb-4 rounded-lg bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700"
+          >
+            {rideActionError}
+          </div>
+        )}
+
         {/* Header summary */}
         <div style={{ marginBottom: 20 }}>
           <span
@@ -729,8 +1019,22 @@ export default function DriverRideInteractiveClient({
           </div>
         </div>
 
+        {(ride.status === "confirmed" || ride.status === "active") &&
+          !ride.hasOpenIncident && (
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={() => setReportDialogOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-bold text-amber-900 shadow-sm"
+              >
+                <Flag size={16} aria-hidden="true" />
+                {t("driver.incident.report_problem")}
+              </button>
+            </div>
+          )}
+
         {/* Start Ride Action Banner */}
-        {!rideStarted && !isCompleted && (
+        {!isRideTerminal && !rideStarted && !isCompleted && (
           <div
             style={{
               background: "linear-gradient(135deg, #0B1E3D 0%, #1A365D 100%)",
@@ -832,6 +1136,48 @@ export default function DriverRideInteractiveClient({
           confirmedStationIndices={confirmedStationIndices}
           stationSelections={stationSelections}
         />
+
+        <section
+          aria-label={t("chat.manifest_title")}
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            border: "1px solid #eef0f3",
+            padding: 18,
+            marginBottom: 16,
+          }}
+        >
+          <h2 style={{ margin: "0 0 12px", color: "#0B1E3D", fontSize: 15 }}>
+            {t("chat.manifest_title")}
+          </h2>
+          <div style={{ display: "grid", gap: 10 }}>
+            {ride.passengers.map((passenger) => (
+              <div
+                key={`chat-passenger-${passenger.tripId}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  padding: 10,
+                  border: "1px solid #E7ECEF",
+                  borderRadius: 12,
+                }}
+              >
+                <strong style={{ color: "#0B1E3D", fontSize: 14 }}>
+                  {passengerLabel(passenger)}
+                </strong>
+                <TripChat
+                  tripId={passenger.tripId}
+                  role="driver"
+                  passengerNumber={passenger.passengerNumber}
+                  triggerLabel={t("chat.open")}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
 
         {/* Route Details Section */}
         <div
@@ -950,6 +1296,11 @@ export default function DriverRideInteractiveClient({
                 boardingPassengersForStation.every((passenger) =>
                   Boolean(stationSelectionsForStep[passenger.tripId]),
                 );
+              const isPickupPinComplete = boardingPassengersForStation.every(
+                (passenger) =>
+                  stationSelectionsForStep[passenger.tripId] !== "arrived" ||
+                  /^\d{4}$/.test(pickupPins[passenger.tripId] ?? ""),
+              );
               const hasNoShowAtStation =
                 noShowPassengersForStation.length > 0 || noShowAlightingForStation.length > 0;
 
@@ -1049,7 +1400,7 @@ export default function DriverRideInteractiveClient({
                       </div>
 
                       {/* Confirm stop — also opens directions to the next station */}
-                      {!isCompleted && step.type === "station" && isCurrentStep && (
+                      {!isRideTerminal && !isCompleted && step.type === "station" && isCurrentStep && (
                         <>
                           <button
                             type="button"
@@ -1059,6 +1410,7 @@ export default function DriverRideInteractiveClient({
                             disabled={
                               loadingAction === `confirm-${step.stationIndex}` ||
                               (requiresPassengerSelections && !isDecisionComplete)
+                              || (requiresPassengerSelections && !isPickupPinComplete)
                             }
                             style={{
                               display: "inline-flex",
@@ -1074,10 +1426,15 @@ export default function DriverRideInteractiveClient({
                               cursor:
                                 loadingAction === `confirm-${step.stationIndex}` ||
                                 (requiresPassengerSelections && !isDecisionComplete)
+                                || (requiresPassengerSelections && !isPickupPinComplete)
                                   ? "not-allowed"
                                   : "pointer",
                               boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                              opacity: requiresPassengerSelections && !isDecisionComplete ? 0.7 : 1,
+                              opacity:
+                                requiresPassengerSelections &&
+                                (!isDecisionComplete || !isPickupPinComplete)
+                                  ? 0.7
+                                  : 1,
                             }}
                           >
                             <CheckCircle2 size={13} color={isActiveStation ? "#27AE60" : "#00C2A8"} />
@@ -1180,9 +1537,7 @@ export default function DriverRideInteractiveClient({
                             }}
                           >
                             {t("driver.no_show_alighting_note", {
-                              name:
-                                passenger.passengerName ??
-                                t("driver.passenger_fallback", { n: passenger.pickupOrder ?? 1 }),
+                              name: passengerLabel(passenger),
                             })}
                           </div>
                         ))}
@@ -1206,7 +1561,7 @@ export default function DriverRideInteractiveClient({
                             }}
                           >
                             <span style={{ fontSize: 12, fontWeight: 700, color: "#C0392B" }}>
-                              {passenger.passengerName ?? t("driver.passenger_fallback", { n: passenger.pickupOrder ?? 1 })}
+                              {passengerLabel(passenger)}
                             </span>
                             <span style={{ fontSize: 11, fontWeight: 800, color: "#C0392B" }}>
                               {t("driver.no_show")}
@@ -1237,6 +1592,11 @@ export default function DriverRideInteractiveClient({
                         ) : (
                           passengersForStation.map((passenger) => {
                             const selectedStatus = stationSelectionsForStep[passenger.tripId];
+                            const noShowRemaining = noShowRemainingSeconds(
+                              passenger.arrivedAt,
+                              ride.noShowMinWaitMinutes,
+                              clockNow,
+                            );
                             const isBoardingPassenger =
                               passenger.status === "waiting" &&
                               (passenger.pickupOrder ?? 0) === step.stationIndex;
@@ -1259,14 +1619,14 @@ export default function DriverRideInteractiveClient({
                               >
                                 <div>
                                   <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
-                                    {passenger.passengerName ?? t("driver.passenger_fallback", { n: passenger.pickupOrder ?? 1 })}
+                                    {passengerLabel(passenger)}
                                   </span>
                                   <div style={{ marginTop: 4, fontSize: 11, color: "#5A6A7A" }}>
                                     {isBoardingPassenger ? t("driver.status_boarding") : isAlightingPassenger ? t("driver.status_alighting") : t("driver.status_pending")}
                                   </div>
                                 </div>
                                 {isBoardingPassenger ? (
-                                  <div style={{ display: "flex", gap: 8 }}>
+                                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -1293,15 +1653,24 @@ export default function DriverRideInteractiveClient({
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() =>
+                                      disabled={
+                                        noShowRemaining === null ||
+                                        noShowRemaining > 0
+                                      }
+                                      onClick={() => {
+                                        setPickupPins((previous) => {
+                                          const next = { ...previous };
+                                          delete next[passenger.tripId];
+                                          return next;
+                                        });
                                         setStationSelections((prev) => ({
                                           ...prev,
                                           [String(step.stationIndex)]: {
                                             ...(prev[String(step.stationIndex)] ?? {}),
                                             [passenger.tripId]: "no_show",
                                           },
-                                        }))
-                                      }
+                                        }));
+                                      }}
                                       style={{
                                         padding: "6px 10px",
                                         borderRadius: 8,
@@ -1310,7 +1679,16 @@ export default function DriverRideInteractiveClient({
                                         color: selectedStatus === "no_show" ? "#C0392B" : "#5A6A7A",
                                         fontWeight: 700,
                                         fontSize: 12,
-                                        cursor: "pointer",
+                                        cursor:
+                                          noShowRemaining === null ||
+                                          noShowRemaining > 0
+                                            ? "not-allowed"
+                                            : "pointer",
+                                        opacity:
+                                          noShowRemaining === null ||
+                                          noShowRemaining > 0
+                                            ? 0.55
+                                            : 1,
                                       }}
                                     >
                                       {t("driver.no_show")}
@@ -1320,6 +1698,100 @@ export default function DriverRideInteractiveClient({
                                   <span style={{ fontSize: 12, fontWeight: 700, color: "#00806E" }}>
                                     {t("driver.will_alight_here")}
                                   </span>
+                                )}
+                                {isBoardingPassenger && (
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                      width: "100%",
+                                      flexWrap: "wrap",
+                                      fontSize: 11,
+                                      color: "#5A6A7A",
+                                    }}
+                                  >
+                                    {noShowRemaining === null ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleConfirmNoShowArrival(
+                                            passenger,
+                                            step,
+                                          )
+                                        }
+                                        disabled={
+                                          loadingAction ===
+                                          `no-show-arrival-${passenger.tripId}`
+                                        }
+                                        style={{
+                                          border: "1px solid #dbe2e8",
+                                          borderRadius: 7,
+                                          background: "#fff",
+                                          color: "#0B1E3D",
+                                          padding: "5px 8px",
+                                          fontWeight: 700,
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        {loadingAction ===
+                                        `no-show-arrival-${passenger.tripId}`
+                                          ? t("driver.confirming")
+                                          : t("driver.confirm_arrival_for_wait")}
+                                      </button>
+                                    ) : noShowRemaining > 0 ? (
+                                      <span>
+                                        {t("driver.no_show_wait_countdown", {
+                                          time: formatCountdown(noShowRemaining),
+                                        })}
+                                      </span>
+                                    ) : (
+                                      <span>{t("driver.no_show_wait_complete")}</span>
+                                    )}
+                                  </div>
+                                )}
+                                {isBoardingPassenger && selectedStatus === "arrived" && (
+                                  <label
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                      width: "100%",
+                                      fontSize: 12,
+                                      fontWeight: 700,
+                                      color: "#0B1E3D",
+                                    }}
+                                  >
+                                    {t("pickup_pin.driver_prompt")}
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      maxLength={4}
+                                      autoComplete="off"
+                                      pattern="[0-9]{4}"
+                                      aria-label={t("pickup_pin.driver_prompt")}
+                                      value={pickupPins[passenger.tripId] ?? ""}
+                                      onChange={(event) => {
+                                        setRideActionError(null);
+                                        setPickupPins((previous) => ({
+                                          ...previous,
+                                          [passenger.tripId]: event.target.value
+                                            .replace(/\D/g, "")
+                                            .slice(0, 4),
+                                        }));
+                                      }}
+                                      style={{
+                                        width: 88,
+                                        padding: "7px 9px",
+                                        border: "1px solid #cbd5e1",
+                                        borderRadius: 8,
+                                        fontSize: 16,
+                                        fontWeight: 800,
+                                        letterSpacing: "0.2em",
+                                        textAlign: "center",
+                                      }}
+                                    />
+                                  </label>
                                 )}
                               </div>
                             );
@@ -1339,7 +1811,7 @@ export default function DriverRideInteractiveClient({
             })}
           </div>
 
-          {rideStarted && !isCompleted && allStationsConfirmed && (
+          {!isRideTerminal && rideStarted && !isCompleted && allStationsConfirmed && (
             <button
               type="button"
               onClick={handleCloseRide}
@@ -1365,6 +1837,79 @@ export default function DriverRideInteractiveClient({
           )}
         </div>
       </main>
+      {reportDialogOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !reportSubmitting) {
+              setReportDialogOpen(false);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ride-incident-dialog-title"
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"
+          >
+            <h2
+              id="ride-incident-dialog-title"
+              className="mb-4 text-lg font-extrabold text-slate-900"
+            >
+              {t("driver.incident.dialog_title")}
+            </h2>
+            <form onSubmit={handleReportIncident} className="grid gap-4">
+              <label className="grid gap-1.5 text-sm font-semibold text-slate-800">
+                {t("driver.incident.type_label")}
+                <select
+                  value={reportType}
+                  onChange={(event) => setReportType(event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2.5"
+                >
+                  <option value="vehicle_breakdown">
+                    {t("driver.incident.type.vehicle_breakdown")}
+                  </option>
+                  <option value="accident">{t("driver.incident.type.accident")}</option>
+                  <option value="emergency">{t("driver.incident.type.emergency")}</option>
+                  <option value="passenger_issue">
+                    {t("driver.incident.type.passenger_issue")}
+                  </option>
+                  <option value="other">{t("driver.incident.type.other")}</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm font-semibold text-slate-800">
+                {t("driver.incident.note_label")}
+                <textarea
+                  value={reportNote}
+                  onChange={(event) => setReportNote(event.target.value)}
+                  maxLength={300}
+                  rows={3}
+                  className="resize-y rounded-lg border border-slate-300 px-3 py-2.5"
+                />
+              </label>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReportDialogOpen(false)}
+                  disabled={reportSubmitting}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60"
+                >
+                  {t("driver.incident.cancel")}
+                </button>
+                <button
+                  type="submit"
+                  disabled={reportSubmitting}
+                  className="rounded-lg bg-[#0B1E3D] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                >
+                  {reportSubmitting
+                    ? t("driver.incident.submitting")
+                    : t("driver.incident.submit")}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

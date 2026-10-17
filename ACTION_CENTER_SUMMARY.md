@@ -35,16 +35,17 @@ Pre-built logging functions for both ride types:
 
 ### 3. **Action Center API** ✅
 
-**GET** `/api/actions/ride/:rideId/next`
+**GET** `/api/actions/ride/[rideId]`
 
-- Returns next action prompt based on ride state and type
+- Returns the current action prompt based on ride state and type
 - Determines whether to show "Start Ride", "Station Arrived", "Pickup Arrived", or "End Ride"
 - Returns station/stop details needed for UI
 
-**POST** `/api/actions/ride/:rideId`
+**POST** `/api/actions/ride/[rideId]`
 
 - Processes driver actions
-- Supports: `start_ride`, `station_arrived`, `boarding_alighting`, `pickup_arrived`, `passenger_picked_up`, `no_show`, `stop_point_arrived`, `end_ride`
+- Supports: `start_ride`, `station_arrived`, `boarding_alighting`, `pickup_arrived`, `passenger_picked_up`, `confirm_no_show_arrival`, `no_show`, `stop_point_arrived`, `end_ride`
+- Incident reports use `POST /api/actions/ride/[rideId]/incident`; drivers can withdraw through `/incident/withdraw`.
 - Creates corresponding log entries
 - Updates ride/trip status as needed
 
@@ -106,7 +107,7 @@ Pre-built logging functions for both ride types:
 ### 1. Get Next Action
 
 ```typescript
-const res = await fetch(`/api/actions/ride/${rideId}/next`, {
+const res = await fetch(`/api/actions/ride/${rideId}`, {
   headers: { Authorization: `Bearer ${token}` },
 });
 const data = await res.json();
@@ -157,7 +158,7 @@ const res = await fetch(`/api/actions/ride/${rideId}`, {
 
 ### 4. Poll for Next Action
 
-After submitting an action, poll `GET /api/actions/ride/:rideId/next` again to get the next prompt.
+After submitting an action, request `GET /api/actions/ride/[rideId]` again to get the current prompt.
 
 ## Database Behavior
 

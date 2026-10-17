@@ -194,7 +194,8 @@ const TripSchema = new Schema(
       ref: "Payment",
       required: false,
     },
-    extraPassengers: { type: Number, default: 0, min: 0, max: 9 },
+    // Vehicle-specific limits are validated against vehicles.ts at booking time.
+    extraPassengers: { type: Number, default: 0, min: 0 },
     preferedGender: {
       type: String,
       enum: ["male", "female", null],
@@ -231,6 +232,7 @@ const TripSchema = new Schema(
         "confirmed",
         "active",
         "completed",
+        "no_show",
         "refunded",
         "cancelled",
         "time_out",
@@ -249,6 +251,11 @@ const TripSchema = new Schema(
       index: true,
       default: null,
     },
+    pinVersion: { type: Number, required: true, min: 0, default: 0 },
+    pinFailedAttempts: { type: Number, required: true, min: 0, default: 0 },
+    pinLockedUntil: { type: Date, required: false },
+    noShowAt: { type: Date, required: false, default: null },
+    noShowReviewRequestedAt: { type: Date, required: false, default: null },
     summary: {
       type: Schema.Types.Mixed,
       default: null,

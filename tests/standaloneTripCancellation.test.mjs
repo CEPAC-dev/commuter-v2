@@ -154,6 +154,20 @@ test("a second cancellation is refused without changing state again", async () =
       state.paymentCancellations += 1;
     },
   });
+
+  test("no-show Trip cannot be passenger-cancelled", () => {
+    assert.deepEqual(
+      getStandaloneTripCancellationMode(
+        makeTrip({ status: "no_show", paymentStatus: "paid" }),
+      ),
+      {
+        kind: "blocked",
+        httpStatus: 409,
+        errorCode: "TRIP_NO_SHOW",
+        error: "Trips marked as not present cannot be cancelled.",
+      },
+    );
+  });
   const tripAfterFirst = { ...state.trip };
   const second = await runStandaloneTripCancellation({
     trip: state.trip,
@@ -187,4 +201,3 @@ test("legacy Request-backed Trips stay on the parent cancellation path", () => {
     false,
   );
 });
-

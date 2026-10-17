@@ -52,5 +52,8 @@ export async function GET(
       endTime: item.endTime,
     }));
 
-  return NextResponse.json({ drivers: matches });
+  return NextResponse.json(
+    { drivers: matches },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }

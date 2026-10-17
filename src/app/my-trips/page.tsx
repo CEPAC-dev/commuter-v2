@@ -31,7 +31,7 @@ import TripTabs from "@/components/trips/TripTabs";
 import NextTripCard from "@/components/trips/NextTripCard";
 import DateRangeCalendar from "@/components/shared/DateRangeCalendar";
 import Pagination from "@/components/shared/Pagination";
-import type { BookingStatus, RideListRow, TripListRow } from "@/types/booking";
+import type { RideListRow, TripListRow, TripStatus } from "@/types/booking";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import RateTripModal from "@/components/trips/RateTripModal";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
@@ -99,10 +99,12 @@ function getStatusPill(locale: "en" | "ar") {
     confirmed: { label: translate(locale, "status.upcoming"), bg: "#E2E8F0", color: "#5A6A7A" },
     active: { label: translate(locale, "status.ongoing"), bg: "#00C2A8", color: "#fff" },
     completed: { label: translate(locale, "status.completed"), bg: "#0B1E3D", color: "#fff" },
+    no_show: { label: translate(locale, "status.no_show"), bg: "#FFEBEE", color: "#C0392B" },
+    refunded: { label: translate(locale, "status.refunded"), bg: "#0B1E3D", color: "#fff" },
     cancelled: { label: translate(locale, "status.cancelled"), bg: "#0B1E3D", color: "#fff" },
     time_out: { label: translate(locale, "status.expired"), bg: "#0B1E3D", color: "#fff" },
     nomatch: { label: translate(locale, "status.nomatch"), bg: "#FFEBEE", color: "#E74C3C" },
-  } satisfies Record<BookingStatus, { label: string; bg: string; color: string }>;
+  } satisfies Record<TripStatus, { label: string; bg: string; color: string }>;
 }
 function descriptionForVehicle(locale: "en" | "ar", vehicleType: string) {
   const key = `vehicles.${vehicleType}`;

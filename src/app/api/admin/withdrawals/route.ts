@@ -44,10 +44,12 @@ export async function GET(req: NextRequest) {
     const balanceEgp = wallet?.balanceEgp ?? 0;
     const reserveAmount = wallet?.reserveAmount ?? settings.walletReserveAmount ?? 200;
     const pendingWithdrawalAmount = wallet?.pendingWithdrawalAmount ?? 0;
+    const owedEgp = wallet?.owedEgp ?? 0;
     const withdrawableEgp = computeWithdrawableBalance(
       balanceEgp,
       reserveAmount,
       pendingWithdrawalAmount,
+      owedEgp,
     );
 
     return {
@@ -65,6 +67,7 @@ export async function GET(req: NextRequest) {
       resolvedAt: r.resolvedAt ? new Date(r.resolvedAt).toISOString() : null,
       wallet: {
         balanceEgp,
+        owedEgp,
         reserveAmount,
         pendingWithdrawalAmount,
         withdrawableEgp,

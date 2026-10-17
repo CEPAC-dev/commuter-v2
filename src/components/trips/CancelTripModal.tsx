@@ -69,6 +69,7 @@ export default function CancelTripModal({
   if (
     status === "cancelled" ||
     status === "completed" ||
+    status === "no_show" ||
     status === "time_out"
   ) {
     return null;
@@ -94,7 +95,11 @@ export default function CancelTripModal({
       }
       setEvaluation(json.evaluation);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load cancellation policy");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load cancellation policy",
+      );
     } finally {
       setLoading(false);
     }
@@ -140,7 +145,10 @@ export default function CancelTripModal({
       <button
         type="button"
         onClick={openModal}
-        className={triggerClassName ?? "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"}
+        className={
+          triggerClassName ??
+          "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+        }
       >
         <XCircle size={14} />
         <span>Cancel Trip</span>

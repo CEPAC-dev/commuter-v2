@@ -78,7 +78,7 @@ export function getTripTab({
   }
 
   if (
-    ["completed", "cancelled", "refunded", "time_out"].includes(childStatus ?? "") ||
+    ["completed", "no_show", "cancelled", "refunded", "time_out"].includes(childStatus ?? "") ||
     childStatus === "rejected" || requestStatus === "rejected" || requestStatus === "time_out"
   ) {
     return "history";

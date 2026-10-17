@@ -20,10 +20,12 @@ import PrivateRideDetails from "@/components/trips/PrivateRideDetails";
 import SharedRideDetails from "@/components/trips/SharedRideDetails";
 import RateTripModal from "@/components/trips/RateTripModal";
 import CancelTripModal from "@/components/trips/CancelTripModal";
+import NoShowReviewNotice from "@/components/trips/NoShowReviewNotice";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 import LiveShareControl from "@/components/trips/LiveShareControl";
+import PickupPinCard from "@/components/trips/PickupPinCard";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
 import { getSharedRideStep } from "@/lib/sharedRideStepper.ts";
@@ -539,6 +541,8 @@ export default async function TripDetailPage({
               />
             </div>
 
+            {!isDriver && <PickupPinCard tripId={trip.id} />}
+
             <section className="trip-route-card" aria-labelledby="trip-route-title">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
                 <h2 id="trip-route-title" style={{ margin: 0, color: "#173337", fontSize: 16, fontWeight: 800 }}>
@@ -651,12 +655,30 @@ export default async function TripDetailPage({
             {!isDriver && trip.rideType === "private" && trip.assignedDriver && (
               <DriverCard
                 driver={{ ...trip.assignedDriver, rating: trip.rating }}
-                showCall={isOngoing && Boolean(trip.assignedDriver.phone)}
+                showCall={false}
               />
             )}
-            {isOngoing && Boolean(trip.assignedDriver || trip.rideId) && (
-              <TripChat tripId={id} role={isDriver ? "driver" : "user"} />
+            {!isDriver && trip.assignedDriver?.phone && isOngoing && (
+              <a
+                href={`tel:${trip.assignedDriver.phone}`}
+                aria-label={`${translate(locale, "my_trips.call_driver")} ${trip.assignedDriver.name ?? ""}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "12px 16px",
+                  borderRadius: 12,
+                  background: "#E2F8F5",
+                  color: "#006D60",
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                <span>{translate(locale, "my_trips.call_driver")}</span>
+                <span dir="ltr">{trip.assignedDriver.phone}</span>
+              </a>
             )}
+            {!isDriver && <TripChat tripId={id} role="user" />}
           </div>
 
           {/* Secondary Column: Breakdown, Passenger stops & timestamp */}
@@ -685,6 +707,14 @@ export default async function TripDetailPage({
                   )}
                 </div>
               </div>
+
+              {!isDriver && status === "no_show" && (
+                <NoShowReviewNotice
+                  tripId={trip.id}
+                  paymentStatus={trip.paymentStatus}
+                  requestedAt={trip.noShowReviewRequestedAt}
+                />
+              )}
 
               <div>
                 <p className="trip-summary-label">{translate(locale, "trip_detail.trip_price")}</p>

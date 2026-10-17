@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
     totalCount,
     page: safePage,
     limit: safeLimit,
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function DELETE(req: NextRequest) {

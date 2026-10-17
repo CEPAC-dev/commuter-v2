@@ -69,8 +69,8 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     trip_type: 2,
     buffer: 30,
     window: 20,
-    capacity: 4,
-    occupancy: 4,
+    capacity: 3,
+    occupancy: 3,
     min_occupancy: 2,
     minimum_charge: 50,
   },
@@ -99,8 +99,8 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
     trip_type: 4,
     buffer: 30,
     window: 20,
-    capacity: 4,
-    occupancy: 4,
+    capacity: 3,
+    occupancy: 3,
     min_occupancy: 2,
     minimum_charge: 50, // EGP minimum charge for shared taxi rides
   },
@@ -153,6 +153,11 @@ export const VEHICLES: Record<VehicleKey, VehicleConfig> = {
 
 export const VEHICLE_LIST = Object.values(VEHICLES);
 
+export function getVehiclePassengerCapacity(vehicleType: string): number {
+  const capacity = VEHICLES[vehicleType]?.capacity;
+  return Number.isInteger(capacity) && capacity > 0 ? capacity : 1;
+}
+
 export function priceFor(
   distanceKm: number,
   key: VehicleKey,
@@ -186,11 +191,7 @@ export function waitingCostEgp(
 
 /** Max extra passengers allowed per vehicle type */
 export function maxExtraPassengers(key: VehicleKey | ""): number {
-  if (key === "taxi_shared" || key === "shared_car") return 2;
-  if (key === "van_shared") return 4;
-  if (key === "microbus_shared") return 9;
-  if (key === "mini_bus") return 13;
-  return 2; // private_car, taxi_private, taxi_shared, or unset
+  return Math.max(0, getVehiclePassengerCapacity(key) - 1);
 }
 
 /**

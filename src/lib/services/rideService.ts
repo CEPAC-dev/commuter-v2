@@ -4,10 +4,19 @@ import { Ride } from "../../models/Ride";
 import { Trip } from "../../models/Trip";
 import { Wallet } from "../../models/Wallet";
 import { WalletTransaction } from "../../models/WalletTransaction";
+import { Log } from "../../models/Log";
+import {
+  buildPenaltyWalletUpdate,
+  computePenaltyApplication,
+} from "@/lib/walletPenalty";
 import { createNotification } from "@/lib/notifications/createNotification";
+import { notifyRideCancellationPassengers } from "@/lib/notifications/rideIncident";
 import { getEligibleDriverIds } from "@/lib/services/rideMatching";
 import { getAdminSettings, getCancellationTier } from "@/lib/cancellationPolicy";
+import { getDriverRideCancellationDecision } from "@/lib/rideCancellationAccess";
 import { isRegionCode } from "@/lib/config/regions";
+import { NO_SHOW_MIN_WAIT_MINUTES } from "@/lib/noShowRules";
+import { getAdminRideCancellationPlan } from "@/lib/rideIncidentAdminGuards";
 import type {
   RideDetailView,
   RideListRow,
@@ -19,6 +28,21 @@ import {
   getSharedRouteStopCounts,
   normalizeSharedRidePassengers,
 } from "@/lib/services/sharedRideManifest";
+import {
+  assignMissingPassengerNumbers,
+  getNextPassengerNumber,
+} from "@/lib/passengerNumbers";
+import { sanitizePickupPinFields } from "@/lib/pickupPinSafety";
+import {
+  getTripPassengerCount,
+  isRideWithinCapacity,
+} from "@/lib/rideCapacity";
+import { countRidePassengers } from "@/lib/ridePassengerCount";
+import {
+  evaluateTripClaim,
+  isTripClaimTransactionConflict,
+  TripClaimConflictError,
+} from "@/lib/matchingEndpointGuards";
 
 type MatchResult = {
   availabilityId?: Types.ObjectId | string | null;
@@ -135,6 +159,7 @@ function normalizeRoutePayload(route: unknown[] = []): unknown[] {
 async function createRide(matchResult: MatchResult) {
   const session = await mongoose.startSession();
   session.startTransaction();
+  let sessionClosed = false;
   try {
     // availabilityId is optional and purely informational under the recurring-
     // availability model — a broadcast-matched ride may not originate from any
@@ -143,23 +168,34 @@ async function createRide(matchResult: MatchResult) {
 
     const tripIds = matchResult.passengers.map((p) => p.tripId);
     const trips = await Trip.find({ _id: { $in: tripIds } })
-      .select("pickupStation dropoffStation")
+      .select(
+        "pickupStation dropoffStation numberOfPassengers extraPassengers",
+      )
       .session(session)
       .lean<
         {
           _id: unknown;
           pickupStation?: StationSelection;
           dropoffStation?: StationSelection;
+          numberOfPassengers?: number;
+          extraPassengers?: number;
         }[]
       >();
     const tripById = new Map(trips.map((trip) => [String(trip._id), trip]));
 
     let currentSeatCounter = 1;
-    const passengersForRide = matchResult.passengers.map((p) => {
+    const passengersForRide = matchResult.passengers.map((p, index) => {
       const trip = tripById.get(String(p.tripId));
       let seats = p.seatNumbers;
-      const count = p.numberOfPassengers || 1;
-      if (!Array.isArray(seats) || seats.length === 0) {
+      const count = Math.max(
+        p.numberOfPassengers || 1,
+        getTripPassengerCount(
+          matchResult.vehicleType,
+          trip?.numberOfPassengers ?? p.numberOfPassengers,
+          trip?.extraPassengers ?? 0,
+        ),
+      );
+      if (!Array.isArray(seats) || seats.length !== count) {
         seats = Array.from({ length: count }, (_, i) => currentSeatCounter + i);
         currentSeatCounter += count;
       } else {
@@ -177,12 +213,21 @@ async function createRide(matchResult: MatchResult) {
         dropoffOrder: p.dropoffOrder,
         tripCost: p.priceEgp || 0,
         numberOfPassengers: count,
+        passengerNumber: index + 1,
         pickupStation: trip?.pickupStation ?? undefined,
         dropoffStation: trip?.dropoffStation ?? undefined,
         seatNumbers: seats,
         status: "waiting",
       };
     });
+    if (
+      !isRideWithinCapacity(
+        matchResult.vehicleType,
+        passengersForRide.map((passenger) => passenger.numberOfPassengers),
+      )
+    ) {
+      throw new Error("Selected trips exceed this vehicle's passenger capacity.");
+    }
 
     const firstTrip = tripById.get(String(matchResult.passengers[0]?.tripId));
     const rideNumber = await getNextSequence("rideNumber", session);
@@ -196,6 +241,10 @@ async function createRide(matchResult: MatchResult) {
       startTime: matchResult.startTime,
       endTime: matchResult.endTime,
       passengers: passengersForRide,
+      passengersCount: countRidePassengers(
+        passengersForRide.map((passenger) => passenger.numberOfPassengers),
+      ),
+      passengerNumberSequence: passengersForRide.length,
       status: matchResult.status || "matched",
       totalCost: passengersForRide.reduce(
         (sum, p) => sum + (p.tripCost || 0),
@@ -217,17 +266,21 @@ async function createRide(matchResult: MatchResult) {
       );
     }
 
-    await rideDoc.save({ session });
-
-    // Recurring driver Availability is never mutated/consumed by ride lifecycle.
-
-    // update trips with seatNumbers and driver assignment
+    const expectedTripIds = matchResult.passengers.map((passenger) =>
+      String(passenger.tripId),
+    );
+    const claimedTripIds: string[] = [];
     for (const p of matchResult.passengers) {
       const assigned = passengersForRide.find(
         (pr) => String(pr.tripId) === String(p.tripId),
       );
-      await Trip.findByIdAndUpdate(
-        p.tripId,
+      const claim = await Trip.updateOne(
+        {
+          _id: p.tripId,
+          status: "submitted",
+          paymentStatus: "paid",
+          rideId: null,
+        },
         {
           $set: {
             rideId: rideDoc._id,
@@ -238,10 +291,22 @@ async function createRide(matchResult: MatchResult) {
         },
         { session },
       );
+      if (claim.modifiedCount === 1) {
+        claimedTripIds.push(String(p.tripId));
+      }
     }
+    const claimResult = evaluateTripClaim(expectedTripIds, claimedTripIds);
+    if (!claimResult.ok) {
+      throw new TripClaimConflictError(claimResult.skippedCount);
+    }
+
+    await rideDoc.save({ session });
+
+    // Recurring driver Availability is never mutated/consumed by ride lifecycle.
 
     await session.commitTransaction();
     session.endSession();
+    sessionClosed = true;
 
     if (!matchResult.driverId) {
       const savedRide = await Ride.findById(rideDoc._id);
@@ -267,8 +332,15 @@ async function createRide(matchResult: MatchResult) {
     }
     return rideDoc;
   } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    if (!sessionClosed) {
+      session.endSession();
+    }
+    if (!sessionClosed && isTripClaimTransactionConflict(err)) {
+      throw new TripClaimConflictError(matchResult.passengers.length);
+    }
     throw err;
   }
 }
@@ -442,9 +514,22 @@ function mapPassengerRow(
     numberOfPassengers: asNumber(p.numberOfPassengers, 1),
     tripCost: asNumber(p.tripCost),
     status: asString(p.status, "waiting"),
+    passengerNumber: asNumber(p.passengerNumber, index + 1),
     pickupStation: toStation(p.pickupStation),
     dropoffStation: toStation(p.dropoffStation),
     seatNumbers,
+    arrivedAt:
+      p.arrivedAt instanceof Date
+        ? p.arrivedAt.toISOString()
+        : typeof p.arrivedAt === "string"
+          ? p.arrivedAt
+          : null,
+    noShowAt:
+      p.noShowAt instanceof Date
+        ? p.noShowAt.toISOString()
+        : typeof p.noShowAt === "string"
+          ? p.noShowAt
+          : null,
     passengerName: asString(
       p.passengerName,
       `Passenger #${pickupOrder || index + 1}`,
@@ -460,7 +545,7 @@ function mapRideToDetailView(ride: Record<string, unknown>): RideDetailView {
     dropoff: toGeoPoint(p.dropoff),
   }));
 
-  return {
+  return sanitizePickupPinFields({
     id: String(ride._id),
     rideNumber: asNumber(ride.rideNumber),
     date: asString(ride.date),
@@ -475,6 +560,8 @@ function mapRideToDetailView(ride: Record<string, unknown>): RideDetailView {
         sum + (p.numberOfPassengers || 1),
       0,
     ),
+    hasOpenIncident: ride.hasOpenIncident === true,
+    noShowMinWaitMinutes: NO_SHOW_MIN_WAIT_MINUTES,
     passengers,
     route: recordArray(ride.route).map((stop) => {
       const counts = getSharedRouteStopCounts(stop);
@@ -496,7 +583,7 @@ function mapRideToDetailView(ride: Record<string, unknown>): RideDetailView {
       ride.createdAt instanceof Date
         ? ride.createdAt.toISOString()
         : String(ride.createdAt ?? new Date().toISOString()),
-  };
+  }) as RideDetailView;
 }
 
 async function getDriverRide(
@@ -523,15 +610,12 @@ async function getDriverRide(
 
   if (!ride) return null;
 
-  const { User } = await import("@/models/User");
+  const numberedRide = await ensureRidePassengerNumbers(String(ride._id));
+  if (numberedRide) ride = numberedRide as typeof ride;
+
   const { Station } = await import("@/models/Station");
 
   const ridePassengers = getRidePassengers(ride as Record<string, unknown>);
-  const userIds = ridePassengers.map((p) => p.userId).filter(Boolean);
-  const users = await User.find({ _id: { $in: userIds } })
-    .select("name phone")
-    .lean<{ _id: unknown; name?: string; phone?: string }[]>();
-  const userById = new Map(users.map((u) => [String(u._id), u]));
 
   // Look up station details from Station collection
   const stationIds: number[] = [];
@@ -588,8 +672,6 @@ async function getDriverRide(
       ...p,
       pickupStation: enrichStation(p.pickupStation),
       dropoffStation: enrichStation(p.dropoffStation),
-      passengerName:
-        userById.get(String(p.userId))?.name ?? `Passenger #${p.pickupOrder}`,
     })),
   };
 
@@ -599,9 +681,67 @@ async function getDriverRide(
 async function getRideById(rideId: string): Promise<RideDetailView | null> {
   if (!Types.ObjectId.isValid(rideId)) return null;
   await connectDB();
-  const ride = await Ride.findById(rideId).lean();
+  const ride = await ensureRidePassengerNumbers(rideId);
   if (!ride) return null;
-  return mapRideToDetailView(ride as Record<string, unknown>);
+  return mapRideToDetailView(ride);
+}
+
+export async function ensureRidePassengerNumbers(
+  rideId: string | Types.ObjectId,
+): Promise<Record<string, unknown> | null> {
+  const ride = await Ride.findById(rideId);
+  if (!ride) return null;
+
+  const rawRide = ride.toObject() as unknown as Record<string, unknown>;
+  const normalizedPassengers = getRidePassengers(rawRide);
+  const currentSequence = Number(ride.passengerNumberSequence ?? 0);
+  const { passengers, sequence } = assignMissingPassengerNumbers(
+    normalizedPassengers,
+    currentSequence,
+  );
+  const numberByTripId = new Map(
+    passengers.map((passenger) => [
+      String(passenger.tripId),
+      passenger.passengerNumber,
+    ]),
+  );
+  let changed = sequence !== currentSequence;
+
+  for (const passenger of ride.passengers) {
+    const assignedNumber = numberByTripId.get(String(passenger.tripId));
+    if (assignedNumber && passenger.passengerNumber !== assignedNumber) {
+      passenger.passengerNumber = assignedNumber;
+      changed = true;
+    }
+  }
+
+  const route = ride.route as unknown as Array<Record<string, unknown>>;
+  for (const stop of route ?? []) {
+    for (const key of ["boarding", "alighting"] as const) {
+      const entries = stop[key];
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries) {
+        if (!entry || typeof entry !== "object") continue;
+        const passenger = entry as Record<string, unknown>;
+        const assignedNumber = numberByTripId.get(String(passenger.tripId));
+        if (
+          assignedNumber &&
+          passenger.passengerNumber !== assignedNumber
+        ) {
+          passenger.passengerNumber = assignedNumber;
+          changed = true;
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    ride.passengerNumberSequence = sequence;
+    ride.markModified("route");
+    await ride.save();
+  }
+
+  return ride.toObject() as unknown as Record<string, unknown>;
 }
 
 async function getRideByNumber(rideNumber: number) {
@@ -630,7 +770,7 @@ function mapRideToListRow(ride: Record<string, unknown>): RideListRow {
       mapPassengerRow(p, index, ridePassengers),
   );
 
-  return {
+  return sanitizePickupPinFields({
     id: String(ride._id),
     rideNumber: asNumber(ride.rideNumber),
     date: asString(ride.date),
@@ -662,7 +802,7 @@ function mapRideToListRow(ride: Record<string, unknown>): RideListRow {
       ride.createdAt instanceof Date
         ? ride.createdAt.toISOString()
         : String(ride.createdAt ?? new Date().toISOString()),
-  };
+  }) as RideListRow;
 }
 
 async function getRidesByDriver(
@@ -784,13 +924,23 @@ async function addPassengerToRide(
     if (!ride) throw new Error("Ride not found");
     // Recurring driver Availability is never mutated/consumed by ride lifecycle.
 
-    const trip = await Trip.findById(passenger.tripId)
+    const trip = await Trip.findOneAndUpdate(
+      {
+        _id: passenger.tripId,
+        status: "submitted",
+        paymentStatus: "paid",
+        rideId: null,
+      },
+      { $set: { rideId: ride._id, status: "matched" } },
+      { session, new: true },
+    )
       .select("pickupStation dropoffStation")
       .session(session)
       .lean<{
         pickupStation?: StationSelection;
         dropoffStation?: StationSelection;
       }>();
+    if (!trip) throw new Error("Trip is no longer eligible for ride assignment");
 
     ride.passengers.push({
       tripId: passenger.tripId,
@@ -800,21 +950,24 @@ async function addPassengerToRide(
       pickupOrder: passenger.pickupOrder,
       dropoffOrder: passenger.dropoffOrder,
       numberOfPassengers: passenger.numberOfPassengers || 1,
+      passengerNumber: getNextPassengerNumber(
+        ride.passengers,
+        ride.passengerNumberSequence,
+      ),
       pickupStation: trip?.pickupStation ?? undefined,
       dropoffStation: trip?.dropoffStation ?? undefined,
       status: "waiting",
     });
+    ride.passengerNumberSequence = getNextPassengerNumber(
+      ride.passengers,
+      ride.passengerNumberSequence,
+    ) - 1;
 
     // recompute route
     ride.route = recalculateRouteFromPassengers(
       ride.passengers as unknown as RoutePassenger[],
     );
 
-    await Trip.findByIdAndUpdate(
-      passenger.tripId,
-      { $set: { rideId: ride._id, status: "matched" } },
-      { session },
-    );
     await ride.save({ session });
 
     await session.commitTransaction();
@@ -918,26 +1071,72 @@ async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
 
     // unlink trips
     const tripIds = collectRideTripIds(ride);
-
-    await Trip.updateMany(
-      { _id: { $in: tripIds } },
-      {
-        $set: {
-          rideId: null,
-          status: "submitted",
-          driverId: null,
-          assignedDriver: null,
-          seatNumbers: [],
-        },
-      },
-      { session },
+    const ridePickupStatusByTripId = new Map(
+      ((ride.passengers || []) as Array<{
+        tripId?: unknown;
+        status?: string | null;
+      }>).map((passenger) => [
+        String(passenger.tripId),
+        String(passenger.status ?? "waiting"),
+      ]),
     );
+    const linkedTrips = await Trip.find({ _id: { $in: tripIds } })
+      .select("_id status")
+      .session(session)
+      .lean<{ _id: Types.ObjectId; status: string }[]>();
+    const cancellationPlan = getAdminRideCancellationPlan(
+      linkedTrips.map((trip) => ({
+        id: String(trip._id),
+        status: trip.status,
+        pickupStatus:
+          ridePickupStatusByTripId.get(String(trip._id)) ?? "waiting",
+      })),
+    );
+    const notificationTripIds = await Trip.find({
+      _id: { $in: tripIds },
+      status: { $ne: "cancelled" },
+    })
+      .select("_id")
+      .session(session)
+      .lean<{ _id: Types.ObjectId }[]>();
+
+    if (cancellationPlan.resetTripIds.length > 0) {
+      await Trip.updateMany(
+        {
+          _id: { $in: cancellationPlan.resetTripIds },
+          rideId: ride._id,
+          status: { $in: ["matched", "confirmed", "active"] },
+        },
+        {
+          $set: {
+            rideId: null,
+            status: "submitted",
+            driverId: null,
+            assignedDriver: null,
+            seatNumbers: [],
+          },
+        },
+        { session },
+      );
+    }
+    const preservedTrips = await Trip.find({
+      _id: { $in: tripIds },
+      rideId: ride._id,
+    })
+      .select("_id")
+      .session(session)
+      .lean<{ _id: Types.ObjectId }[]>();
+    const preservedTripIds = preservedTrips.map((trip) => String(trip._id));
 
     // Recurring driver Availability is never released/mutated by ride cancellation.
 
     await session.commitTransaction();
     session.endSession();
-    return ride;
+    await notifyRideCancellationPassengers({
+      rideId: String(ride._id),
+      tripIds: notificationTripIds.map((trip) => String(trip._id)),
+    });
+    return { ride, preservedTripIds };
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -974,9 +1173,8 @@ function collectRideTripIds(ride: {
 }
 
 /**
- * Admin-only hard delete: restores every linked trip back to "submitted" (the
- * matchable pool) and then permanently removes the ride document, unlike
- * cancelRide() which only soft-cancels and keeps the ride record around.
+ * Admin-only hard delete: restores linked Trips except terminal no-shows, then
+ * permanently removes the Ride document.
  */
 async function deleteRideAndRestoreTrips(rideId: string | Types.ObjectId) {
   const session = await mongoose.startSession();
@@ -991,7 +1189,7 @@ async function deleteRideAndRestoreTrips(rideId: string | Types.ObjectId) {
     const tripIds = collectRideTripIds(ride);
 
     await Trip.updateMany(
-      { _id: { $in: tripIds } },
+      { _id: { $in: tripIds }, status: { $ne: "no_show" } },
       {
         $set: {
           rideId: null,
@@ -1001,6 +1199,11 @@ async function deleteRideAndRestoreTrips(rideId: string | Types.ObjectId) {
           seatNumbers: [],
         },
       },
+      { session },
+    );
+    await Trip.updateMany(
+      { _id: { $in: tripIds }, status: "no_show" },
+      { $set: { rideId: null, seatNumbers: [] } },
       { session },
     );
 
@@ -1027,6 +1230,12 @@ async function cancelRideByDriver(
   try {
     const ride = await Ride.findById(rideId).session(session);
     if (!ride) throw new Error("Ride not found");
+    if (
+      getDriverRideCancellationDecision("driver", ride.status) ===
+      "use_incident_report"
+    ) {
+      throw new Error("USE_INCIDENT_REPORT");
+    }
     if (ride.status === "completed") {
       throw new Error("Completed rides cannot be cancelled");
     }
@@ -1058,33 +1267,58 @@ async function cancelRideByDriver(
       penaltyAmount = Math.round((ride.totalCost * evaluation.penaltyPercent) / 100);
 
       if (penaltyAmount > 0) {
-        let wallet = await Wallet.findOne({ userId: driverUserId }).session(session);
-        if (!wallet) {
-          wallet = new Wallet({
-            userId: driverUserId,
-            balanceEgp: 0,
-            reservedBalanceEgp: 0,
-            totalCreditedEgp: 0,
-            totalDebitedEgp: 0,
-            status: "active",
-          });
+        const userId = new Types.ObjectId(String(driverUserId));
+        const appliedAt = new Date();
+        const walletBefore = await Wallet.findOneAndUpdate(
+          { userId },
+          buildPenaltyWalletUpdate(userId, penaltyAmount, appliedAt),
+          { returnDocument: "before", upsert: true, session },
+        );
+        const application = computePenaltyApplication({
+          balanceEgp: walletBefore?.balanceEgp ?? 0,
+          owedEgp: walletBefore?.owedEgp ?? 0,
+          penaltyEgp: penaltyAmount,
+        });
+
+        if (application.deductedEgp > 0) {
+          await WalletTransaction.create(
+            [
+              {
+                userId,
+                type: "cancellation_penalty",
+                amountEgp: application.deductedEgp,
+                status: "completed",
+                description: `Cancellation penalty (${evaluation.penaltyPercent}%) for ride #${ride.rideNumber || ride._id}`,
+                balanceAfterEgp: application.newBalanceEgp,
+                rideId: ride._id,
+              },
+            ],
+            { session },
+          );
         }
 
-        wallet.balanceEgp -= penaltyAmount;
-        wallet.totalDebitedEgp = (wallet.totalDebitedEgp || 0) + penaltyAmount;
-        wallet.lastTransactionAt = new Date();
-        await wallet.save({ session });
-
-        const tx = new WalletTransaction({
-          userId: driverUserId,
-          type: "cancellation_penalty",
-          amountEgp: penaltyAmount,
-          status: "completed",
-          description: `Cancellation penalty (${evaluation.penaltyPercent}%) for ride #${ride.rideNumber || ride._id}`,
-          balanceAfterEgp: wallet.balanceEgp,
-          rideId: ride._id,
-        });
-        await tx.save({ session });
+        await Log.create(
+          [
+            {
+              userId,
+              driverId: userId,
+              rideId: ride._id,
+              status: "cancelled",
+              action: "driver_penalty_applied",
+              description: "Driver cancellation penalty applied.",
+              actorType: "driver",
+              actorId: userId,
+              actionTimestamp: appliedAt,
+              metadata: {
+                tier: evaluation.tierLabel,
+                penaltyEgp: penaltyAmount,
+                deductedEgp: application.deductedEgp,
+                addedDebtEgp: application.addedDebtEgp,
+              },
+            },
+          ],
+          { session },
+        );
       }
 
       // Recurring driver Availability stays untouched regardless of penalty.
@@ -1107,6 +1341,13 @@ async function cancelRideByDriver(
     const tripIds = ridePassengers
       .map((p) => String(p.tripId))
       .filter((id) => Types.ObjectId.isValid(id));
+    const notificationTripIds = await Trip.find({
+      _id: { $in: tripIds },
+      status: { $ne: "cancelled" },
+    })
+      .select("_id")
+      .session(session)
+      .lean<{ _id: Types.ObjectId }[]>();
 
     if (tripIds.length > 0) {
       await Trip.updateMany(
@@ -1126,6 +1367,10 @@ async function cancelRideByDriver(
 
     await session.commitTransaction();
     session.endSession();
+    await notifyRideCancellationPassengers({
+      rideId: String(ride._id),
+      tripIds: notificationTripIds.map((trip) => String(trip._id)),
+    });
     return ride;
   } catch (err) {
     await session.abortTransaction();

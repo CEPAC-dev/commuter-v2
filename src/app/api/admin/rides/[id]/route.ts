@@ -103,7 +103,7 @@ export async function GET(
       availability: ride.availabilityId ?? null,
       passengerDetails,
     },
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 /**

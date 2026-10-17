@@ -1,14 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
-import { VEHICLES } from "@/lib/config/vehicles";
+import { getVehiclePassengerCapacity } from "@/lib/config/vehicles";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
+import { Log } from "@/models/Log";
 import { getSession } from "@/lib/auth/session";
 import * as rideActions from "@/lib/services/rideActionHelpers";
 import { creditReferralBonusIfEligible } from "@/lib/referral";
 import { normalizeSharedRidePassengers } from "@/lib/services/sharedRideManifest";
 import { notifyAdminsOfCompletedPaidTrip } from "@/lib/notifications/adminActivity";
+import { notifyPassengersOfNoShowTrips } from "@/lib/notifications/noShowTrip";
+import {
+  getRideActionStatusDecision,
+  shouldBlockRideActionForOpenIncident,
+} from "@/lib/rideActionGuards";
+import {
+  getCompletableTripIds,
+  getNoShowTripIds,
+} from "@/lib/rideTripCompletion";
+import {
+  canMarkNoShow,
+  NO_SHOW_MIN_WAIT_MINUTES,
+} from "@/lib/noShowRules";
+import {
+  assertPickupPinSecret,
+  verifyPin,
+  PickupPinConfigError,
+} from "@/lib/pickupPin";
+import { decidePickupPinAttempt } from "@/lib/pickupPinAttempts";
+import {
+  createPickupPinAuditRecord,
+  sanitizePickupPinFields,
+} from "@/lib/pickupPinSafety";
+import {
+  planBoardingSeatAssignments,
+} from "@/lib/seatAllocation";
 
 interface RideRouteStop {
   address?: string;
@@ -22,6 +49,9 @@ interface RidePassengerLike {
   tripId?: string | { toString(): string } | null;
   userId?: string | { toString(): string } | null;
   status?: string | null;
+  arrivedAt?: Date | string | null;
+  noShowAt?: Date | string | null;
+  numberOfPassengers?: number | null;
   pickupOrder?: number | null;
   dropoffOrder?: number | null;
   pickupStation?: {
@@ -64,6 +94,33 @@ function pushRideLog(
   rideDoc.logs?.push({ ...entry, createdAt: new Date() });
 }
 
+function noShowTooEarlyResponse(
+  arrivedAt: Date | string | null | undefined,
+  tripId?: string,
+) {
+  const decision = canMarkNoShow({
+    arrivedAt,
+    now: new Date(),
+    minWaitMinutes: NO_SHOW_MIN_WAIT_MINUTES,
+  });
+  return NextResponse.json(
+    {
+      success: false,
+      errorCode: "NO_SHOW_TOO_EARLY",
+      error: "Wait at the pickup before marking the passenger as not present.",
+      remainingSeconds: decision.remainingSeconds,
+      arrivedAt:
+        arrivedAt instanceof Date
+          ? arrivedAt.toISOString()
+          : typeof arrivedAt === "string" && Number.isFinite(Date.parse(arrivedAt))
+            ? new Date(arrivedAt).toISOString()
+            : null,
+      ...(tripId ? { tripId } : {}),
+    },
+    { status: 409 },
+  );
+}
+
 function materializeSharedRidePassengers(ride: {
   rideType?: string;
   toObject(): Record<string, unknown>;
@@ -89,6 +146,165 @@ function normalizeStationValue(value: unknown): string {
   return String(value ?? "")
     .trim()
     .toLowerCase();
+}
+
+type PickupPinTrip = {
+  _id: Types.ObjectId;
+  userId: Types.ObjectId;
+  status: string;
+  pinVersion?: number;
+  pinFailedAttempts?: number;
+  pinLockedUntil?: Date | null;
+};
+
+async function logPickupPinEvent(
+  trip: PickupPinTrip,
+  rideId: string,
+  driverId: string,
+  action: "pickup_pin_ok" | "pickup_pin_failed" | "pickup_pin_lockout",
+  failedAttempts?: number,
+) {
+  await Log.create(
+    createPickupPinAuditRecord({
+      tripId: trip._id,
+      rideId,
+      userId: trip.userId,
+      driverId,
+      status: trip.status,
+      action,
+      failedAttempts,
+    }),
+  );
+}
+
+function pickupPinAttemptFilter(trip: PickupPinTrip, rideId: string) {
+  const filter: Record<string, unknown> = {
+    _id: trip._id,
+    rideId,
+    status: { $in: ["confirmed", "active"] },
+    pinLockedUntil: trip.pinLockedUntil ?? null,
+  };
+  const conditions: Record<string, unknown>[] = [];
+  const version = trip.pinVersion ?? 0;
+  if (version === 0) {
+    conditions.push({
+      $or: [{ pinVersion: 0 }, { pinVersion: { $exists: false } }],
+    });
+  } else {
+    filter.pinVersion = version;
+  }
+
+  const failedAttempts = trip.pinFailedAttempts ?? 0;
+  if (failedAttempts === 0) {
+    conditions.push({
+      $or: [
+        { pinFailedAttempts: 0 },
+        { pinFailedAttempts: { $exists: false } },
+      ],
+    });
+  } else {
+    filter.pinFailedAttempts = failedAttempts;
+  }
+  if (conditions.length) filter.$and = conditions;
+  return filter;
+}
+
+async function recordPickupPinFailure(
+  tripId: Types.ObjectId,
+  rideId: string,
+  driverId: string,
+) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const trip = await Trip.findOne({ _id: tripId, rideId })
+      .select("userId status pinVersion pinFailedAttempts pinLockedUntil")
+      .lean<PickupPinTrip | null>();
+    if (!trip) return { kind: "trip_changed" as const };
+
+    const now = new Date();
+    const decision = decidePickupPinAttempt(
+      {
+        failedAttempts: trip.pinFailedAttempts ?? 0,
+        lockedUntil: trip.pinLockedUntil,
+      },
+      false,
+      now,
+    );
+    if (decision.kind === "locked" && !decision.lockoutStarted) {
+      return decision;
+    }
+
+    const update: Record<string, unknown> = {
+      $set: { pinFailedAttempts: decision.failedAttempts },
+      $unset: { pinLockedUntil: 1 },
+    };
+    if (decision.kind === "locked") {
+      update.$set = {
+        pinFailedAttempts: decision.failedAttempts,
+        pinLockedUntil: decision.lockedUntil,
+      };
+      update.$unset = {};
+    }
+
+    const updatedTrip = await Trip.findOneAndUpdate(
+      pickupPinAttemptFilter(trip, rideId),
+      update,
+      {
+      new: true,
+      },
+    )
+      .select("userId status pinVersion pinFailedAttempts pinLockedUntil")
+      .lean<PickupPinTrip | null>();
+    if (!updatedTrip) continue;
+
+    await logPickupPinEvent(
+      updatedTrip,
+      rideId,
+      driverId,
+      "pickup_pin_failed",
+      decision.failedAttempts,
+    );
+    if (decision.kind === "locked" && decision.lockoutStarted) {
+      await logPickupPinEvent(
+        updatedTrip,
+        rideId,
+        driverId,
+        "pickup_pin_lockout",
+        decision.failedAttempts,
+      );
+    }
+    return decision;
+  }
+  return { kind: "trip_changed" as const };
+}
+
+async function resetPickupPinAttempts(
+  trip: PickupPinTrip,
+  rideId: string,
+): Promise<"reset" | "locked" | "changed"> {
+  const now = new Date();
+  if (trip.pinLockedUntil && trip.pinLockedUntil.getTime() > now.getTime()) {
+    return "locked";
+  }
+
+  const updated = await Trip.findOneAndUpdate(
+    pickupPinAttemptFilter(trip, rideId),
+    {
+      $set: { pinFailedAttempts: 0 },
+      $unset: { pinLockedUntil: 1 },
+    },
+    { new: true },
+  )
+    .select("_id")
+    .lean();
+  if (updated) return "reset";
+
+  const current = await Trip.findById(trip._id)
+    .select("pinLockedUntil")
+    .lean<{ pinLockedUntil?: Date | null } | null>();
+  return current?.pinLockedUntil &&
+    current.pinLockedUntil.getTime() > now.getTime()
+    ? "locked"
+    : "changed";
 }
 
 function getPassengerStationKey(
@@ -219,48 +435,12 @@ function getRemainingStations(ride: RideDocLike | null | undefined) {
     .filter(Boolean) as Array<{ stationIndex: number; stationName: string }>;
 }
 
-function assignSeat(ride: RideDocLike | null | undefined): number {
-  const occupied = new Set<number>();
-
-  for (const passenger of ride?.passengers ?? []) {
-    if (
-      !["picked_up", "boarding", "on_board"].includes(
-        getPassengerStatus(passenger),
-      )
-    ) {
-      continue;
-    }
-
-    const seatNumbers = Array.isArray(passenger?.seatNumbers)
-      ? passenger.seatNumbers
-      : [];
-
-    for (const seat of seatNumbers) {
-      if (typeof seat === "number" && Number.isFinite(seat)) {
-        occupied.add(seat);
-      }
-    }
-  }
-
-  const vehicleType = ride?.vehicleType as keyof typeof VEHICLES | undefined;
-  const capacity = Number(
-    ride?.vehicleCapacity ??
-      (vehicleType && VEHICLES[vehicleType]?.capacity
-        ? VEHICLES[vehicleType].capacity
-        : 4),
-  );
-
-  for (let seat = 1; seat <= capacity; seat += 1) {
-    if (!occupied.has(seat)) {
-      return seat;
-    }
-  }
-
-  throw new Error("No seats available");
+function getSeatCapacity(ride: RideDocLike): number {
+  return getVehiclePassengerCapacity(ride.vehicleType ?? "");
 }
 
 /**
- * GET /api/actions/ride/:rideId/next
+ * GET /api/actions/ride/:rideId
  * Get the next action/prompt for the driver based on current ride state
  * Returns:
  * - For shared rides: station information and boarding/alighting counts
@@ -329,7 +509,7 @@ export async function GET(
       { status: 200 },
     );
   } catch (error) {
-    console.error("[GET /api/actions/ride/:rideId/next]", error);
+    console.error("[GET /api/actions/ride/:rideId]", error);
     return NextResponse.json(
       { success: false, error: "Failed to get next action" },
       { status: 500 },
@@ -547,8 +727,60 @@ export async function POST(
       alightingCount,
       metadata = {},
     } = body;
+    const safeMetadata = sanitizePickupPinFields(metadata) as Record<
+      string,
+      unknown
+    >;
 
-    const driverId = ride.driverId;
+    const boardingIntent =
+      (action === "boarding_alighting" && Number(boardingCount) > 0) ||
+      (action === "station_arrived" &&
+        Array.isArray(metadata?.confirmations) &&
+        metadata.confirmations.some(
+          (confirmation: { status?: unknown }) =>
+            confirmation?.status === "arrived",
+        ));
+    const statusDecision = getRideActionStatusDecision(
+      typeof action === "string" ? action : "",
+      ride.status,
+      ride.hasOpenIncident === true,
+      boardingIntent,
+    );
+    if (statusDecision.kind === "unknown_action") {
+      return NextResponse.json(
+        { success: false, error: `Unknown action: ${action}` },
+        { status: 400 },
+      );
+    }
+    if (statusDecision.kind === "idempotent") {
+      return NextResponse.json({
+        success: true,
+        message: action === "start_ride" ? "Ride already started" : "Ride already completed",
+        action: action === "start_ride" ? "ride_started" : "ride_completed",
+        data: ride,
+      });
+    }
+    if (statusDecision.kind === "incident_open") {
+      return NextResponse.json(
+        {
+          success: false,
+          errorCode: "INCIDENT_OPEN",
+          error: "Ride actions are paused while the incident is being reviewed.",
+        },
+        { status: 409 },
+      );
+    }
+    if (statusDecision.kind === "conflict") {
+      return NextResponse.json(
+        {
+          success: false,
+          errorCode: "RIDE_ACTION_STATUS_CONFLICT",
+          error: `Action ${action} is not allowed when ride status is ${ride.status}.`,
+        },
+        { status: 409 },
+      );
+    }
+
     const actionPassengers = normalizeSharedRidePassengers(
       ride as Record<string, unknown>,
     ) as unknown as RidePassengerLike[];
@@ -562,14 +794,376 @@ export async function POST(
       )
       .filter(Boolean) as (string | Types.ObjectId)[];
 
+    if (
+      action === "station_arrived" &&
+      (stationIndex === undefined ||
+        stationIndex === null ||
+        typeof stationName !== "string" ||
+        !stationName)
+    ) {
+      return NextResponse.json(
+        { success: false, errorCode: "STATION_DETAILS_REQUIRED", error: "Missing stationIndex or stationName." },
+        { status: 400 },
+      );
+    }
+
+    const arrivedConfirmations: Array<{ tripId?: unknown; pin?: unknown }> =
+      action === "station_arrived" && Array.isArray(metadata?.confirmations)
+        ? metadata.confirmations.filter(
+            (confirmation: { status?: unknown }) =>
+              confirmation?.status === "arrived",
+          )
+        : action === "passenger_picked_up"
+          ? [{ tripId, pin: body.pin }]
+          : [];
+    if (action === "station_arrived") {
+      const arrivingTripIds = arrivedConfirmations
+        .map((confirmation) => String(confirmation.tripId ?? ""))
+        .filter((targetTripId) => {
+          const passenger = actionPassengers.find(
+            (entry) => String(entry.tripId) === targetTripId,
+          );
+          return Boolean(
+            passenger?.status === "waiting" &&
+              stationMatchesPassenger(
+                passenger,
+                Number(stationIndex),
+                stationName,
+                "pickup",
+              ),
+          );
+        });
+      const routeLength = Array.isArray(ride.route) ? ride.route.length : 0;
+      const isLastStation =
+        routeLength > 0 && Number(stationIndex) === routeLength;
+      const releasingTripIds = actionPassengers
+        .filter(
+          (passenger) =>
+            ["boarding", "on_board", "picked_up"].includes(
+              getPassengerStatus(passenger),
+            ) &&
+            ((getPassengerStatus(passenger) === "boarding" ||
+              getPassengerStatus(passenger) === "picked_up") &&
+              stationMatchesPassenger(
+                passenger,
+                Number(stationIndex),
+                stationName,
+                "pickup",
+              )
+              ? false
+              : stationMatchesPassenger(
+                  passenger,
+                  Number(stationIndex),
+                  stationName,
+                  "dropoff",
+                ) || isLastStation),
+        )
+        .map((passenger) => String(passenger.tripId));
+      const seatPlan = planBoardingSeatAssignments({
+        capacity: getSeatCapacity(ride),
+        passengers: actionPassengers.map((passenger) => ({
+          tripId: String(passenger.tripId),
+          status: getPassengerStatus(passenger),
+          seatNumbers: passenger.seatNumbers,
+          numberOfPassengers: passenger.numberOfPassengers ?? 1,
+        })),
+        boardingTripIds: arrivingTripIds,
+        releasingTripIds,
+      });
+      if (!seatPlan.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            errorCode: "SEATS_UNAVAILABLE",
+            error: "Not enough seats are available for this group.",
+          },
+          { status: 409 },
+        );
+      }
+    }
+    const pinConfirmations = arrivedConfirmations.map((confirmation) => ({
+      tripId: confirmation.tripId,
+      pin:
+        confirmation.pin ??
+        (arrivedConfirmations.length === 1 ? body.pin : undefined),
+    }));
+    const verifiedPinTrips: Array<{
+      tripId: Types.ObjectId;
+      pinVersion: number;
+      trip: PickupPinTrip;
+    }> = [];
+
+    for (const confirmation of pinConfirmations) {
+      if (
+        typeof confirmation.tripId !== "string" ||
+        !Types.ObjectId.isValid(confirmation.tripId)
+      ) {
+        return NextResponse.json(
+          { success: false, errorCode: "PICKUP_PIN_TRIP_REQUIRED", error: "A valid trip is required for pickup verification." },
+          { status: 400 },
+        );
+      }
+      const targetId = new Types.ObjectId(confirmation.tripId);
+      if (
+        verifiedPinTrips.some(
+          (verifiedTrip) => String(verifiedTrip.tripId) === String(targetId),
+        )
+      ) {
+        continue;
+      }
+      const passenger = actionPassengers.find(
+        (entry) => String(entry.tripId) === String(targetId),
+      );
+      if (!passenger) {
+        return NextResponse.json(
+          { success: false, errorCode: "TRIP_NOT_IN_RIDE", error: "Trip is not part of this ride." },
+          { status: 403 },
+        );
+      }
+      const passengerAlreadyBoarded = [
+        "boarding",
+        "on_board",
+        "picked_up",
+      ].includes(getPassengerStatus(passenger));
+      if (
+        action === "station_arrived" &&
+        !passengerAlreadyBoarded &&
+        (passenger.status !== "waiting" ||
+          !stationMatchesPassenger(
+            passenger,
+            Number(stationIndex),
+            stationName,
+            "pickup",
+          ))
+      ) {
+        return NextResponse.json(
+          { success: false, errorCode: "TRIP_NOT_PICKING_UP_HERE", error: "Trip is not boarding at this station." },
+          { status: 409 },
+        );
+      }
+
+      const targetTrip = await Trip.findOne({
+        _id: targetId,
+        rideId: ride._id,
+        status: { $in: ["confirmed", "active"] },
+      })
+        .select("userId status pinVersion pinFailedAttempts pinLockedUntil")
+        .lean<PickupPinTrip | null>();
+      if (!targetTrip) {
+        return NextResponse.json(
+          { success: false, errorCode: "TRIP_NOT_ELIGIBLE", error: "Trip is not eligible for pickup verification." },
+          { status: 409 },
+        );
+      }
+
+      const now = new Date();
+      const attemptDecision = decidePickupPinAttempt(
+        {
+          failedAttempts: targetTrip.pinFailedAttempts ?? 0,
+          lockedUntil: targetTrip.pinLockedUntil,
+        },
+        false,
+        now,
+      );
+      if (attemptDecision.kind === "locked" && !attemptDecision.lockoutStarted) {
+        return NextResponse.json(
+          { success: false, errorCode: "PICKUP_PIN_LOCKED", error: "Pickup PIN verification is temporarily locked." },
+          { status: 429 },
+        );
+      }
+      if (confirmation.pin === undefined || confirmation.pin === null || confirmation.pin === "") {
+        return NextResponse.json(
+          { success: false, errorCode: "PICKUP_PIN_REQUIRED", error: "Enter the passenger's four-digit pickup PIN." },
+          { status: 400 },
+        );
+      }
+      assertPickupPinSecret();
+      if (
+        !verifyPin(
+          confirmation.pin,
+          String(targetTrip._id),
+          String(ride._id),
+          targetTrip.pinVersion ?? 0,
+        )
+      ) {
+        const failure = await recordPickupPinFailure(
+          targetId,
+          String(ride._id),
+          String(ride.driverId),
+        );
+        if (failure.kind === "trip_changed") {
+          return NextResponse.json(
+            { success: false, errorCode: "PICKUP_PIN_RETRY", error: "Trip changed during PIN verification. Please retry." },
+            { status: 409 },
+          );
+        }
+        return NextResponse.json(
+          {
+            success: false,
+            errorCode:
+              failure.kind === "locked"
+                ? "PICKUP_PIN_LOCKED"
+                : "PICKUP_PIN_INVALID",
+            error:
+              failure.kind === "locked"
+                ? "Pickup PIN verification is temporarily locked."
+                : "The pickup PIN is incorrect.",
+          },
+          { status: failure.kind === "locked" ? 429 : 400 },
+        );
+      }
+      verifiedPinTrips.push({
+        tripId: targetId,
+        pinVersion: targetTrip.pinVersion ?? 0,
+        trip: targetTrip,
+      });
+    }
+
+    for (const verifiedTrip of verifiedPinTrips) {
+      const resetResult = await resetPickupPinAttempts(
+        verifiedTrip.trip,
+        String(ride._id),
+      );
+      if (resetResult !== "reset") {
+        return NextResponse.json(
+          {
+            success: false,
+            errorCode:
+              resetResult === "locked"
+                ? "PICKUP_PIN_LOCKED"
+                : "PICKUP_PIN_RETRY",
+            error:
+              resetResult === "locked"
+                ? "Pickup PIN verification is temporarily locked."
+                : "Trip changed during PIN verification. Please retry.",
+          },
+          { status: resetResult === "locked" ? 429 : 409 },
+        );
+      }
+      await logPickupPinEvent(
+        verifiedTrip.trip,
+        String(ride._id),
+        String(ride.driverId),
+        "pickup_pin_ok",
+      );
+    }
+
+    const startLocation =
+      action === "start_ride" ? safeMetadata?.currentLocation ?? null : null;
+    const endLocation =
+      action === "end_ride" ? safeMetadata?.currentLocation ?? null : null;
+    const rideLog =
+      action === "start_ride"
+        ? {
+            action: "ride_started",
+            metadata: { currentLocation: startLocation },
+            createdAt: new Date(),
+          }
+        : action === "end_ride"
+          ? {
+              action: "ride_completed",
+              metadata: { currentLocation: endLocation },
+              createdAt: new Date(),
+            }
+          : null;
+    const rideUpdate: Record<string, unknown> = {
+      $inc: { __v: 1 },
+    };
+    if (action === "start_ride") {
+      rideUpdate.$set = {
+        status: "active",
+        ...(startLocation ? { driverOrigin: startLocation } : {}),
+      };
+    } else if (action === "end_ride") {
+      rideUpdate.$set = {
+        status: "completed",
+        completedAt: new Date(),
+        ...(endLocation ? { driverDestination: endLocation } : {}),
+      };
+    }
+    if (rideLog) rideUpdate.$push = { logs: rideLog };
+
+    const versionFilter =
+      typeof ride.__v === "number"
+        ? { __v: ride.__v }
+        : { __v: { $exists: false } };
+    const incidentGuard = shouldBlockRideActionForOpenIncident(
+      action,
+      true,
+      boardingIntent,
+    )
+      ? { hasOpenIncident: { $ne: true } }
+      : {};
+    const claimedRide = await Ride.findOneAndUpdate(
+      {
+        _id: rideId,
+        driverId: ride.driverId,
+        status: statusDecision.expectedStatus,
+        ...incidentGuard,
+        ...versionFilter,
+      },
+      rideUpdate,
+      { new: true },
+    ).lean();
+
+    if (!claimedRide) {
+      const currentRide = await Ride.findById(rideId).lean();
+      if (!currentRide) {
+        return NextResponse.json(
+          { success: false, error: "Ride not found" },
+          { status: 404 },
+        );
+      }
+      if (currentRide.driverId?.toString() !== session.userId) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden - not your ride" },
+          { status: 403 },
+        );
+      }
+      const currentDecision = getRideActionStatusDecision(
+        action,
+        currentRide.status,
+        currentRide.hasOpenIncident === true,
+        boardingIntent,
+      );
+      if (currentDecision.kind === "idempotent") {
+        return NextResponse.json({
+          success: true,
+          message: action === "start_ride" ? "Ride already started" : "Ride already completed",
+          action: action === "start_ride" ? "ride_started" : "ride_completed",
+          data: currentRide,
+        });
+      }
+      if (currentDecision.kind === "incident_open") {
+        return NextResponse.json(
+          {
+            success: false,
+            errorCode: "INCIDENT_OPEN",
+            error: "Ride actions are paused while the incident is being reviewed.",
+          },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json(
+        {
+          success: false,
+          errorCode: "RIDE_ACTION_STATUS_CONFLICT",
+          error: `Ride changed while processing action ${action}; current status is ${currentRide.status}.`,
+        },
+        { status: 409 },
+      );
+    }
+
+    const driverId = ride.driverId;
     let result: Record<string, unknown> = { success: false };
+    let stationSeatAssignments: Record<string, number[]> = {};
 
     switch (action) {
       case "start_ride":
         // Log ride start for all trips
-        await rideActions.logRideStarted(rideId, tripIds, driverId, metadata);
+        await rideActions.logRideStarted(rideId, tripIds, driverId, safeMetadata);
 
-        const originLoc = metadata?.currentLocation ?? null;
+        const originLoc = startLocation;
         const rideDoc = await Ride.findById(rideId);
         if (rideDoc) {
           materializeSharedRidePassengers(rideDoc);
@@ -581,10 +1175,6 @@ export async function POST(
             passenger.status = "waiting";
             passenger.seatNumbers = [];
           }
-          pushRideLog(rideDoc, {
-            action: "ride_started",
-            metadata: { currentLocation: originLoc },
-          });
           await rideDoc.save();
         }
 
@@ -594,6 +1184,117 @@ export async function POST(
           action: "ride_started",
         };
         break;
+
+      case "confirm_no_show_arrival": {
+        const parsedTripId = Types.ObjectId.isValid(String(tripId))
+          ? new Types.ObjectId(String(tripId))
+          : null;
+        const parsedStationIndex = Number(stationIndex);
+        if (
+          !parsedTripId ||
+          !Number.isInteger(parsedStationIndex) ||
+          parsedStationIndex < 1
+        ) {
+          return NextResponse.json(
+            { success: false, errorCode: "INVALID_ARRIVAL", error: "A valid passenger and pickup stop are required." },
+            { status: 400 },
+          );
+        }
+
+        const passenger = actionPassengers.find(
+          (candidate) =>
+            candidate.tripId?.toString?.() === parsedTripId.toString(),
+        );
+        if (
+          !passenger ||
+          passenger.status !== "waiting" ||
+          !stationMatchesPassenger(
+            passenger,
+            parsedStationIndex,
+            stationName,
+            "pickup",
+          )
+        ) {
+          return NextResponse.json(
+            { success: false, errorCode: "PASSENGER_NOT_WAITING", error: "The passenger is not waiting at this pickup stop." },
+            { status: 409 },
+          );
+        }
+
+        const arrivedAt = new Date();
+        const arrivalUpdate = await Ride.updateOne(
+          {
+            _id: rideId,
+            driverId: ride.driverId,
+            status: "active",
+            passengers: {
+              $elemMatch: {
+                tripId: parsedTripId,
+                status: "waiting",
+                arrivedAt: null,
+              },
+            },
+          },
+          {
+            $set: { "passengers.$.arrivedAt": arrivedAt },
+            $push: {
+              logs: {
+                action: "no_show_wait_started",
+                tripId: parsedTripId,
+                userId: passenger.userId,
+                stationIndex: parsedStationIndex,
+                previousStatus: "waiting",
+                newStatus: "waiting",
+                createdAt: arrivedAt,
+              },
+            },
+          },
+        );
+
+        let recordedArrival: Date | string | null | undefined;
+        if (arrivalUpdate.modifiedCount > 0) {
+          recordedArrival = arrivedAt;
+        } else {
+          const latestRide = await Ride.findById(rideId)
+            .select("passengers")
+            .lean();
+          const latestPassenger = (
+            latestRide?.passengers as unknown as
+              | RidePassengerLike[]
+              | undefined
+          )?.find(
+            (candidate) =>
+              candidate.tripId?.toString?.() === parsedTripId.toString(),
+          );
+          if (
+            latestPassenger?.status === "waiting" &&
+            latestPassenger.arrivedAt
+          ) {
+            recordedArrival = latestPassenger.arrivedAt;
+          }
+        }
+        if (!recordedArrival) {
+          return NextResponse.json(
+            { success: false, errorCode: "PASSENGER_NOT_WAITING", error: "The passenger is no longer waiting at this pickup stop." },
+            { status: 409 },
+          );
+        }
+        const decision = canMarkNoShow({
+          arrivedAt: recordedArrival,
+          now: new Date(),
+          minWaitMinutes: NO_SHOW_MIN_WAIT_MINUTES,
+        });
+        result = {
+          success: true,
+          action: "no_show_wait_started",
+          arrivedAt:
+            recordedArrival instanceof Date
+              ? recordedArrival.toISOString()
+              : recordedArrival,
+          remainingSeconds: decision.remainingSeconds,
+        };
+        break;
+      }
 
       case "station_arrived":
         if (
@@ -607,16 +1308,6 @@ export async function POST(
           );
         }
 
-        // Log station arrival for all trips
-        await rideActions.logStationArrived(
-          rideId,
-          tripIds,
-          driverId,
-          stationIndex,
-          stationName,
-          metadata,
-        );
-
         const currentRideDoc = await Ride.findById(rideId);
         let remainingStations: Array<{
           stationIndex: number;
@@ -624,6 +1315,8 @@ export async function POST(
         }> = [];
         if (currentRideDoc) {
           materializeSharedRidePassengers(currentRideDoc);
+          const currentPassengers =
+            currentRideDoc.passengers as unknown as RidePassengerLike[];
           const routeLength = Array.isArray(currentRideDoc.route)
             ? currentRideDoc.route.length
             : 0;
@@ -645,8 +1338,98 @@ export async function POST(
               confirmationMap.set(tripId, entry.status);
             }
           }
+          for (const [confirmedTripId, confirmationStatus] of confirmationMap) {
+            if (confirmationStatus !== "no_show") continue;
+            const passenger = currentPassengers.find(
+              (candidate) =>
+                candidate.tripId?.toString?.() === confirmedTripId,
+            );
+            if (
+              passenger &&
+              passenger.status === "waiting" &&
+              stationMatchesPassenger(
+                passenger,
+                stationIndex,
+                stationName,
+                "pickup",
+              )
+            ) {
+              const decision = canMarkNoShow({
+                arrivedAt: passenger.arrivedAt,
+                now: new Date(),
+                minWaitMinutes: NO_SHOW_MIN_WAIT_MINUTES,
+              });
+              if (!decision.allowed) {
+                return noShowTooEarlyResponse(
+                  passenger.arrivedAt,
+                  confirmedTripId,
+                );
+              }
+            }
+          }
+
+          const arrivingTripIds = currentPassengers
+            .filter(
+              (passenger) =>
+                passenger.status === "waiting" &&
+                confirmationMap.get(String(passenger.tripId)) === "arrived" &&
+                stationMatchesPassenger(
+                  passenger,
+                  stationIndex,
+                  stationName,
+                  "pickup",
+                ),
+            )
+            .map((passenger) => String(passenger.tripId));
+          const releasingTripIds = currentPassengers
+            .filter(
+              (passenger) =>
+                ["boarding", "on_board", "picked_up"].includes(
+                  getPassengerStatus(passenger),
+                ) &&
+                ((getPassengerStatus(passenger) === "boarding" ||
+                  getPassengerStatus(passenger) === "picked_up") &&
+                  stationMatchesPassenger(
+                    passenger,
+                    stationIndex,
+                    stationName,
+                    "pickup",
+                  )
+                  ? false
+                  : stationMatchesPassenger(
+                      passenger,
+                      stationIndex,
+                      stationName,
+                      "dropoff",
+                    ) || isLastStation),
+            )
+            .map((passenger) => String(passenger.tripId));
+          const seatPlan = planBoardingSeatAssignments({
+            capacity: getSeatCapacity(currentRideDoc),
+            passengers: currentPassengers.map((passenger) => ({
+              tripId: String(passenger.tripId),
+              status: getPassengerStatus(passenger),
+              seatNumbers: passenger.seatNumbers,
+              numberOfPassengers: passenger.numberOfPassengers ?? 1,
+            })),
+            boardingTripIds: arrivingTripIds,
+            releasingTripIds,
+          });
+          if (!seatPlan.ok) {
+            return NextResponse.json(
+              {
+                success: false,
+                errorCode: "SEATS_UNAVAILABLE",
+                error: "Not enough seats are available for this group.",
+              },
+              { status: 409 },
+            );
+          }
+          stationSeatAssignments = seatPlan.assignments;
 
           let updatedPassengers = false;
+          const tripsToActivate = new Set<string>();
+          const tripsToComplete = new Set<string>();
 
           // 1. Convert all existing green seats to blue on arrival.
           //    Passengers with boarding/picked_up status who are not boarding here
@@ -705,32 +1488,32 @@ export async function POST(
             if (confirmationStatus === "no_show") {
               passenger.status = "no_show";
               passenger.seatNumbers = [];
+              passenger.noShowAt = new Date();
               updatedPassengers = true;
               pushRideLog(currentRideDoc, {
                 action: "no_show",
                 tripId: passenger.tripId,
                 userId: passenger.userId,
                 stationIndex,
-                stationName,
                 previousStatus: "waiting",
                 newStatus: "no_show",
               });
             } else if (confirmationStatus === "arrived") {
               passenger.status = "boarding";
-              let seat = 1;
-              try {
-                seat = assignSeat(currentRideDoc);
-              } catch (seatErr) {
-                console.warn(
-                  "[station_arrived] Seat assignment fallback:",
-                  seatErr,
+              const seats = stationSeatAssignments[passengerTripId];
+              if (!seats || seats.length !== (passenger.numberOfPassengers ?? 1)) {
+                return NextResponse.json(
+                  {
+                    success: false,
+                    errorCode: "SEATS_UNAVAILABLE",
+                    error: "Not enough seats are available for this group.",
+                  },
+                  { status: 409 },
                 );
               }
-              passenger.seatNumbers = [seat];
+              passenger.seatNumbers = seats;
               updatedPassengers = true;
-              await Trip.findByIdAndUpdate(passenger.tripId, {
-                status: "active",
-              });
+              tripsToActivate.add(passengerTripId);
               pushRideLog(currentRideDoc, {
                 action: "boarding",
                 tripId: passenger.tripId,
@@ -739,7 +1522,7 @@ export async function POST(
                 stationName,
                 previousStatus: "waiting",
                 newStatus: "boarding",
-                metadata: { seat },
+                metadata: { seats },
               });
             }
           }
@@ -770,19 +1553,7 @@ export async function POST(
                 previousStatus,
                 newStatus: "dropped_off",
               });
-              await Trip.findByIdAndUpdate(passenger.tripId, {
-                status: "completed",
-              });
-              await notifyAdminsOfCompletedPaidTrip(String(passenger.tripId));
-              const completedTrip = await Trip.findById(passenger.tripId)
-                .select("userId")
-                .lean<{ userId: string } | null>();
-              if (completedTrip) {
-                await creditReferralBonusIfEligible(
-                  String(completedTrip.userId),
-                  String(passenger.tripId),
-                );
-              }
+              tripsToComplete.add(String(passenger.tripId));
             }
           }
 
@@ -819,15 +1590,85 @@ export async function POST(
                 previousStatus,
                 newStatus: "dropped_off",
               });
-              await Trip.findByIdAndUpdate(passenger.tripId, {
-                status: "completed",
-              });
-              await notifyAdminsOfCompletedPaidTrip(String(passenger.tripId));
+              tripsToComplete.add(String(passenger.tripId));
             }
           }
 
           if (updatedPassengers) {
-            await currentRideDoc.save();
+            const persisted = await Ride.updateOne(
+              {
+                _id: rideId,
+                __v: claimedRide.__v,
+                ...incidentGuard,
+              },
+              {
+                $set: {
+                  passengers: currentRideDoc.passengers,
+                  logs: currentRideDoc.logs,
+                },
+                $inc: { __v: 1 },
+              },
+            );
+            if (persisted.matchedCount !== 1) {
+              const latestRide = await Ride.findById(rideId)
+                .select("hasOpenIncident")
+                .lean();
+              if (latestRide?.hasOpenIncident) {
+                return NextResponse.json(
+                  {
+                    success: false,
+                    errorCode: "INCIDENT_OPEN",
+                    error: "Ride actions are paused while the incident is being reviewed.",
+                  },
+                  { status: 409 },
+                );
+              }
+              return NextResponse.json(
+                {
+                  success: false,
+                  errorCode: "RIDE_ACTION_STATUS_CONFLICT",
+                  error: "Ride changed while processing this station. Please retry.",
+                },
+                { status: 409 },
+              );
+            }
+          }
+
+          await rideActions.logStationArrived(
+            rideId,
+            tripIds,
+            driverId,
+            stationIndex,
+            stationName,
+            safeMetadata,
+          );
+          await Promise.all(
+            [...tripsToActivate].map((activeTripId) =>
+              Trip.findByIdAndUpdate(activeTripId, { status: "active" }),
+            ),
+          );
+          await Promise.all(
+            [...tripsToComplete].map((completedTripId) =>
+              Trip.findByIdAndUpdate(completedTripId, {
+                status: "completed",
+              }),
+            ),
+          );
+          await Promise.all(
+            [...tripsToComplete].map((completedTripId) =>
+              notifyAdminsOfCompletedPaidTrip(completedTripId),
+            ),
+          );
+          for (const completedTripId of tripsToComplete) {
+            const completedTrip = await Trip.findById(completedTripId)
+              .select("userId")
+              .lean<{ userId: string } | null>();
+            if (completedTrip) {
+              await creditReferralBonusIfEligible(
+                String(completedTrip.userId),
+                completedTripId,
+              );
+            }
           }
 
           remainingStations = getRemainingStations(currentRideDoc.toObject());
@@ -837,6 +1678,7 @@ export async function POST(
           success: true,
           message: `Arrived and confirmed passenger rides at ${stationName}`,
           action: "station_arrived",
+          seatAssignments: stationSeatAssignments,
           nextAction: "boarding_alighting",
           remainingStations,
         };
@@ -878,7 +1720,7 @@ export async function POST(
           stationName,
           boardingCount,
           alightingCount,
-          metadata,
+          safeMetadata,
         );
 
         result = {
@@ -909,7 +1751,7 @@ export async function POST(
           tripId,
           driverId,
           stationName,
-          metadata,
+          safeMetadata,
         );
 
         result = {
@@ -935,7 +1777,7 @@ export async function POST(
           tripId,
           driverId,
           passengerCount,
-          metadata,
+          safeMetadata,
         );
 
         result = {
@@ -953,31 +1795,37 @@ export async function POST(
           );
         }
 
-        await rideActions.logNoShow(
-          rideId,
-          tripId,
-          driverId,
-          metadata.reason,
-          metadata,
-        );
-
         const currentRideDocNoShow = await Ride.findById(rideId);
         if (currentRideDocNoShow) {
           const passenger = currentRideDocNoShow.passengers.find(
             (p: RidePassengerLike) =>
               p.tripId?.toString?.() === tripId.toString(),
           );
-          if (passenger) {
+          if (!passenger || passenger.status !== "waiting") {
+            return NextResponse.json(
+              { success: false, errorCode: "PASSENGER_NOT_WAITING", error: "The passenger is not waiting at pickup." },
+              { status: 409 },
+            );
+          }
+          const waitDecision = canMarkNoShow({
+            arrivedAt: passenger.arrivedAt,
+            now: new Date(),
+            minWaitMinutes: NO_SHOW_MIN_WAIT_MINUTES,
+          });
+          if (!waitDecision.allowed) {
+            return noShowTooEarlyResponse(passenger.arrivedAt, String(tripId));
+          }
+          {
             const previousStatus = passenger.status;
             passenger.status = "no_show";
             passenger.seatNumbers = [];
+            passenger.noShowAt = new Date();
             pushRideLog(currentRideDocNoShow, {
               action: "no_show",
               tripId: passenger.tripId,
               userId: passenger.userId,
               previousStatus,
               newStatus: "no_show",
-              metadata: { reason: metadata?.reason },
             });
             await currentRideDocNoShow.save();
           }
@@ -1016,7 +1864,7 @@ export async function POST(
           driverId,
           stationIndex,
           stationName,
-          metadata,
+          safeMetadata,
         );
 
         result = {
@@ -1027,43 +1875,99 @@ export async function POST(
         break;
 
       case "end_ride":
-        // Log ride completion for all trips
-        await rideActions.logRideCompleted(rideId, tripIds, driverId, metadata);
-
-        // Update ride status and driverDestination
-        const destLoc = metadata?.currentLocation ?? null;
-        await Ride.findByIdAndUpdate(rideId, {
-          status: "completed",
-          ...(destLoc ? { driverDestination: destLoc } : {}),
-          $push: {
-            logs: {
-              action: "ride_completed",
-              metadata: { currentLocation: destLoc },
-              createdAt: new Date(),
+        const linkedTrips = await Trip.find({ rideId })
+          .select("_id userId status")
+          .lean<
+            {
+              _id: Types.ObjectId;
+              userId: Types.ObjectId;
+              status: string;
+            }[]
+          >();
+        const noShowTripIds = new Set(
+          getNoShowTripIds(actionPassengers, linkedTrips),
+        );
+        const markedNoShowTripIds: string[] = [];
+        for (const trip of linkedTrips) {
+          if (!noShowTripIds.has(String(trip._id))) continue;
+          const passenger = actionPassengers.find(
+            (entry) => String(entry.tripId) === String(trip._id),
+          );
+          const embeddedNoShowAt = passenger?.noShowAt;
+          const noShowAt =
+            embeddedNoShowAt instanceof Date
+              ? embeddedNoShowAt
+              : typeof embeddedNoShowAt === "string" &&
+                  Number.isFinite(Date.parse(embeddedNoShowAt))
+                ? new Date(embeddedNoShowAt)
+                : new Date();
+          const markedTrip = await Trip.findOneAndUpdate(
+            {
+              _id: trip._id,
+              rideId,
+              status: { $in: ["matched", "confirmed"] },
             },
-          },
-        });
+            { $set: { status: "no_show", noShowAt } },
+            { new: true },
+          )
+            .select("_id userId")
+            .lean<{ _id: Types.ObjectId; userId: Types.ObjectId } | null>();
+          if (markedTrip) {
+            markedNoShowTripIds.push(String(markedTrip._id));
+            await Log.create({
+              tripId: markedTrip._id,
+              rideId,
+              userId: markedTrip.userId,
+              driverId,
+              status: "no_show",
+              previousStatus: trip.status,
+              action: "trip_no_show_marked",
+              description: "Trip marked as no-show at ride end.",
+              actorType: "driver",
+              actorId: driverId,
+            });
+          }
+        }
 
-        // Update all trip statuses to completed
-        await Trip.updateMany({ rideId }, { status: "completed" });
+        const completableTripIds = new Set(
+          getCompletableTripIds(actionPassengers, linkedTrips),
+        );
+        const completedTrips = [];
+        for (const trip of linkedTrips) {
+          if (!completableTripIds.has(String(trip._id))) continue;
+          const completedTrip = await Trip.findOneAndUpdate(
+            { _id: trip._id, rideId, status: "active" },
+            { $set: { status: "completed" } },
+            { new: true },
+          )
+            .select("_id userId")
+            .lean<{ _id: Types.ObjectId; userId: Types.ObjectId } | null>();
+          if (completedTrip) completedTrips.push(completedTrip);
+        }
+
+        const completedTripIds = completedTrips.map((trip) => trip._id);
+        if (completedTripIds.length > 0) {
+          await rideActions.logRideCompleted(
+            rideId,
+            completedTripIds,
+            driverId,
+            safeMetadata,
+          );
+        }
         await Promise.all(
-          tripIds.map((completedTripId: unknown) =>
+          completedTripIds.map((completedTripId: unknown) =>
             notifyAdminsOfCompletedPaidTrip(String(completedTripId)),
           ),
         );
         await Promise.all(
-          tripIds.map(async (completedTripId: unknown) => {
-            const completedTrip = await Trip.findById(completedTripId)
-              .select("userId")
-              .lean<{ userId: string } | null>();
-            return completedTrip
-              ? creditReferralBonusIfEligible(
-                  String(completedTrip.userId),
-                  String(completedTripId),
-                )
-              : false;
-          }),
+          completedTrips.map((completedTrip) =>
+            creditReferralBonusIfEligible(
+              String(completedTrip.userId),
+              String(completedTrip._id),
+            ),
+          ),
         );
+        await notifyPassengersOfNoShowTrips(markedNoShowTripIds);
 
         result = {
           success: true,
@@ -1082,14 +1986,27 @@ export async function POST(
         );
     }
 
-    return NextResponse.json(result, { status: 200 });
+    return NextResponse.json(sanitizePickupPinFields(result), { status: 200 });
   } catch (error) {
-    console.error("[POST /api/actions/ride/:rideId]", error);
+    if (error instanceof PickupPinConfigError) {
+      console.error("[POST /api/actions/ride/:rideId]", error.code);
+      return NextResponse.json(
+        {
+          success: false,
+          errorCode: error.code,
+          error: "Pickup PIN configuration is unavailable.",
+        },
+        { status: 500 },
+      );
+    }
+    console.error(
+      "[POST /api/actions/ride/:rideId]",
+      error instanceof Error ? error.name : "UnknownError",
+    );
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Failed to process action",
+        error: "Failed to process action.",
       },
       { status: 500 },
     );

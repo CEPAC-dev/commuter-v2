@@ -27,5 +27,8 @@ export async function GET(req: NextRequest) {
     dateTo,
   });
 
-  return NextResponse.json({ trips: result.rows, total: result.total, page: result.page });
+  return NextResponse.json(
+    { trips: result.rows, total: result.total, page: result.page },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }

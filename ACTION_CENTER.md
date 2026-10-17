@@ -18,30 +18,30 @@ The Action Center manages the real-time flow of driver actions during a ride. It
    - Shared ride flows (station arrivals, boarding/alighting)
    - Private ride flows (pickups, no-shows, stops)
 
-3. **Action Center Endpoint** (`/api/actions/ride/:rideId`) - Determines next action and processes driver inputs
+3. **Action Center Endpoint** (`/api/actions/ride/[rideId]`) - Determines the current prompt and processes driver inputs
 
 ## Flow for Shared Rides
 
 ```
-Ride Matched
+Ride Confirmed
     ↓
-[GET] Next Action → {type: "start_ride"}
+[GET] Current Action → {type: "start_ride"}
     ↓
 [POST] action="start_ride" → Ride starts, timer begins
     ↓
-[GET] Next Action → {type: "station_arrived", stationIndex: 0, stationName: "..."}
+[GET] Current Action → {type: "station_arrived", stationIndex: 0, stationName: "..."}
     ↓
 [POST] action="station_arrived" → Logs arrival
     ↓
-[GET] Next Action → {type: "boarding_alighting", stationIndex: 0}
+[GET] Current Action → {type: "boarding_alighting", stationIndex: 0}
     ↓
 [POST] action="boarding_alighting", boardingCount=5, alightingCount=0 → Logs counts
     ↓
-[GET] Next Action → {type: "station_arrived", stationIndex: 1, stationName: "..."} (next station)
+[GET] Current Action → {type: "station_arrived", stationIndex: 1, stationName: "..."} (next station)
     ↓
 ... (repeat for each station)
     ↓
-[GET] Next Action → {type: "end_ride"} (at last station)
+[GET] Current Action → {type: "end_ride"} (at last station)
     ↓
 [POST] action="end_ride" → Ride completed, timer stops
 ```
@@ -51,27 +51,27 @@ Ride Matched
 ```
 Ride Matched
     ↓
-[GET] Next Action → {type: "start_ride"}
+[GET] Current Action → {type: "start_ride"}
     ↓
 [POST] action="start_ride" → Ride starts
     ↓
-[GET] Next Action → {type: "pickup_arrived", pickupAddress: "..."}
+[GET] Current Action → {type: "pickup_arrived", pickupAddress: "..."}
     ↓
 [POST] action="pickup_arrived" → Logs pickup arrival
     ↓
-[GET] Next Action → Options: ["Passenger picked up", "No show"]
+[GET] Current Action → Options: ["Passenger picked up", "No show"]
     ↓
 IF "Passenger picked up":
   [POST] action="passenger_picked_up", boardingCount=1
     ↓
-  [GET] Next Action → {type: "end_ride"}
+  [GET] Current Action → {type: "end_ride"}
     ↓
   [POST] action="end_ride"
 
 IF "No show":
-  [POST] action="no_show" → Trip cancelled
+  [POST] action="no_show" → Ride passenger marked no-show; eligible Trip is marked terminal at end_ride
     ↓
-  [GET] Next Action → (next passenger if exists, else end_ride)
+  [GET] Current Action → (next passenger if exists, else end_ride)
 ```
 
 ## Flow for Private Rides (With Stops)
@@ -79,38 +79,38 @@ IF "No show":
 ```
 Ride Matched
     ↓
-[GET] Next Action → {type: "start_ride"}
+[GET] Current Action → {type: "start_ride"}
     ↓
 [POST] action="start_ride"
     ↓
-[GET] Next Action → {type: "pickup_arrived"}
+[GET] Current Action → {type: "pickup_arrived"}
     ↓
 [POST] action="pickup_arrived"
     ↓
 [POST] action="passenger_picked_up"
     ↓
-[GET] Next Action → {type: "stop_point_arrived", stationIndex: 0} (first stop)
+[GET] Current Action → {type: "stop_point_arrived", stationIndex: 0} (first stop)
     ↓
 [POST] action="stop_point_arrived"
     ↓
-[GET] Next Action → {type: "boarding_alighting", stationIndex: 0}
+[GET] Current Action → {type: "boarding_alighting", stationIndex: 0}
     ↓
 [POST] action="boarding_alighting", boardingCount=X, alightingCount=Y
     ↓
 ... (repeat for each stop)
     ↓
-[GET] Next Action → {type: "end_ride"}
+[GET] Current Action → {type: "end_ride"}
     ↓
 [POST] action="end_ride"
 ```
 
 ## API Endpoints
 
-### Get Next Action
+### Get Current Action
 
-**GET** `/api/actions/ride/:rideId/next`
+**GET** `/api/actions/ride/[rideId]`
 
-Determines what the driver should do next based on ride state.
+Returns the current prompt based on ride state.
 
 **Auth Required:** Yes (driver must own the ride)
 
@@ -173,7 +173,7 @@ Determines what the driver should do next based on ride state.
 
 ### Process Action
 
-**POST** `/api/actions/ride/:rideId`
+**POST** `/api/actions/ride/[rideId]`
 
 Processes a driver action and creates log entries.
 
@@ -324,8 +324,12 @@ Added to Log schema `action` enum:
 - `pickup_arrived` - Arrived at pickup location (private)
 - `passenger_picked_up` - Passenger confirmed pickup (private)
 - `no_show` - Passenger no-show (private)
+- `confirm_no_show_arrival` - Start the server-enforced no-show wait
 - `stop_point_arrived` - Arrived at a stop point (private)
 - `ride_completed` - Ride finished
+
+Incident reports use `POST /api/actions/ride/[rideId]/incident`; drivers can
+withdraw an open report through `POST /api/actions/ride/[rideId]/incident/withdraw`.
 
 ## Frontend Integration Examples
 
@@ -336,13 +340,13 @@ const ActionCenter = ({ rideId, onActionComplete }: Props) => {
   const [nextAction, setNextAction] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Get next action on mount
+  // Get current action on mount
   useEffect(() => {
     fetchNextAction();
   }, []);
 
   const fetchNextAction = async () => {
-    const res = await fetch(`/api/actions/ride/${rideId}/next`);
+    const res = await fetch(`/api/actions/ride/${rideId}`);
     const data = await res.json();
     setNextAction(data.nextAction);
   };
@@ -436,8 +440,8 @@ Common errors from the action endpoint:
 ### Test Shared Ride Flow
 
 ```bash
-# 1. Get next action
-curl -X GET "http://localhost:3000/api/actions/ride/[rideId]/next" \
+# 1. Get current action
+curl -X GET "http://localhost:3000/api/actions/ride/[rideId]" \
   -H "Authorization: Bearer [token]"
 
 # 2. Start ride
