@@ -706,7 +706,7 @@ export default async function MyTripsPage({
   const session = await getSession();
   if (!session) redirect("/login?redirect=/my-trips");
   if (session.role === "admin") redirect("/admin/dashboard");
-  await connectDB();
+  const [locale] = await Promise.all([getServerLocale(), connectDB()]);
 
   const isDriver = session.role === "driver";
   const isPassenger = !isDriver;
@@ -778,6 +778,7 @@ export default async function MyTripsPage({
   let listItems: DayItem[] = [];
   let total = 0;
   let paginationTotal = 0;
+  let wallet: Awaited<ReturnType<typeof getOrCreateWallet>> | null = null;
   let tabCounts: Record<TripTabKey, number> = {
     all: 0,
     pending: 0,
@@ -799,7 +800,11 @@ export default async function MyTripsPage({
     }
     listItems = rideRows.map((ride) => ({ kind: "ride", data: ride }));
   } else {
-    const result = await listUserTrips(session.userId, passengerListOptions);
+    const [result, passengerWallet] = await Promise.all([
+      listUserTrips(session.userId, passengerListOptions),
+      getOrCreateWallet(session.userId),
+    ]);
+    wallet = passengerWallet;
     allPassengerTrips = result.rows;
     const selectedTab: TripTabKey =
       groupFilter === "pending_payment"
@@ -831,7 +836,6 @@ export default async function MyTripsPage({
 
   const totalPages = Math.ceil(paginationTotal / PAGE_SIZE);
 
-  const wallet = isDriver ? null : await getOrCreateWallet(session.userId);
   const walletBalance = wallet?.balanceEgp ?? 0;
 
   // Today's date in YYYY-MM-DD format for comparison
@@ -880,8 +884,6 @@ export default async function MyTripsPage({
   const hiddenGroups: Array<
     "all" | "upcoming" | "ongoing" | "pending_payment"
   > = isPassenger ? [] : ["upcoming", "pending_payment"];
-
-  const locale = await getServerLocale();
 
   let summaryText = "";
   if (total === 0) {
