@@ -1,5 +1,7 @@
 import type { PipelineStage, Types } from "mongoose";
 
+const MAX_WALLET_AMOUNT_EGP = 1_000_000_000;
+
 type WalletMoneyInput = {
   balanceEgp: number;
   owedEgp: number;
@@ -26,6 +28,9 @@ export function computeWalletAdjustment({
   if (amount <= 0) {
     throw new RangeError("amountEgp must be greater than zero.");
   }
+  if (amountEgp > MAX_WALLET_AMOUNT_EGP) {
+    throw new RangeError("amountEgp exceeds the wallet limit.");
+  }
 
   if (type === "waive_debt") {
     const waived = Math.min(owed, amount);
@@ -40,6 +45,9 @@ export function computeWalletAdjustment({
 
   const debtReduction = Math.min(owed, amount);
   const balanceCredit = amount - debtReduction;
+  if (balance + balanceCredit > MAX_WALLET_AMOUNT_EGP * 100) {
+    throw new RangeError("Wallet balance would exceed the wallet limit.");
+  }
   return {
     appliedAmountEgp: egp(amount),
     debtReductionEgp: egp(debtReduction),

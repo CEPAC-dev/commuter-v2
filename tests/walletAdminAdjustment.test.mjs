@@ -81,6 +81,29 @@ test("penalty refunds reduce debt before crediting balance", () => {
   );
 });
 
+test("adjustments reject invalid amounts and wallet balance overflow", () => {
+  assert.throws(
+    () =>
+      computeWalletAdjustment({
+        type: "waive_debt",
+        balanceEgp: 0,
+        owedEgp: 10,
+        amountEgp: -1,
+      }),
+    RangeError,
+  );
+  assert.throws(
+    () =>
+      computeWalletAdjustment({
+        type: "refund_penalty",
+        balanceEgp: 1_000_000_000,
+        owedEgp: 0,
+        amountEgp: 1,
+      }),
+    RangeError,
+  );
+});
+
 test("admin adjustment update persists totals and initializes missing wallet fields", () => {
   const [stage] = buildAdminWalletAdjustmentUpdate(
     { toString: () => "507f1f77bcf86cd799439011" },
