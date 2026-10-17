@@ -5,6 +5,79 @@ type WalletMoneyInput = {
   owedEgp: number;
 };
 
+export type WalletAdjustmentType = "waive_debt" | "refund_penalty";
+
+export function isAdminWalletAdjustmentAuthorized(role: unknown): boolean {
+  return role === "admin";
+}
+
+export function computeWalletAdjustment({
+  type,
+  balanceEgp,
+  owedEgp,
+  amountEgp,
+}: WalletMoneyInput & {
+  type: WalletAdjustmentType;
+  amountEgp: number;
+}) {
+  const balance = toPiasters(balanceEgp, "balanceEgp");
+  const owed = toPiasters(owedEgp, "owedEgp");
+  const amount = toPiasters(amountEgp, "amountEgp");
+  if (amount <= 0) {
+    throw new RangeError("amountEgp must be greater than zero.");
+  }
+
+  if (type === "waive_debt") {
+    const waived = Math.min(owed, amount);
+    return {
+      appliedAmountEgp: egp(waived),
+      debtReductionEgp: egp(waived),
+      balanceCreditEgp: 0,
+      newBalanceEgp: egp(balance),
+      newOwedEgp: egp(owed - waived),
+    };
+  }
+
+  const debtReduction = Math.min(owed, amount);
+  const balanceCredit = amount - debtReduction;
+  return {
+    appliedAmountEgp: egp(amount),
+    debtReductionEgp: egp(debtReduction),
+    balanceCreditEgp: egp(balanceCredit),
+    newBalanceEgp: egp(balance + balanceCredit),
+    newOwedEgp: egp(owed - debtReduction),
+  };
+}
+
+export function buildAdminWalletAdjustmentUpdate(
+  userId: Types.ObjectId,
+  adjustment: { newBalanceEgp: number; newOwedEgp: number; balanceCreditEgp: number },
+  appliedAt: Date,
+): PipelineStage[] {
+  return [
+    {
+      $set: {
+        userId,
+        balanceEgp: adjustment.newBalanceEgp,
+        owedEgp: adjustment.newOwedEgp,
+        totalCreditedEgp: {
+          $add: [
+            { $ifNull: ["$totalCreditedEgp", 0] },
+            adjustment.balanceCreditEgp,
+          ],
+        },
+        totalDebitedEgp: { $ifNull: ["$totalDebitedEgp", 0] },
+        pendingWithdrawalAmount: {
+          $ifNull: ["$pendingWithdrawalAmount", 0],
+        },
+        reservedBalanceEgp: { $ifNull: ["$reservedBalanceEgp", 0] },
+        status: { $ifNull: ["$status", "active"] },
+        lastTransactionAt: appliedAt,
+      },
+    },
+  ];
+}
+
 function toPiasters(value: number, field: string): number {
   if (!Number.isFinite(value) || value < 0) {
     throw new RangeError(`${field} must be a finite non-negative amount.`);
