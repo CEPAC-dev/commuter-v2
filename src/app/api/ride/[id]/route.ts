@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { getSession } from "@/lib/auth/session";
-import { getRideCancellationAccess } from "@/lib/rideCancellationAccess";
+import {
+  getDriverRideCancellationDecision,
+  getRideCancellationAccess,
+} from "@/lib/rideCancellationAccess";
 import { Ride } from "@/models/Ride";
 import {
   getRideById,
@@ -103,13 +106,27 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const rideOwner = await Ride.findById(id).select("driverId").lean();
+    const rideOwner = await Ride.findById(id)
+      .select("driverId status")
+      .lean();
     if (!rideOwner) {
       return NextResponse.json({ error: "Ride not found" }, { status: 404 });
     }
     const driverAccess = getRideCancellationAccess(session, rideOwner.driverId);
     if (driverAccess !== "driver") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (
+      getDriverRideCancellationDecision(driverAccess, rideOwner.status) ===
+      "use_incident_report"
+    ) {
+      return NextResponse.json(
+        {
+          errorCode: "USE_INCIDENT_REPORT",
+          error: "Active rides must report a problem instead of cancelling.",
+        },
+        { status: 409 },
+      );
     }
 
     const ride = await cancelRideByDriver(id, session.userId, reason);

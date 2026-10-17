@@ -4,6 +4,9 @@ export type RideCancellationSession = {
 };
 
 export type RideCancellationAccess = "unauthorized" | "forbidden" | "driver" | "admin";
+export type DriverRideCancellationDecision =
+  | "allowed"
+  | "use_incident_report";
 
 export function getRideCancellationAccess(
   session: RideCancellationSession | null,
@@ -15,4 +18,13 @@ export function getRideCancellationAccess(
     return "driver";
   }
   return "forbidden";
+}
+
+export function getDriverRideCancellationDecision(
+  access: RideCancellationAccess,
+  rideStatus: string,
+): DriverRideCancellationDecision {
+  return access === "driver" && rideStatus === "active"
+    ? "use_incident_report"
+    : "allowed";
 }

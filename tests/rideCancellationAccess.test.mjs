@@ -1,10 +1,34 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { getRideCancellationAccess } = await import("../src/lib/rideCancellationAccess.ts");
+const {
+  getRideCancellationAccess,
+  getDriverRideCancellationDecision,
+} = await import("../src/lib/rideCancellationAccess.ts");
 
 test("unauthenticated callers cannot cancel a ride", () => {
   assert.equal(getRideCancellationAccess(null, "driver-1"), "unauthorized");
+});
+
+test("active driver cancellation requires an incident report", () => {
+  assert.equal(
+    getDriverRideCancellationDecision("driver", "active"),
+    "use_incident_report",
+  );
+});
+
+test("confirmed driver cancellation remains allowed", () => {
+  assert.equal(
+    getDriverRideCancellationDecision("driver", "confirmed"),
+    "allowed",
+  );
+});
+
+test("admin cancellation behavior is unchanged for active rides", () => {
+  assert.equal(
+    getDriverRideCancellationDecision("admin", "active"),
+    "allowed",
+  );
 });
 
 test("a different driver cannot cancel the ride", () => {
