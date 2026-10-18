@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
     Number.isInteger(requestedLimit) && requestedLimit > 0
       ? Math.min(requestedLimit, 50)
       : 20;
+
   await connectDB();
 
   const query = { status: "waiting_list" };
