@@ -202,6 +202,7 @@ export default function AppHeader({
       }}
     >
       <div
+        className="appheader-row"
         style={{
           maxWidth: 1200,
           margin: "0 auto",
@@ -216,7 +217,10 @@ export default function AppHeader({
         }}
       >
         {/* Left: optional back + logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div
+          className="appheader-left"
+          style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}
+        >
           {backHref && (
             <Link
               href={backHref}
@@ -240,6 +244,7 @@ export default function AppHeader({
           <Link
             href={role === "driver" ? "/my-trips" : "/"}
             aria-label="Commuter home"
+            className="appheader-brand"
             style={{
               textDecoration: "none",
               display: "flex",
@@ -254,6 +259,7 @@ export default function AppHeader({
               height={32}
             />
             <span
+              className="appheader-brand-name"
               style={{
                 fontWeight: 800,
                 fontSize: 18,
@@ -326,6 +332,7 @@ export default function AppHeader({
               onClick={() => void handleInstallApp()}
               aria-label="Install Commuter"
               title="Install Commuter"
+              className="appheader-install-button"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -610,6 +617,44 @@ export default function AppHeader({
           .appheader-desktop { display: none !important; }
           .appheader-mobile-toggle { display: flex !important; }
           .appheader-actions { min-width: 0 !important; }
+        }
+        @media (max-width: 767px) {
+          .appheader-row {
+            flex-wrap: nowrap !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
+            padding: 0 12px !important;
+          }
+          .appheader-left {
+            flex: 1 1 auto;
+            gap: 8px !important;
+            min-width: 0 !important;
+          }
+          .appheader-brand {
+            flex: 0 1 auto;
+            min-width: 0;
+            gap: 6px !important;
+            white-space: nowrap;
+          }
+          .appheader-actions {
+            flex: 0 0 auto;
+            gap: 4px !important;
+            overflow: visible;
+          }
+          .appheader-install-button,
+          .appheader-mobile-toggle,
+          .appheader-actions .notification-center-button {
+            box-sizing: border-box;
+            width: 38px !important;
+            height: 38px !important;
+            min-width: 38px !important;
+            min-height: 38px !important;
+          }
+          .appheader-mobile-toggle { padding: 0 !important; }
+          .appheader-actions .notification-center { overflow: visible; }
+        }
+        @media (max-width: 359px) {
+          .appheader-brand-name { display: none; }
         }
       `}</style>
       <LogoutConfirmModal
