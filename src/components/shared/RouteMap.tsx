@@ -52,6 +52,16 @@ const STATION_ICON = svgDataUrl(
   </svg>`,
 );
 
+function createNumberedStationIcon(number: number) {
+  const fontSize = number > 9 ? 10 : 14;
+  return svgDataUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26">
+      <circle cx="13" cy="13" r="11" fill="#00C2A8" stroke="#ffffff" stroke-width="2"/>
+      <text x="13" y="18" font-size="${fontSize}" font-weight="700" fill="#ffffff" text-anchor="middle">${number}</text>
+    </svg>`,
+  );
+}
+
 function valid(point?: LatLng | null): point is LatLng {
   return (
     !!point &&
@@ -241,8 +251,15 @@ export default function RouteMap({
       normalizedStops.forEach((point) => {
         L.marker([point.lat, point.lng], { icon: stopIcon }).addTo(layers);
       });
-      normalizedStations.forEach((point) => {
-        L.marker([point.lat, point.lng], { icon: stationIcon }).addTo(layers);
+      normalizedStations.forEach((point, index) => {
+        const icon = stationIconsOnly
+          ? L.icon({
+              iconUrl: createNumberedStationIcon(index + 1),
+              iconSize: [26, 26],
+              iconAnchor: [13, 13],
+            })
+          : stationIcon;
+        L.marker([point.lat, point.lng], { icon }).addTo(layers);
       });
 
       const bounds = L.latLngBounds([
