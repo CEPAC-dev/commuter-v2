@@ -165,3 +165,25 @@ export function findPassengerStopIndices(
 
   return { pickupIndex, dropoffIndex };
 }
+
+export function getPassengerRouteCoordinates({
+  route,
+  stops,
+  pickup,
+  dropoff,
+}: {
+  route: LatLng[];
+  stops: RideRouteStopDetail[];
+  pickup: string | GeoPoint | null | undefined;
+  dropoff: string | GeoPoint | null | undefined;
+}): LatLng[] {
+  if (!shouldSliceRoute(false, stops.length > 2)) return route;
+  const indices = findPassengerStopIndices(pickup, dropoff, stops);
+  if (!indices) return route;
+  return sliceRouteForUser({
+    route,
+    stops,
+    userPickupIndex: indices.pickupIndex,
+    userDropoffIndex: indices.dropoffIndex,
+  });
+}

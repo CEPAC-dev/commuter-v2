@@ -107,6 +107,7 @@ export interface RideDetailView
   extends Omit<RideListRow, "passengers" | "route"> {
   passengers: RidePassengerDetail[];
   route: RideRouteStopDetail[];
+  routeCoordinates?: LatLng[];
   chatTripId: string | null;
   hasOpenIncident: boolean;
   noShowMinWaitMinutes: number;

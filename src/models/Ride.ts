@@ -136,6 +136,10 @@ const RideSchema = new Schema(
     },
     // combined, ordered pickup/dropoff sequence across all passengers on this ride
     route: { type: [RideRouteStopSchema], default: [] },
+    routeCoordinates: {
+      type: [{ lat: { type: Number, required: true }, lng: { type: Number, required: true } }],
+      default: [],
+    },
     pickupStation: { type: StationSchema, required: false },
     dropoffStation: { type: StationSchema, required: false },
     driverOrigin: { type: PointSchema, required: false },
@@ -194,6 +198,11 @@ if (existingRideModel && !existingRideModel.schema.path("passengersCount")) {
 if (existingRideModel && !existingRideModel.schema.path("hasOpenIncident")) {
   existingRideModel.schema.add({
     hasOpenIncident: RideSchema.obj.hasOpenIncident,
+  });
+}
+if (existingRideModel && !existingRideModel.schema.path("routeCoordinates")) {
+  existingRideModel.schema.add({
+    routeCoordinates: RideSchema.obj.routeCoordinates,
   });
 }
 

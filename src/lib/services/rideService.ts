@@ -17,6 +17,7 @@ import { getDriverRideCancellationDecision } from "@/lib/rideCancellationAccess"
 import { isRegionCode } from "@/lib/config/regions";
 import { NO_SHOW_MIN_WAIT_MINUTES } from "@/lib/noShowRules";
 import { getAdminRideCancellationPlan } from "@/lib/rideIncidentAdminGuards";
+import { fetchDirections } from "@/app/api/directions/route";
 import type {
   RideDetailView,
   RideListRow,
@@ -128,6 +129,19 @@ function recordArray(value: unknown): UnknownRecord[] {
           entry !== null && typeof entry === "object",
       )
     : [];
+}
+
+function normalizeRouteCoordinates(
+  value: unknown,
+): Array<{ lat: number; lng: number }> {
+  return recordArray(value).flatMap((point) =>
+    typeof point.lat === "number" &&
+    Number.isFinite(point.lat) &&
+    typeof point.lng === "number" &&
+    Number.isFinite(point.lng)
+      ? [{ lat: point.lat, lng: point.lng }]
+      : [],
+  );
 }
 
 function normalizeRoutePayload(route: unknown[] = []): unknown[] {
@@ -259,12 +273,13 @@ async function createRide(matchResult: MatchResult) {
         : {}),
     });
 
-    // if route absent, compute basic route from passengers
+    const recalculatedRoute = await recalculateRouteFromPassengers(
+      passengersForRide,
+    );
     if (!matchResult.route) {
-      rideDoc.route = normalizeRoutePayload(
-        recalculateRouteFromPassengers(passengersForRide),
-      );
+      rideDoc.route = normalizeRoutePayload(recalculatedRoute.stops);
     }
+    rideDoc.routeCoordinates = recalculatedRoute.coordinates;
 
     const expectedTripIds = matchResult.passengers.map((passenger) =>
       String(passenger.tripId),
@@ -371,7 +386,10 @@ async function getNextSequence(name: string, session: mongoose.ClientSession) {
   return nextSeq;
 }
 
-function recalculateRouteFromPassengers(passengers: RoutePassenger[]) {
+async function recalculateRouteFromPassengers(
+  passengers: RoutePassenger[],
+  previousCoordinates: Array<{ lat: number; lng: number }> = [],
+) {
   // Build stops array by order indices. Aggregate boarding/alighting counts per order.
   const indexMap: Record<number, RouteAccumulator> = {};
   let maxIndex = 0;
@@ -428,7 +446,39 @@ function recalculateRouteFromPassengers(passengers: RoutePassenger[]) {
       });
     }
   }
-  return stops;
+  if (stops.length < 2) {
+    return { stops, coordinates: [] as Array<{ lat: number; lng: number }> };
+  }
+
+  const points = stops.map((stop) => stop.point);
+  const origin = points[0];
+  const destination = points[points.length - 1];
+  const waypoints = points
+    .slice(1, -1)
+    .map(({ lat, lng }) => `${lat},${lng}`)
+    .join("|");
+
+  try {
+    const routes = await fetchDirections(
+      `${origin.lat},${origin.lng}`,
+      `${destination.lat},${destination.lng}`,
+      waypoints || undefined,
+    );
+    const coordinates = routes[0]?.coordinates;
+    if (!coordinates || coordinates.length < 2) {
+      throw new Error("OSRM returned no route geometry");
+    }
+    return {
+      stops,
+      coordinates: coordinates.map(([lat, lng]) => ({ lat, lng })),
+    };
+  } catch (error) {
+    console.error(
+      "[rideService] OSRM route recalculation failed; keeping previous geometry",
+      error,
+    );
+    return { stops, coordinates: previousCoordinates };
+  }
 }
 
 function toGeoPoint(value: unknown): GeoPoint | null {
@@ -574,6 +624,7 @@ function mapRideToDetailView(ride: Record<string, unknown>): RideDetailView {
         waitingMinutes: asNumber(stop.waitingMinutes),
       };
     }),
+    routeCoordinates: normalizeRouteCoordinates(ride.routeCoordinates),
     pickupStation: toStation(ride.pickupStation),
     dropoffStation: toStation(ride.dropoffStation),
     driverOrigin: toGeoPoint(ride.driverOrigin),
@@ -964,9 +1015,12 @@ async function addPassengerToRide(
     ) - 1;
 
     // recompute route
-    ride.route = recalculateRouteFromPassengers(
+    const recalculatedRoute = await recalculateRouteFromPassengers(
       ride.passengers as unknown as RoutePassenger[],
+      normalizeRouteCoordinates(ride.routeCoordinates),
     );
+    ride.route = recalculatedRoute.stops;
+    ride.routeCoordinates = recalculatedRoute.coordinates;
 
     await ride.save({ session });
 
@@ -1003,9 +1057,12 @@ async function removePassengerFromRide(
     ride.passengers = ridePassengers.filter(
       (p) => p.tripId?.toString() !== tripId.toString(),
     );
-    ride.route = recalculateRouteFromPassengers(
+    const recalculatedRoute = await recalculateRouteFromPassengers(
       ride.passengers as unknown as RoutePassenger[],
+      normalizeRouteCoordinates(ride.routeCoordinates),
     );
+    ride.route = recalculatedRoute.stops;
+    ride.routeCoordinates = recalculatedRoute.coordinates;
 
     await Trip.findByIdAndUpdate(
       tripId,
@@ -1035,9 +1092,12 @@ async function removePassengerFromRide(
 async function recalculateRoute(rideId: string | Types.ObjectId) {
   const ride = await Ride.findById(rideId);
   if (!ride) throw new Error("Ride not found");
-  ride.route = recalculateRouteFromPassengers(
+  const recalculatedRoute = await recalculateRouteFromPassengers(
     ride.passengers as unknown as RoutePassenger[],
+    normalizeRouteCoordinates(ride.routeCoordinates),
   );
+  ride.route = recalculatedRoute.stops;
+  ride.routeCoordinates = recalculatedRoute.coordinates;
   await ride.save();
   return ride;
 }

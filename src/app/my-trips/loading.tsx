@@ -5,7 +5,7 @@ export default function MyTripsLoading() {
       <div className="loading-heading" />
       <div className="loading-hero">
         <div className="loading-copy">
-          <i />
+          <i /> 
           <i />
           <i />
           <i />

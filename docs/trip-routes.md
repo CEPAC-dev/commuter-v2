@@ -113,19 +113,19 @@ Already returns full ride with complete route - no slicing needed.
 2. Aggregates boarding/alighting counts per stop
 3. Returns array of `{ point, boardingNumber, alightingNumber, boarding[], alighting[], waitingMinutes }`
 
-**Gap: No OSRM Integration**:
-- `recalculateRouteFromPassengers()` creates stop waypoints but does NOT fetch actual road routes
-- The route stored is just the pickup/dropoff station points, NOT the driving directions
-- When a new trip is matched, the route array updates with new stops, but road geometry is NOT fetched
+**Status: Fixed**:
+- `recalculateRouteFromPassengers()` now builds the ordered stop sequence and requests road geometry from the existing `/api/directions` OSRM integration.
+- The resulting coordinates are stored in `Ride.routeCoordinates` and included in passenger/driver ride details.
+- Matching and removing passengers both recompute the route; if OSRM returns no geometry or errors, the prior coordinates are retained and the failure is logged.
 
-### What Should Happen
+### Recalculation Flow
 
-When a new trip is matched into an existing ride:
+When a trip is matched into or removed from a ride:
 1. Call `recalculateRouteFromPassengers()` to build new stop sequence ✅ (already done)
-2. Extract all stop points from the updated route
-3. Call OSRM via `/api/directions` with waypoints to get road geometry ❌ (missing)
-4. Store the returned coordinates in `Ride.route` or a separate field
-5. Passengers see updated route on next page load
+2. Extract all stop points in their configured order.
+3. Request OSRM geometry from `/api/directions` with intermediate stops as waypoints.
+4. Store the returned geometry in `Ride.routeCoordinates`.
+5. Passenger maps slice the stored geometry to the passenger's boarding/alighting stops.
 
 ### Integration Gap
 
@@ -133,33 +133,6 @@ When a new trip is matched into an existing ride:
 - Returns: `{ coordinates: [[lat,lng], ...], distance_km, duration_minutes }`
 - Used by: `RouteMap.tsx` (client-side), `osrm.ts` (client-side helper)
 - NOT used by: `rideService.ts` (server-side matching logic)
-
-**TODO**: Server-side route recomputation
-```typescript
-// After ride.route = recalculateRouteFromPassengers(...)
-const stopPoints = ride.route.map(stop => stop.point);
-if (stopPoints.length >= 2) {
-  const routeGeometry = await fetchServerSideOsrmRoute(stopPoints);
-  ride.routeGeometry = routeGeometry; // Store in new field or encode in route
-}
-```
-
-**Impact**: Passengers currently see client-side fetched routes (not sliced server-side), which works but means:
-- Route slicing happens client-side from stop points, not pre-computed routes
-- No route caching/optimization on match
-- Each page load fetches directions from OSRM
-
-### Workaround
-
-The current implementation works because:
-1. Client-side `RouteMap` fetches directions on every page load
-2. Route slicing uses the stop sequence from `ride.route` to slice client-fetched geometry
-3. The gap only affects server-side route storage/caching, not user-facing functionality
-
-**Recommendation**: Implement server-side OSRM integration in `rideService.ts` for:
-- Better performance (cache routes server-side)
-- Consistent route calculations
-- Support for offline route fallbacks
 
 ## Unified Page Structure
 
@@ -189,7 +162,7 @@ Both passenger and driver trip detail pages now follow the same layout:
 - ✅ `sliceRouteForUser` with 2, 3, 4 stop rides
 - ✅ Driver sees complete route
 - ✅ Passenger sees sliced route
-- ✅ Route update on match (or TODO test if not implemented)
+- ✅ Route slicing falls back to the full stored route when passenger stops cannot be matched
 
 ### Visual Tests
 - ✅ Single-passenger ride: no slicing
@@ -204,7 +177,7 @@ None - route display is backward compatible.
 
 ### New Behavior
 - Passengers now see only their portion of a shared route
-- Route updates when new passengers are matched (if routing service integrated)
+- Route geometry is recomputed from ordered stops on match/removal and stored on the ride
 - Driver and passenger pages have unified structure
 
 ### Migration
@@ -212,10 +185,9 @@ No database migration needed. Existing `Ride.route` data is compatible.
 
 ## Known Gaps
 
-1. **Server-side OSRM integration**: `recalculateRouteFromPassengers()` updates stop sequences but does NOT fetch road geometry from OSRM. Routes are client-side fetched on every page load. See "Route Recomputation on Match" section for details.
-2. **Real-time updates**: Route changes require page refresh - no WebSocket push in this implementation
-3. **Offline handling**: No offline route caching or fallback directions
-4. **Route slicing API**: Passenger API does not yet return `userPickupStopIndex` and `userDropoffStopIndex` - client uses `findPassengerStopIndices()` helper to determine indices from station names
+1. **Real-time updates**: Route changes require page refresh - no WebSocket push in this implementation
+2. **Offline handling**: No offline route caching or fallback directions
+3. **Route slicing API**: Passenger API does not yet return `userPickupStopIndex` and `userDropoffStopIndex` - client uses `findPassengerStopIndices()` helper to determine indices from station names
 
 ---
 

@@ -199,38 +199,20 @@ export default async function TripDetailPage({
   // ── Per-User Route Slicing (U3-UI) ────────────────────────────────────────────
   // Passengers see only their portion of the route (pickup → dropoff with deviations).
   // Drivers see the complete route serving all passengers.
-  // Import note: sliceRouteForUser, shouldSliceRoute, findPassengerStopIndices from @/lib/routeSlicing
-  const { sliceRouteForUser, shouldSliceRoute, findPassengerStopIndices } = await import("@/lib/routeSlicing");
+  const { getPassengerRouteCoordinates } = await import("@/lib/routeSlicing");
 
   let slicedRouteCoordinates: { lat: number; lng: number }[] | null = null;
 
   if (!isDriver && trip.rideDetails?.route && trip.rideDetails.route.length > 0) {
     const rideRoute = trip.rideDetails.route;
-    const hasMultipleStops = rideRoute.length > 2;
-
-    if (shouldSliceRoute(false, hasMultipleStops)) {
-      // Determine passenger's pickup/dropoff indices in ride.route[] array
-      const indices = findPassengerStopIndices(
-        trip.pickupStation ?? trip.pickup,
-        trip.dropoffStation ?? trip.dropoff,
-        rideRoute,
-      );
-
-      if (indices) {
-        // Build route coordinates from ride.route (array of stops with point: {lat, lng})
-        const fullRouteCoords = rideRoute
-          .map((stop) => stop.point)
-          .filter((pt): pt is NonNullable<typeof pt> => Boolean(pt && typeof pt.lat === "number" && typeof pt.lng === "number"));
-
-        if (fullRouteCoords.length > 0) {
-          slicedRouteCoordinates = sliceRouteForUser({
-            route: fullRouteCoords,
-            stops: rideRoute,
-            userPickupIndex: indices.pickupIndex,
-            userDropoffIndex: indices.dropoffIndex,
-          });
-        }
-      }
+    const fullRouteCoords = trip.rideDetails.routeCoordinates;
+    if (fullRouteCoords && fullRouteCoords.length > 1) {
+      slicedRouteCoordinates = getPassengerRouteCoordinates({
+        route: fullRouteCoords,
+        stops: rideRoute,
+        pickup: trip.pickupStation?.name ?? trip.pickup,
+        dropoff: trip.dropoffStation?.name ?? trip.dropoff,
+      });
     }
   }
   // ── End Route Slicing ──────────────────────────────────────────────────────────

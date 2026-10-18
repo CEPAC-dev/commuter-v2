@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { LayerGroup, Map as LeafletMap } from "leaflet";
 import { MapPin } from "lucide-react";
 import { loadLeaflet, svgDataUrl, MAP_COLORS } from "@/lib/leaflet";
+import { loadRouteCoordinates } from "@/lib/routeMapDirections";
 
 interface LatLng {
   lat: number;
@@ -117,12 +118,6 @@ export default function RouteMap({
   const normalizedStations = useMemo(() => (stations ?? []).filter(valid), [stations]);
 
   useEffect(() => {
-    // If routeCoordinates provided, use them directly (skip API call)
-    if (routeCoordinates && routeCoordinates.length > 1) {
-      setPathCoords(routeCoordinates);
-      return;
-    }
-
     if (!ok) {
       // Clear path when inputs invalid
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -132,22 +127,15 @@ export default function RouteMap({
     let cancelled = false;
     const start = pickup as LatLng;
     const end = dropoff as LatLng;
-    const viaPoints = [...normalizedStops, ...normalizedStations];
-    let url = `/api/directions?origin=${start.lat},${start.lng}&dest=${end.lat},${end.lng}`;
-    if (viaPoints.length > 0) {
-      const waypoints = viaPoints.map((point) => `${point.lat},${point.lng}`).join("|");
-      url += `&waypoints=${encodeURIComponent(waypoints)}`;
-    }
-    fetch(url)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (cancelled) return;
-        const coords = data?.[0]?.coordinates as [number, number][] | undefined;
-        if (coords && coords.length > 1) {
-          setPathCoords(coords.map(([lat, lng]) => ({ lat, lng })));
-        } else {
-          setPathCoords(null);
-        }
+    loadRouteCoordinates({
+      pickup: start,
+      dropoff: end,
+      stops: normalizedStops,
+      stations: normalizedStations,
+      routeCoordinates,
+    })
+      .then((coordinates) => {
+        if (!cancelled) setPathCoords(coordinates);
       })
       .catch(() => {
         if (!cancelled) setPathCoords(null);
