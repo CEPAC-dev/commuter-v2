@@ -19,6 +19,7 @@ interface Props {
   stops?: LatLng[];
   stations?: LatLng[];
   stationIconsOnly?: boolean;
+  routeCoordinates?: LatLng[]; // Pre-computed route (skips directions API)
 }
 
 const ROUTE_COLOR = MAP_COLORS.route;
@@ -91,6 +92,7 @@ export default function RouteMap({
   stops,
   stations,
   stationIconsOnly = false,
+  routeCoordinates,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -103,6 +105,12 @@ export default function RouteMap({
   const normalizedStations = useMemo(() => (stations ?? []).filter(valid), [stations]);
 
   useEffect(() => {
+    // If routeCoordinates provided, use them directly (skip API call)
+    if (routeCoordinates && routeCoordinates.length > 1) {
+      setPathCoords(routeCoordinates);
+      return;
+    }
+
     if (!ok) {
       // Clear path when inputs invalid
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -135,7 +143,7 @@ export default function RouteMap({
     return () => {
       cancelled = true;
     };
-  }, [dropoff, normalizedStations, normalizedStops, ok, pickup]);
+  }, [dropoff, normalizedStations, normalizedStops, ok, pickup, routeCoordinates]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current || !ok) return;
