@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { LayerGroup, Map as LeafletMap } from "leaflet";
 import { MapPin } from "lucide-react";
 import { loadLeaflet, svgDataUrl, MAP_COLORS } from "@/lib/leaflet";
+import { loadRouteCoordinates } from "@/lib/routeMapDirections";
 
 interface LatLng {
   lat: number;
@@ -19,6 +20,7 @@ interface Props {
   stops?: LatLng[];
   stations?: LatLng[];
   stationIconsOnly?: boolean;
+  routeCoordinates?: LatLng[]; // Pre-computed route (skips directions API)
 }
 
 const ROUTE_COLOR = MAP_COLORS.route;
@@ -50,6 +52,16 @@ const STATION_ICON = svgDataUrl(
     <rect x="9" y="9" width="8" height="8" rx="2" fill="#fff"/>
   </svg>`,
 );
+
+function createNumberedStationIcon(number: number) {
+  const fontSize = number > 9 ? 10 : 14;
+  return svgDataUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26">
+      <circle cx="13" cy="13" r="11" fill="#00C2A8" stroke="#ffffff" stroke-width="2"/>
+      <text x="13" y="18" font-size="${fontSize}" font-weight="700" fill="#ffffff" text-anchor="middle">${number}</text>
+    </svg>`,
+  );
+}
 
 function valid(point?: LatLng | null): point is LatLng {
   return (
@@ -91,10 +103,13 @@ export default function RouteMap({
   stops,
   stations,
   stationIconsOnly = false,
+  routeCoordinates,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const layersRef = useRef<LayerGroup | null>(null);
+  const leafletModuleRef = useRef<typeof import("leaflet") | null>(null);
+  const boundsRef = useRef<import("leaflet").LatLngBounds | null>(null);
   const [leafletReady, setLeafletReady] = useState(false);
   const [pathCoords, setPathCoords] = useState<LatLng[] | null>(null);
   const ok = valid(pickup) && valid(dropoff);
@@ -112,22 +127,15 @@ export default function RouteMap({
     let cancelled = false;
     const start = pickup as LatLng;
     const end = dropoff as LatLng;
-    const viaPoints = [...normalizedStops, ...normalizedStations];
-    let url = `/api/directions?origin=${start.lat},${start.lng}&dest=${end.lat},${end.lng}`;
-    if (viaPoints.length > 0) {
-      const waypoints = viaPoints.map((point) => `${point.lat},${point.lng}`).join("|");
-      url += `&waypoints=${encodeURIComponent(waypoints)}`;
-    }
-    fetch(url)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (cancelled) return;
-        const coords = data?.[0]?.coordinates as [number, number][] | undefined;
-        if (coords && coords.length > 1) {
-          setPathCoords(coords.map(([lat, lng]) => ({ lat, lng })));
-        } else {
-          setPathCoords(null);
-        }
+    loadRouteCoordinates({
+      pickup: start,
+      dropoff: end,
+      stops: normalizedStops,
+      stations: normalizedStations,
+      routeCoordinates,
+    })
+      .then((coordinates) => {
+        if (!cancelled) setPathCoords(coordinates);
       })
       .catch(() => {
         if (!cancelled) setPathCoords(null);
@@ -135,7 +143,7 @@ export default function RouteMap({
     return () => {
       cancelled = true;
     };
-  }, [dropoff, normalizedStations, normalizedStops, ok, pickup]);
+  }, [dropoff, normalizedStations, normalizedStops, ok, pickup, routeCoordinates]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current || !ok) return;
@@ -161,6 +169,7 @@ export default function RouteMap({
 
       mapRef.current = map;
       layersRef.current = L.layerGroup().addTo(map);
+      leafletModuleRef.current = L;
       setLeafletReady(true);
     });
 
@@ -168,11 +177,70 @@ export default function RouteMap({
       disposed = true;
       layersRef.current?.clearLayers();
       layersRef.current = null;
+      boundsRef.current = null;
+      leafletModuleRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       setLeafletReady(false);
     };
   }, [interactive, ok]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const L = leafletModuleRef.current;
+    if (!leafletReady || !map || !L) return;
+
+    const recenter = () => {
+      const bounds = boundsRef.current;
+      if (bounds?.isValid()) {
+        map.fitBounds(bounds, { padding: [36, 36] });
+      } else {
+        map.fitWorld({ padding: [36, 36] });
+      }
+    };
+    const RecenterControl = L.Control.extend({
+      onAdd() {
+        const container = L.DomUtil.create("div");
+        const button = L.DomUtil.create(
+          "button",
+          "leaflet-control-recenter",
+          container,
+        ) as HTMLButtonElement;
+        button.type = "button";
+        button.setAttribute("aria-label", "Recenter map");
+        button.title = "Recenter map";
+        button.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>';
+        Object.assign(button.style, {
+          background: "#fff",
+          border: "2px solid rgba(0,0,0,0.1)",
+          borderRadius: "8px",
+          width: "36px",
+          height: "36px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+          color: "#0B1E3D",
+          padding: "0",
+        });
+        L.DomEvent.disableClickPropagation(button);
+        L.DomEvent.disableScrollPropagation(button);
+        return container;
+      },
+    });
+    const control = new RecenterControl({ position: "topright" });
+    control.addTo(map);
+    const button =
+      control.getContainer()?.querySelector<HTMLButtonElement>("button") ?? null;
+    button?.addEventListener("click", recenter);
+
+    return () => {
+      button?.removeEventListener("click", recenter);
+      control.remove();
+    };
+  }, [leafletReady]);
 
   useEffect(() => {
     if (!ok || !mapRef.current || !layersRef.current) return;
@@ -233,8 +301,15 @@ export default function RouteMap({
       normalizedStops.forEach((point) => {
         L.marker([point.lat, point.lng], { icon: stopIcon }).addTo(layers);
       });
-      normalizedStations.forEach((point) => {
-        L.marker([point.lat, point.lng], { icon: stationIcon }).addTo(layers);
+      normalizedStations.forEach((point, index) => {
+        const icon = stationIconsOnly
+          ? L.icon({
+              iconUrl: createNumberedStationIcon(index + 1),
+              iconSize: [26, 26],
+              iconAnchor: [13, 13],
+            })
+          : stationIcon;
+        L.marker([point.lat, point.lng], { icon }).addTo(layers);
       });
 
       const bounds = L.latLngBounds([
@@ -244,6 +319,7 @@ export default function RouteMap({
       normalizedStops.forEach((point) => bounds.extend([point.lat, point.lng]));
       normalizedStations.forEach((point) => bounds.extend([point.lat, point.lng]));
       routePoints.forEach((point) => bounds.extend(point));
+      boundsRef.current = bounds;
       map.fitBounds(bounds, { padding: [36, 36] });
     });
 
