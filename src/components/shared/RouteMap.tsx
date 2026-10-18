@@ -107,6 +107,8 @@ export default function RouteMap({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const layersRef = useRef<LayerGroup | null>(null);
+  const leafletModuleRef = useRef<typeof import("leaflet") | null>(null);
+  const boundsRef = useRef<import("leaflet").LatLngBounds | null>(null);
   const [leafletReady, setLeafletReady] = useState(false);
   const [pathCoords, setPathCoords] = useState<LatLng[] | null>(null);
   const ok = valid(pickup) && valid(dropoff);
@@ -179,6 +181,7 @@ export default function RouteMap({
 
       mapRef.current = map;
       layersRef.current = L.layerGroup().addTo(map);
+      leafletModuleRef.current = L;
       setLeafletReady(true);
     });
 
@@ -186,11 +189,70 @@ export default function RouteMap({
       disposed = true;
       layersRef.current?.clearLayers();
       layersRef.current = null;
+      boundsRef.current = null;
+      leafletModuleRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       setLeafletReady(false);
     };
   }, [interactive, ok]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const L = leafletModuleRef.current;
+    if (!leafletReady || !map || !L) return;
+
+    const recenter = () => {
+      const bounds = boundsRef.current;
+      if (bounds?.isValid()) {
+        map.fitBounds(bounds, { padding: [36, 36] });
+      } else {
+        map.fitWorld({ padding: [36, 36] });
+      }
+    };
+    const RecenterControl = L.Control.extend({
+      onAdd() {
+        const container = L.DomUtil.create("div");
+        const button = L.DomUtil.create(
+          "button",
+          "leaflet-control-recenter",
+          container,
+        ) as HTMLButtonElement;
+        button.type = "button";
+        button.setAttribute("aria-label", "Recenter map");
+        button.title = "Recenter map";
+        button.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>';
+        Object.assign(button.style, {
+          background: "#fff",
+          border: "2px solid rgba(0,0,0,0.1)",
+          borderRadius: "8px",
+          width: "36px",
+          height: "36px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+          color: "#0B1E3D",
+          padding: "0",
+        });
+        L.DomEvent.disableClickPropagation(button);
+        L.DomEvent.disableScrollPropagation(button);
+        return container;
+      },
+    });
+    const control = new RecenterControl({ position: "topright" });
+    control.addTo(map);
+    const button =
+      control.getContainer()?.querySelector<HTMLButtonElement>("button") ?? null;
+    button?.addEventListener("click", recenter);
+
+    return () => {
+      button?.removeEventListener("click", recenter);
+      control.remove();
+    };
+  }, [leafletReady]);
 
   useEffect(() => {
     if (!ok || !mapRef.current || !layersRef.current) return;
@@ -269,6 +331,7 @@ export default function RouteMap({
       normalizedStops.forEach((point) => bounds.extend([point.lat, point.lng]));
       normalizedStations.forEach((point) => bounds.extend([point.lat, point.lng]));
       routePoints.forEach((point) => bounds.extend(point));
+      boundsRef.current = bounds;
       map.fitBounds(bounds, { padding: [36, 36] });
     });
 
