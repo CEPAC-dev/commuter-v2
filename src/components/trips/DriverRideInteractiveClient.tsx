@@ -1094,9 +1094,9 @@ export default function DriverRideInteractiveClient({
           }}
         >
           <RouteMap
-            pickup={driverOrigin ?? stationPoints[0] ?? null}
-            dropoff={driverDestination ?? stationPoints[stationPoints.length - 1] ?? null}
-            stations={driverOrigin ? stationPoints : stationPoints.slice(1, -1)}
+            pickup={stationPoints[0] ?? null}
+            dropoff={stationPoints[stationPoints.length - 1] ?? null}
+            stations={stationPoints.length > 2 ? stationPoints.slice(1, -1) : []}
             stationIconsOnly
             height={220}
             interactive
