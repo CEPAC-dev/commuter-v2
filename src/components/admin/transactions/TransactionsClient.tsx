@@ -124,6 +124,8 @@ export default function TransactionsClient({
     if (descriptionCategory) p.set("descriptionCategory", descriptionCategory);
     if (descriptionSearch) p.set("descriptionSearch", descriptionSearch);
     if (method) p.set("paymentMethod", method);
+    if (financialView && financialView !== "all")
+      p.set("financialView", financialView);
     if (dateFrom) p.set("dateFrom", dateFrom);
     if (dateTo) p.set("dateTo", dateTo);
     if (minAmount) p.set("minAmount", minAmount);
@@ -138,6 +140,7 @@ export default function TransactionsClient({
     descriptionCategory,
     descriptionSearch,
     method,
+    financialView,
     dateFrom,
     dateTo,
     minAmount,
@@ -189,13 +192,63 @@ export default function TransactionsClient({
     setPage(1);
   }
 
+  function applySummaryFilter(
+    filter: "all" | "collected" | "refunded" | "refundable" | "reserved",
+  ) {
+    setPage(1);
+
+    if (filter === "all") {
+      setTypeFilter([]);
+      setStatusFilter([]);
+      setFinancialView("all");
+      return;
+    }
+
+    if (filter === "collected") {
+      setTypeFilter(["payment_captured"]);
+      setStatusFilter(["completed"]);
+      setFinancialView("all");
+      return;
+    }
+
+    if (filter === "refunded") {
+      setTypeFilter(["refund", "payment_refund_partial"]);
+      setStatusFilter(["completed"]);
+      setFinancialView("all");
+      return;
+    }
+
+    if (filter === "refundable") {
+      setTypeFilter([]);
+      setStatusFilter([]);
+      setFinancialView("refundable");
+      return;
+    }
+
+    if (filter === "reserved") {
+      setTypeFilter(["payment_reserved"]);
+      setStatusFilter(["pending"]);
+      setFinancialView("all");
+    }
+  }
+
   const kpi = (
     label: string,
     value: string,
     sub?: string,
     color = "var(--color-primary)",
+    onClick?: () => void,
   ) => (
-    <AdminCard padding="14px 16px" style={{ flex: 1, minWidth: 160 }}>
+    <AdminCard
+      padding="14px 16px"
+      style={{
+        flex: 1,
+        minWidth: 160,
+        cursor: onClick ? "pointer" : "default",
+        transition: "all 0.15s ease",
+      }}
+      onClick={onClick}
+    >
       <div
         style={{
           fontSize: 11,
@@ -254,119 +307,85 @@ export default function TransactionsClient({
       ) : null}
 
       {canReports && report && (
-        <>
-          <AdminCard padding={12} style={{ marginBottom: 16 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--color-muted)",
-                  textTransform: "uppercase",
-                  letterSpacing: 0.4,
-                }}
-              >
-                Financial view
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <FilterGroup
-                  label=""
-                  items={["all", "refundable", "net_collected"]}
-                  selected={financialView ? [financialView] : []}
-                  onToggle={(v) =>
-                    setFinancialView(
-                      v as "all" | "refundable" | "net_collected",
-                    )
-                  }
-                  singleSelect
-                />
-              </div>
-            </div>
-          </AdminCard>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 12,
-              marginBottom: 20,
-            }}
-          >
-            {kpi(
-              "Total collected",
-              `${report.completed.totalCollectedEgp} EGP`,
-              `${report.completed.paidPaymentsCount} payments`,
-              "var(--color-secondary-deep)",
-            )}
-            {kpi(
-              "Wallet portion",
-              `${report.completed.walletVolumeEgp} EGP`,
-              "captured",
-              "var(--color-primary)",
-            )}
-            {kpi(
-              "Kashier portion",
-              `${report.completed.kashierVolumeEgp} EGP`,
-              "settled",
-              "var(--color-primary)",
-            )}
-            {kpi(
-              "Refunded",
-              `${report.refunds.totalRefundedEgp} EGP`,
-              `${report.refunds.refundCount} refunds`,
-              "var(--color-danger)",
-            )}
-            {kpi(
-              "Total Wallet Refunded",
-              `${report.refunds.totalWalletRefundedEgp} EGP`,
-              "wallet refund ledger",
-              "var(--color-danger)",
-            )}
-            {kpi(
-              "Total Kashier Refunded",
-              `${report.refunds.totalKashierRefundedEgp} EGP`,
-              "gateway refund ledger",
-              "var(--color-danger)",
-            )}
-            {kpi(
-              "Refundable remaining",
-              `${report.refundable.refundableEgp} EGP`,
-              `${report.refundable.refundablePaymentsCount} paid payments`,
-              "var(--color-accent)",
-            )}
-            {kpi(
-              "Net collected",
-              `${report.net.netCollectedEgp} EGP`,
-              "collected − refunded",
-              "var(--color-secondary-deep)",
-            )}
-            {kpi(
-              "Reserved (inflight)",
-              `${report.inflight.reservedEgp} EGP`,
-              `${report.inflight.reservationCount} holds — NOT revenue`,
-              "var(--color-accent)",
-            )}
-            {kpi(
-              "Pending",
-              String(report.inflight.pendingTxCount),
-              "unsettled",
-              "var(--color-accent)",
-            )}
-            {kpi(
-              "Failed",
-              String(report.failures.failedTxCount),
-              "",
-              "var(--color-danger)",
-            )}
-          </div>
-        </>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          {kpi(
+            "Total collected",
+            `${report.completed.totalCollectedEgp} EGP`,
+            `${report.completed.paidPaymentsCount} payments`,
+            "var(--color-secondary-deep)",
+            () => applySummaryFilter("collected"),
+          )}
+          {kpi(
+            "Wallet portion",
+            `${report.completed.walletVolumeEgp} EGP`,
+            "captured",
+            "var(--color-primary)",
+          )}
+          {kpi(
+            "Kashier portion",
+            `${report.completed.kashierVolumeEgp} EGP`,
+            "settled",
+            "var(--color-primary)",
+          )}
+          {kpi(
+            "Refunded",
+            `${report.refunds.totalRefundedEgp} EGP`,
+            `${report.refunds.refundCount} refunds`,
+            "var(--color-danger)",
+            () => applySummaryFilter("refunded"),
+          )}
+          {kpi(
+            "Total Wallet Refunded",
+            `${report.refunds.totalWalletRefundedEgp} EGP`,
+            "wallet refund ledger",
+            "var(--color-danger)",
+          )}
+          {kpi(
+            "Total Kashier Refunded",
+            `${report.refunds.totalKashierRefundedEgp} EGP`,
+            "gateway refund ledger",
+            "var(--color-danger)",
+          )}
+          {kpi(
+            "Refundable remaining",
+            `${report.refundable.refundableEgp} EGP`,
+            `${report.refundable.refundablePaymentsCount} paid payments`,
+            "var(--color-accent)",
+            () => applySummaryFilter("refundable"),
+          )}
+          {kpi(
+            "Net collected",
+            `${report.net.netCollectedEgp} EGP`,
+            "collected − refunded",
+            "var(--color-secondary-deep)",
+          )}
+          {kpi(
+            "Reserved (inflight)",
+            `${report.inflight.reservedEgp} EGP`,
+            `${report.inflight.reservationCount} holds — NOT revenue`,
+            "var(--color-accent)",
+            () => applySummaryFilter("reserved"),
+          )}
+          {kpi(
+            "Pending",
+            String(report.inflight.pendingTxCount),
+            "unsettled",
+            "var(--color-accent)",
+          )}
+          {kpi(
+            "Failed",
+            String(report.failures.failedTxCount),
+            "",
+            "var(--color-danger)",
+          )}
+        </div>
       )}
 
       {canReports ? (
@@ -580,6 +599,19 @@ export default function TransactionsClient({
               <option value="kashier">Kashier</option>
               <option value="mixed">Mixed (with Payment)</option>
             </select>
+          </div>
+          <div>
+            <FilterGroup
+              label="Financial view"
+              items={["all", "refundable", "net_collected"]}
+              selected={financialView ? [financialView] : []}
+              onToggle={(v) => {
+                const next = v as "all" | "refundable" | "net_collected";
+                setFinancialView(next);
+                setPage(1);
+              }}
+              singleSelect
+            />
           </div>
         </div>
       </AdminCard>

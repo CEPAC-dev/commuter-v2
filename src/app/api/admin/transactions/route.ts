@@ -26,6 +26,7 @@ export interface TxFilters {
   descriptionCategory?: ReferralDescriptionCategory;
   descriptionSearch?: string;
   paymentMethod?: "wallet" | "kashier" | "mixed" | null;
+  financialView?: "all" | "refundable" | "net_collected" | null;
   dateFrom?: Date | null;
   dateTo?: Date | null;
   minAmount?: number | null;
@@ -57,6 +58,11 @@ export function parseFilters(sp: URLSearchParams): TxFilters {
     descriptionSearch: sp.get("descriptionSearch")?.trim() || undefined,
     paymentMethod:
       (sp.get("paymentMethod") as TxFilters["paymentMethod"]) || null,
+    financialView:
+      ((sp.get("financialView") as TxFilters["financialView"]) || "all") ===
+      "all"
+        ? "all"
+        : (sp.get("financialView") as TxFilters["financialView"]) || "all",
     dateFrom: parseDate(sp.get("dateFrom")),
     dateTo: parseDate(sp.get("dateTo")),
     minAmount: parseNum(sp.get("minAmount")),
@@ -161,6 +167,26 @@ export async function buildTxQuery(
     } else if (f.paymentMethod === "mixed") {
       q.paymentId = { $exists: true, $ne: null };
     }
+  }
+  if (f.financialView === "refundable") {
+    const refundablePayments = await Payment.find(
+      {
+        overallStatus: { $in: ["paid", "partially_refunded"] },
+        $expr: { $lt: ["$refundedAmountEgp", "$totalEgp"] },
+      },
+      { _id: 1 },
+    ).lean<{ _id: Types.ObjectId }[]>();
+
+    const paymentIds = refundablePayments.map((p) => p._id);
+    if (paymentIds.length) {
+      q.paymentId = { $in: paymentIds };
+    } else {
+      q.paymentId = { $in: [] };
+    }
+  }
+  if (f.financialView === "net_collected") {
+    q.type = { $in: ["payment_captured", "refund", "payment_refund_partial"] };
+    q.status = "completed";
   }
   if (typeConstraints.length) {
     const [first, ...remaining] = typeConstraints;
