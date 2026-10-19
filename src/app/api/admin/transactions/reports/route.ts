@@ -19,6 +19,10 @@ export async function GET(req: NextRequest) {
 
   await connectDB();
   const sp = req.nextUrl.searchParams;
+  const financialView = (sp.get("financialView") ?? "all") as
+    | "all"
+    | "refundable"
+    | "net_collected";
   const dateFrom = sp.get("dateFrom") ? new Date(sp.get("dateFrom")!) : null;
   const dateTo = sp.get("dateTo") ? new Date(sp.get("dateTo")!) : null;
 
@@ -30,12 +34,15 @@ export async function GET(req: NextRequest) {
   const [
     walletCollected,
     kashierCollected,
+    walletRefunded,
+    kashierRefunded,
     refunds,
     reservationsHeld,
     pending,
     failed,
     byType,
     paidPayments,
+    refundableRemaining,
   ] = await Promise.all([
     WalletTransaction.aggregate([
       {
@@ -53,6 +60,30 @@ export async function GET(req: NextRequest) {
           sum: { $sum: "$gatewayAmountEgp" },
           count: { $sum: 1 },
         },
+      },
+    ]),
+    WalletTransaction.aggregate([
+      {
+        $match: {
+          ...dateMatch,
+          type: "refund",
+          status: "completed",
+        },
+      },
+      {
+        $group: { _id: null, sum: { $sum: "$amountEgp" }, count: { $sum: 1 } },
+      },
+    ]),
+    WalletTransaction.aggregate([
+      {
+        $match: {
+          ...dateMatch,
+          type: "payment_refund_partial",
+          status: "completed",
+        },
+      },
+      {
+        $group: { _id: null, sum: { $sum: "$amountEgp" }, count: { $sum: 1 } },
       },
     ]),
     WalletTransaction.aggregate([
@@ -97,9 +128,35 @@ export async function GET(req: NextRequest) {
         },
       },
     ]),
+    Payment.aggregate([
+      {
+        $match: {
+          ...dateMatch,
+          overallStatus: { $in: ["paid", "partially_refunded"] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          refundableEgp: {
+            $sum: {
+              $max: [{ $subtract: ["$totalEgp", "$refundedAmountEgp"] }, 0],
+            },
+          },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
   ]);
 
+  const totalCollectedEgp = paidPayments[0]?.totalCollected ?? 0;
+  const totalRefundedEgp = refunds[0]?.sum ?? 0;
+  const totalWalletRefundedEgp = walletRefunded[0]?.sum ?? 0;
+  const totalKashierRefundedEgp = kashierRefunded[0]?.sum ?? 0;
+  const netCollectedEgp = totalCollectedEgp - totalRefundedEgp;
+
   return NextResponse.json({
+    view: financialView,
     dateFrom: dateFrom?.toISOString() ?? null,
     dateTo: dateTo?.toISOString() ?? null,
     // Completed (settled) money only.
@@ -108,12 +165,18 @@ export async function GET(req: NextRequest) {
       walletTxCount: walletCollected[0]?.count ?? 0,
       kashierVolumeEgp: kashierCollected[0]?.sum ?? 0,
       kashierTxCount: kashierCollected[0]?.count ?? 0,
-      totalCollectedEgp: paidPayments[0]?.totalCollected ?? 0,
+      totalCollectedEgp,
       paidPaymentsCount: paidPayments[0]?.count ?? 0,
     },
     refunds: {
-      totalRefundedEgp: refunds[0]?.sum ?? 0,
+      totalWalletRefundedEgp,
+      totalKashierRefundedEgp,
+      totalRefundedEgp,
       refundCount: refunds[0]?.count ?? 0,
+    },
+    refundable: {
+      refundableEgp: refundableRemaining[0]?.refundableEgp ?? 0,
+      refundablePaymentsCount: refundableRemaining[0]?.count ?? 0,
     },
     inflight: {
       reservedEgp: reservationsHeld[0]?.sum ?? 0,
@@ -122,8 +185,7 @@ export async function GET(req: NextRequest) {
     },
     failures: { failedTxCount: failed },
     net: {
-      netCollectedEgp:
-        (paidPayments[0]?.totalCollected ?? 0) - (refunds[0]?.sum ?? 0),
+      netCollectedEgp,
     },
     breakdown: byType.map((b) => ({
       type: b._id.type,

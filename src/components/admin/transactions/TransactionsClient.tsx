@@ -42,13 +42,23 @@ interface Transaction {
 }
 
 interface ReportSummary {
+  view: "all" | "refundable" | "net_collected";
   completed: {
     walletVolumeEgp: number;
     kashierVolumeEgp: number;
     totalCollectedEgp: number;
     paidPaymentsCount: number;
   };
-  refunds: { totalRefundedEgp: number; refundCount: number };
+  refunds: {
+    totalWalletRefundedEgp: number;
+    totalKashierRefundedEgp: number;
+    totalRefundedEgp: number;
+    refundCount: number;
+  };
+  refundable: {
+    refundableEgp: number;
+    refundablePaymentsCount: number;
+  };
   inflight: {
     reservedEgp: number;
     reservationCount: number;
@@ -86,6 +96,9 @@ export default function TransactionsClient({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [financialView, setFinancialView] = useState<
+    "all" | "refundable" | "net_collected"
+  >("all");
   const [descriptionCategory, setDescriptionCategory] = useState("");
   const [descriptionSearch, setDescriptionSearch] = useState("");
   const [method, setMethod] = useState<"" | "wallet" | "kashier" | "mixed">("");
@@ -162,11 +175,14 @@ export default function TransactionsClient({
     const params = new URLSearchParams();
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
+    if (financialView && financialView !== "all") {
+      params.set("financialView", financialView);
+    }
     fetch(`/api/admin/transactions/reports?${params}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setReport(d))
       .catch(() => {});
-  }, [dateFrom, dateTo, canReports]);
+  }, [dateFrom, dateTo, financialView, canReports]);
 
   function toggle(list: string[], setter: (v: string[]) => void, val: string) {
     setter(list.includes(val) ? list.filter((x) => x !== val) : [...list, val]);
@@ -203,7 +219,9 @@ export default function TransactionsClient({
         {value}
       </div>
       {sub && (
-        <div style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 2 }}>
+        <div
+          style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 2 }}
+        >
           {sub}
         </div>
       )}
@@ -218,24 +236,61 @@ export default function TransactionsClient({
       />
       {canExport ? (
         <AdminTopbarActions>
-            <a
-              href={`/api/admin/transactions/export?${qs}`}
-              style={{
-                padding: "10px 16px",
-                background: "var(--color-primary)",
-                color: "var(--color-on-primary)",
-                borderRadius: 10,
-                textDecoration: "none",
-                fontWeight: 700,
-                fontSize: 13,
-              }}
-            >
-              Export CSV
-            </a>
+          <a
+            href={`/api/admin/transactions/export?${qs}`}
+            style={{
+              padding: "10px 16px",
+              background: "var(--color-primary)",
+              color: "var(--color-on-primary)",
+              borderRadius: 10,
+              textDecoration: "none",
+              fontWeight: 700,
+              fontSize: 13,
+            }}
+          >
+            Export CSV
+          </a>
         </AdminTopbarActions>
       ) : null}
 
-        {canReports && report && (
+      {canReports && report && (
+        <>
+          <AdminCard padding={12} style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "var(--color-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: 0.4,
+                }}
+              >
+                Financial view
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <FilterGroup
+                  label=""
+                  items={["all", "refundable", "net_collected"]}
+                  selected={financialView ? [financialView] : []}
+                  onToggle={(v) =>
+                    setFinancialView(
+                      v as "all" | "refundable" | "net_collected",
+                    )
+                  }
+                  singleSelect
+                />
+              </div>
+            </div>
+          </AdminCard>
           <div
             style={{
               display: "flex",
@@ -269,6 +324,24 @@ export default function TransactionsClient({
               "var(--color-danger)",
             )}
             {kpi(
+              "Total Wallet Refunded",
+              `${report.refunds.totalWalletRefundedEgp} EGP`,
+              "wallet refund ledger",
+              "var(--color-danger)",
+            )}
+            {kpi(
+              "Total Kashier Refunded",
+              `${report.refunds.totalKashierRefundedEgp} EGP`,
+              "gateway refund ledger",
+              "var(--color-danger)",
+            )}
+            {kpi(
+              "Refundable remaining",
+              `${report.refundable.refundableEgp} EGP`,
+              `${report.refundable.refundablePaymentsCount} paid payments`,
+              "var(--color-accent)",
+            )}
+            {kpi(
               "Net collected",
               `${report.net.netCollectedEgp} EGP`,
               "collected − refunded",
@@ -293,348 +366,371 @@ export default function TransactionsClient({
               "var(--color-danger)",
             )}
           </div>
-        )}
+        </>
+      )}
 
-        {canReports ? <TransactionsChart dateFrom={dateFrom} dateTo={dateTo} /> : null}
+      {canReports ? (
+        <TransactionsChart dateFrom={dateFrom} dateTo={dateTo} />
+      ) : null}
 
-        {/* Filter bar */}
-        <AdminCard padding={16}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-              marginBottom: 12,
+      {/* Filter bar */}
+      <AdminCard padding={16}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+            marginBottom: 12,
+          }}
+        >
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
             }}
-          >
+            placeholder="Search id, payment id, kashier ref, user name/email/phone…"
+            style={{
+              padding: "10px 12px",
+              border: "1.5px solid var(--color-border)",
+              borderRadius: 8,
+              fontSize: 13,
+            }}
+          />
+          <div style={{ display: "flex", gap: 8 }}>
             <input
-              type="text"
-              value={search}
+              type="date"
+              value={dateFrom}
               onChange={(e) => {
-                setSearch(e.target.value);
+                setDateFrom(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search id, payment id, kashier ref, user name/email/phone…"
               style={{
+                flex: 1,
                 padding: "10px 12px",
                 border: "1.5px solid var(--color-border)",
                 borderRadius: 8,
                 fontSize: 13,
               }}
             />
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => {
-                  setDateFrom(e.target.value);
-                  setPage(1);
-                }}
-                style={{
-                  flex: 1,
-                  padding: "10px 12px",
-                  border: "1.5px solid var(--color-border)",
-                  borderRadius: 8,
-                  fontSize: 13,
-                }}
-              />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => {
-                  setDateTo(e.target.value);
-                  setPage(1);
-                }}
-                style={{
-                  flex: 1,
-                  padding: "10px 12px",
-                  border: "1.5px solid var(--color-border)",
-                  borderRadius: 8,
-                  fontSize: 13,
-                }}
-              />
-              <input
-                type="number"
-                placeholder="Min EGP"
-                value={minAmount}
-                onChange={(e) => {
-                  setMinAmount(e.target.value);
-                  setPage(1);
-                }}
-                style={{
-                  width: 100,
-                  padding: "10px 12px",
-                  border: "1.5px solid var(--color-border)",
-                  borderRadius: 8,
-                  fontSize: 13,
-                }}
-              />
-              <input
-                type="number"
-                placeholder="Max EGP"
-                value={maxAmount}
-                onChange={(e) => {
-                  setMaxAmount(e.target.value);
-                  setPage(1);
-                }}
-                style={{
-                  width: 100,
-                  padding: "10px 12px",
-                  border: "1.5px solid var(--color-border)",
-                  borderRadius: 8,
-                  fontSize: 13,
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <FilterGroup
-              label="Status"
-              items={["completed", "pending", "failed"]}
-              selected={statusFilter}
-              onToggle={(v) => toggle(statusFilter, setStatusFilter, v)}
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                setPage(1);
+              }}
+              style={{
+                flex: 1,
+                padding: "10px 12px",
+                border: "1.5px solid var(--color-border)",
+                borderRadius: 8,
+                fontSize: 13,
+              }}
             />
-            <FilterGroup
-              label="Type"
-              items={TYPES}
-              selected={typeFilter}
-              onToggle={(v) => toggle(typeFilter, setTypeFilter, v)}
+            <input
+              type="number"
+              placeholder="Min EGP"
+              value={minAmount}
+              onChange={(e) => {
+                setMinAmount(e.target.value);
+                setPage(1);
+              }}
+              style={{
+                width: 100,
+                padding: "10px 12px",
+                border: "1.5px solid var(--color-border)",
+                borderRadius: 8,
+                fontSize: 13,
+              }}
             />
-            <label style={{ display: "grid", gap: 4 }}>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--color-muted)",
-                  textTransform: "uppercase",
-                }}
-              >
-                {t("admin.transactions.description_category")}
-              </span>
-              <select
-                value={descriptionCategory}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setDescriptionCategory(value);
-                  if (value) {
-                    setTypeFilter((current) =>
-                      current.includes("referral_bonus")
-                        ? current
-                        : [...current, "referral_bonus"],
-                    );
-                  }
-                  setPage(1);
-                }}
-                style={{
-                  padding: "6px 10px",
-                  border: "1.5px solid var(--color-border)",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
-              >
-                <option value="">{t("admin.transactions.any_description")}</option>
-                <option value="referrer_bonus">
-                  {t("admin.transactions.referrer_bonus")}
-                </option>
-                <option value="welcome_referral_bonus">
-                  {t("admin.transactions.welcome_referral_bonus")}
-                </option>
-                <option value="admin_referral_welcome_bonus">
-                  {t("admin.transactions.admin_referral_welcome_bonus")}
-                </option>
-              </select>
-            </label>
-            <label style={{ display: "grid", gap: 4 }}>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--color-muted)",
-                  textTransform: "uppercase",
-                }}
-              >
-                {t("admin.transactions.description_contains")}
-              </span>
-              <input
-                type="search"
-                value={descriptionSearch}
-                onChange={(event) => {
-                  setDescriptionSearch(event.target.value);
-                  setPage(1);
-                }}
-                placeholder={t("admin.transactions.description_contains")}
-                style={{
-                  padding: "6px 10px",
-                  border: "1.5px solid var(--color-border)",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
-              />
-            </label>
-            <div>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--color-muted)",
-                  textTransform: "uppercase",
-                  marginBottom: 4,
-                }}
-              >
-                Method
-              </div>
-              <select
-                value={method}
-                onChange={(e) => {
-                  setMethod(e.target.value as typeof method);
-                  setPage(1);
-                }}
-                style={{
-                  padding: "6px 10px",
-                  border: "1.5px solid var(--color-border)",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
-              >
-                <option value="">Any</option>
-                <option value="wallet">Wallet</option>
-                <option value="kashier">Kashier</option>
-                <option value="mixed">Mixed (with Payment)</option>
-              </select>
-            </div>
+            <input
+              type="number"
+              placeholder="Max EGP"
+              value={maxAmount}
+              onChange={(e) => {
+                setMaxAmount(e.target.value);
+                setPage(1);
+              }}
+              style={{
+                width: 100,
+                padding: "10px 12px",
+                border: "1.5px solid var(--color-border)",
+                borderRadius: 8,
+                fontSize: 13,
+              }}
+            />
           </div>
-        </AdminCard>
+        </div>
 
-        {error ? <AdminErrorState title="Unable to load transactions" description={error} /> : null}
-
-        {/* Table */}
-        <AdminCard padding={0}>
-          <AdminTable ariaLabel="Transactions">
-              <thead>
-                <tr style={{ background: "var(--color-surface)", textAlign: "left" }}>
-                  <Th>Date</Th>
-                  <Th>Type</Th>
-                  <Th>Status</Th>
-                  <Th>Num of trips</Th>
-                  <Th>Amount</Th>
-                  <Th>User</Th>
-                  <Th>Payment split</Th>
-                  <Th>Description</Th>
-                  <Th> </Th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      style={{
-                        padding: 24,
-                        textAlign: "center",
-                        color: "var(--color-muted)",
-                      }}
-                    >
-                      <AdminLoadingState title="Loading transactions..." />
-                    </td>
-                  </tr>
-                )}
-                {!loading && rows.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      style={{
-                        padding: 24,
-                        textAlign: "center",
-                        color: "var(--color-muted)",
-                      }}
-                    >
-                      <AdminEmptyState title="No transactions" description="No transactions match the current filters." />
-                    </td>
-                  </tr>
-                )}
-                {!loading &&
-                  rows.map((tx) => (
-                    <tr key={tx.id} style={{ borderTop: "1px solid var(--color-border)" }}>
-                      <Td>{new Date(tx.createdAt).toLocaleString()}</Td>
-                      <Td>
-                        <code style={{ fontSize: 11 }}>{tx.type}</code>
-                      </Td>
-                      <Td>
-                        <StatusPill status={tx.status} />
-                      </Td>
-                      <Td style={{ fontVariantNumeric: "tabular-nums" }}>
-                        {tx.tripCount}
-                      </Td>
-                      <Td
-                        style={{
-                          fontVariantNumeric: "tabular-nums",
-                          fontWeight: 700,
-                        }}
-                      >
-                        {tx.amountEgp} EGP
-                      </Td>
-                      <Td>
-                        {tx.userName ?? "—"}
-                        <div style={{ fontSize: 11, color: "var(--color-muted)" }}>
-                          {tx.userEmail ?? tx.userPhone ?? tx.userId}
-                        </div>
-                      </Td>
-                      <Td>
-                        {tx.payment ? (
-                          <span style={{ fontSize: 11, color: "var(--color-muted)" }}>
-                            W {tx.payment.walletAmountEgp} + K{" "}
-                            {tx.payment.gatewayAmountEgp} ={" "}
-                            {tx.payment.totalEgp}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </Td>
-                      <Td
-                        style={{
-                          maxWidth: 260,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {tx.description}
-                      </Td>
-                      <Td>
-                        <Link
-                          href={`/admin/transactions/${tx.id}`}
-                          style={{
-                            color: "var(--color-secondary)",
-                            fontWeight: 700,
-                            textDecoration: "none",
-                          }}
-                        >
-                          View →
-                        </Link>
-                      </Td>
-                    </tr>
-                  ))}
-              </tbody>
-          </AdminTable>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "12px 16px",
-              borderTop: "1px solid var(--color-border)",
-              fontSize: 12,
-              color: "var(--color-muted)",
-            }}
-          >
-            <span>
-              {total} transactions · page {page} of {pages}
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <FilterGroup
+            label="Status"
+            items={["completed", "pending", "failed"]}
+            selected={statusFilter}
+            onToggle={(v) => toggle(statusFilter, setStatusFilter, v)}
+          />
+          <FilterGroup
+            label="Type"
+            items={TYPES}
+            selected={typeFilter}
+            onToggle={(v) => toggle(typeFilter, setTypeFilter, v)}
+          />
+          <label style={{ display: "grid", gap: 4 }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "var(--color-muted)",
+                textTransform: "uppercase",
+              }}
+            >
+              {t("admin.transactions.description_category")}
             </span>
-            <AdminPagination page={page} totalPages={pages} onPageChange={setPage} />
+            <select
+              value={descriptionCategory}
+              onChange={(event) => {
+                const value = event.target.value;
+                setDescriptionCategory(value);
+                if (value) {
+                  setTypeFilter((current) =>
+                    current.includes("referral_bonus")
+                      ? current
+                      : [...current, "referral_bonus"],
+                  );
+                }
+                setPage(1);
+              }}
+              style={{
+                padding: "6px 10px",
+                border: "1.5px solid var(--color-border)",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+            >
+              <option value="">
+                {t("admin.transactions.any_description")}
+              </option>
+              <option value="referrer_bonus">
+                {t("admin.transactions.referrer_bonus")}
+              </option>
+              <option value="welcome_referral_bonus">
+                {t("admin.transactions.welcome_referral_bonus")}
+              </option>
+              <option value="admin_referral_welcome_bonus">
+                {t("admin.transactions.admin_referral_welcome_bonus")}
+              </option>
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 4 }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "var(--color-muted)",
+                textTransform: "uppercase",
+              }}
+            >
+              {t("admin.transactions.description_contains")}
+            </span>
+            <input
+              type="search"
+              value={descriptionSearch}
+              onChange={(event) => {
+                setDescriptionSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder={t("admin.transactions.description_contains")}
+              style={{
+                padding: "6px 10px",
+                border: "1.5px solid var(--color-border)",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+            />
+          </label>
+          <div>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "var(--color-muted)",
+                textTransform: "uppercase",
+                marginBottom: 4,
+              }}
+            >
+              Method
+            </div>
+            <select
+              value={method}
+              onChange={(e) => {
+                setMethod(e.target.value as typeof method);
+                setPage(1);
+              }}
+              style={{
+                padding: "6px 10px",
+                border: "1.5px solid var(--color-border)",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+            >
+              <option value="">Any</option>
+              <option value="wallet">Wallet</option>
+              <option value="kashier">Kashier</option>
+              <option value="mixed">Mixed (with Payment)</option>
+            </select>
           </div>
-        </AdminCard>
+        </div>
+      </AdminCard>
+
+      {error ? (
+        <AdminErrorState
+          title="Unable to load transactions"
+          description={error}
+        />
+      ) : null}
+
+      {/* Table */}
+      <AdminCard padding={0}>
+        <AdminTable ariaLabel="Transactions">
+          <thead>
+            <tr
+              style={{ background: "var(--color-surface)", textAlign: "left" }}
+            >
+              <Th>Date</Th>
+              <Th>Type</Th>
+              <Th>Status</Th>
+              <Th>Num of trips</Th>
+              <Th>Amount</Th>
+              <Th>User</Th>
+              <Th>Payment split</Th>
+              <Th>Description</Th>
+              <Th> </Th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr>
+                <td
+                  colSpan={9}
+                  style={{
+                    padding: 24,
+                    textAlign: "center",
+                    color: "var(--color-muted)",
+                  }}
+                >
+                  <AdminLoadingState title="Loading transactions..." />
+                </td>
+              </tr>
+            )}
+            {!loading && rows.length === 0 && (
+              <tr>
+                <td
+                  colSpan={9}
+                  style={{
+                    padding: 24,
+                    textAlign: "center",
+                    color: "var(--color-muted)",
+                  }}
+                >
+                  <AdminEmptyState
+                    title="No transactions"
+                    description="No transactions match the current filters."
+                  />
+                </td>
+              </tr>
+            )}
+            {!loading &&
+              rows.map((tx) => (
+                <tr
+                  key={tx.id}
+                  style={{ borderTop: "1px solid var(--color-border)" }}
+                >
+                  <Td>{new Date(tx.createdAt).toLocaleString()}</Td>
+                  <Td>
+                    <code style={{ fontSize: 11 }}>{tx.type}</code>
+                  </Td>
+                  <Td>
+                    <StatusPill status={tx.status} />
+                  </Td>
+                  <Td style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {tx.tripCount}
+                  </Td>
+                  <Td
+                    style={{
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {tx.amountEgp} EGP
+                  </Td>
+                  <Td>
+                    {tx.userName ?? "—"}
+                    <div style={{ fontSize: 11, color: "var(--color-muted)" }}>
+                      {tx.userEmail ?? tx.userPhone ?? tx.userId}
+                    </div>
+                  </Td>
+                  <Td>
+                    {tx.payment ? (
+                      <span
+                        style={{ fontSize: 11, color: "var(--color-muted)" }}
+                      >
+                        W {tx.payment.walletAmountEgp} + K{" "}
+                        {tx.payment.gatewayAmountEgp} = {tx.payment.totalEgp}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </Td>
+                  <Td
+                    style={{
+                      maxWidth: 260,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {tx.description}
+                  </Td>
+                  <Td>
+                    <Link
+                      href={`/admin/transactions/${tx.id}`}
+                      style={{
+                        color: "var(--color-secondary)",
+                        fontWeight: 700,
+                        textDecoration: "none",
+                      }}
+                    >
+                      View →
+                    </Link>
+                  </Td>
+                </tr>
+              ))}
+          </tbody>
+        </AdminTable>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "12px 16px",
+            borderTop: "1px solid var(--color-border)",
+            fontSize: 12,
+            color: "var(--color-muted)",
+          }}
+        >
+          <span>
+            {total} transactions · page {page} of {pages}
+          </span>
+          <AdminPagination
+            page={page}
+            totalPages={pages}
+            onPageChange={setPage}
+          />
+        </div>
+      </AdminCard>
     </AdminPageContainer>
   );
 }
@@ -663,7 +759,9 @@ function Td({
   style?: React.CSSProperties;
 }) {
   return (
-    <td style={{ padding: "10px 12px", color: "var(--color-primary)", ...style }}>
+    <td
+      style={{ padding: "10px 12px", color: "var(--color-primary)", ...style }}
+    >
       {children}
     </td>
   );
@@ -676,25 +774,29 @@ function FilterGroup({
   items,
   selected,
   onToggle,
+  singleSelect = false,
 }: {
   label: string;
   items: string[];
   selected: string[];
   onToggle: (v: string) => void;
+  singleSelect?: boolean;
 }) {
   return (
     <div>
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: "var(--color-muted)",
-          textTransform: "uppercase",
-          marginBottom: 4,
-        }}
-      >
-        {label}
-      </div>
+      {label && (
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: "var(--color-muted)",
+            textTransform: "uppercase",
+            marginBottom: 4,
+          }}
+        >
+          {label}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
         {items.map((it) => (
           <button
@@ -702,8 +804,12 @@ function FilterGroup({
             onClick={() => onToggle(it)}
             style={{
               padding: "4px 8px",
-              background: selected.includes(it) ? "var(--color-primary)" : "var(--color-panel)",
-              color: selected.includes(it) ? "var(--color-on-primary)" : "var(--color-muted)",
+              background: selected.includes(it)
+                ? "var(--color-primary)"
+                : "var(--color-panel)",
+              color: selected.includes(it)
+                ? "var(--color-on-primary)"
+                : "var(--color-muted)",
               border: "1.5px solid var(--color-border)",
               borderRadius: 999,
               fontSize: 11,
@@ -711,7 +817,7 @@ function FilterGroup({
               cursor: "pointer",
             }}
           >
-            {it}
+            {singleSelect ? it.replace(/_/g, " ") : it}
           </button>
         ))}
       </div>
