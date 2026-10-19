@@ -5,7 +5,10 @@ import { adminAuth } from "@/lib/middleware/adminAuth";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { Types } from "mongoose";
 import { reconcileKashierRefund } from "@/lib/payments/kashierRefundReconciliation";
-import { queryKashierRefundTransaction } from "@/lib/payments/kashier";
+import {
+  queryKashierRefundTransaction,
+  queryKashierRefundsForOrder,
+} from "@/lib/payments/kashier";
 import { Trip } from "@/models/Trip";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { resolvePayableBooking } from "@/lib/payments/resolveBooking";
@@ -101,6 +104,11 @@ export async function POST(req: NextRequest) {
           $options: "i",
         },
       },
+      {
+        "adminRefund.status": "failed",
+        "adminRefund.gatewayRefundAmountEgp": { $gt: 0 },
+        "adminRefund.failureReason": { $regex: "Kashier", $options: "i" },
+      },
     ],
   })
     .select("_id priceEgp adminRefund")
@@ -114,6 +122,7 @@ export async function POST(req: NextRequest) {
           gatewayRefundAmountEgp?: number;
           kashierRefundId?: string;
           refundedAt?: Date;
+          failureReason?: string;
         };
       }[]
     >();
@@ -122,6 +131,7 @@ export async function POST(req: NextRequest) {
   let retryReady = 0;
   let amountMismatch = 0;
   let historicalReference = 0;
+  let ambiguousReference = 0;
 
   for (const trip of unresolvedTrips) {
     const expectedAmount =
@@ -157,7 +167,107 @@ export async function POST(req: NextRequest) {
       .sort((left, right) => right.at - left.at)[0];
     const refundId =
       trip.adminRefund?.kashierRefundId ?? referenceFromTimeline?.refundId;
-    if (!refundId || expectedAmount <= 0) continue;
+    if (expectedAmount <= 0) continue;
+
+    const attemptIsRecent =
+      attemptAt != null &&
+      Date.now() - new Date(attemptAt).getTime() <
+        REFUND_RECONCILIATION_GRACE_MS;
+
+    if (!refundId) {
+      if (!payment.kashierOrderId) continue;
+      const orderLookup = await queryKashierRefundsForOrder(
+        payment.kashierOrderId,
+      );
+      if (orderLookup.status === "unavailable") {
+        providerUnavailable += 1;
+        continue;
+      }
+      providerChecked += 1;
+      if (orderLookup.status === "not_found") {
+        if (!attemptIsRecent) {
+          await Trip.updateOne(
+            { _id: trip._id, "adminRefund.status": { $in: ["processing", "failed"] } },
+            {
+              $set: {
+                "adminRefund.status": "failed",
+                "adminRefund.failureReason":
+                  "Kashier confirms no successful refund for this order and attempt",
+                "adminRefund.retryAllowed": true,
+              },
+            },
+          );
+          retryReady += 1;
+        }
+        continue;
+      }
+
+      const sameAttempt = orderLookup.transactions.filter(
+        (transaction) =>
+          transaction.amountEgp === expectedAmount &&
+          transaction.transactionStatus === "approved" &&
+          transaction.date != null &&
+          attemptAt != null &&
+          transaction.date.getTime() >=
+            new Date(attemptAt).getTime() - 10_000,
+      );
+      if (sameAttempt.length > 1) {
+        ambiguousReference += 1;
+        continue;
+      }
+
+      if (sameAttempt.length === 1) {
+        const transaction = sameAttempt[0];
+        await reconcileKashierRefund(
+          String(payment._id),
+          transaction.amountEgp!,
+          transaction.transactionId,
+          payment.kashierOrderId,
+        );
+        reconciled += 1;
+        continue;
+      }
+
+      const sameAttemptAmountMismatch = orderLookup.transactions.some(
+        (transaction) =>
+          transaction.transactionStatus === "approved" &&
+          transaction.amountEgp != null &&
+          transaction.amountEgp !== expectedAmount &&
+          transaction.date != null &&
+          attemptAt != null &&
+          transaction.date.getTime() >=
+            new Date(attemptAt).getTime() - 10_000,
+      );
+      if (sameAttemptAmountMismatch) {
+        amountMismatch += 1;
+        continue;
+      }
+
+      const sameAttemptFailed = orderLookup.transactions.some(
+        (transaction) =>
+          transaction.amountEgp === expectedAmount &&
+          transaction.transactionStatus === "failed" &&
+          transaction.date != null &&
+          attemptAt != null &&
+          transaction.date.getTime() >=
+            new Date(attemptAt).getTime() - 10_000,
+      );
+      if (sameAttemptFailed && !attemptIsRecent) {
+        await Trip.updateOne(
+          { _id: trip._id, "adminRefund.status": { $in: ["processing", "failed"] } },
+          {
+            $set: {
+              "adminRefund.status": "failed",
+              "adminRefund.failureReason":
+                "Kashier confirms this refund attempt failed",
+              "adminRefund.retryAllowed": true,
+            },
+          },
+        );
+        retryReady += 1;
+      }
+      continue;
+    }
 
     const existingConfirmedRefund = await WalletTransaction.findOne({
       paymentId: payment._id,
@@ -216,11 +326,6 @@ export async function POST(req: NextRequest) {
     }
     providerChecked += 1;
 
-    const attemptIsRecent =
-      attemptAt != null &&
-      Date.now() - new Date(attemptAt).getTime() <
-        REFUND_RECONCILIATION_GRACE_MS;
-
     if (
       lookup.status === "found" &&
       lookup.transactionStatus === "approved" &&
@@ -273,6 +378,7 @@ export async function POST(req: NextRequest) {
     retryReady,
     amountMismatch,
     historicalReference,
+    ambiguousReference,
     providerUnavailable,
   });
 }

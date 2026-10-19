@@ -193,7 +193,13 @@ export default function TransactionsClient({
   }
 
   function applySummaryFilter(
-    filter: "all" | "collected" | "refunded" | "refundable" | "reserved",
+    filter:
+      | "all"
+      | "collected"
+      | "kashier_settled"
+      | "refunded"
+      | "refundable"
+      | "reserved",
   ) {
     setPage(1);
 
@@ -207,6 +213,14 @@ export default function TransactionsClient({
     if (filter === "collected") {
       setTypeFilter(["payment_captured"]);
       setStatusFilter(["completed"]);
+      setFinancialView("all");
+      return;
+    }
+
+    if (filter === "kashier_settled") {
+      setTypeFilter(["topup", "withdrawal", "kashier_payment"]);
+      setStatusFilter(["completed"]);
+      setMethod("kashier");
       setFinancialView("all");
       return;
     }
@@ -333,6 +347,7 @@ export default function TransactionsClient({
             `${report.completed.kashierVolumeEgp} EGP`,
             "settled",
             "var(--color-primary)",
+            () => applySummaryFilter("kashier_settled"),
           )}
           {kpi(
             "Refunded",
