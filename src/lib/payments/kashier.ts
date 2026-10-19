@@ -447,14 +447,16 @@ export type KashierRefundLookup =
       transactionId: string;
       date: Date | null;
     }
-  | { status: "not_found" | "unavailable" };
+  | { status: "not_found" }
+  | { status: "unavailable" };
 
 export type KashierRefundOrderLookup =
   | {
       status: "found";
       transactions: Extract<KashierRefundLookup, { status: "found" }>[];
     }
-  | { status: "not_found" | "unavailable" };
+  | { status: "not_found" }
+  | { status: "unavailable" };
 
 function parseKashierRefundTransaction(
   entry: unknown,
