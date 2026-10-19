@@ -187,6 +187,9 @@ export default function TransactionDetailClient({
         j.historicalReference
           ? `${j.historicalReference} earlier Kashier refund reference(s) were found; trip assignment needs review.`
           : "",
+        j.ambiguousReference
+          ? `${j.ambiguousReference} attempt(s) matched multiple Kashier refunds; manual review is required.`
+          : "",
         j.providerUnavailable
           ? `Kashier lookup was unavailable for ${j.providerUnavailable} reference(s); those refunds remain pending.`
           : "",
@@ -194,10 +197,13 @@ export default function TransactionDetailClient({
         !j.retryReady &&
         !j.amountMismatch &&
         !j.historicalReference &&
+        !j.ambiguousReference &&
         !j.providerUnavailable
           ? j.checked
             ? `${j.alreadyRecorded} Kashier refund(s) were already reconciled.`
-            : "No refund result was found to reconcile."
+            : j.providerChecked
+              ? "Kashier was checked, but no matching successful refund was found for this attempt."
+              : "No refund result was found to reconcile."
           : "",
       ].filter(Boolean);
       setReconcileResult(results.join(" "));
@@ -230,7 +236,9 @@ export default function TransactionDetailClient({
     canRefund &&
     p &&
     (p.overallStatus === "paid" || p.overallStatus === "partially_refunded");
-  const maxRefundable = p ? p.totalEgp - (p.refundedAmountEgp ?? 0) : 0;
+  const maxRefundable = p
+    ? Math.max(0, p.totalEgp - (p.refundedAmountEgp ?? 0))
+    : 0;
   const eligibleTrips = data.trips.filter(
     (trip) =>
       (trip.status === "submitted" ||
@@ -492,7 +500,7 @@ export default function TransactionDetailClient({
           ))}
         </Section>
 
-        {canDoRefund && (
+        {canDoRefund && maxRefundable > 0 && eligibleTrips.length > 0 && (
           <Section title="Issue refund" full>
             <div
               style={{
