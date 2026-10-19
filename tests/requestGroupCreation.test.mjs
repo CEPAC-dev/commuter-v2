@@ -438,7 +438,9 @@ test("a created group displays once, reviews as a Request, and resolves payment 
   );
   assert.deepEqual(buildPendingTripExpiryFilter([result.request._id]), {
     requestId: { $in: ["request-id"] },
+    paymentStatus: { $in: ["pending", "failed"] },
     status: "pending_payment",
+    rideId: null,
   });
 });
 

@@ -19,6 +19,7 @@ interface Props {
   interactive?: boolean;
   stops?: LatLng[];
   stations?: LatLng[];
+  routeCoordinates?: LatLng[];
 }
 
 const PICKUP_ICON = svgIcon(
@@ -78,12 +79,16 @@ export default function RouteMapOsm({
   interactive = false,
   stops,
   stations,
+  routeCoordinates,
 }: Props) {
   const [map, setMap] = useState<L.Map | null>(null);
   const [path, setPath] = useState<LatLng[] | null>(null);
   const ok = valid(pickup) && valid(dropoff);
 
   useEffect(() => {
+    if (routeCoordinates && routeCoordinates.length > 1) {
+      return;
+    }
     if (!ok) return;
     let cancelled = false;
     const points = [...(stops ?? []), ...(stations ?? [])].filter(valid);
@@ -118,12 +123,18 @@ export default function RouteMapOsm({
     dropoff?.lng,
     JSON.stringify(stops ?? []),
     JSON.stringify(stations ?? []),
+    routeCoordinates,
   ]);
 
   useEffect(() => {
     if (!map || !ok) return;
     const layers = L.layerGroup();
-    const route = path?.length ? path : [pickup, dropoff];
+    const route =
+      routeCoordinates && routeCoordinates.length > 1
+        ? routeCoordinates
+        : path?.length
+          ? path
+          : [pickup, dropoff];
     L.polyline(
       route.map((point) => [point.lat, point.lng]),
       { color: "#4361EE", weight: 12, opacity: 0.15 },
@@ -153,7 +164,7 @@ export default function RouteMapOsm({
     return () => {
       layers.remove();
     };
-  }, [map, ok, pickup, dropoff, path, stops, stations]);
+  }, [map, ok, pickup, dropoff, path, routeCoordinates, stops, stations]);
 
   if (!ok) return <Placeholder height={height} rounded={rounded} />;
   return (

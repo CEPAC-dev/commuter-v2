@@ -8,6 +8,7 @@ const NOTIFICATION_TYPES = [
   "trip_submitted",
   "driver_assigned",
   "trip_completed",
+  "trip_chat_message",
   "trip_refund_update",
   "request_cancelled",
   "withdrawal_approved",
@@ -20,6 +21,9 @@ const NOTIFICATION_TYPES = [
   "waiting_list_rejected",
   "station_suggestion_submitted",
   "station_suggestion_reviewed",
+  "ride_incident",
+  "ride_incident_resolution",
+  "no_show_trip",
 ] as const;
 
 const NotificationSchema = new Schema(

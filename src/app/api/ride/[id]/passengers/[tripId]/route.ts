@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
+import { getRideCancellationAccess } from "@/lib/rideCancellationAccess";
+import { Ride } from "@/models/Ride";
 import {
   updatePassengerStatusInRide,
   removePassengerFromRide,
@@ -8,10 +11,25 @@ import {
 // PATCH /api/rides/:id/passengers/:tripId — update one passenger's status
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: any },
+  { params }: { params: Promise<{ id: string; tripId: string }> },
 ) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id, tripId } = await params;
     await connectDB();
+    const rideOwner = await Ride.findById(id).select("driverId").lean();
+    if (!rideOwner) {
+      return NextResponse.json({ error: "Ride not found" }, { status: 404 });
+    }
+    const access = getRideCancellationAccess(session, rideOwner.driverId);
+    if (access !== "admin" && access !== "driver") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { status } = await req.json();
     if (!status) {
       return NextResponse.json(
@@ -20,8 +38,8 @@ export async function PATCH(
       );
     }
     const ride = await updatePassengerStatusInRide(
-      params.id,
-      params.tripId,
+      id,
+      tripId,
       status,
     );
     if (!ride) {
@@ -42,14 +60,29 @@ export async function PATCH(
 // DELETE /api/rides/:id/passengers/:tripId — remove a passenger from the ride
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: any },
+  { params }: { params: Promise<{ id: string; tripId: string }> },
 ) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id, tripId } = await params;
     await connectDB();
+    const rideOwner = await Ride.findById(id).select("driverId").lean();
+    if (!rideOwner) {
+      return NextResponse.json({ error: "Ride not found" }, { status: 404 });
+    }
+    const access = getRideCancellationAccess(session, rideOwner.driverId);
+    if (access !== "admin" && access !== "driver") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { reason } = await req.json().catch(() => ({ reason: undefined }));
     const ride = await removePassengerFromRide(
-      params.id,
-      params.tripId,
+      id,
+      tripId,
       reason,
     );
     return NextResponse.json({ data: ride });

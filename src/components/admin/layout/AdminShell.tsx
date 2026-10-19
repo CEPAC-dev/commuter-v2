@@ -19,6 +19,7 @@ import {
   MessageCircle,
   Route,
   Settings,
+  ShieldAlert,
   SlidersHorizontal,
   TicketPercent,
   Users,
@@ -27,6 +28,7 @@ import {
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import AdminActivityBell from "@/components/admin/layout/AdminActivityBell";
 import type { RegionSlug } from "@/lib/config/regions";
+import { useClientLocale } from "@/lib/i18n/client";
 
 interface AdminRegionOption {
   code: string;
@@ -82,6 +84,18 @@ const sections = [
   },
   { href: "/admin/maps", label: "Maps", icon: MapPinned, statKey: null },
   { href: "/admin/rides", label: "Rides", icon: Car, statKey: "rides" },
+  {
+    href: "/admin/chat-reports",
+    label: "Chat reports",
+    icon: ShieldAlert,
+    statKey: null,
+  },
+  {
+    href: "/admin/incidents",
+    label: "Ride incidents",
+    icon: ShieldAlert,
+    statKey: "incidents",
+  },
   { href: "/admin/vehicles", label: "Vehicles", icon: CarFront, statKey: null },
   {
     href: "/admin/availability",
@@ -129,6 +143,7 @@ type Stats = {
   availability: number;
   waitingList: number;
   supportUnread: number;
+  incidents: number;
 };
 
 const COLLAPSE_STORAGE_KEY = "admin-sidebar-collapsed";
@@ -164,6 +179,7 @@ export default function AdminShell({
 }: AdminShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useClientLocale();
   const isAuthPage =
     pathname === "/admin/login" || pathname === "/admin/signup";
   const [collapsed, setCollapsed] = useState(false);
@@ -190,6 +206,7 @@ export default function AdminShell({
             availability: json.availability ?? 0,
             waitingList: current?.waitingList ?? 0,
             supportUnread: current?.supportUnread ?? 0,
+            incidents: current?.incidents ?? 0,
           }));
         }
       })
@@ -215,6 +232,7 @@ export default function AdminShell({
               availability: current?.availability ?? 0,
               waitingList: json.count,
               supportUnread: current?.supportUnread ?? 0,
+              incidents: current?.incidents ?? 0,
             }));
           }
         })
@@ -237,6 +255,40 @@ export default function AdminShell({
   useEffect(() => {
     if (isAuthPage) return;
     let cancelled = false;
+    const fetchIncidentCount = () => {
+      if (document.visibilityState !== "visible") return;
+      fetch("/api/admin/incidents?status=open&limit=1", {
+        cache: "no-store",
+      })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((json) => {
+          if (!cancelled && json && typeof json.openCount === "number") {
+            setStats((current) => ({
+              users: current?.users ?? 0,
+              trips: current?.trips ?? 0,
+              rides: current?.rides ?? 0,
+              availability: current?.availability ?? 0,
+              waitingList: current?.waitingList ?? 0,
+              supportUnread: current?.supportUnread ?? 0,
+              incidents: json.openCount,
+            }));
+          }
+        })
+        .catch(() => {});
+    };
+    const interval = window.setInterval(fetchIncidentCount, 60_000);
+    window.addEventListener("focus", fetchIncidentCount);
+    fetchIncidentCount();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", fetchIncidentCount);
+    };
+  }, [isAuthPage]);
+
+  useEffect(() => {
+    if (isAuthPage) return;
+    let cancelled = false;
     const fetchSupportUnread = () => {
       if (document.visibilityState !== "visible") return;
       fetch("/api/admin/support/unread", { cache: "no-store" })
@@ -250,6 +302,7 @@ export default function AdminShell({
               availability: current?.availability ?? 0,
               waitingList: current?.waitingList ?? 0,
               supportUnread: json.unreadCount,
+              incidents: current?.incidents ?? 0,
             }));
           }
         })
@@ -344,6 +397,10 @@ export default function AdminShell({
               normalizedPath === href ||
               (href !== "/admin/dashboard" &&
                 normalizedPath.startsWith(`${href}/`));
+            const displayLabel =
+              href === "/admin/incidents"
+                ? t("admin.incidents.nav")
+                : label;
             const count = statKey ? stats?.[statKey] : undefined;
                 const showCount =
                   typeof count === "number" &&
@@ -364,13 +421,13 @@ export default function AdminShell({
                     </span>
                   ) : null}
                 </span>
-                <span className="admin-sidebar-link-label">{label}</span>
+                <span className="admin-sidebar-link-label">{displayLabel}</span>
                 {!collapsed && showCount ? (
                   <span className="admin-sidebar-badge">{count}</span>
                 ) : null}
                 {collapsed ? (
                   <span className="admin-sidebar-tooltip">
-                    {label}
+                    {displayLabel}
                     {showCount ? ` (${count})` : ""}
                   </span>
                 ) : null}
@@ -381,7 +438,11 @@ export default function AdminShell({
       </aside>
       <div className="admin-shell-content">
         <header className="admin-topbar">
-          <p className="admin-topbar-title">{currentTitle(pathname)}</p>
+          <p className="admin-topbar-title">
+            {pathname === "/admin/incidents"
+              ? t("admin.incidents.title")
+              : currentTitle(pathname)}
+          </p>
           <div className="admin-topbar-actions">
             {activeRegionSlug && allowedRegions.length > 0 ? (
               <label

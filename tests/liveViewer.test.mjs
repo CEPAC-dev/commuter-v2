@@ -212,3 +212,34 @@ test("viewer page and component only read public projection fields", async () =>
   assert.match(component, /href="\/privacy"[\s\S]*?target="_blank"[\s\S]*?rel="noopener noreferrer"/);
   assert.doesNotMatch(component, /href=\{[^}]*token/);
 });
+
+test("live viewer keeps page referrer private and sends only its origin to map tiles", async () => {
+  const page = await readFile(
+    new URL("../src/app/(public-live)/live/[token]/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const component = await readFile(
+    new URL("../src/components/live/LiveLocationViewer.tsx", import.meta.url),
+    "utf8",
+  );
+  const config = await readFile(new URL("../next.config.ts", import.meta.url), "utf8");
+  const apiRoute = await readFile(
+    new URL("../src/app/api/live/[token]/route.ts", import.meta.url),
+    "utf8",
+  );
+  const unsafePolicies =
+    /(?:unsafe-url|origin-when-cross-origin|no-referrer-when-downgrade)/i;
+  const livePageHeaders = config.match(
+    /source:\s*"\/live\/:path\*"[\s\S]*?headers:\s*\[([\s\S]*?)\]/,
+  )?.[1];
+
+  assert.match(page, /referrer:\s*"no-referrer"/);
+  assert.ok(livePageHeaders);
+  assert.match(livePageHeaders, /Referrer-Policy",\s*value:\s*"no-referrer"/);
+  assert.match(apiRoute, /"Referrer-Policy":\s*"no-referrer"/);
+  assert.match(component, /L\.tileLayer\(LIVE_TILE_URL,\s*\{[^}]*referrerPolicy:\s*"origin"/);
+  assert.doesNotMatch(page, unsafePolicies);
+  assert.doesNotMatch(component, unsafePolicies);
+  assert.doesNotMatch(livePageHeaders, unsafePolicies);
+  assert.doesNotMatch(apiRoute, unsafePolicies);
+});

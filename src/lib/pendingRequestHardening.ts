@@ -3,6 +3,13 @@ export const SETTLEMENT_BLOCKED_STATUSES = [
   "rejected",
 ] as const;
 
+export function buildUnlinkedTripExpiryFilter(
+  status: string,
+  conditions: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return { ...conditions, status, rideId: null };
+}
+
 export function buildPendingRequestExpiryFilter(
   cutoff: Date,
   userId?: string,
@@ -18,10 +25,10 @@ export function buildPendingRequestExpiryFilter(
 export function buildPendingTripExpiryFilter(
   requestIds: readonly unknown[],
 ): Record<string, unknown> {
-  return {
+  return buildUnlinkedTripExpiryFilter("pending_payment", {
     requestId: { $in: requestIds },
-    status: "pending_payment",
-  };
+    paymentStatus: { $in: ["pending", "failed"] },
+  });
 }
 
 export function buildSettlementRequestFilter(

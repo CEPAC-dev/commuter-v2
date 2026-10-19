@@ -39,6 +39,7 @@ const WalletTransactionSchema = new Schema(
         "kashier_payment",
         // Driver penalty for cancelling ride late
         "cancellation_penalty",
+        "debt_repayment",
       ],
     },
     amountEgp: { type: Number, required: true, min: 0.01, max: 1000000000 },

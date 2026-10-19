@@ -33,7 +33,9 @@ test('legacy Request expiry remains limited to unpaid pending-payment records', 
 test('trip expiry filter requires selected parent request ids and pending trip status', () => {
   assert.deepEqual(buildPendingTripExpiryFilter(['request-a', 'request-b']), {
     requestId: { $in: ['request-a', 'request-b'] },
+    paymentStatus: { $in: ['pending', 'failed'] },
     status: 'pending_payment',
+    rideId: null,
   });
 });
 

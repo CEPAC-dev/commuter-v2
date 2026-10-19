@@ -4,6 +4,12 @@ import { WalletTransaction } from "@/models/WalletTransaction";
 import { WithdrawalRequest } from "@/models/WithdrawalRequest";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { getAdminSettings } from "@/lib/cancellationPolicy";
+import {
+  applyEarningWithDebt,
+  buildEarningWalletUpdate,
+  computeWithdrawable,
+} from "@/lib/walletPenalty";
+import { Log } from "@/models/Log";
 import mongoose, { Types, type ClientSession } from "mongoose";
 
 const MAX_WALLET_AMOUNT_EGP = 1_000_000_000;
@@ -260,22 +266,66 @@ export async function creditDriverEarning(
         { session },
       );
 
-      const wallet = await Wallet.findOneAndUpdate(
+      const appliedAt = new Date();
+      const walletBefore = await Wallet.findOneAndUpdate(
         { userId: uid },
-        {
-          $inc: { balanceEgp: amountEgp, totalCreditedEgp: amountEgp },
-          $set: { lastTransactionAt: new Date() },
-        },
-        { returnDocument: "after", upsert: true, session },
+        buildEarningWalletUpdate(uid, amountEgp, appliedAt),
+        { returnDocument: "before", upsert: true, session },
       );
+      const application = applyEarningWithDebt({
+        balanceEgp: walletBefore?.balanceEgp ?? 0,
+        owedEgp: walletBefore?.owedEgp ?? 0,
+        earningEgp: amountEgp,
+      });
 
       const settled = await WalletTransaction.findOneAndUpdate(
         { _id: ledger._id, status: "pending" },
-        { $set: { status: "completed", balanceAfterEgp: wallet.balanceEgp } },
+        {
+          $set: {
+            status: "completed",
+            balanceAfterEgp: application.newBalanceEgp,
+          },
+        },
         { returnDocument: "after", session },
       );
       if (!settled) throw new Error("Earning ledger claim failed");
-      balance = wallet.balanceEgp;
+
+      if (application.repaidEgp > 0) {
+        await WalletTransaction.create(
+          [
+            {
+              userId: uid,
+              type: "debt_repayment",
+              amountEgp: application.repaidEgp,
+              status: "completed",
+              description: "Driver earnings applied to outstanding debt",
+              balanceAfterEgp: application.newBalanceEgp,
+              tripId: tripOid,
+            },
+          ],
+          { session },
+        );
+        await Log.create(
+          [
+            {
+              tripId: tripOid,
+              userId: uid,
+              driverId: uid,
+              status: "completed",
+              action: "driver_earning_debt_repaid",
+              description: "Driver earnings applied to outstanding debt.",
+              actorType: "system",
+              metadata: {
+                earningEgp: amountEgp,
+                repaidEgp: application.repaidEgp,
+                creditedEgp: amountEgp - application.repaidEgp,
+              },
+            },
+          ],
+          { session },
+        );
+      }
+      balance = application.newBalanceEgp;
     });
     return balance;
   } catch (error) {
@@ -734,6 +784,7 @@ export async function reconcileWalletFromLedger(
                                 "payment",
                                 "payment_captured",
                                 "cancellation_penalty",
+                                "debt_repayment",
                               ],
                             ],
                           },
@@ -777,10 +828,7 @@ export async function reconcileWalletFromLedger(
         balanceEgp:
           (totals?.totalCreditedEgp ?? 0) - (totals?.totalDebitedEgp ?? 0),
       };
-      if (
-        expected.balanceEgp < 0 ||
-        expected.reservedBalanceEgp > expected.balanceEgp
-      )
+      if (expected.balanceEgp < 0)
         throw new Error(
           "Wallet ledger invariants are invalid; manual review required.",
         );
@@ -838,7 +886,15 @@ export async function createWithdrawalRequest(
   const limit =
     wallet.withdrawalLimit ?? settings.defaultWithdrawalLimit ?? null;
   const pending = wallet.pendingWithdrawalAmount ?? 0;
-  const withdrawable = Math.max(0, wallet.balanceEgp - reserve - pending);
+  const owed = wallet.owedEgp ?? 0;
+  const withdrawable = Math.max(
+    0,
+    computeWithdrawable({
+      balanceEgp: wallet.balanceEgp,
+      owedEgp: owed,
+      reserveEgp: reserve,
+    }) - pending,
+  );
 
   if (amountEgp <= 0) {
     throw new Error("Enter a valid amount.");
@@ -856,6 +912,7 @@ export async function createWithdrawalRequest(
     {
       userId: uid,
       status: "active",
+      owedEgp: { $in: [0, null] },
       $expr: {
         $gte: [
           {
@@ -922,11 +979,15 @@ export async function approveWithdrawalRequest(
       "Driver balance is no longer sufficient to approve this request.",
     );
   }
+  if ((wallet.owedEgp ?? 0) > 0) {
+    throw new Error("Driver has outstanding wallet debt.");
+  }
 
   const updatedWallet = await Wallet.findOneAndUpdate(
     {
       userId: request.driverId,
       balanceEgp: { $gte: request.amountEgp },
+      owedEgp: { $in: [0, null] },
     },
     {
       $inc: {

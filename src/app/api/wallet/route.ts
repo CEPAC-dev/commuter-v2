@@ -3,7 +3,10 @@ import { getSession } from "@/lib/auth/session";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import { WalletTransaction } from "@/models/WalletTransaction";
 import { reconcileDriverEarnings } from "@/lib/services/tripEarnings";
-import { getAdminSettings } from "@/lib/cancellationPolicy";
+import {
+  computeWithdrawableBalance,
+  getAdminSettings,
+} from "@/lib/cancellationPolicy";
 
 export async function GET() {
   const session = await getSession();
@@ -50,11 +53,17 @@ export async function GET() {
 
   const withdrawableEgp =
     session.role === "driver"
-      ? Math.max(0, wallet.balanceEgp - reserveAmount - pendingWithdrawalAmount)
+      ? computeWithdrawableBalance(
+          wallet.balanceEgp,
+          reserveAmount,
+          pendingWithdrawalAmount,
+          wallet.owedEgp ?? 0,
+        )
       : 0;
 
   return NextResponse.json({
     balanceEgp: wallet.balanceEgp,
+    owedEgp: wallet.owedEgp ?? 0,
     reservedBalanceEgp: wallet.reservedBalanceEgp ?? 0,
     reserveAmount,
     pendingWithdrawalAmount,

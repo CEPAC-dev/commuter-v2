@@ -7,39 +7,39 @@ import { getAdminSettings, getNomatchSweepFilter } from "@/lib/cancellationPolic
 import { logTripNomatch } from "@/lib/services/logActionHelpers";
 import { expireStandaloneTrips } from "@/lib/services/standaloneTripExpiry";
 import {
+  buildUnlinkedTripExpiryFilter,
   buildPendingRequestExpiryFilter,
   buildPendingTripExpiryFilter,
 } from "@/lib/pendingRequestHardening";
-import { isAuthorizedExpiryRequest } from "@/lib/phase8bGuards";
+import { isMatchingEndpointAuthorized, isValidCronSecret } from "@/lib/matchingEndpointGuards";
+import { selectModifiedNomatchTrips } from "@/lib/nomatchLogging";
 import { releasePromoForRequest } from "@/lib/promoCode";
 
 const EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 /**
- * Expires bookings that have been in pending_payment / pending state for
- * more than 2 hours.  Safe to call multiple times (idempotent).
- *
- * Protected by an optional CRON_SECRET env var.
- * Set Authorization: Bearer <CRON_SECRET> when calling from a cron service.
- * Production requests fail closed when CRON_SECRET is missing.
+ * Expires eligible pending bookings and unmatched Trips.
+ * Scheduler requests must send the x-cron-secret header.
  */
 export async function POST(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get("authorization") ?? "";
-  if (!isAuthorizedExpiryRequest(secret, process.env.NODE_ENV === "production", auth)) {
+  if (
+    process.env.NODE_ENV === "production" &&
+    !isValidCronSecret(secret, secret)
+  ) {
     return NextResponse.json(
-      {
-        error: secret
-          ? "Unauthorized"
-          : "CRON_SECRET is required in production.",
-      },
-      { status: secret ? 401 : 500 },
+      { error: "CRON_SECRET must be configured with at least 32 characters." },
+      { status: 500 },
     );
   }
-  if (secret) {
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (
+    !isMatchingEndpointAuthorized({
+      isAdmin: false,
+      configuredCronSecret: secret,
+      providedCronSecret: req.headers.get("x-cron-secret") ?? undefined,
+    })
+  ) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   await connectDB();
@@ -87,20 +87,28 @@ export async function POST(req: NextRequest) {
   // Auto-mark unmatched "submitted" trips as "nomatch" past the admin-configured cutoff.
   const settings = await getAdminSettings();
   const nomatchOr = getNomatchSweepFilter(new Date(), settings.nomatchCutoffTime);
-  const nomatchCandidates = await Trip.find({
-    status: "submitted",
+  const nomatchFilter = buildUnlinkedTripExpiryFilter("submitted", {
     $or: nomatchOr,
-  }).select("_id userId");
-
-  if (nomatchCandidates.length > 0) {
-    await Trip.updateMany(
-      { _id: { $in: nomatchCandidates.map((t) => t._id) } },
-      { $set: { status: "nomatch" } },
-    );
-    await Promise.all(
-      nomatchCandidates.map((t) => logTripNomatch(t._id, t.userId)),
-    );
-  }
+  });
+  const nomatchCandidates = await Trip.find(nomatchFilter)
+    .select("_id userId")
+    .lean<{ _id: Types.ObjectId; userId: Types.ObjectId }[]>();
+  const nomatchUpdates = await Promise.all(
+    nomatchCandidates.map(async (trip) => {
+      const result = await Trip.updateOne(
+        { _id: trip._id, ...nomatchFilter },
+        { $set: { status: "nomatch" } },
+      );
+      return result.modifiedCount === 1 ? String(trip._id) : null;
+    }),
+  );
+  const transitionedTrips = selectModifiedNomatchTrips(
+    nomatchCandidates,
+    nomatchUpdates.filter((tripId): tripId is string => tripId !== null),
+  );
+  await Promise.all(
+    transitionedTrips.map((trip) => logTripNomatch(trip._id, trip.userId)),
+  );
 
   return NextResponse.json({
     expiredRequests,
@@ -109,9 +117,10 @@ export async function POST(req: NextRequest) {
     cancelledStandalonePayments: standaloneExpiry.cancelledPayments,
     releasedStandaloneWalletReservations:
       standaloneExpiry.releasedWalletReservations,
-    nomatchedTrips: nomatchCandidates.length,
+    nomatchedTrips: transitionedTrips.length,
   });
 }
 
-// Allow Vercel Cron to call via GET as well
-export const GET = POST;
+export async function GET() {
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}

@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import { REGION_LIST, type RegionCode } from "@/lib/config/regions";
-import type { VehicleRegionConfig } from "@/lib/config/vehicles";
+import {
+  getVehiclePassengerCapacity,
+  VEHICLES,
+  type VehicleRegionConfig,
+} from "@/lib/config/vehicles";
 
 type Vehicle = { key: string; label: string; ride: "private" | "shared"; regionConfigs: VehicleRegionConfig[] };
 type VehicleResponse = Vehicle & Partial<Omit<VehicleRegionConfig, "regionCode">> & { regionCodes?: string[]; regionConfigs?: VehicleRegionConfig[] };
@@ -31,7 +35,21 @@ function normalizeVehicle(vehicle: VehicleResponse): Vehicle {
         trip_type: vehicle.trip_type ?? 0,
         sortOrder: vehicle.sortOrder ?? 0,
       }));
-  return { key: vehicle.key, label: vehicle.label, ride: vehicle.ride, regionConfigs: regionConfigs.map((config) => ({ ...config, active: config.active !== false })) };
+  const fixedCapacity = VEHICLES[vehicle.key]
+    ? getVehiclePassengerCapacity(vehicle.key)
+    : undefined;
+  return {
+    key: vehicle.key,
+    label: vehicle.label,
+    ride: vehicle.ride,
+    regionConfigs: regionConfigs.map((config) => ({
+      ...config,
+      ...(fixedCapacity !== undefined
+        ? { capacity: fixedCapacity, occupancy: fixedCapacity }
+        : {}),
+      active: config.active !== false,
+    })),
+  };
 }
 
 export default function VehiclesManager() {
@@ -64,7 +82,31 @@ export default function VehiclesManager() {
     });
   }
   function updateConfig(regionCode: string, field: (typeof numeric)[number], value: number) {
-    setDraft((current) => current ? { ...current, regionConfigs: current.regionConfigs.map((config) => config.regionCode === regionCode ? { ...config, [field]: value } : config) } : current);
+    setDraft((current) => {
+      if (!current) return current;
+      const fixedCapacity = VEHICLES[current.key]
+        ? getVehiclePassengerCapacity(current.key)
+        : undefined;
+      return {
+        ...current,
+        regionConfigs: current.regionConfigs.map((config) =>
+          config.regionCode === regionCode
+            ? {
+                ...config,
+                [field]:
+                  fixedCapacity !== undefined &&
+                  (field === "capacity" || field === "occupancy")
+                    ? fixedCapacity
+                    : value,
+                ...(fixedCapacity !== undefined &&
+                (field === "capacity" || field === "occupancy")
+                  ? { capacity: fixedCapacity, occupancy: fixedCapacity }
+                  : {}),
+              }
+            : config,
+        ),
+      };
+    });
   }
   function setRegionActive(regionCode: string, active: boolean) {
     setDraft((current) => current ? { ...current, regionConfigs: current.regionConfigs.map((config) => config.regionCode === regionCode ? { ...config, active } : config) } : current);
@@ -98,7 +140,7 @@ export default function VehiclesManager() {
     {draft ? <section className="vehicles-editor" aria-labelledby="vehicle-editor-title"><header><div><p className="vehicles-kicker">Vehicle configuration</p><h2 id="vehicle-editor-title">{title}</h2><p>Selected regions define where this vehicle exists. Each region can be enabled independently.</p></div></header>
       <div className="vehicles-core"><EditorField label="Key" hint="Stable API identifier"><input disabled={editing} value={draft.key} placeholder="e.g. executive_suv" onChange={(event) => setDraftValue("key", event.target.value)} /></EditorField><EditorField label="Display name"><input value={draft.label} placeholder="e.g. Executive SUV" onChange={(event) => setDraftValue("label", event.target.value)} /></EditorField><EditorField label="Ride model"><select value={draft.ride} onChange={(event) => setDraftValue("ride", event.target.value as Vehicle["ride"])}><option value="private">Private</option><option value="shared">Shared</option></select></EditorField></div>
       <div className="vehicles-region-picker"><div><h3>Available regions</h3><p>Select every market where this vehicle can be booked.</p></div><div className="vehicles-region-options">{REGION_LIST.map((region) => { const selected = draft.regionConfigs.some((config) => config.regionCode === region.code); return <button type="button" key={region.code} onClick={() => toggleRegion(region.code)} className={`vehicles-region-option ${selected ? "selected" : ""}`} aria-pressed={selected}><span className="vehicles-check">{selected ? <Check size={14} /> : null}</span><span><strong>{region.label}</strong><small>{region.currency.code}</small></span></button>; })}</div></div>
-      <div className="vehicles-region-configs">{draft.regionConfigs.length === 0 ? <p className="vehicles-empty">Select one or more regions to configure availability.</p> : draft.regionConfigs.map((config) => { const region = REGION_LIST.find((item) => item.code === config.regionCode)!; return <details key={config.regionCode} open className={`vehicles-region-card ${config.active ? "" : "is-inactive"}`}><summary><span><strong>{region.label}</strong><small>{region.currency.code} · {region.currency.locale}</small></span><span className="vehicles-region-summary-actions" onClick={(event) => event.stopPropagation()}><label className="vehicles-switch"><input type="checkbox" checked={config.active} onChange={(event) => setRegionActive(config.regionCode, event.target.checked)} /><span>{config.active ? "Active" : "Inactive"}</span></label><ChevronDown size={18} /></span></summary><div className="vehicles-region-fields">{numeric.map((field) => <EditorField key={field} label={labels[field]} hint={field === "rate" || field === "additional_rate" || field === "minimum_charge" ? region.currency.code : undefined}><input type="number" min="0" step="any" value={config[field]} onChange={(event) => updateConfig(config.regionCode, field, Number(event.target.value))} /></EditorField>)}</div></details>; })}</div>
+      <div className="vehicles-region-configs">{draft.regionConfigs.length === 0 ? <p className="vehicles-empty">Select one or more regions to configure availability.</p> : draft.regionConfigs.map((config) => { const region = REGION_LIST.find((item) => item.code === config.regionCode)!; const fixedCapacity = Boolean(VEHICLES[draft.key]); return <details key={config.regionCode} open className={`vehicles-region-card ${config.active ? "" : "is-inactive"}`}><summary><span><strong>{region.label}</strong><small>{region.currency.code} · {region.currency.locale}</small></span><span className="vehicles-region-summary-actions" onClick={(event) => event.stopPropagation()}><label className="vehicles-switch"><input type="checkbox" checked={config.active} onChange={(event) => setRegionActive(config.regionCode, event.target.checked)} /><span>{config.active ? "Active" : "Inactive"}</span></label><ChevronDown size={18} /></span></summary><div className="vehicles-region-fields">{numeric.map((field) => <EditorField key={field} label={labels[field]} hint={field === "rate" || field === "additional_rate" || field === "minimum_charge" ? region.currency.code : fixedCapacity && (field === "capacity" || field === "occupancy") ? "Fixed by vehicle type" : undefined}><input type="number" min="0" step="any" value={config[field]} disabled={fixedCapacity && (field === "capacity" || field === "occupancy")} onChange={(event) => updateConfig(config.regionCode, field, Number(event.target.value))} /></EditorField>)}</div></details>; })}</div>
       <footer><button type="button" disabled={busy || draft.regionConfigs.length === 0} onClick={() => void save()} className="vehicles-primary">{busy ? "Saving…" : "Save vehicle"}</button><button type="button" disabled={busy} onClick={() => setDraft(null)} className="vehicles-secondary">Cancel</button></footer></section> : null}
     {deleteKey ? <section role="dialog" aria-modal="true" className="vehicles-dialog"><h2>Delete {deleteKey}?</h2><p>Permanent. Existing trips retain their stored vehicle key.</p><EditorField label="Admin password"><input autoFocus type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></EditorField><div><button type="button" disabled={busy || !password} className="vehicles-danger" onClick={() => void remove()}>Delete permanently</button><button type="button" className="vehicles-secondary" disabled={busy} onClick={() => { setDeleteKey(null); setPassword(""); }}>Cancel</button></div></section> : null}
     <style>{styles}</style>

@@ -153,6 +153,8 @@ export function getDisplayStatus({
           ...refundOptions,
           canRate: true,
         });
+      case "no_show":
+        return result("status.no_show", "danger", refundOptions);
       case "nomatch":
         return result("status.no_ride_found", "danger", {
           ...refundOptions,
@@ -264,6 +266,8 @@ export function getDisplayStatus({
       return result("status.in_progress", "success", { ...refundOptions, canCancel: true });
     case "completed":
       return result("status.completed", "success", { ...refundOptions, canRate: true });
+    case "no_show":
+      return result("status.no_show", "danger", refundOptions);
     case "nomatch":
       return result("status.no_ride_found", "danger", refundOptions);
     case "cancelled":

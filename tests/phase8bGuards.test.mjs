@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const {
-  isAuthorizedExpiryRequest,
   isTransientBookingConflict,
   latePaymentDedupeKey,
   safeKashierErrorFields,
   spacingLockUpsertFields,
 } = await import("../src/lib/phase8bGuards.ts");
+const { isMatchingEndpointAuthorized, isValidCronSecret } = await import(
+  "../src/lib/matchingEndpointGuards.ts"
+);
 const {
   canContinueStandaloneTripPayment,
   formatKashierAmount,
@@ -424,20 +426,25 @@ test("late success for every dead Trip status alerts once without changing money
   }
 });
 
-test("expiry authorization fails closed in production but keeps Bearer auth", async () => {
-  assert.equal(isAuthorizedExpiryRequest(undefined, true, ""), false);
-  assert.equal(isAuthorizedExpiryRequest(undefined, false, ""), true);
-  assert.equal(isAuthorizedExpiryRequest("secret", true, "Bearer secret"), true);
-  assert.equal(isAuthorizedExpiryRequest("secret", true, "secret"), false);
+test("expiry authorization requires a strong x-cron-secret", async () => {
+  const secret = "a".repeat(32);
+  assert.equal(isValidCronSecret(undefined, secret), false);
+  assert.equal(isValidCronSecret("short", "short"), false);
+  assert.equal(isValidCronSecret(secret, secret), true);
+  assert.equal(isValidCronSecret(secret, "b".repeat(32)), false);
+  assert.equal(isMatchingEndpointAuthorized({ isAdmin: false }), false);
 
   const route = await readFile(
     new URL("../src/app/api/trips/expire/route.ts", import.meta.url),
     "utf8",
   );
   assert.ok(
-    route.indexOf("isAuthorizedExpiryRequest") < route.indexOf("await connectDB()"),
+    route.indexOf("isMatchingEndpointAuthorized") <
+      route.indexOf("await connectDB()"),
   );
-  assert.match(route, /if \(auth !== `Bearer \$\{secret\}`\)/);
+  assert.match(route, /headers\.get\("x-cron-secret"\)/);
+  assert.match(route, /export async function GET[\s\S]*status: 405/);
+  assert.doesNotMatch(route, /export const GET = POST/);
 });
 
 test("Kashier log projection excludes raw response/session/card fields", async () => {

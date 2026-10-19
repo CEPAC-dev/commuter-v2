@@ -4,6 +4,7 @@ import { Availability } from "@/models/Availability";
 import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 import { adminAuth } from "@/lib/middleware/adminAuth";
+import { buildEligibleMatchTripFilter } from "@/lib/matchingEndpointGuards";
 
 export async function GET(req: NextRequest) {
   const auth = await adminAuth();
@@ -21,18 +22,18 @@ export async function GET(req: NextRequest) {
         .select("_id name phone email")
         .sort({ name: 1 })
         .lean(),
-      Trip.find({
-        status: { $in: ["submitted", "pending_payment", "matched"] },
-        paymentStatus: "paid",
-      })
+      Trip.find(buildEligibleMatchTripFilter())
         .select(
-          "_id tripNumber date pickupTime arrivalTime pickup dropoff vehicleType rideType priceEgp numberOfPassengers userId",
+          "_id tripNumber date pickupTime arrivalTime pickup dropoff vehicleType rideType priceEgp numberOfPassengers extraPassengers userId",
         )
         .sort({ date: 1, pickupTime: 1 })
         .lean(),
     ]);
 
-    return NextResponse.json({ data: { availabilities, drivers, trips } });
+    return NextResponse.json(
+      { data: { availabilities, drivers, trips } },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (error) {
     const message =
       error instanceof Error

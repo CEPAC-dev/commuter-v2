@@ -1,6 +1,7 @@
 import { connectDB } from "@/lib/db/mongoose";
 import { AdminSettings } from "@/models/AdminSettings";
 import { getCairoNowParts } from "./time/cairoTime";
+import { computeWithdrawable } from "@/lib/walletPenalty";
 
 export { getCairoNowParts } from "./time/cairoTime";
 
@@ -183,6 +184,11 @@ export function computeWithdrawableBalance(
   balanceEgp: number,
   reserveAmount: number = 200,
   pendingWithdrawalAmount: number = 0,
+  owedEgp: number = 0,
 ): number {
-  return Math.max(0, balanceEgp - reserveAmount - pendingWithdrawalAmount);
+  return Math.max(
+    0,
+    computeWithdrawable({ balanceEgp, owedEgp, reserveEgp: reserveAmount }) -
+      pendingWithdrawalAmount,
+  );
 }

@@ -307,6 +307,7 @@ export default function LiveLocationViewer({
         L.tileLayer(LIVE_TILE_URL, {
           attribution: MAP_COLORS.tileAttribution,
           maxZoom: 19,
+          referrerPolicy: "origin",
         }).addTo(map);
         map.on("dragstart", () => {
           userPannedRef.current = true;

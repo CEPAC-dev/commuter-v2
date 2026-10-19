@@ -17,7 +17,6 @@ import {
   type WaitingListRequestRecord,
   type WaitingListTripRecord,
 } from "@/lib/admin/waitingList";
-
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {

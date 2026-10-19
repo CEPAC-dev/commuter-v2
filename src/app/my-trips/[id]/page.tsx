@@ -6,6 +6,7 @@ import {
   Clock,
   Users,
   Star,
+  Armchair,
   CreditCard,
   Wallet,
 } from "lucide-react";
@@ -20,10 +21,12 @@ import PrivateRideDetails from "@/components/trips/PrivateRideDetails";
 import SharedRideDetails from "@/components/trips/SharedRideDetails";
 import RateTripModal from "@/components/trips/RateTripModal";
 import CancelTripModal from "@/components/trips/CancelTripModal";
+import NoShowReviewNotice from "@/components/trips/NoShowReviewNotice";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 import LiveShareControl from "@/components/trips/LiveShareControl";
+import PickupPinCard from "@/components/trips/PickupPinCard";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
 import { getSharedRideStep } from "@/lib/sharedRideStepper.ts";
@@ -193,10 +196,46 @@ export default async function TripDetailPage({
 
   if (!trip) notFound();
 
+  // ── Per-User Route Slicing (U3-UI) ────────────────────────────────────────────
+  // Passengers see only their portion of the route (pickup → dropoff with deviations).
+  // Drivers see the complete route serving all passengers.
+  const { getPassengerRouteCoordinates } = await import("@/lib/routeSlicing");
+
+  let slicedRouteCoordinates: { lat: number; lng: number }[] | null = null;
+
+  if (!isDriver && trip.rideDetails?.route && trip.rideDetails.route.length > 0) {
+    const rideRoute = trip.rideDetails.route;
+    const fullRouteCoords = trip.rideDetails.routeCoordinates;
+    if (fullRouteCoords && fullRouteCoords.length > 1) {
+      slicedRouteCoordinates = getPassengerRouteCoordinates({
+        route: fullRouteCoords,
+        stops: rideRoute,
+        pickup: trip.pickupStation?.name ?? trip.pickup,
+        dropoff: trip.dropoffStation?.name ?? trip.dropoff,
+      });
+    }
+  }
+  // ── End Route Slicing ──────────────────────────────────────────────────────────
+
   const otherTrips = trip.otherTrips ?? [];
   const vLabel = translate(locale, `vehicles.${trip.vehicleType}`);
   const paymentStatus = (trip.paymentStatus as PaymentStatus) ?? "pending";
   const status = (trip.status as TripStatus) ?? "pending_payment";
+  const ridePassenger = trip.rideDetails?.passengers?.find(
+    (passenger) => String(passenger.tripId) === String(trip.id),
+  );
+  const assignedSeats =
+    ridePassenger?.seatNumbers && ridePassenger.seatNumbers.length > 0
+      ? ridePassenger.seatNumbers
+      : trip.seatNumbers && trip.seatNumbers.length > 0
+        ? trip.seatNumbers
+        : [1];
+  const showAssignedSeatBadge =
+    !isDriver &&
+    Boolean(trip.rideDetails) &&
+    trip.rideType === "shared" &&
+    ["confirmed", "active", "completed"].includes(status) &&
+    assignedSeats.length > 0;
   const parentPaymentStatus = trip.parentPaymentStatus ?? paymentStatus;
   const displayStatus = getDisplayStatus({
     request: {
@@ -358,6 +397,22 @@ export default async function TripDetailPage({
         .trip-summary-card { display: grid; gap: var(--space-12); }
         .trip-summary-label { margin: 0; color: #526262; font-size: 11px; font-weight: 800; text-transform: uppercase; }
         .trip-summary-price { margin: 0; color: #0B1E3D; font-size: 24px; font-weight: 800; }
+        .trip-seat-badge {
+          box-sizing: border-box;
+          width: 100%;
+          background: #E8F8F5;
+          border: 1px solid #B2D4D0;
+          border-radius: 12px;
+          padding: 14px 16px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          color: #006D60;
+          margin-bottom: 16px;
+          text-align: start;
+        }
+        .trip-seat-badge strong { font-size: 15px; font-weight: 700; color: #006D60; display: block; }
+        .trip-seat-badge span { font-size: 13px; color: #5A6A7A; display: block; margin-top: 2px; }
         .trip-route-timeline { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; }
         .trip-route-rail { display: flex; flex-direction: column; align-items: center; padding: 4px 0; }
         .trip-route-point { width: 10px; height: 10px; flex: 0 0 10px; border: 2px solid #007A6A; border-radius: 50%; background: #fff; }
@@ -534,10 +589,13 @@ export default async function TripDetailPage({
                       )
                     : undefined
                 }
+                routeCoordinates={slicedRouteCoordinates ?? undefined}
                 height={280}
                 interactive
               />
             </div>
+
+            {!isDriver && <PickupPinCard tripId={trip.id} />}
 
             <section className="trip-route-card" aria-labelledby="trip-route-title">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
@@ -624,39 +682,63 @@ export default async function TripDetailPage({
               </details>
             )}
 
-            {/* Visual 2D Seating Map for Passenger */}
-            {isOngoing &&
-              (() => {
-                const passengerInRide = trip.rideDetails?.passengers?.find(
-                  (p) => String(p.tripId) === String(trip.id),
-                );
-                const mySeats =
-                  passengerInRide?.seatNumbers &&
-                  passengerInRide.seatNumbers.length > 0
-                    ? passengerInRide.seatNumbers
-                    : trip.seatNumbers && trip.seatNumbers.length > 0
-                      ? trip.seatNumbers
-                      : [1];
-
-                return (
-                  <VehicleSeatMap
-                    ride={trip.rideDetails}
-                    vehicleType={trip.vehicleType}
-                    assignedSeatNumbers={mySeats}
-                    isDriver={isDriver}
-                  />
-                );
-              })()}
+            {/* Assigned seat badge and visual 2D seating map for passengers */}
+            {showAssignedSeatBadge && (
+              <div className="trip-seat-badge">
+                <Armchair size={20} color="#006D60" aria-hidden="true" />
+                <div>
+                  <strong>
+                    {translate(
+                      locale,
+                      assignedSeats.length > 1
+                        ? "my_trips.your_seats"
+                        : "my_trips.your_seat",
+                    )}
+                    : {assignedSeats.join(", ")}
+                  </strong>
+                  <span>{translate(locale, "my_trips.find_seat_in_map")}</span>
+                </div>
+              </div>
+            )}
+            {(isOngoing ||
+              (!isDriver &&
+                status === "completed" &&
+                trip.rideType === "shared")) && (
+              <VehicleSeatMap
+                ride={trip.rideDetails}
+                vehicleType={trip.vehicleType}
+                assignedSeatNumbers={assignedSeats}
+                isDriver={isDriver}
+              />
+            )}
 
             {!isDriver && trip.rideType === "private" && trip.assignedDriver && (
               <DriverCard
                 driver={{ ...trip.assignedDriver, rating: trip.rating }}
-                showCall={isOngoing && Boolean(trip.assignedDriver.phone)}
+                showCall={false}
               />
             )}
-            {isOngoing && Boolean(trip.assignedDriver || trip.rideId) && (
-              <TripChat tripId={id} role={isDriver ? "driver" : "user"} />
+            {!isDriver && trip.assignedDriver?.phone && isOngoing && (
+              <a
+                href={`tel:${trip.assignedDriver.phone}`}
+                aria-label={`${translate(locale, "my_trips.call_driver")} ${trip.assignedDriver.name ?? ""}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "12px 16px",
+                  borderRadius: 12,
+                  background: "#E2F8F5",
+                  color: "#006D60",
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                <span>{translate(locale, "my_trips.call_driver")}</span>
+                <span dir="ltr">{trip.assignedDriver.phone}</span>
+              </a>
             )}
+            {!isDriver && <TripChat tripId={id} role="user" />}
           </div>
 
           {/* Secondary Column: Breakdown, Passenger stops & timestamp */}
@@ -685,6 +767,14 @@ export default async function TripDetailPage({
                   )}
                 </div>
               </div>
+
+              {!isDriver && status === "no_show" && (
+                <NoShowReviewNotice
+                  tripId={trip.id}
+                  paymentStatus={trip.paymentStatus}
+                  requestedAt={trip.noShowReviewRequestedAt}
+                />
+              )}
 
               <div>
                 <p className="trip-summary-label">{translate(locale, "trip_detail.trip_price")}</p>

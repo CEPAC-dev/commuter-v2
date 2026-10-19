@@ -24,7 +24,10 @@ export async function GET(
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ trip });
+  return NextResponse.json(
+    { trip },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }
 
 export async function DELETE(

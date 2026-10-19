@@ -19,9 +19,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
   if (!auth.authorized) return auth.response;
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
-  const parsed = cleanVehicle(body as Record<string, unknown>, true);
-  if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const { key } = await params;
+  const parsed = cleanVehicle(body as Record<string, unknown>, true, key);
+  if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const vehicle = await Vehicle.findOneAndUpdate({ key }, parsed.update, { returnDocument: "after", runValidators: true });
   if (!vehicle) return NextResponse.json({ error: "Vehicle not found." }, { status: 404 });
   invalidateVehiclesCache();

@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { computeWithdrawable } from "../src/lib/walletPenalty.ts";
 
 // Simulated policy calculation matching src/lib/cancellationPolicy.ts
-function computeWithdrawableBalance(balanceEgp, reserveAmount = 200, pendingWithdrawalAmount = 0) {
-  return Math.max(0, balanceEgp - reserveAmount - pendingWithdrawalAmount);
+function computeWithdrawableBalance(balanceEgp, reserveAmount = 200, pendingWithdrawalAmount = 0, owedEgp = 0) {
+  return Math.max(
+    0,
+    computeWithdrawable({ balanceEgp, owedEgp, reserveEgp: reserveAmount }) -
+      pendingWithdrawalAmount
+  );
 }
 
 // Simulated request validation matching src/lib/wallet/wallet.ts createWithdrawalRequest
@@ -10,7 +15,7 @@ function validateWithdrawalRequest(wallet, adminSettings, amountEgp) {
   const reserve = wallet.reserveAmount ?? adminSettings.walletReserveAmount ?? 200;
   const limit = wallet.withdrawalLimit ?? adminSettings.defaultWithdrawalLimit ?? null;
   const pending = wallet.pendingWithdrawalAmount ?? 0;
-  const withdrawable = computeWithdrawableBalance(wallet.balanceEgp, reserve, pending);
+  const withdrawable = computeWithdrawableBalance(wallet.balanceEgp, reserve, pending, wallet.owedEgp ?? 0);
 
   if (amountEgp <= 0) {
     throw new Error("Enter a valid amount.");
@@ -123,6 +128,27 @@ console.log("--- STARTING WALLET RESERVE & WITHDRAWAL LIMIT TESTS ---");
   // When defaultWithdrawalLimit is null, driver can withdraw full withdrawable balance (2800 EGP)
   assert.equal(validateWithdrawalRequest(wallet, adminSettings, 2800).limit, null);
   console.log("PASS Test 5: Null defaultWithdrawalLimit treats withdrawal limit as unlimited.");
+}
+
+// --- TEST CASE 6: Outstanding debt blocks withdrawal even above the reserve ---
+{
+  const wallet = { balanceEgp: 1000, owedEgp: 10, reserveAmount: 200, pendingWithdrawalAmount: 0, withdrawalLimit: undefined };
+  const adminSettings = { walletReserveAmount: 200, defaultWithdrawalLimit: null };
+
+  assert.equal(
+    computeWithdrawableBalance(
+      wallet.balanceEgp,
+      wallet.reserveAmount ?? adminSettings.walletReserveAmount,
+      wallet.pendingWithdrawalAmount,
+      wallet.owedEgp,
+    ),
+    0,
+  );
+  assert.throws(
+    () => validateWithdrawalRequest(wallet, adminSettings, 1),
+    (err) => err.message.includes("Amount exceeds your withdrawable balance"),
+  );
+  console.log("PASS Test 6: Outstanding debt blocks withdrawal regardless of balance.");
 }
 
 console.log("--- ALL TESTS PASSED SUCCESSFULLY! ---");

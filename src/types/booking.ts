@@ -34,6 +34,7 @@ export type TripStatus =
   | "confirmed"
   | "active"
   | "completed"
+  | "no_show"
   | "refunded"
   | "cancelled"
   | "time_out";
@@ -57,9 +58,12 @@ export interface RidePassengerRow {
   numberOfPassengers: number;
   tripCost: number;
   status: string;
+  passengerNumber: number;
   pickupStation?: StationSelection | null;
   dropoffStation?: StationSelection | null;
   seatNumbers?: number[];
+  arrivedAt?: string | null;
+  noShowAt?: string | null;
   passengerName?: string;
 }
 
@@ -103,7 +107,10 @@ export interface RideDetailView
   extends Omit<RideListRow, "passengers" | "route"> {
   passengers: RidePassengerDetail[];
   route: RideRouteStopDetail[];
+  routeCoordinates?: LatLng[];
   chatTripId: string | null;
+  hasOpenIncident: boolean;
+  noShowMinWaitMinutes: number;
   driverOrigin?: GeoPoint | null;
   driverDestination?: GeoPoint | null;
 }

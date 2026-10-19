@@ -124,6 +124,7 @@ test("standalone Trip statuses map directly to passenger tabs", () => {
     time_out: "history",
     cancelled: "history",
     completed: "history",
+    no_show: "history",
     refunded: "history",
   };
   for (const [status, tab] of Object.entries(expected)) {
@@ -142,6 +143,18 @@ test("standalone Trip statuses map directly to passenger tabs", () => {
       status,
     );
   }
+});
+
+test("no-show Trip is terminal history with a clear display label", () => {
+  const trip = {
+    isStandalone: true,
+    status: "no_show",
+    paymentStatus: "paid",
+    date: "2026-10-02",
+    pickupTime: "09:00",
+  };
+  assert.equal(getTripTab({ trip, now }), "history");
+  assert.equal(getDisplayStatus({ trip }).key, "status.no_show");
 });
 
 test("standalone approved unpaid trips stay pending even after pickup time", () => {

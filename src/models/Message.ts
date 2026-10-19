@@ -10,7 +10,14 @@ const MessageSchema = new Schema(
       enum: ["user", "driver"],
       default: "user",
     },
-    text: { type: String, required: true, trim: true, maxlength: 2000 },
+    kind: {
+      type: String,
+      required: true,
+      enum: ["text", "preset"],
+      default: "text",
+    },
+    presetKey: { type: String, required: false, trim: true },
+    text: { type: String, required: false, trim: true, maxlength: 500 },
   },
   { timestamps: true }, // createdAt, updatedAt
 );

@@ -1,4 +1,5 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
+import mongoose, { Types } from "mongoose";
 import ExcelJS from "exceljs";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
@@ -9,7 +10,17 @@ import { Ride } from "@/models/Ride";
 import { User } from "@/models/User";
 import { getDriverSummaryByUserNumber } from "@/lib/services/trips";
 import { createRide } from "@/lib/services/rideService";
+import {
+  getTripPassengerCount,
+  isRideWithinCapacity,
+} from "@/lib/rideCapacity";
+import { countRidePassengers } from "@/lib/ridePassengerCount";
 import { adminAuth } from "@/lib/middleware/adminAuth";
+import {
+  evaluateTripClaim,
+  isTripClaimTransactionConflict,
+  TripClaimConflictError,
+} from "@/lib/matchingEndpointGuards";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -426,6 +437,8 @@ type TripRecord = {
   pickup?: { address?: string; lat?: number; lng?: number } | null;
   dropoff?: { address?: string; lat?: number; lng?: number } | null;
   numberOfPassengers?: number;
+  extraPassengers?: number;
+  vehicleType?: string;
   summary?: Record<string, unknown> | null;
   details?: Record<string, unknown> | null;
 };
@@ -641,6 +654,7 @@ async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
     getWorksheetByName(workbook, ["Stops", "Stop"]) ?? detailsSheet,
   );
   const imported: string[] = [];
+  let skippedGroups = 0;
 
   for (const [matchKey, rows] of detailsByKey) {
     const summary = summaries.get(matchKey) ?? {
@@ -727,23 +741,43 @@ async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
         dropoff: trip.dropoff,
         pickupOrder: pickupOrder.get(number) ?? 0,
         dropoffOrder: dropoffOrder.get(number) ?? 0,
-        numberOfPassengers: trip.numberOfPassengers ?? 1,
+        numberOfPassengers: getTripPassengerCount(
+          summary.vehicleType,
+          trip.numberOfPassengers ?? 1,
+          trip.extraPassengers ?? 0,
+        ),
         tripCost: trip.priceEgp ?? 0,
         seatNumbers: trip.seatNumbers ?? [],
       };
     });
 
-    const ride = await createRide({
-      availabilityId: null,
-      driverId: null,
-      date,
-      vehicleType: summary.vehicleType,
-      rideType: summary.rideType,
-      startTime,
-      endTime,
-      passengers,
-      route,
-    });
+    if (
+      !isRideWithinCapacity(
+        summary.vehicleType,
+        passengers.map((passenger) => passenger.numberOfPassengers),
+      )
+    ) {
+      continue;
+    }
+
+    let ride;
+    try {
+      ride = await createRide({
+        availabilityId: null,
+        driverId: null,
+        date,
+        vehicleType: summary.vehicleType,
+        rideType: summary.rideType,
+        startTime,
+        endTime,
+        passengers,
+        route,
+      });
+    } catch (error) {
+      if (!(error instanceof TripClaimConflictError)) throw error;
+      skippedGroups += 1;
+      continue;
+    }
     await Ride.updateOne(
       { _id: ride._id },
       { $set: { totalCost: summary.totalCost || ride.totalCost, additionalFees: summary.additionalFees, kmRate: summary.kmRate, hrRate: summary.hrRate } },
@@ -751,7 +785,7 @@ async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
     imported.push(String(ride._id));
   }
 
-  return imported;
+  return { imported, skippedGroups };
 }
 
 export async function POST(req: NextRequest) {
@@ -776,12 +810,22 @@ export async function POST(req: NextRequest) {
 
     const newMatchImport = await importNewMatchWorkbook(workbook);
     if (newMatchImport) {
-      return NextResponse.json({
-        ok: true,
-        updatedCount: newMatchImport.length,
-        rideIds: newMatchImport,
-        message: "Matched rides were imported and broadcast to eligible drivers.",
-      });
+      return NextResponse.json(
+        {
+          ok: true,
+          updatedCount: newMatchImport.imported.length,
+          skippedGroups: newMatchImport.skippedGroups,
+          rideIds: newMatchImport.imported,
+          message: "Matched rides were imported; ineligible groups were skipped.",
+        },
+        {
+          status:
+            newMatchImport.imported.length === 0 &&
+            newMatchImport.skippedGroups > 0
+              ? 409
+              : 200,
+        },
+      );
     }
 
     const tripsSummarySheet = getWorksheetByName(workbook, [
@@ -835,13 +879,8 @@ export async function POST(req: NextRequest) {
       (row) => row.number > summaryHeaderRow.number,
     );
     const updatedTripIds: string[] = [];
+    let skippedGroups = 0;
     const summaryByTripNumber = new Map<string, Record<string, unknown>>();
-
-    console.log("[addMatchedData] summary header", {
-      rowNumber: summaryHeaderRow.number,
-      headers: Array.from(summaryIndexes.entries()),
-      dataRowNumbers: summaryRows.map((row) => row.number),
-    });
 
     for (const row of summaryRows) {
       if (!row) continue;
@@ -1076,26 +1115,6 @@ export async function POST(req: NextRequest) {
         arrival: normalizeTimeValue(arrivalValue),
       };
 
-      console.log("[addMatchedData] summary row", {
-        rowNumber: row.number,
-        tripNumber,
-        values: {
-          totalFeesValue,
-          additionalFeesValue,
-          kmRateValue,
-          hrRateValue,
-          totalPersonsValue,
-          totalDistanceValue,
-          numberOfTripsValue,
-          maxLoadValue,
-          numberOfStopsValue,
-          boardingValue,
-          alightingValue,
-        },
-        rideSummary,
-        foundTrip: Boolean(trip),
-      });
-
       summaryByTripNumber.set(String(tripNumber), rideSummary);
       if (trip) {
         await Trip.collection.updateOne(
@@ -1121,12 +1140,6 @@ export async function POST(req: NextRequest) {
       const detailsRows = getSheetRows(tripsDetailsSheet).filter(
         (row) => row.number > detailsHeaderRow.number,
       );
-      console.log("[addMatchedData] details header", {
-        rowNumber: detailsHeaderRow.number,
-        stopColumnIndexes,
-        dataRowNumbers: detailsRows.map((row) => row.number),
-      });
-
       for (const row of detailsRows) {
         if (!row) continue;
 
@@ -1140,10 +1153,6 @@ export async function POST(req: NextRequest) {
           availabilityNumber,
         );
         if (!availability) {
-          console.log("[addMatchedData] no availability for row", {
-            rowNumber: row.number,
-            availabilityNumber,
-          });
           continue;
         }
 
@@ -1210,7 +1219,6 @@ export async function POST(req: NextRequest) {
           );
           const alightingCell = getCellText(row.getCell(stopCol + 2));
           const boardingCell = getCellText(row.getCell(stopCol + 3));
-          console.log({ boardingCell });
           const waitingMinutes = parseWaitingMinutes(
             getCellText(row.getCell(stopCol + 4)),
           );
@@ -1220,7 +1228,6 @@ export async function POST(req: NextRequest) {
 
           const alightingRefs = splitCommaRefs(alightingCell);
           const boardingRefs = splitCommaRefs(boardingCell);
-          console.log({ boardingRefs });
 
           route.push({
             point,
@@ -1237,10 +1244,6 @@ export async function POST(req: NextRequest) {
         }
 
         if (route.length === 0) {
-          console.log("[addMatchedData] no route stops for row", {
-            rowNumber: row.number,
-            availabilityNumber,
-          });
           continue;
         }
 
@@ -1318,9 +1321,13 @@ export async function POST(req: NextRequest) {
             },
             pickupOrder: pickupOrderByTrip.get(tripNumber) ?? 0,
             dropoffOrder: dropoffOrderByTrip.get(tripNumber) ?? 0,
-            numberOfPassengers: Math.max(
-              1,
-              Number(tripRecord.numberOfPassengers ?? 1) || 1,
+            numberOfPassengers: getTripPassengerCount(
+              String(summary.vehicleType ?? vehicleType),
+              Math.max(
+                1,
+                Number(tripRecord.numberOfPassengers ?? 1) || 1,
+              ),
+              Number(tripRecord.extraPassengers ?? 0) || 0,
             ),
             tripCost: Number(summary.totalFees ?? 0) || 0,
             seatNumber:
@@ -1343,6 +1350,36 @@ export async function POST(req: NextRequest) {
             if (passenger) stop.alighting.push(passenger);
           }
         }
+
+        const passengerCountsByTrip = new Map<string, number>();
+        for (const stop of route) {
+          for (const passenger of [...stop.boarding, ...stop.alighting]) {
+            passengerCountsByTrip.set(
+              String(passenger.tripId),
+              Math.max(1, Number(passenger.numberOfPassengers ?? 1) || 1),
+            );
+          }
+        }
+        if (
+          !isRideWithinCapacity(vehicleType, [
+            ...passengerCountsByTrip.values(),
+          ])
+        ) {
+          continue;
+        }
+
+        const matchedTripIds = Array.from(
+          new Set(
+            route.flatMap((stop) => [
+              ...stop.boarding.map((passenger) => passenger.tripId),
+              ...stop.alighting.map((passenger) => passenger.tripId),
+            ]),
+          ),
+        ).filter(
+          (tripId): tripId is string | { toString(): string } =>
+            tripId != null && String(tripId).trim() !== "",
+        );
+        if (matchedTripIds.length === 0) continue;
 
         const rideNumber = await nextSequence("rideNumber");
         const firstPoint = route[0]?.point;
@@ -1379,7 +1416,8 @@ export async function POST(req: NextRequest) {
           };
         };
 
-        const insertedRide = await Ride.create({
+        const insertedRide = new Ride({
+          _id: new Types.ObjectId(),
           rideNumber,
           availabilityId: availability._id,
           driverId: driverIdRaw,
@@ -1419,6 +1457,9 @@ export async function POST(req: NextRequest) {
           startTime: availability.startTime ?? "00:00",
           endTime: availability.endTime ?? "00:00",
           passengers: [],
+          passengersCount: countRidePassengers([
+            ...passengerCountsByTrip.values(),
+          ]),
           totalCost,
           additionalFees,
           kmRate,
@@ -1426,25 +1467,67 @@ export async function POST(req: NextRequest) {
           status: "matched",
         });
 
-        const matchedTripIds = Array.from(
-          new Set(
-            route.flatMap((stop) => [
-              ...stop.boarding.map((passenger) => passenger.tripId),
-              ...stop.alighting.map((passenger) => passenger.tripId),
-            ]),
-          ),
-        ).filter(
-          (tripId): tripId is string | { toString(): string } =>
-            tripId != null && String(tripId).trim() !== "",
-        );
+        const claimSession = await mongoose.startSession();
+        let claimConflict = false;
+        try {
+          await claimSession.withTransaction(async () => {
+            const claimedTripIds: string[] = [];
+            for (const tripId of matchedTripIds) {
+              const claim = await Trip.updateOne(
+                {
+                  _id: tripId,
+                  status: "submitted",
+                  paymentStatus: "paid",
+                  rideId: null,
+                },
+                {
+                  $set: {
+                    rideId: insertedRide._id,
+                    status: "matched",
+                    driverId: driverIdRaw,
+                  },
+                },
+                { session: claimSession },
+              );
+              if (claim.modifiedCount === 1) {
+                claimedTripIds.push(String(tripId));
+              }
+            }
+            const result = evaluateTripClaim(
+              matchedTripIds.map(String),
+              claimedTripIds,
+            );
+            if (!result.ok) {
+              throw new TripClaimConflictError(result.skippedCount);
+            }
+            await insertedRide.save({ session: claimSession });
+          });
+        } catch (error) {
+          if (
+            !(error instanceof TripClaimConflictError) &&
+            !isTripClaimTransactionConflict(error)
+          ) {
+            throw error;
+          }
+          claimConflict = true;
+        } finally {
+          await claimSession.endSession();
+        }
+        if (claimConflict) {
+          skippedGroups += 1;
+          continue;
+        }
 
         if (matchedTripIds.length > 0) {
           const tripDocs = await Trip.find({ _id: { $in: matchedTripIds } })
-            .select("_id tripNumber summary details")
+            .select("_id tripNumber summary details numberOfPassengers extraPassengers vehicleType")
             .lean<
               {
                 _id: unknown;
                 tripNumber: number | string;
+                numberOfPassengers?: number;
+                extraPassengers?: number;
+                vehicleType?: string;
                 summary?: Record<string, unknown>;
                 details?: Record<string, unknown>;
               }[]
@@ -1530,21 +1613,21 @@ export async function POST(req: NextRequest) {
 
         updatedTripIds.push(String(availabilityNumber));
 
-        // console.log("[addMatchedData] ride created", {
-        //   rideNumber,
-        //   availabilityNumber,
-        //   routeStops: route.length,
-        //   boardingRefsPerStop,
-        //   alightingRefsPerStop,
-        // });
       }
     }
 
-    return NextResponse.json({
-      ok: true,
-      updatedCount: updatedTripIds.length,
-      tripIds: updatedTripIds,
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        updatedCount: updatedTripIds.length,
+        skippedGroups,
+        tripIds: updatedTripIds,
+      },
+      {
+        status:
+          updatedTripIds.length === 0 && skippedGroups > 0 ? 409 : 200,
+      },
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

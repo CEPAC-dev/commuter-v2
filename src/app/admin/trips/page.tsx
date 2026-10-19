@@ -175,6 +175,11 @@ const STATUS_STYLES: Record<
   },
   active: { bg: "var(--color-warning-tint)", color: "var(--color-warning)" },
   completed: { bg: "var(--color-primary-tint)", color: "var(--color-muted)" },
+  no_show: {
+    bg: "var(--color-danger-tint)",
+    color: "var(--color-danger)",
+    label: "Marked as not present",
+  },
   cancelled: { bg: "var(--color-danger-tint)", color: "var(--color-danger)" },
   time_out: {
     bg: "var(--color-danger-tint)",

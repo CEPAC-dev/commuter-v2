@@ -47,6 +47,14 @@ export function getStandaloneTripCancellationMode(
       error: "Completed trips cannot be cancelled",
     };
   }
+  if (trip.status === "no_show") {
+    return {
+      kind: "blocked",
+      httpStatus: 409,
+      errorCode: "TRIP_NO_SHOW",
+      error: "Trips marked as not present cannot be cancelled.",
+    };
+  }
   if (trip.status === "active") {
     return {
       kind: "blocked",

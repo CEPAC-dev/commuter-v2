@@ -14,24 +14,40 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { getServerLocale } from "@/lib/i18n/server";
-import { translate, formatDate, formatTime, formatEgp, toArabicDigits, formatDistanceKm, formatMinutes } from "@/lib/i18n";
+import {
+  translate,
+  formatDate,
+  formatTime,
+  formatEgp,
+  toArabicDigits,
+  formatDistanceKm,
+  formatMinutes,
+} from "@/lib/i18n";
 import { isSharedVehicle } from "@/lib/geo/stations";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
-import { listUserTrips, listDriverTrips, getUserTrip, type UserTripDetail } from "@/lib/services/trips";
+import {
+  listUserTrips,
+  listDriverTrips,
+  getUserTrip,
+  type UserTripDetail,
+} from "@/lib/services/trips";
 import { getRidesByDriver } from "@/lib/services/rideService";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import { VEHICLES } from "@/lib/config/vehicles";
 import type { VehicleKey } from "@/lib/config/vehicles";
 import AppHeader from "@/components/layout/AppHeader";
 import EmptyState from "@/components/shared/EmptyState";
-import { PassengerEmptyIcon, DriverEmptyIcon } from "@/components/icons/EmptyStateIcons";
+import {
+  PassengerEmptyIcon,
+  DriverEmptyIcon,
+} from "@/components/icons/EmptyStateIcons";
 import StatusGroupFilter from "@/components/shared/StatusGroupFilter";
 import TripTabs from "@/components/trips/TripTabs";
 import NextTripCard from "@/components/trips/NextTripCard";
 import DateRangeCalendar from "@/components/shared/DateRangeCalendar";
 import Pagination from "@/components/shared/Pagination";
-import type { BookingStatus, RideListRow, TripListRow } from "@/types/booking";
+import type { RideListRow, TripListRow, TripStatus } from "@/types/booking";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import RateTripModal from "@/components/trips/RateTripModal";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
@@ -94,15 +110,57 @@ function getStatusPill(locale: "en" | "ar") {
       bg: "#FFEBEE",
       color: "#C0392B",
     },
-    submitted: { label: translate(locale, "status.upcoming"), bg: "#E2E8F0", color: "#5A6A7A" },
-    matched: { label: translate(locale, "status.ongoing"), bg: "#00C2A8", color: "#fff" },
-    confirmed: { label: translate(locale, "status.upcoming"), bg: "#E2E8F0", color: "#5A6A7A" },
-    active: { label: translate(locale, "status.ongoing"), bg: "#00C2A8", color: "#fff" },
-    completed: { label: translate(locale, "status.completed"), bg: "#0B1E3D", color: "#fff" },
-    cancelled: { label: translate(locale, "status.cancelled"), bg: "#0B1E3D", color: "#fff" },
-    time_out: { label: translate(locale, "status.expired"), bg: "#0B1E3D", color: "#fff" },
-    nomatch: { label: translate(locale, "status.nomatch"), bg: "#FFEBEE", color: "#E74C3C" },
-  } satisfies Record<BookingStatus, { label: string; bg: string; color: string }>;
+    submitted: {
+      label: translate(locale, "status.upcoming"),
+      bg: "#E2E8F0",
+      color: "#5A6A7A",
+    },
+    matched: {
+      label: translate(locale, "status.ongoing"),
+      bg: "#00C2A8",
+      color: "#fff",
+    },
+    confirmed: {
+      label: translate(locale, "status.upcoming"),
+      bg: "#E2E8F0",
+      color: "#5A6A7A",
+    },
+    active: {
+      label: translate(locale, "status.ongoing"),
+      bg: "#00C2A8",
+      color: "#fff",
+    },
+    completed: {
+      label: translate(locale, "status.completed"),
+      bg: "#0B1E3D",
+      color: "#fff",
+    },
+    no_show: {
+      label: translate(locale, "status.no_show"),
+      bg: "#FFEBEE",
+      color: "#C0392B",
+    },
+    refunded: {
+      label: translate(locale, "status.refunded"),
+      bg: "#0B1E3D",
+      color: "#fff",
+    },
+    cancelled: {
+      label: translate(locale, "status.cancelled"),
+      bg: "#0B1E3D",
+      color: "#fff",
+    },
+    time_out: {
+      label: translate(locale, "status.expired"),
+      bg: "#0B1E3D",
+      color: "#fff",
+    },
+    nomatch: {
+      label: translate(locale, "status.nomatch"),
+      bg: "#FFEBEE",
+      color: "#E74C3C",
+    },
+  } satisfies Record<TripStatus, { label: string; bg: string; color: string }>;
 }
 function descriptionForVehicle(locale: "en" | "ar", vehicleType: string) {
   const key = `vehicles.${vehicleType}`;
@@ -143,7 +201,10 @@ function Pill({
   );
 }
 
-function displayPill(locale: "en" | "ar", status: ReturnType<typeof getDisplayStatus>) {
+function displayPill(
+  locale: "en" | "ar",
+  status: ReturnType<typeof getDisplayStatus>,
+) {
   const tone = {
     neutral: { bg: "#EEF2F2", color: "#5A6A7A" },
     warning: { bg: "#FFF3E0", color: "#E65100" },
@@ -193,7 +254,9 @@ function SharedSummaryCard({
   dropoffPoint: string;
   arrivalTime: string;
 }) {
-  const carLine = [driver?.carBrand, driver?.carModel].filter(Boolean).join(" ");
+  const carLine = [driver?.carBrand, driver?.carModel]
+    .filter(Boolean)
+    .join(" ");
   const avatarUrl = driver?.profilePicture ?? driver?.profilePic;
 
   return (
@@ -362,7 +425,8 @@ function SharedSummaryCard({
                 width: 2,
                 flex: 1,
                 minHeight: 28,
-                background: "repeating-linear-gradient(180deg, #CBE9E2 0 4px, transparent 4px 8px)",
+                background:
+                  "repeating-linear-gradient(180deg, #CBE9E2 0 4px, transparent 4px 8px)",
                 margin: "4px 0",
               }}
             />
@@ -517,7 +581,10 @@ function SharedSummaryCard({
           }}
         >
           <Users size={13} color="#00806E" aria-hidden="true" />
-          {totalPersons} {totalPersons === 1 ? translate(locale, "my_trips.passenger_singular") : translate(locale, "my_trips.passenger_plural")}
+          {totalPersons}{" "}
+          {totalPersons === 1
+            ? translate(locale, "my_trips.passenger_singular")
+            : translate(locale, "my_trips.passenger_plural")}
         </span>
       </div>
     </div>
@@ -564,7 +631,8 @@ function RequestTripGroupCard({
   const firstRoute = routes[0];
   const sameRoute = routes.every(
     (route) =>
-      route.pickup === firstRoute.pickup && route.dropoff === firstRoute.dropoff,
+      route.pickup === firstRoute.pickup &&
+      route.dropoff === firstRoute.dropoff,
   );
   const sameTime = trips.every(
     (trip) => trip.pickupTime === firstTrip.pickupTime,
@@ -592,16 +660,19 @@ function RequestTripGroupCard({
           borderBottom: "1px solid #EDF2F1",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 9,
+            flexWrap: "wrap",
+          }}
+        >
           <strong style={{ color: "#0B1E3D", fontSize: 14 }}>
-            {translate(
-              locale,
-              multiDayBookingCountKey(locale, trips.length),
-              {
-                count: trips.length,
-                plural: trips.length === 1 ? "" : "s",
-              },
-            )}
+            {translate(locale, multiDayBookingCountKey(locale, trips.length), {
+              count: trips.length,
+              plural: trips.length === 1 ? "" : "s",
+            })}
           </strong>
           <span
             style={{
@@ -617,13 +688,29 @@ function RequestTripGroupCard({
             {bookingStatus}
           </span>
         </div>
-        <strong style={{ color: "#0B1E3D", fontSize: 16, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+        <strong
+          style={{
+            color: "#0B1E3D",
+            fontSize: 16,
+            fontVariantNumeric: "tabular-nums",
+            whiteSpace: "nowrap",
+          }}
+        >
           {formatEgp(locale, firstTrip.bookingAmountEgp)}
         </strong>
       </div>
       <div style={{ padding: "4px 20px 18px" }}>
         {sameRoute && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#0B1E3D", fontSize: 13, lineHeight: 1.5 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              color: "#0B1E3D",
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
             <MapPin size={15} color="#00A98F" aria-hidden="true" />
             <span title={firstRoute.pickup}>{truncate(firstRoute.pickup)}</span>
             <ArrowRight
@@ -632,11 +719,22 @@ function RequestTripGroupCard({
               aria-hidden="true"
               className="rtl-directional-icon"
             />
-            <span title={firstRoute.dropoff}>{truncate(firstRoute.dropoff)}</span>
+            <span title={firstRoute.dropoff}>
+              {truncate(firstRoute.dropoff)}
+            </span>
           </div>
         )}
         {sameTime && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, color: "#687978", fontSize: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginTop: 6,
+              color: "#687978",
+              fontSize: 12,
+            }}
+          >
             <Clock size={14} aria-hidden="true" />
             {formatTime(locale, firstTrip.pickupTime)}
           </div>
@@ -706,16 +804,21 @@ export default async function MyTripsPage({
   const session = await getSession();
   if (!session) redirect("/login?redirect=/my-trips");
   if (session.role === "admin") redirect("/admin/dashboard");
-  await connectDB();
+  const [locale] = await Promise.all([getServerLocale(), connectDB()]);
 
   const isDriver = session.role === "driver";
   const isPassenger = !isDriver;
   const params = await searchParams;
   const groupFilter =
     typeof params.group === "string" &&
-    ["all", "bookings", "pending", "upcoming", "ongoing", "pending_payment"].includes(
-      params.group,
-    )
+    [
+      "all",
+      "bookings",
+      "pending",
+      "upcoming",
+      "ongoing",
+      "pending_payment",
+    ].includes(params.group)
       ? (params.group as
           | "all"
           | "bookings"
@@ -758,7 +861,9 @@ export default async function MyTripsPage({
     groupFilter &&
     groupFilter !== "all" &&
     groupFilter !== "ongoing" &&
-    ["bookings", "pending", "upcoming", "pending_payment"].includes(groupFilter),
+    ["bookings", "pending", "upcoming", "pending_payment"].includes(
+      groupFilter,
+    ),
   );
 
   const driverListOptions = {
@@ -778,6 +883,7 @@ export default async function MyTripsPage({
   let listItems: DayItem[] = [];
   let total = 0;
   let paginationTotal = 0;
+  let wallet: Awaited<ReturnType<typeof getOrCreateWallet>> | null = null;
   let tabCounts: Record<TripTabKey, number> = {
     all: 0,
     pending: 0,
@@ -799,7 +905,11 @@ export default async function MyTripsPage({
     }
     listItems = rideRows.map((ride) => ({ kind: "ride", data: ride }));
   } else {
-    const result = await listUserTrips(session.userId, passengerListOptions);
+    const [result, passengerWallet] = await Promise.all([
+      listUserTrips(session.userId, passengerListOptions),
+      getOrCreateWallet(session.userId),
+    ]);
+    wallet = passengerWallet;
     allPassengerTrips = result.rows;
     const selectedTab: TripTabKey =
       groupFilter === "pending_payment"
@@ -811,27 +921,30 @@ export default async function MyTripsPage({
     tabCounts = view.counts;
     total = view.items.length;
     paginationTotal = total;
-    const pageItems = view.items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const pageItems = view.items.slice(
+      (page - 1) * PAGE_SIZE,
+      page * PAGE_SIZE,
+    );
     tripRows = pageItems.flatMap((item) =>
       item.kind === "request" ? item.trips : [item.trip],
     );
-    listItems = pageItems.map((item): DayItem =>
-      item.kind === "request"
-        ? {
-            kind: "request_group",
-            data: {
-              requestId: item.requestId,
-              date: item.date,
-              trips: item.trips as TripListRow[],
-            },
-          }
-        : { kind: "trip", data: item.trip as TripListRow },
+    listItems = pageItems.map(
+      (item): DayItem =>
+        item.kind === "request"
+          ? {
+              kind: "request_group",
+              data: {
+                requestId: item.requestId,
+                date: item.date,
+                trips: item.trips as TripListRow[],
+              },
+            }
+          : { kind: "trip", data: item.trip as TripListRow },
     );
   }
 
   const totalPages = Math.ceil(paginationTotal / PAGE_SIZE);
 
-  const wallet = isDriver ? null : await getOrCreateWallet(session.userId);
   const walletBalance = wallet?.balanceEgp ?? 0;
 
   // Today's date in YYYY-MM-DD format for comparison
@@ -846,16 +959,25 @@ export default async function MyTripsPage({
           await Promise.all(
             tripRows
               .filter((trip) => isSharedVehicle(trip.vehicleType))
-              .map(async (trip) => [trip.id, await getUserTrip(session.userId, trip.id)] as const),
+              .map(
+                async (trip) =>
+                  [
+                    trip.id,
+                    await getUserTrip(session.userId, trip.id),
+                  ] as const,
+              ),
           )
         ).filter(([, tripDetail]) => Boolean(tripDetail)),
       )
     : new Map<string, UserTripDetail>();
 
-  const nextTrip = isPassenger ? getNextTrip({ trips: allPassengerTrips, now: displayNow }) : null;
+  const nextTrip = isPassenger
+    ? getNextTrip({ trips: allPassengerTrips, now: displayNow })
+    : null;
   const nextTripDetail =
     nextTrip && isSharedVehicle(nextTrip.vehicleType)
-      ? sharedTripDetailsById.get(nextTrip.id) ?? await getUserTrip(session.userId, nextTrip.id)
+      ? (sharedTripDetailsById.get(nextTrip.id) ??
+        (await getUserTrip(session.userId, nextTrip.id)))
       : null;
   const approvalRequestCount = new Set(
     allPassengerTrips
@@ -875,31 +997,50 @@ export default async function MyTripsPage({
   }
 
   const hasFilters = Boolean(
-    (isDriver ? groupFilter : passengerHasActiveStatusFilter) || dateFrom || dateTo,
+    (isDriver ? groupFilter : passengerHasActiveStatusFilter) ||
+    dateFrom ||
+    dateTo,
   );
   const hiddenGroups: Array<
     "all" | "upcoming" | "ongoing" | "pending_payment"
   > = isPassenger ? [] : ["upcoming", "pending_payment"];
 
-  const locale = await getServerLocale();
-
   let summaryText = "";
   if (total === 0) {
-    if (hasFilters) summaryText = translate(locale, "my_trips.no_trips_filters");
-    else summaryText = isDriver ? translate(locale, "my_trips.no_assigned_trips") : translate(locale, "my_trips.no_trips");
+    if (hasFilters)
+      summaryText = translate(locale, "my_trips.no_trips_filters");
+    else
+      summaryText = isDriver
+        ? translate(locale, "my_trips.no_assigned_trips")
+        : translate(locale, "my_trips.no_trips");
   } else {
     if (isDriver) {
       summaryText = driverOngoingView
-        ? translate(locale, "my_trips.total_ongoing", { total, plural: total === 1 ? "" : "s" })
-        : translate(locale, "my_trips.total_assigned", { total, plural: total === 1 ? "" : "s" });
+        ? translate(locale, "my_trips.total_ongoing", {
+            total,
+            plural: total === 1 ? "" : "s",
+          })
+        : translate(locale, "my_trips.total_assigned", {
+            total,
+            plural: total === 1 ? "" : "s",
+          });
     } else {
       summaryText = passengerOngoingView
-        ? translate(locale, "my_trips.total_ongoing", { total, plural: total === 1 ? "" : "s" })
+        ? translate(locale, "my_trips.total_ongoing", {
+            total,
+            plural: total === 1 ? "" : "s",
+          })
         : activePassengerTab === "pending"
           ? translate(locale, "my_trips.total_pending_requests", { total })
           : activePassengerTab === "upcoming"
-            ? translate(locale, "my_trips.total_upcoming", { total, plural: total === 1 ? "" : "s" })
-            : translate(locale, "my_trips.total_active", { total, plural: total === 1 ? "" : "s" });
+            ? translate(locale, "my_trips.total_upcoming", {
+                total,
+                plural: total === 1 ? "" : "s",
+              })
+            : translate(locale, "my_trips.total_active", {
+                total,
+                plural: total === 1 ? "" : "s",
+              });
     }
   }
 
@@ -907,21 +1048,21 @@ export default async function MyTripsPage({
     summaryText = translate(locale, "my_trips.empty_ongoing");
   }
 
-  const activeGroupLabel =
-    isPassenger
-      ? activePassengerTab === "all"
-        ? translate(locale, "filter.all")
-        : translate(locale, `status.${activePassengerTab}`)
-      : !groupFilter || groupFilter === "all"
-        ? translate(locale, "filter.all")
-        : translate(locale, `status.${groupFilter}`);
+  const activeGroupLabel = isPassenger
+    ? activePassengerTab === "all"
+      ? translate(locale, "filter.all")
+      : translate(locale, `status.${activePassengerTab}`)
+    : !groupFilter || groupFilter === "all"
+      ? translate(locale, "filter.all")
+      : translate(locale, `status.${groupFilter}`);
 
-  const pendingPaymentCount = !isDriver
-    ? payablePendingCount
-    : 0;
+  const pendingPaymentCount = !isDriver ? payablePendingCount : 0;
 
   return (
-    <div className="my-trips-page" style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
+    <div
+      className="my-trips-page"
+      style={{ minHeight: "100dvh", background: "#f8f9fa" }}
+    >
       <AppHeader
         authed
         email={session.email}
@@ -1263,18 +1404,62 @@ export default async function MyTripsPage({
               now={displayNow}
             />
             {(payablePendingCount > 0 || approvalRequestCount > 0) && (
-              <div className="my-trips-alerts" aria-label={translate(locale, "my_trips.request_alerts")}>
+              <div
+                className="my-trips-alerts"
+                aria-label={translate(locale, "my_trips.request_alerts")}
+              >
                 {payablePendingCount > 0 && (
-                  <Link className="my-trips-alert" href="/my-trips?group=pending" aria-label={translate(locale, payablePendingCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: toArabicDigitsIf(locale, String(payablePendingCount)) })}>
+                  <Link
+                    className="my-trips-alert"
+                    href="/my-trips?group=pending"
+                    aria-label={translate(
+                      locale,
+                      payablePendingCount === 1
+                        ? "my_trips.payment_alert_one"
+                        : "my_trips.payment_alert_many",
+                      {
+                        count: toArabicDigitsIf(
+                          locale,
+                          String(payablePendingCount),
+                        ),
+                      },
+                    )}
+                  >
                     <Clock size={15} aria-hidden="true" />
-                    {translate(locale, payablePendingCount === 1 ? "my_trips.payment_alert_one" : "my_trips.payment_alert_many", { count: toArabicDigitsIf(locale, String(payablePendingCount)) })}
-                    <ChevronRight className="rtl-directional-icon" size={15} aria-hidden="true" />
+                    {translate(
+                      locale,
+                      payablePendingCount === 1
+                        ? "my_trips.payment_alert_one"
+                        : "my_trips.payment_alert_many",
+                      {
+                        count: toArabicDigitsIf(
+                          locale,
+                          String(payablePendingCount),
+                        ),
+                      },
+                    )}
+                    <ChevronRight
+                      className="rtl-directional-icon"
+                      size={15}
+                      aria-hidden="true"
+                    />
                   </Link>
                 )}
                 {approvalRequestCount > 0 && (
                   <div className="my-trips-alert approval" role="status">
                     <ShieldCheck size={15} aria-hidden="true" />
-                    {translate(locale, approvalRequestCount === 1 ? "my_trips.approval_alert_one" : "my_trips.approval_alert_many", { count: toArabicDigitsIf(locale, String(approvalRequestCount)) })}
+                    {translate(
+                      locale,
+                      approvalRequestCount === 1
+                        ? "my_trips.approval_alert_one"
+                        : "my_trips.approval_alert_many",
+                      {
+                        count: toArabicDigitsIf(
+                          locale,
+                          String(approvalRequestCount),
+                        ),
+                      },
+                    )}
                   </div>
                 )}
               </div>
@@ -1284,119 +1469,175 @@ export default async function MyTripsPage({
         )}
 
         <div className="my-trips-layout">
-          <aside className="my-trips-sidebar" aria-label={translate(locale, "my_trips.title")}>
+          <aside
+            className="my-trips-sidebar"
+            aria-label={translate(locale, "my_trips.title")}
+          >
             <div className="my-trips-sidebar-pin">
-            <div className="my-trips-sidebar-panel">
-              <p className="my-trips-sidebar-label">{translate(locale, "my_trips.sidebar_filters")}</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-16)" }}>
-                <DateRangeCalendar fullWidth />
-                {isDriver && (
-                  <StatusGroupFilter hiddenGroups={hiddenGroups} orientation="vertical" />
+              <div className="my-trips-sidebar-panel">
+                <p className="my-trips-sidebar-label">
+                  {translate(locale, "my_trips.sidebar_filters")}
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "var(--space-16)",
+                  }}
+                >
+                  <DateRangeCalendar fullWidth />
+                  {isDriver && (
+                    <StatusGroupFilter
+                      hiddenGroups={hiddenGroups}
+                      orientation="vertical"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="my-trips-sidebar-panel">
+                <p className="my-trips-sidebar-label">
+                  {translate(locale, "my_trips.sidebar_overview")}
+                </p>
+                <div className="my-trips-stat-row">
+                  <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                    {translate(locale, "my_trips.results_label")}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 800,
+                      color: "#0B1E3D",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {toArabicDigitsIf(locale, String(total))}
+                  </span>
+                </div>
+                <div className="my-trips-stat-row">
+                  <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                    {translate(locale, "my_trips.status_filter_label")}
+                  </span>
+                  <span
+                    style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}
+                  >
+                    {activeGroupLabel}
+                  </span>
+                </div>
+                {(dateFrom || dateTo) && (
+                  <div className="my-trips-stat-row">
+                    <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                      {translate(locale, "my_trips.date_filter_label")}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "#0B1E3D",
+                      }}
+                    >
+                      {dateFrom && dateTo
+                        ? `${prettyDate(locale, dateFrom)} – ${prettyDate(locale, dateTo)}`
+                        : dateFrom
+                          ? prettyDate(locale, dateFrom)
+                          : prettyDate(locale, dateTo!)}
+                    </span>
+                  </div>
+                )}
+                {!isDriver && pendingPaymentCount > 0 && (
+                  <div className="my-trips-stat-row">
+                    <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                      {translate(locale, "status.pending_payment")}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "#E65100",
+                      }}
+                    >
+                      {toArabicDigitsIf(locale, String(pendingPaymentCount))}
+                    </span>
+                  </div>
+                )}
+                {!isDriver && approvalRequestCount > 0 && (
+                  <div className="my-trips-stat-row">
+                    <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                      {translate(locale, "request_status.waiting_for_approval")}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "#16594F",
+                      }}
+                    >
+                      {toArabicDigitsIf(locale, String(approvalRequestCount))}
+                    </span>
+                  </div>
+                )}
+                {!isDriver && (
+                  <div className="my-trips-stat-row">
+                    <span style={{ fontSize: 13, color: "#5A6A7A" }}>
+                      {translate(locale, "wallet.balance_label")}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "#00C2A8",
+                      }}
+                    >
+                      {formatEgp(locale, walletBalance)}
+                    </span>
+                  </div>
                 )}
               </div>
-            </div>
 
-            <div className="my-trips-sidebar-panel">
-              <p className="my-trips-sidebar-label">{translate(locale, "my_trips.sidebar_overview")}</p>
-              <div className="my-trips-stat-row">
-                <span style={{ fontSize: 13, color: "#5A6A7A" }}>
-                  {translate(locale, "my_trips.results_label")}
-                </span>
-                <span style={{ fontSize: 15, fontWeight: 800, color: "#0B1E3D", fontVariantNumeric: "tabular-nums" }}>
-                  {toArabicDigitsIf(locale, String(total))}
-                </span>
-              </div>
-              <div className="my-trips-stat-row">
-                <span style={{ fontSize: 13, color: "#5A6A7A" }}>
-                  {translate(locale, "my_trips.status_filter_label")}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
-                  {activeGroupLabel}
-                </span>
-              </div>
-              {(dateFrom || dateTo) && (
-                <div className="my-trips-stat-row">
-                  <span style={{ fontSize: 13, color: "#5A6A7A" }}>
-                    {translate(locale, "my_trips.date_filter_label")}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#0B1E3D" }}>
-                    {dateFrom && dateTo
-                      ? `${prettyDate(locale, dateFrom)} – ${prettyDate(locale, dateTo)}`
-                      : dateFrom
-                        ? prettyDate(locale, dateFrom)
-                        : prettyDate(locale, dateTo!)}
-                  </span>
-                </div>
-              )}
-              {!isDriver && pendingPaymentCount > 0 && (
-                <div className="my-trips-stat-row">
-                  <span style={{ fontSize: 13, color: "#5A6A7A" }}>
-                    {translate(locale, "status.pending_payment")}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#E65100" }}>
-                    {toArabicDigitsIf(locale, String(pendingPaymentCount))}
-                  </span>
-                </div>
-              )}
-              {!isDriver && approvalRequestCount > 0 && (
-                <div className="my-trips-stat-row">
-                  <span style={{ fontSize: 13, color: "#5A6A7A" }}>
-                    {translate(locale, "request_status.waiting_for_approval")}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#16594F" }}>
-                    {toArabicDigitsIf(locale, String(approvalRequestCount))}
-                  </span>
-                </div>
-              )}
               {!isDriver && (
-                <div className="my-trips-stat-row">
-                  <span style={{ fontSize: 13, color: "#5A6A7A" }}>
-                    {translate(locale, "wallet.balance_label")}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#00C2A8" }}>
-                    {formatEgp(locale, walletBalance)}
-                  </span>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "var(--space-8)",
+                    marginTop: "var(--space-16)",
+                  }}
+                >
+                  <Link
+                    href="/create"
+                    style={{
+                      display: "block",
+                      padding: "14px var(--space-16)",
+                      background: "#0B1E3D",
+                      color: "#fff",
+                      borderRadius: 10,
+                      fontWeight: 700,
+                      fontSize: 14,
+                      textDecoration: "none",
+                      textAlign: "center",
+                    }}
+                  >
+                    {translate(locale, "my_trips.book_ride")}
+                  </Link>
+                  <Link
+                    href="/wallet"
+                    style={{
+                      display: "block",
+                      padding: "14px var(--space-16)",
+                      background: "#fff",
+                      color: "#0B1E3D",
+                      border: "1px solid #eef0f3",
+                      borderRadius: 10,
+                      fontWeight: 700,
+                      fontSize: 14,
+                      textDecoration: "none",
+                      textAlign: "center",
+                    }}
+                  >
+                    {translate(locale, "nav.wallet")}
+                  </Link>
                 </div>
               )}
-            </div>
-
-            {!isDriver && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)", marginTop: "var(--space-16)" }}>
-                <Link
-                  href="/create"
-                  style={{
-                    display: "block",
-                    padding: "14px var(--space-16)",
-                    background: "#0B1E3D",
-                    color: "#fff",
-                    borderRadius: 10,
-                    fontWeight: 700,
-                    fontSize: 14,
-                    textDecoration: "none",
-                    textAlign: "center",
-                  }}
-                >
-                  {translate(locale, "my_trips.book_ride")}
-                </Link>
-                <Link
-                  href="/wallet"
-                  style={{
-                    display: "block",
-                    padding: "14px var(--space-16)",
-                    background: "#fff",
-                    color: "#0B1E3D",
-                    border: "1px solid #eef0f3",
-                    borderRadius: 10,
-                    fontWeight: 700,
-                    fontSize: 14,
-                    textDecoration: "none",
-                    textAlign: "center",
-                  }}
-                >
-                  {translate(locale, "nav.wallet")}
-                </Link>
-              </div>
-            )}
             </div>
           </aside>
 
@@ -1404,134 +1645,785 @@ export default async function MyTripsPage({
             <div className="my-trips-header my-trips-header-desktop">
               <TripsPageHeader locale={locale} summaryText={summaryText} />
             </div>
-        {listItems.length === 0 ? (
-          <EmptyState
-            minHeight="min(40vh, 360px)"
-            icon={
-              isDriver ? (
-                <DriverEmptyIcon
-                  className="empty-state-icon"
-                  title={translate(locale, "my_trips.empty_assigned")}
-                />
-              ) : (
-                <PassengerEmptyIcon
-                  className="empty-state-icon"
-                  title={translate(locale, "my_trips.empty")}
-                />
-              )
-            }
-            title={
-              isPassenger
-                ? translate(locale, `my_trips.empty_tab_${activePassengerTab}_title`)
-                : hasFilters
-                  ? translate(locale, "my_trips.empty_title_filtered")
-                  : isDriver
-                  ? driverOngoingView
-                    ? translate(locale, "my_trips.empty_ongoing")
-                    : translate(locale, "my_trips.empty_assigned")
-                  : translate(locale, "my_trips.empty")
-            }
-            description={
-              isPassenger
-                ? translate(locale, `my_trips.empty_tab_${activePassengerTab}_description`)
-                : hasFilters
-                  ? translate(locale, "my_trips.empty_description_filtered")
-                  : isDriver
-                  ? driverOngoingView
-                    ? translate(locale, "my_trips.empty_description_ongoing")
-                    : translate(locale, "my_trips.empty_description_assigned")
-                  : translate(locale, "my_trips.empty_description_book")
-            }
-            action={
-              !isDriver ? (
-                <Link
-                  href="/create"
-                  style={{
-                    display: "inline-block",
-                    padding: "14px var(--space-24)",
-                    background: "#0B1E3D",
-                    outlineOffset: 3,
-                    color: "#fff",
-                    borderRadius: 10,
-                    fontWeight: 700,
-                    fontSize: 14,
-                    textDecoration: "none",
-                  }}
-                  className="my-trips-book-link"
-                >
-                  {translate(locale, "my_trips.book_ride")}
-                </Link>
-              ) : undefined
-            }
-          />
-        ) : (
-          <>
-            {dayGroups.map((group) => (
-              <div key={group.date} className="my-trips-day-group" style={{ marginBottom: "var(--space-24)" }}>
-                <div
-                  className="my-trips-date-heading"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--space-8)",
-                    marginBottom: "var(--space-12)",
-                  }}
-                >
-                  <CalendarDays size={14} color="#00806E" aria-hidden="true" />
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 800,
-                      color: "#0B1E3D",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                    }}
+            {listItems.length === 0 ? (
+              <EmptyState
+                minHeight="min(40vh, 360px)"
+                icon={
+                  isDriver ? (
+                    <DriverEmptyIcon
+                      className="empty-state-icon"
+                      title={translate(locale, "my_trips.empty_assigned")}
+                    />
+                  ) : (
+                    <PassengerEmptyIcon
+                      className="empty-state-icon"
+                      title={translate(locale, "my_trips.empty")}
+                    />
+                  )
+                }
+                title={
+                  isPassenger
+                    ? translate(
+                        locale,
+                        `my_trips.empty_tab_${activePassengerTab}_title`,
+                      )
+                    : hasFilters
+                      ? translate(locale, "my_trips.empty_title_filtered")
+                      : isDriver
+                        ? driverOngoingView
+                          ? translate(locale, "my_trips.empty_ongoing")
+                          : translate(locale, "my_trips.empty_assigned")
+                        : translate(locale, "my_trips.empty")
+                }
+                description={
+                  isPassenger
+                    ? translate(
+                        locale,
+                        `my_trips.empty_tab_${activePassengerTab}_description`,
+                      )
+                    : hasFilters
+                      ? translate(locale, "my_trips.empty_description_filtered")
+                      : isDriver
+                        ? driverOngoingView
+                          ? translate(
+                              locale,
+                              "my_trips.empty_description_ongoing",
+                            )
+                          : translate(
+                              locale,
+                              "my_trips.empty_description_assigned",
+                            )
+                        : translate(locale, "my_trips.empty_description_book")
+                }
+                action={
+                  !isDriver ? (
+                    <Link
+                      href="/create"
+                      style={{
+                        display: "inline-block",
+                        padding: "14px var(--space-24)",
+                        background: "#0B1E3D",
+                        outlineOffset: 3,
+                        color: "#fff",
+                        borderRadius: 10,
+                        fontWeight: 700,
+                        fontSize: 14,
+                        textDecoration: "none",
+                      }}
+                      className="my-trips-book-link"
+                    >
+                      {translate(locale, "my_trips.book_ride")}
+                    </Link>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <>
+                {dayGroups.map((group) => (
+                  <div
+                    key={group.date}
+                    className="my-trips-day-group"
+                    style={{ marginBottom: "var(--space-24)" }}
                   >
-                    {group.date === todayStr ? translate(locale, "my_trips.today") : prettyDate(locale, group.date)}
-                  </span>
-                  <span
-                    style={{ fontSize: 12, color: "#9aa7b4", fontWeight: 600 }}
-                  >
-                    · {group.items.reduce((count, item) => count + (item.kind === "request_group" ? item.data.trips.length : 1), 0)} {group.items.reduce((count, item) => count + (item.kind === "request_group" ? item.data.trips.length : 1), 0) === 1 ? (isDriver ? translate(locale, "my_trips.ride_singular") : translate(locale, "my_trips.trip_singular")) : (isDriver ? translate(locale, "my_trips.ride_plural") : translate(locale, "my_trips.trip_plural"))}
-                    {isDriver ? (
-                      ` · ${group.items.reduce((sum, item) => item.kind === "ride" ? sum + item.data.passengerCount : sum, 0)} ${translate(locale, "my_trips.passengers")}`
-                    ) : ""}
-                  </span>
-                </div>
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: "var(--space-12)" }}
-                >
-                  {group.items.map((item) => {
-                    if (item.kind === "request_group") {
-                      return (
-                        <RequestTripGroupCard
-                          key={item.data.requestId}
-                          requestId={item.data.requestId}
-                          trips={item.data.trips}
-                          walletBalance={walletBalance}
-                          locale={locale}
-                          sharedTripDetailsById={sharedTripDetailsById}
-                        />
-                      );
-                    }
-                    if (item.kind === "ride") {
-                      const ride = item.data;
-                      const vLabel = descriptionForVehicle(locale, ride.vehicleType);
-                      const detailHref = `/my-trips/${ride.id}`;
+                    <div
+                      className="my-trips-date-heading"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-8)",
+                        marginBottom: "var(--space-12)",
+                      }}
+                    >
+                      <CalendarDays
+                        size={14}
+                        color="#00806E"
+                        aria-hidden="true"
+                      />
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 800,
+                          color: "#0B1E3D",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        {group.date === todayStr
+                          ? translate(locale, "my_trips.today")
+                          : prettyDate(locale, group.date)}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: "#9aa7b4",
+                          fontWeight: 600,
+                        }}
+                      >
+                        ·{" "}
+                        {group.items.reduce(
+                          (count, item) =>
+                            count +
+                            (item.kind === "request_group"
+                              ? item.data.trips.length
+                              : 1),
+                          0,
+                        )}{" "}
+                        {group.items.reduce(
+                          (count, item) =>
+                            count +
+                            (item.kind === "request_group"
+                              ? item.data.trips.length
+                              : 1),
+                          0,
+                        ) === 1
+                          ? isDriver
+                            ? translate(locale, "my_trips.ride_singular")
+                            : translate(locale, "my_trips.trip_singular")
+                          : isDriver
+                            ? translate(locale, "my_trips.ride_plural")
+                            : translate(locale, "my_trips.trip_plural")}
+                        {isDriver
+                          ? ` · ${group.items.reduce((sum, item) => (item.kind === "ride" ? sum + item.data.passengerCount : sum), 0)} ${translate(locale, "my_trips.passengers")}`
+                          : ""}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "var(--space-12)",
+                      }}
+                    >
+                      {group.items.map((item) => {
+                        if (item.kind === "request_group") {
+                          return (
+                            <RequestTripGroupCard
+                              key={item.data.requestId}
+                              requestId={item.data.requestId}
+                              trips={item.data.trips}
+                              walletBalance={walletBalance}
+                              locale={locale}
+                              sharedTripDetailsById={sharedTripDetailsById}
+                            />
+                          );
+                        }
+                        if (item.kind === "ride") {
+                          const ride = item.data;
+                          const vLabel = descriptionForVehicle(
+                            locale,
+                            ride.vehicleType,
+                          );
+                          const detailHref = `/my-trips/${ride.id}`;
 
-                      return (
-                        <div
-                          key={ride.id}
-                          style={{
-                            background: "#fff",
-                            borderRadius: 14,
-                            border: "1px solid #eef0f3",
-                            overflow: "hidden",
-                          }}
-                        >
-                          {detailHref ? (
+                          return (
+                            <div
+                              key={ride.id}
+                              style={{
+                                background: "#fff",
+                                borderRadius: 14,
+                                border: "1px solid #eef0f3",
+                                overflow: "hidden",
+                              }}
+                            >
+                              {detailHref ? (
+                                <Link
+                                  href={detailHref}
+                                  style={{
+                                    textDecoration: "none",
+                                    color: "inherit",
+                                    display: "block",
+                                  }}
+                                >
+                                  <div style={{ padding: "16px 18px" }}>
+                                    <div style={{ marginBottom: 10 }}>
+                                      <span
+                                        style={{
+                                          fontSize: 11,
+                                          color: "#9aa7b4",
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {translate(
+                                          locale,
+                                          "my_trips.ride_number",
+                                          { rideNumber: ride.rideNumber },
+                                        )}{" "}
+                                        · {ride.passengers.length}{" "}
+                                        {ride.passengers.length === 1
+                                          ? translate(
+                                              locale,
+                                              "my_trips.trip_singular",
+                                            )
+                                          : translate(
+                                              locale,
+                                              "my_trips.trip_plural",
+                                            )}{" "}
+                                        ·{" "}
+                                        {toArabicDigitsIf(
+                                          locale,
+                                          new Date(
+                                            ride.createdAt,
+                                          ).toLocaleString(
+                                            locale === "ar" ? "ar-EG" : "en-EG",
+                                            {
+                                              month: "short",
+                                              day: "numeric",
+                                              hour: "numeric",
+                                              minute: "2-digit",
+                                            },
+                                          ),
+                                        )}
+                                      </span>
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        gap: 8,
+                                        marginBottom: 8,
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 8,
+                                          flexWrap: "wrap",
+                                        }}
+                                      >
+                                        <Car
+                                          size={20}
+                                          color="#00806E"
+                                          aria-hidden="true"
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: 18,
+                                            fontWeight: 800,
+                                            color: "#0B1E3D",
+                                            letterSpacing: "-0.01em",
+                                          }}
+                                        >
+                                          {vLabel}
+                                        </span>
+                                        <span
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            padding: "2px 8px",
+                                            borderRadius: 999,
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                            background:
+                                              ride.rideType === "shared"
+                                                ? "#E8F8F5"
+                                                : "#EEF2FF",
+                                            color:
+                                              ride.rideType === "shared"
+                                                ? "#00806E"
+                                                : "#0B1E3D",
+                                            textTransform: "capitalize",
+                                          }}
+                                        >
+                                          {rideTypeLabel(locale, ride.rideType)}
+                                        </span>
+                                      </div>
+                                      <span
+                                        style={{
+                                          fontWeight: 800,
+                                          fontSize: 16,
+                                          color: "#00C2A8",
+                                          fontVariantNumeric: "tabular-nums",
+                                        }}
+                                      >
+                                        {formatEgp(locale, ride.totalCost)}
+                                      </span>
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                        flexWrap: "wrap",
+                                        marginBottom: 12,
+                                      }}
+                                    >
+                                      <Pill
+                                        {...rideStatusPill(ride.status, locale)}
+                                      />
+                                      <span
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 4,
+                                          fontSize: 12,
+                                          color: "#5A6A7A",
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        <Users size={12} aria-hidden="true" />
+                                        {ride.passengerCount}{" "}
+                                        {ride.passengerCount === 1
+                                          ? translate(
+                                              locale,
+                                              "my_trips.passenger_singular",
+                                            )
+                                          : translate(
+                                              locale,
+                                              "my_trips.passenger_plural",
+                                            )}
+                                      </span>
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 16,
+                                        marginBottom: 12,
+                                        flexWrap: "wrap",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 5,
+                                        }}
+                                      >
+                                        <Clock
+                                          size={12}
+                                          color="#5A6A7A"
+                                          aria-hidden="true"
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: 12,
+                                            color: "#5A6A7A",
+                                          }}
+                                        >
+                                          {translate(
+                                            locale,
+                                            "my_trips.window_label",
+                                          )}{" "}
+                                          <strong style={{ color: "#0B1E3D" }}>
+                                            {formatTime(locale, ride.startTime)}{" "}
+                                            – {formatTime(locale, ride.endTime)}
+                                          </strong>
+                                        </span>
+                                      </div>
+                                      {ride.route.length > 0 && (
+                                        <span
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: 5,
+                                            fontSize: 12,
+                                            color: "#5A6A7A",
+                                          }}
+                                        >
+                                          <Route size={12} aria-hidden="true" />
+                                          {ride.route.length}{" "}
+                                          {ride.route.length === 1
+                                            ? translate(
+                                                locale,
+                                                "my_trips.stop_singular",
+                                              )
+                                            : translate(
+                                                locale,
+                                                "my_trips.stop_plural",
+                                              )}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: 10,
+                                        marginBottom: 12,
+                                      }}
+                                    >
+                                      {ride.passengers.map((passenger) => (
+                                        <div
+                                          key={passenger.tripId}
+                                          style={{
+                                            padding: "10px 12px",
+                                            borderRadius: 10,
+                                            background: "#F8FAFB",
+                                            border: "1px solid #eef0f3",
+                                          }}
+                                        >
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              gap: 8,
+                                              marginBottom: 6,
+                                              flexWrap: "wrap",
+                                            }}
+                                          >
+                                            <span
+                                              style={{
+                                                fontSize: 11,
+                                                fontWeight: 700,
+                                                color: "#00806E",
+                                              }}
+                                            >
+                                              {translate(
+                                                locale,
+                                                "my_trips.pickup_prefix",
+                                                { n: passenger.pickupOrder },
+                                              )}
+                                            </span>
+                                            <span
+                                              style={{
+                                                fontSize: 11,
+                                                fontWeight: 700,
+                                                color: "#E74C3C",
+                                              }}
+                                            >
+                                              {translate(
+                                                locale,
+                                                "my_trips.dropoff_prefix",
+                                                { n: passenger.dropoffOrder },
+                                              )}
+                                            </span>
+                                            <span
+                                              style={{
+                                                fontSize: 11,
+                                                color: "#9aa7b4",
+                                                fontWeight: 600,
+                                              }}
+                                            >
+                                              · {passenger.numberOfPassengers}{" "}
+                                              {translate(
+                                                locale,
+                                                passenger.numberOfPassengers ===
+                                                  1
+                                                  ? "my_trips.passenger_singular_short"
+                                                  : "my_trips.passenger_plural_short",
+                                              )}{" "}
+                                              ·{" "}
+                                              {formatEgp(
+                                                locale,
+                                                passenger.tripCost,
+                                              )}
+                                            </span>
+                                          </div>
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 4,
+                                            }}
+                                          >
+                                            <div
+                                              style={{
+                                                display: "flex",
+                                                alignItems: "flex-start",
+                                                gap: 8,
+                                              }}
+                                            >
+                                              <MapPin
+                                                size={13}
+                                                color="#00C2A8"
+                                                style={{
+                                                  marginTop: 2,
+                                                  flexShrink: 0,
+                                                }}
+                                                aria-hidden="true"
+                                              />
+                                              <span
+                                                title={
+                                                  ride.rideType === "shared"
+                                                    ? (passenger.pickupStation
+                                                        ?.name ??
+                                                      ride.pickupStation
+                                                        ?.name ??
+                                                      passenger.pickupAddress)
+                                                    : passenger.pickupAddress
+                                                }
+                                                style={{
+                                                  fontSize: 13,
+                                                  color: "#0B1E3D",
+                                                }}
+                                              >
+                                                {truncate(
+                                                  ride.rideType === "shared"
+                                                    ? (passenger.pickupStation
+                                                        ?.name ??
+                                                        ride.pickupStation
+                                                          ?.name ??
+                                                        passenger.pickupAddress)
+                                                    : passenger.pickupAddress,
+                                                )}
+                                              </span>
+                                            </div>
+                                            <div
+                                              style={{
+                                                display: "flex",
+                                                alignItems: "flex-start",
+                                                gap: 8,
+                                              }}
+                                            >
+                                              <MapPin
+                                                size={13}
+                                                color="#E74C3C"
+                                                style={{
+                                                  marginTop: 2,
+                                                  flexShrink: 0,
+                                                }}
+                                                aria-hidden="true"
+                                              />
+                                              <span
+                                                title={
+                                                  ride.rideType === "shared"
+                                                    ? (passenger.dropoffStation
+                                                        ?.name ??
+                                                      ride.dropoffStation
+                                                        ?.name ??
+                                                      passenger.dropoffAddress)
+                                                    : passenger.dropoffAddress
+                                                }
+                                                style={{
+                                                  fontSize: 13,
+                                                  color: "#0B1E3D",
+                                                }}
+                                              >
+                                                {truncate(
+                                                  ride.rideType === "shared"
+                                                    ? (passenger.dropoffStation
+                                                        ?.name ??
+                                                        ride.dropoffStation
+                                                          ?.name ??
+                                                        passenger.dropoffAddress)
+                                                    : passenger.dropoffAddress,
+                                                )}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "flex-end",
+                                        paddingTop: 10,
+                                      }}
+                                    >
+                                      <ChevronRight
+                                        className="rtl-directional-icon"
+                                        size={16}
+                                        color="#9aa7b4"
+                                        aria-hidden="true"
+                                      />
+                                    </div>
+                                  </div>
+                                </Link>
+                              ) : (
+                                <div style={{ padding: "16px 18px" }}>
+                                  <Pill
+                                    {...rideStatusPill(ride.status, locale)}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        const trip = item.data;
+                        const vLabel = descriptionForVehicle(
+                          locale,
+                          trip.vehicleType,
+                        );
+                        const displayRequest = {
+                          status: trip.isStandalone
+                            ? trip.status
+                            : (trip.parentRequestStatus ?? trip.status),
+                          paymentStatus: trip.isStandalone
+                            ? trip.paymentStatus
+                            : (trip.parentPaymentStatus ?? trip.paymentStatus),
+                          hasPastTrip: trip.hasPastTrip,
+                          rejectionReason: trip.rejectionReason,
+                        };
+                        const displayStatus = getDisplayStatus({
+                          request: displayRequest,
+                          trip,
+                        });
+                        const rejectionDisplay = getRejectionDisplay({
+                          request: displayRequest,
+                          trip,
+                        });
+                        const timedOut = trip.status === "time_out";
+                        const hasAssignedDriver = Boolean(trip.assignedDriver);
+                        const sharedDetail = !isDriver
+                          ? sharedTripDetailsById.get(trip.id)
+                          : null;
+                        const showSharedSummary =
+                          !isDriver &&
+                          isSharedVehicle(trip.vehicleType) &&
+                          Boolean(sharedDetail?.rideDetails);
+                        const pickupName =
+                          sharedDetail?.pickupStation?.name ??
+                          trip.pickupAddress;
+                        const dropoffName =
+                          sharedDetail?.dropoffStation?.name ??
+                          trip.dropoffAddress;
+                        const sharedTrip = isSharedVehicle(trip.vehicleType);
+                        const needsPayment =
+                          !isDriver &&
+                          activePassengerTab === "pending" &&
+                          displayStatus.canPay;
+                        const tripPaymentStatus = trip.isStandalone
+                          ? trip.paymentStatus
+                          : (trip.parentPaymentStatus ?? trip.paymentStatus);
+                        const compactPendingPassengerTrip =
+                          !isDriver &&
+                          activePassengerTab === "pending" &&
+                          !["paid", "refunded"].includes(
+                            tripPaymentStatus ?? "",
+                          ) &&
+                          (displayStatus.canPay ||
+                            [
+                              "request_status.waiting_for_approval",
+                              "status.waiting_list",
+                              "status.pending_payment",
+                            ].includes(displayStatus.key));
+                        if (compactPendingPassengerTrip) {
+                          const checkoutAmount = trip.isStandalone
+                            ? trip.priceEgp
+                            : trip.bookingAmountEgp;
+                          const waitingForApproval = [
+                            "request_status.waiting_for_approval",
+                            "status.waiting_list",
+                          ].includes(displayStatus.key);
+                          return (
+                            <article
+                              key={trip.id}
+                              className="trip-card trip-pending-single-card"
+                            >
+                              <header className="trip-pending-single-header">
+                                <div className="trip-pending-single-heading">
+                                  <Car
+                                    size={19}
+                                    color="#00806E"
+                                    aria-hidden="true"
+                                  />
+                                  <strong
+                                    style={{
+                                      color: "#0B1E3D",
+                                      fontSize: 15,
+                                      fontWeight: 800,
+                                    }}
+                                  >
+                                    {vLabel}
+                                  </strong>
+                                  <Pill
+                                    {...displayPill(locale, displayStatus)}
+                                  />
+                                </div>
+                                <strong className="trip-pending-single-price">
+                                  {formatEgp(locale, checkoutAmount)}
+                                </strong>
+                              </header>
+                              <div className="trip-pending-single-route">
+                                <MapPin
+                                  size={14}
+                                  color="#00A98F"
+                                  aria-hidden="true"
+                                />
+                                <span dir="auto" title={pickupName}>
+                                  {truncate(pickupName)}
+                                </span>
+                                <ArrowRight
+                                  className="rtl-directional-icon"
+                                  size={14}
+                                  color="#91A6A3"
+                                  aria-hidden="true"
+                                />
+                                <span dir="auto" title={dropoffName}>
+                                  {truncate(dropoffName)}
+                                </span>
+                              </div>
+                              <div className="trip-pending-single-date">
+                                <CalendarDays size={14} aria-hidden="true" />
+                                <span>
+                                  {prettyDate(locale, trip.date)} ·{" "}
+                                  {formatTime(locale, trip.pickupTime)}
+                                </span>
+                              </div>
+                              {waitingForApproval && (
+                                <p className="trip-pending-single-note">
+                                  {translate(
+                                    locale,
+                                    "request_status.waiting_payment_explanation",
+                                  )}
+                                </p>
+                              )}
+                              <div className="trip-pending-single-actions">
+                                {needsPayment && (
+                                  <ContinueCheckoutButton
+                                    bookingId={
+                                      trip.isStandalone
+                                        ? trip.id
+                                        : trip.requestId
+                                    }
+                                    amountEgp={checkoutAmount}
+                                    walletBalance={walletBalance}
+                                  />
+                                )}
+                                {displayStatus.canCancel && (
+                                  <CancelTripModal
+                                    tripId={trip.id}
+                                    tripNumber={trip.tripNumber}
+                                    date={trip.date}
+                                    priceEgp={trip.priceEgp}
+                                    status={trip.status}
+                                    isStandalone={trip.isStandalone}
+                                    paymentStatus={trip.paymentStatus}
+                                    triggerClassName="my-trips-booking-action booking-action-danger"
+                                  />
+                                )}
+                                <Link
+                                  href={`/my-trips/${trip.id}`}
+                                  className="my-trips-booking-action booking-action-icon trip-pending-single-view"
+                                  aria-label={translate(
+                                    locale,
+                                    "my_trips.view_trip",
+                                  )}
+                                >
+                                  <ChevronRight
+                                    className="rtl-directional-icon"
+                                    size={17}
+                                    aria-hidden="true"
+                                  />
+                                </Link>
+                              </div>
+                            </article>
+                          );
+                        }
+                        return (
+                          <div
+                            key={trip.id}
+                            className="trip-card"
+                            style={{
+                              background: "#fff",
+                              borderRadius: 8,
+                              border: "1px solid #DCE6E4",
+                              overflow: "hidden",
+                              opacity: timedOut ? 0.7 : 1,
+                              boxShadow: "0 3px 12px rgba(11,30,61,0.035)",
+                            }}
+                          >
                             <Link
-                              href={detailHref}
+                              className="trip-card-link"
+                              href={`/my-trips/${trip.id}`}
                               style={{
                                 textDecoration: "none",
                                 color: "inherit",
@@ -1547,7 +2439,26 @@ export default async function MyTripsPage({
                                       fontWeight: 600,
                                     }}
                                   >
-                                    {translate(locale, "my_trips.ride_number", { rideNumber: ride.rideNumber })} · {ride.passengers.length} {ride.passengers.length === 1 ? translate(locale, "my_trips.trip_singular") : translate(locale, "my_trips.trip_plural")} · {toArabicDigitsIf(locale, new Date(ride.createdAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-EG", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}
+                                    {translate(locale, "my_trips.trip_number", {
+                                      n: trip.tripNumber,
+                                    })}{" "}
+                                    ·{" "}
+                                    {translate(
+                                      locale,
+                                      "my_trips.requested_label",
+                                    )}{" "}
+                                    {toArabicDigitsIf(
+                                      locale,
+                                      new Date(trip.createdAt).toLocaleString(
+                                        locale === "ar" ? "ar-EG" : "en-EG",
+                                        {
+                                          month: "short",
+                                          day: "numeric",
+                                          hour: "numeric",
+                                          minute: "2-digit",
+                                        },
+                                      ),
+                                    )}
                                   </span>
                                 </div>
 
@@ -1565,6 +2476,7 @@ export default async function MyTripsPage({
                                       display: "flex",
                                       alignItems: "center",
                                       gap: 8,
+                                      minWidth: 0,
                                       flexWrap: "wrap",
                                     }}
                                   >
@@ -1575,34 +2487,20 @@ export default async function MyTripsPage({
                                     />
                                     <span
                                       style={{
-                                        fontSize: 18,
+                                        fontSize: 16,
                                         fontWeight: 800,
                                         color: "#0B1E3D",
-                                        letterSpacing: "-0.01em",
                                       }}
                                     >
                                       {vLabel}
                                     </span>
-                                    <span
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        padding: "2px 8px",
-                                        borderRadius: 999,
-                                        fontSize: 11,
-                                        fontWeight: 700,
-                                        background:
-                                          ride.rideType === "shared"
-                                            ? "#E8F8F5"
-                                            : "#EEF2FF",
-                                        color:
-                                          ride.rideType === "shared"
-                                            ? "#00806E"
-                                            : "#0B1E3D",
-                                        textTransform: "capitalize",
-                                      }}
-                                    >
-                                      {rideTypeLabel(locale, ride.rideType)}
+                                    <span className="trip-type-badge">
+                                      {translate(
+                                        locale,
+                                        sharedTrip
+                                          ? "ride.shared"
+                                          : "ride.private",
+                                      )}
                                     </span>
                                   </div>
                                   <span
@@ -1613,7 +2511,35 @@ export default async function MyTripsPage({
                                       fontVariantNumeric: "tabular-nums",
                                     }}
                                   >
-                                    {formatEgp(locale, ride.totalCost)}
+                                    {formatEgp(locale, trip.priceEgp)}
+                                  </span>
+                                </div>
+
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: 8,
+                                    marginBottom: 12,
+                                    fontSize: 12,
+                                    color: "#5A6A7A",
+                                  }}
+                                >
+                                  <span>
+                                    {translate(locale, "my_trips.trip_fare")}
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontWeight: 700,
+                                      color: "#0B1E3D",
+                                      fontVariantNumeric: "tabular-nums",
+                                    }}
+                                  >
+                                    {translate(
+                                      locale,
+                                      "my_trips.request_total",
+                                    )}
+                                    : {formatEgp(locale, trip.bookingAmountEgp)}
                                   </span>
                                 </div>
 
@@ -1626,639 +2552,538 @@ export default async function MyTripsPage({
                                     marginBottom: 12,
                                   }}
                                 >
-                                  <Pill {...rideStatusPill(ride.status, locale)} />
-                                  <span
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: 4,
-                                      fontSize: 12,
-                                      color: "#5A6A7A",
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    <Users size={12} aria-hidden="true" />
-                                    {ride.passengerCount} {ride.passengerCount === 1 ? translate(locale, "my_trips.passenger_singular") : translate(locale, "my_trips.passenger_plural")}
+                                  <span className="trip-card-date">
+                                    {formatDate(locale, trip.date)}
+                                    <span>
+                                      {formatTime(locale, trip.pickupTime)}
+                                    </span>
                                   </span>
+                                  <Pill
+                                    {...displayPill(locale, displayStatus)}
+                                  />
+                                  {trip.status === "matched" && (
+                                    <MatchedTripCountdown
+                                      date={trip.date}
+                                      pickupTime={trip.pickupTime}
+                                      locale={locale}
+                                    />
+                                  )}
+                                  {displayStatus.showRefundBadge &&
+                                    trip.cancellation && (
+                                      <span
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 4,
+                                          padding: "3px 10px",
+                                          borderRadius: 20,
+                                          fontSize: 11,
+                                          fontWeight: 700,
+                                          background:
+                                            trip.cancellation.refundStatus ===
+                                            "approved"
+                                              ? "#E8F8F5"
+                                              : trip.cancellation
+                                                    .refundStatus === "rejected"
+                                                ? "#FDECEA"
+                                                : "#FFF3E0",
+                                          color:
+                                            trip.cancellation.refundStatus ===
+                                            "approved"
+                                              ? "#00806E"
+                                              : trip.cancellation
+                                                    .refundStatus === "rejected"
+                                                ? "#C0392B"
+                                                : "#E65100",
+                                          border: `1px solid ${
+                                            trip.cancellation.refundStatus ===
+                                            "approved"
+                                              ? "#CBE9E2"
+                                              : trip.cancellation
+                                                    .refundStatus === "rejected"
+                                                ? "#FADBD8"
+                                                : "#FFE0B2"
+                                          }`,
+                                        }}
+                                      >
+                                        {trip.cancellation.refundStatus ===
+                                        "approved"
+                                          ? `Refund Approved (${trip.cancellation.refundAmount} EGP)`
+                                          : trip.cancellation.refundStatus ===
+                                              "rejected"
+                                            ? "Refund Rejected"
+                                            : `Refund Pending Review (${trip.cancellation.refundAmount} EGP)`}
+                                      </span>
+                                    )}
                                 </div>
-
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 16,
-                                    marginBottom: 12,
-                                    flexWrap: "wrap",
-                                  }}
-                                >
-                                  <div
+                                {(rejectionDisplay.showReasonCard ||
+                                  displayStatus.secondaryKey ||
+                                  displayStatus.secondaryText) && (
+                                  <p
+                                    className={
+                                      displayStatus.secondaryKey ===
+                                      "status.approved_by_admin"
+                                        ? "trip-approved-caption"
+                                        : undefined
+                                    }
+                                    title={
+                                      rejectionDisplay.showReasonCard
+                                        ? (rejectionDisplay.reason ??
+                                          translate(
+                                            locale,
+                                            "rejection.no_reason",
+                                          ))
+                                        : undefined
+                                    }
                                     style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 5,
+                                      margin:
+                                        displayStatus.secondaryKey ===
+                                        "status.approved_by_admin"
+                                          ? "-5px 0 10px"
+                                          : "-4px 0 12px",
+                                      marginInlineStart:
+                                        displayStatus.secondaryKey ===
+                                        "status.approved_by_admin"
+                                          ? 28
+                                          : 0,
+                                      fontSize:
+                                        displayStatus.secondaryKey ===
+                                        "status.approved_by_admin"
+                                          ? 11
+                                          : 13,
+                                      lineHeight:
+                                        displayStatus.secondaryKey ===
+                                        "status.approved_by_admin"
+                                          ? 1.35
+                                          : 1.5,
+                                      color:
+                                        displayStatus.secondaryKey ===
+                                        "status.approved_by_admin"
+                                          ? "#687978"
+                                          : "#5A6A7A",
+                                      ...(rejectionDisplay.showReasonCard
+                                        ? {
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                            whiteSpace: "nowrap" as const,
+                                          }
+                                        : {}),
                                     }}
                                   >
-                                    <Clock
-                                      size={12}
-                                      color="#5A6A7A"
-                                      aria-hidden="true"
-                                    />
-                                    <span
-                                      style={{ fontSize: 12, color: "#5A6A7A" }}
-                                    >
-                                      {translate(locale, "my_trips.window_label")} {" "}
-                                      <strong style={{ color: "#0B1E3D" }}>
-                                        {formatTime(locale, ride.startTime)} –{" "}
-                                        {formatTime(locale, ride.endTime)}
-                                      </strong>
-                                    </span>
-                                  </div>
-                                  {ride.route.length > 0 && (
-                                    <span
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: 5,
-                                        fontSize: 12,
-                                        color: "#5A6A7A",
-                                      }}
-                                    >
-                                      <Route size={12} aria-hidden="true" />
-                                      {ride.route.length} {ride.route.length === 1 ? translate(locale, "my_trips.stop_singular") : translate(locale, "my_trips.stop_plural")}
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: 10,
-                                    marginBottom: 12,
-                                  }}
-                                >
-                                  {ride.passengers.map((passenger) => (
-                                    <div
-                                      key={passenger.tripId}
-                                      style={{
-                                        padding: "10px 12px",
-                                        borderRadius: 10,
-                                        background: "#F8FAFB",
-                                        border: "1px solid #eef0f3",
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          gap: 8,
-                                          marginBottom: 6,
-                                          flexWrap: "wrap",
-                                        }}
-                                      >
-                                        <span
-                                          style={{
-                                            fontSize: 11,
-                                            fontWeight: 700,
-                                            color: "#00806E",
-                                          }}
-                                        >
-                                          {translate(locale, "my_trips.pickup_prefix", { n: passenger.pickupOrder })}
-                                        </span>
-                                        <span
-                                          style={{
-                                            fontSize: 11,
-                                            fontWeight: 700,
-                                            color: "#E74C3C",
-                                          }}
-                                        >
-                                          {translate(locale, "my_trips.dropoff_prefix", { n: passenger.dropoffOrder })}
-                                        </span>
-                                        <span
-                                          style={{
-                                            fontSize: 11,
-                                            color: "#9aa7b4",
-                                            fontWeight: 600,
-                                          }}
-                                        >
-                                          · {passenger.numberOfPassengers}{" "}
-                                          {translate(locale, passenger.numberOfPassengers === 1 ? "my_trips.passenger_singular_short" : "my_trips.passenger_plural_short")} · {formatEgp(locale, passenger.tripCost)}
-                                        </span>
-                                      </div>
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          flexDirection: "column",
-                                          gap: 4,
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            display: "flex",
-                                            alignItems: "flex-start",
-                                            gap: 8,
-                                          }}
-                                        >
-                                          <MapPin
-                                            size={13}
-                                            color="#00C2A8"
-                                            style={{
-                                              marginTop: 2,
-                                              flexShrink: 0,
-                                            }}
-                                            aria-hidden="true"
-                                          />
-                                          <span
-                                            title={
-                                              ride.rideType === "shared"
-                                                ? (passenger.pickupStation?.name ??
-                                                  ride.pickupStation?.name ??
-                                                  passenger.pickupAddress)
-                                                : passenger.pickupAddress
-                                            }
-                                            style={{
-                                              fontSize: 13,
-                                              color: "#0B1E3D",
-                                            }}
-                                          >
-                                            {truncate(
-                                              ride.rideType === "shared"
-                                                ? (passenger.pickupStation?.name ??
-                                                  ride.pickupStation?.name ??
-                                                  passenger.pickupAddress)
-                                                : passenger.pickupAddress,
-                                            )}
-                                          </span>
-                                        </div>
-                                        <div
-                                          style={{
-                                            display: "flex",
-                                            alignItems: "flex-start",
-                                            gap: 8,
-                                          }}
-                                        >
-                                          <MapPin
-                                            size={13}
-                                            color="#E74C3C"
-                                            style={{
-                                              marginTop: 2,
-                                              flexShrink: 0,
-                                            }}
-                                            aria-hidden="true"
-                                          />
-                                          <span
-                                            title={
-                                              ride.rideType === "shared"
-                                                ? (passenger.dropoffStation?.name ??
-                                                  ride.dropoffStation?.name ??
-                                                  passenger.dropoffAddress)
-                                                : passenger.dropoffAddress
-                                            }
-                                            style={{
-                                              fontSize: 13,
-                                              color: "#0B1E3D",
-                                            }}
-                                          >
-                                            {truncate(
-                                              ride.rideType === "shared"
-                                                ? (passenger.dropoffStation?.name ??
-                                                  ride.dropoffStation?.name ??
-                                                  passenger.dropoffAddress)
-                                                : passenger.dropoffAddress,
-                                            )}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "flex-end",
-                                    paddingTop: 10,
-                                  }}
-                                >
-                                  <ChevronRight
-                                    className="rtl-directional-icon"
-                                    size={16}
-                                    color="#9aa7b4"
-                                    aria-hidden="true"
-                                  />
-                                </div>
-                              </div>
-                            </Link>
-                          ) : (
-                            <div style={{ padding: "16px 18px" }}>
-                              <Pill {...rideStatusPill(ride.status, locale)} />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    const trip = item.data;
-                    const vLabel = descriptionForVehicle(locale, trip.vehicleType);
-                    const displayRequest = {
-                      status: trip.isStandalone
-                        ? trip.status
-                        : trip.parentRequestStatus ?? trip.status,
-                      paymentStatus: trip.isStandalone
-                        ? trip.paymentStatus
-                        : trip.parentPaymentStatus ?? trip.paymentStatus,
-                      hasPastTrip: trip.hasPastTrip,
-                      rejectionReason: trip.rejectionReason,
-                    };
-                    const displayStatus = getDisplayStatus({ request: displayRequest, trip });
-                    const rejectionDisplay = getRejectionDisplay({ request: displayRequest, trip });
-                    const timedOut = trip.status === "time_out";
-                    const hasAssignedDriver = Boolean(trip.assignedDriver);
-                    const sharedDetail = !isDriver ? sharedTripDetailsById.get(trip.id) : null;
-                    const showSharedSummary =
-                      !isDriver &&
-                      isSharedVehicle(trip.vehicleType) &&
-                      Boolean(sharedDetail?.rideDetails);
-                    const pickupName = sharedDetail?.pickupStation?.name ?? trip.pickupAddress;
-                    const dropoffName = sharedDetail?.dropoffStation?.name ?? trip.dropoffAddress;
-                    const sharedTrip = isSharedVehicle(trip.vehicleType);
-                    const needsPayment =
-                      !isDriver &&
-                      activePassengerTab === "pending" &&
-                      displayStatus.canPay;
-                    const tripPaymentStatus = trip.isStandalone
-                      ? trip.paymentStatus
-                      : trip.parentPaymentStatus ?? trip.paymentStatus;
-                    const compactPendingPassengerTrip =
-                      !isDriver &&
-                      activePassengerTab === "pending" &&
-                      !["paid", "refunded"].includes(tripPaymentStatus ?? "") &&
-                      (displayStatus.canPay ||
-                        [
-                          "request_status.waiting_for_approval",
-                          "status.waiting_list",
-                          "status.pending_payment",
-                        ].includes(displayStatus.key));
-                    if (compactPendingPassengerTrip) {
-                      const checkoutAmount = trip.isStandalone
-                        ? trip.priceEgp
-                        : trip.bookingAmountEgp;
-                      const waitingForApproval = [
-                        "request_status.waiting_for_approval",
-                        "status.waiting_list",
-                      ].includes(displayStatus.key);
-                      return (
-                        <article key={trip.id} className="trip-card trip-pending-single-card">
-                          <header className="trip-pending-single-header">
-                            <div className="trip-pending-single-heading">
-                              <Car size={19} color="#00806E" aria-hidden="true" />
-                              <strong style={{ color: "#0B1E3D", fontSize: 15, fontWeight: 800 }}>
-                                {vLabel}
-                              </strong>
-                              <Pill {...displayPill(locale, displayStatus)} />
-                            </div>
-                            <strong className="trip-pending-single-price">
-                              {formatEgp(locale, checkoutAmount)}
-                            </strong>
-                          </header>
-                          <div className="trip-pending-single-route">
-                            <MapPin size={14} color="#00A98F" aria-hidden="true" />
-                            <span dir="auto" title={pickupName}>{truncate(pickupName)}</span>
-                            <ArrowRight className="rtl-directional-icon" size={14} color="#91A6A3" aria-hidden="true" />
-                            <span dir="auto" title={dropoffName}>{truncate(dropoffName)}</span>
-                          </div>
-                          <div className="trip-pending-single-date">
-                            <CalendarDays size={14} aria-hidden="true" />
-                            <span>{prettyDate(locale, trip.date)} · {formatTime(locale, trip.pickupTime)}</span>
-                          </div>
-                          {waitingForApproval && (
-                            <p className="trip-pending-single-note">
-                              {translate(locale, "request_status.waiting_payment_explanation")}
-                            </p>
-                          )}
-                          <div className="trip-pending-single-actions">
-                            {needsPayment && (
-                              <ContinueCheckoutButton
-                                bookingId={trip.isStandalone ? trip.id : trip.requestId}
-                                amountEgp={checkoutAmount}
-                                walletBalance={walletBalance}
-                              />
-                            )}
-                            {displayStatus.canCancel && (
-                              <CancelTripModal
-                                tripId={trip.id}
-                                tripNumber={trip.tripNumber}
-                                date={trip.date}
-                                priceEgp={trip.priceEgp}
-                                status={trip.status}
-                                isStandalone={trip.isStandalone}
-                                paymentStatus={trip.paymentStatus}
-                                triggerClassName="my-trips-booking-action booking-action-danger"
-                              />
-                            )}
-                            <Link
-                              href={`/my-trips/${trip.id}`}
-                              className="my-trips-booking-action booking-action-icon trip-pending-single-view"
-                              aria-label={translate(locale, "my_trips.view_trip")}
-                            >
-                              <ChevronRight className="rtl-directional-icon" size={17} aria-hidden="true" />
-                            </Link>
-                          </div>
-                        </article>
-                      );
-                    }
-                    return (
-                      <div
-                        key={trip.id}
-                        className="trip-card"
-                        style={{
-                          background: "#fff",
-                          borderRadius: 8,
-                          border: "1px solid #DCE6E4",
-                          overflow: "hidden",
-                          opacity: timedOut ? 0.7 : 1,
-                          boxShadow: "0 3px 12px rgba(11,30,61,0.035)",
-                        }}
-                      >
-                        <Link
-                          className="trip-card-link"
-                          href={`/my-trips/${trip.id}`}
-                          style={{
-                            textDecoration: "none",
-                            color: "inherit",
-                            display: "block",
-                          }}
-                        >
-                          <div style={{ padding: "16px 18px" }}>
-                            <div style={{ marginBottom: 10 }}>
-                              <span
-                                style={{
-                                  fontSize: 11,
-                                  color: "#9aa7b4",
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {translate(locale, "my_trips.trip_number", { n: trip.tripNumber })} · {translate(locale, "my_trips.requested_label")} {" "}
-                                {toArabicDigitsIf(locale, new Date(trip.createdAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-EG", {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                }))}
-                              </span>
-                            </div>
-
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                gap: 8,
-                                marginBottom: 8,
-                              }}
-                            >
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
-                                <Car size={20} color="#00806E" aria-hidden="true" />
-                                <span style={{ fontSize: 16, fontWeight: 800, color: "#0B1E3D" }}>
-                                  {vLabel}
-                                </span>
-                                <span className="trip-type-badge">
-                                  {translate(locale, sharedTrip ? "ride.shared" : "ride.private")}
-                                </span>
-                              </div>
-                              <span style={{ fontWeight: 800, fontSize: 16, color: "#00C2A8", fontVariantNumeric: "tabular-nums" }}>
-                                {formatEgp(locale, trip.priceEgp)}
-                              </span>
-                            </div>
-
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                gap: 8,
-                                marginBottom: 12,
-                                fontSize: 12,
-                                color: "#5A6A7A",
-                              }}
-                            >
-                              <span>{translate(locale, "my_trips.trip_fare")}</span>
-                              <span style={{ fontWeight: 700, color: "#0B1E3D", fontVariantNumeric: "tabular-nums" }}>
-                                {translate(locale, "my_trips.request_total")}: {formatEgp(locale, trip.bookingAmountEgp)}
-                              </span>
-                            </div>
-
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                              <span className="trip-card-date">
-                                {formatDate(locale, trip.date)}
-                                <span>{formatTime(locale, trip.pickupTime)}</span>
-                              </span>
-                              <Pill {...displayPill(locale, displayStatus)} />
-                              {trip.status === "matched" && (
-                                <MatchedTripCountdown
-                                  date={trip.date}
-                                  pickupTime={trip.pickupTime}
-                                  locale={locale}
-                                />
-                              )}
-                              {displayStatus.showRefundBadge && trip.cancellation && (
-                                <span
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 4,
-                                    padding: "3px 10px",
-                                    borderRadius: 20,
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    background:
-                                      trip.cancellation.refundStatus === "approved"
-                                        ? "#E8F8F5"
-                                        : trip.cancellation.refundStatus === "rejected"
-                                          ? "#FDECEA"
-                                          : "#FFF3E0",
-                                    color:
-                                      trip.cancellation.refundStatus === "approved"
-                                        ? "#00806E"
-                                        : trip.cancellation.refundStatus === "rejected"
-                                          ? "#C0392B"
-                                          : "#E65100",
-                                    border: `1px solid ${
-                                      trip.cancellation.refundStatus === "approved"
-                                        ? "#CBE9E2"
-                                        : trip.cancellation.refundStatus === "rejected"
-                                          ? "#FADBD8"
-                                          : "#FFE0B2"
-                                    }`,
-                                  }}
-                                >
-                                  {trip.cancellation.refundStatus === "approved"
-                                    ? `Refund Approved (${trip.cancellation.refundAmount} EGP)`
-                                    : trip.cancellation.refundStatus === "rejected"
-                                      ? "Refund Rejected"
-                                      : `Refund Pending Review (${trip.cancellation.refundAmount} EGP)`}
-                                </span>
-                              )}
-                            </div>
-                            {(rejectionDisplay.showReasonCard || displayStatus.secondaryKey || displayStatus.secondaryText) && (
-                              <p
-                                className={displayStatus.secondaryKey === "status.approved_by_admin" ? "trip-approved-caption" : undefined}
-                                title={rejectionDisplay.showReasonCard ? (rejectionDisplay.reason ?? translate(locale, "rejection.no_reason")) : undefined}
-                                style={{
-                                  margin: displayStatus.secondaryKey === "status.approved_by_admin" ? "-5px 0 10px" : "-4px 0 12px",
-                                  marginInlineStart: displayStatus.secondaryKey === "status.approved_by_admin" ? 28 : 0,
-                                  fontSize: displayStatus.secondaryKey === "status.approved_by_admin" ? 11 : 13,
-                                  lineHeight: displayStatus.secondaryKey === "status.approved_by_admin" ? 1.35 : 1.5,
-                                  color: displayStatus.secondaryKey === "status.approved_by_admin" ? "#687978" : "#5A6A7A",
-                                  ...(rejectionDisplay.showReasonCard
-                                    ? { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }
-                                    : {}),
-                                }}
-                              >
-                                {rejectionDisplay.showReasonCard
-                                  ? rejectionDisplay.reason ?? translate(locale, "rejection.no_reason")
-                                  : displayStatus.secondaryKey
-                                    ? translate(locale, displayStatus.secondaryKey)
-                                    : displayStatus.secondaryText}
-                              </p>
-                            )}
-
-                            {showSharedSummary ? (
-                              <div style={{ marginBottom: 12 }}>
-                                <SharedSummaryCard
-                                  locale={locale}
-                                  driver={sharedDetail?.assignedDriver ?? trip.assignedDriver}
-                                  totalPersons={sharedDetail?.rideDetails?.passengerCount ?? sharedDetail?.numberOfPassengers ?? 1}
-                                  totalFees={sharedDetail?.rideDetails?.totalCost ?? trip.bookingAmountEgp}
-                                  pickupPoint={sharedDetail?.pickupStation?.name ?? trip.pickupAddress}
-                                  departureTime={trip.pickupTime}
-                                  dropoffPoint={sharedDetail?.dropoffStation?.name ?? trip.dropoffAddress}
-                                  arrivalTime={trip.arrivalTime}
-                                />
-                              </div>
-                            ) : (
-                              <>
-                                {!isDriver && hasAssignedDriver && (
-                                  <div style={{ marginBottom: 12, background: "linear-gradient(135deg, #F6FBFA 0%, #EEFBF8 100%)", border: "1px solid #D6F5EE", borderRadius: 14, overflow: "hidden" }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px" }}>
-                                      {(trip.assignedDriver?.profilePicture ?? trip.assignedDriver?.profilePic) ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                          src={trip.assignedDriver.profilePicture ?? trip.assignedDriver.profilePic ?? ""}
-                                          alt={trip.assignedDriver?.name ?? translate(locale, "my_trips.driver_fallback")}
-                                          style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
-                                        />
-                                      ) : (
-                                        <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B1E3D", color: "#fff", fontWeight: 800, fontSize: 15 }} aria-hidden="true">
-                                          {(trip.assignedDriver?.name ?? "").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("")}
-                                        </div>
-                                      )}
-                                      <div style={{ minWidth: 0, flex: 1 }}>
-                                        <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#00806E", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                                          {translate(locale, "my_trips.driver_heading")}
-                                        </p>
-                                        <p style={{ margin: "1px 0 0", fontSize: 14, fontWeight: 700, color: "#0B1E3D" }}>
-                                          {trip.assignedDriver?.name ?? "—"}
-                                        </p>
-                                      </div>
-                                    </div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderTop: "1px solid #D6F5EE", background: "rgba(255,255,255,0.5)" }}>
-                                      <Car size={16} color="#00806E" style={{ flexShrink: 0 }} aria-hidden="true" />
-                                      <span style={{ fontSize: 13, fontWeight: 600, color: "#0B1E3D" }}>
-                                        {trip.assignedDriver?.carBrand ?? ""}
-                                        {trip.assignedDriver?.carBrand && trip.assignedDriver?.carModel ? " " : ""}
-                                        {trip.assignedDriver?.carModel ?? ""}
-                                        {trip.assignedDriver?.modelYear ? ` · ${trip.assignedDriver.modelYear}` : ""}
-                                      </span>
-                                      <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 8, background: "#fff", border: "1px solid #CBE9E2", fontSize: 12, fontWeight: 700, color: "#0B1E3D", whiteSpace: "nowrap" }}>
-                                        <span style={{ fontSize: 10, color: "#5A6A7A", textTransform: "uppercase", letterSpacing: "0.04em" }}>Color</span>
-                                        <span>{trip.assignedDriver?.vehicleColor ?? trip.assignedDriver?.carColor ?? "—"}</span>
-                                      </span>
-                                    </div>
-                                  </div>
+                                    {rejectionDisplay.showReasonCard
+                                      ? (rejectionDisplay.reason ??
+                                        translate(
+                                          locale,
+                                          "rejection.no_reason",
+                                        ))
+                                      : displayStatus.secondaryKey
+                                        ? translate(
+                                            locale,
+                                            displayStatus.secondaryKey,
+                                          )
+                                        : displayStatus.secondaryText}
+                                  </p>
                                 )}
 
-                                <div className="trip-card-route">
-                                  <div className="trip-card-route-row">
-                                    <MapPin size={13} color="#00C2A8" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
-                                    <span title={pickupName}>{truncate(pickupName)}</span>
+                                {showSharedSummary ? (
+                                  <div style={{ marginBottom: 12 }}>
+                                    <SharedSummaryCard
+                                      locale={locale}
+                                      driver={
+                                        sharedDetail?.assignedDriver ??
+                                        trip.assignedDriver
+                                      }
+                                      totalPersons={
+                                        sharedDetail?.rideDetails
+                                          ?.passengerCount ??
+                                        sharedDetail?.numberOfPassengers ??
+                                        1
+                                      }
+                                      totalFees={
+                                        sharedDetail?.rideDetails?.totalCost ??
+                                        trip.bookingAmountEgp
+                                      }
+                                      pickupPoint={
+                                        sharedDetail?.pickupStation?.name ??
+                                        trip.pickupAddress
+                                      }
+                                      departureTime={trip.pickupTime}
+                                      dropoffPoint={
+                                        sharedDetail?.dropoffStation?.name ??
+                                        trip.dropoffAddress
+                                      }
+                                      arrivalTime={trip.arrivalTime}
+                                    />
                                   </div>
-                                  <div className="trip-card-route-row">
-                                    <MapPin size={13} color="#E74C3C" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
-                                    <span title={dropoffName}>{truncate(dropoffName)}</span>
-                                  </div>
-                                </div>
+                                ) : (
+                                  <>
+                                    {!isDriver && hasAssignedDriver && (
+                                      <div
+                                        style={{
+                                          marginBottom: 12,
+                                          background:
+                                            "linear-gradient(135deg, #F6FBFA 0%, #EEFBF8 100%)",
+                                          border: "1px solid #D6F5EE",
+                                          borderRadius: 14,
+                                          overflow: "hidden",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 12,
+                                            padding: "12px 14px",
+                                          }}
+                                        >
+                                          {(trip.assignedDriver
+                                            ?.profilePicture ??
+                                          trip.assignedDriver?.profilePic) ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img
+                                              src={
+                                                trip.assignedDriver
+                                                  .profilePicture ??
+                                                trip.assignedDriver
+                                                  .profilePic ??
+                                                ""
+                                              }
+                                              alt={
+                                                trip.assignedDriver?.name ??
+                                                translate(
+                                                  locale,
+                                                  "my_trips.driver_fallback",
+                                                )
+                                              }
+                                              style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: "50%",
+                                                objectFit: "cover",
+                                                flexShrink: 0,
+                                              }}
+                                            />
+                                          ) : (
+                                            <div
+                                              style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: "50%",
+                                                flexShrink: 0,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                background: "#0B1E3D",
+                                                color: "#fff",
+                                                fontWeight: 800,
+                                                fontSize: 15,
+                                              }}
+                                              aria-hidden="true"
+                                            >
+                                              {(trip.assignedDriver?.name ?? "")
+                                                .split(" ")
+                                                .filter(Boolean)
+                                                .slice(0, 2)
+                                                .map((p) => p[0]?.toUpperCase())
+                                                .join("")}
+                                            </div>
+                                          )}
+                                          <div style={{ minWidth: 0, flex: 1 }}>
+                                            <p
+                                              style={{
+                                                margin: 0,
+                                                fontSize: 10,
+                                                fontWeight: 700,
+                                                color: "#00806E",
+                                                textTransform: "uppercase",
+                                                letterSpacing: "0.05em",
+                                              }}
+                                            >
+                                              {translate(
+                                                locale,
+                                                "my_trips.driver_heading",
+                                              )}
+                                            </p>
+                                            <p
+                                              style={{
+                                                margin: "1px 0 0",
+                                                fontSize: 14,
+                                                fontWeight: 700,
+                                                color: "#0B1E3D",
+                                              }}
+                                            >
+                                              {trip.assignedDriver?.name ?? "—"}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 10,
+                                            padding: "10px 14px",
+                                            borderTop: "1px solid #D6F5EE",
+                                            background: "rgba(255,255,255,0.5)",
+                                          }}
+                                        >
+                                          <Car
+                                            size={16}
+                                            color="#00806E"
+                                            style={{ flexShrink: 0 }}
+                                            aria-hidden="true"
+                                          />
+                                          <span
+                                            style={{
+                                              fontSize: 13,
+                                              fontWeight: 600,
+                                              color: "#0B1E3D",
+                                            }}
+                                          >
+                                            {trip.assignedDriver?.carBrand ??
+                                              ""}
+                                            {trip.assignedDriver?.carBrand &&
+                                            trip.assignedDriver?.carModel
+                                              ? " "
+                                              : ""}
+                                            {trip.assignedDriver?.carModel ??
+                                              ""}
+                                            {trip.assignedDriver?.modelYear
+                                              ? ` · ${trip.assignedDriver.modelYear}`
+                                              : ""}
+                                          </span>
+                                          <span
+                                            style={{
+                                              marginLeft: "auto",
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: 6,
+                                              padding: "4px 10px",
+                                              borderRadius: 8,
+                                              background: "#fff",
+                                              border: "1px solid #CBE9E2",
+                                              fontSize: 12,
+                                              fontWeight: 700,
+                                              color: "#0B1E3D",
+                                              whiteSpace: "nowrap",
+                                            }}
+                                          >
+                                            <span
+                                              style={{
+                                                fontSize: 10,
+                                                color: "#5A6A7A",
+                                                textTransform: "uppercase",
+                                                letterSpacing: "0.04em",
+                                              }}
+                                            >
+                                              Color
+                                            </span>
+                                            <span>
+                                              {trip.assignedDriver
+                                                ?.vehicleColor ??
+                                                trip.assignedDriver?.carColor ??
+                                                "—"}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )}
 
-                                <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 10, flexWrap: "wrap" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                    <Clock size={12} color="#5A6A7A" aria-hidden="true" />
-                                    <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                                      {isSharedVehicle(trip.vehicleType) ? translate(locale, "board_station_by") : translate(locale, "pickup")} <strong style={{ color: "#0B1E3D" }}>{formatTime(locale, trip.pickupTime)}</strong>
-                                    </span>
-                                  </div>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                    <Clock size={12} color="#5A6A7A" aria-hidden="true" />
-                                    <span style={{ fontSize: 12, color: "#5A6A7A" }}>
-                                      {translate(locale, "arrive")} <strong style={{ color: "#0B1E3D" }}>{formatTime(locale, trip.arrivalTime)}</strong>
-                                    </span>
-                                  </div>
-                                </div>
+                                    <div className="trip-card-route">
+                                      <div className="trip-card-route-row">
+                                        <MapPin
+                                          size={13}
+                                          color="#00C2A8"
+                                          style={{
+                                            marginTop: 2,
+                                            flexShrink: 0,
+                                          }}
+                                          aria-hidden="true"
+                                        />
+                                        <span title={pickupName}>
+                                          {truncate(pickupName)}
+                                        </span>
+                                      </div>
+                                      <div className="trip-card-route-row">
+                                        <MapPin
+                                          size={13}
+                                          color="#E74C3C"
+                                          style={{
+                                            marginTop: 2,
+                                            flexShrink: 0,
+                                          }}
+                                          aria-hidden="true"
+                                        />
+                                        <span title={dropoffName}>
+                                          {truncate(dropoffName)}
+                                        </span>
+                                      </div>
+                                    </div>
 
-                                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "#647575" }}>
-                                    <Route size={12} aria-hidden="true" />
-                                    {formatDistanceKm(locale, trip.distanceKm ?? 0)} · {formatMinutes(locale, trip.durationMinutes ?? 0)}
-                                  </span>
-                                  <span className="trip-card-view-action">
-                                    {translate(locale, "my_trips.view_trip")}
-                                    <ChevronRight className="rtl-directional-icon" size={15} aria-hidden="true" />
-                                  </span>
-                                </div>
-                              </>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 16,
+                                        marginBottom: 10,
+                                        flexWrap: "wrap",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 5,
+                                        }}
+                                      >
+                                        <Clock
+                                          size={12}
+                                          color="#5A6A7A"
+                                          aria-hidden="true"
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: 12,
+                                            color: "#5A6A7A",
+                                          }}
+                                        >
+                                          {isSharedVehicle(trip.vehicleType)
+                                            ? translate(
+                                                locale,
+                                                "board_station_by",
+                                              )
+                                            : translate(locale, "pickup")}{" "}
+                                          <strong style={{ color: "#0B1E3D" }}>
+                                            {formatTime(
+                                              locale,
+                                              trip.pickupTime,
+                                            )}
+                                          </strong>
+                                        </span>
+                                      </div>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 5,
+                                        }}
+                                      >
+                                        <Clock
+                                          size={12}
+                                          color="#5A6A7A"
+                                          aria-hidden="true"
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: 12,
+                                            color: "#5A6A7A",
+                                          }}
+                                        >
+                                          {translate(locale, "arrive")}{" "}
+                                          <strong style={{ color: "#0B1E3D" }}>
+                                            {formatTime(
+                                              locale,
+                                              trip.arrivalTime,
+                                            )}
+                                          </strong>
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: 6,
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 5,
+                                          fontSize: 12,
+                                          color: "#647575",
+                                        }}
+                                      >
+                                        <Route size={12} aria-hidden="true" />
+                                        {formatDistanceKm(
+                                          locale,
+                                          trip.distanceKm ?? 0,
+                                        )}{" "}
+                                        ·{" "}
+                                        {formatMinutes(
+                                          locale,
+                                          trip.durationMinutes ?? 0,
+                                        )}
+                                      </span>
+                                      <span className="trip-card-view-action">
+                                        {translate(
+                                          locale,
+                                          "my_trips.view_trip",
+                                        )}
+                                        <ChevronRight
+                                          className="rtl-directional-icon"
+                                          size={15}
+                                          aria-hidden="true"
+                                        />
+                                      </span>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </Link>
+                            {!isDriver && displayStatus.canCancel && (
+                              <div
+                                style={{
+                                  padding: "0 18px 16px",
+                                  display: "flex",
+                                  justifyContent: "flex-end",
+                                }}
+                              >
+                                <CancelTripModal
+                                  tripId={trip.id}
+                                  tripNumber={trip.tripNumber}
+                                  date={trip.date}
+                                  priceEgp={trip.priceEgp}
+                                  status={trip.status}
+                                  isStandalone={trip.isStandalone}
+                                  paymentStatus={trip.paymentStatus}
+                                />
+                              </div>
+                            )}
+                            {!isDriver && needsPayment && (
+                              <div style={{ padding: "0 18px 16px" }}>
+                                <ContinueCheckoutButton
+                                  bookingId={
+                                    trip.isStandalone ? trip.id : trip.requestId
+                                  }
+                                  amountEgp={
+                                    trip.isStandalone
+                                      ? trip.priceEgp
+                                      : trip.bookingAmountEgp
+                                  }
+                                  walletBalance={walletBalance}
+                                />
+                              </div>
+                            )}
+                            {!isDriver && displayStatus.canRate && (
+                              <div style={{ padding: "0 18px 16px" }}>
+                                <RateTripModal
+                                  tripId={trip.id}
+                                  initialRating={trip.rating ?? null}
+                                />
+                              </div>
                             )}
                           </div>
-                        </Link>
-                        {!isDriver && displayStatus.canCancel && (
-                          <div style={{ padding: "0 18px 16px", display: "flex", justifyContent: "flex-end" }}>
-                            <CancelTripModal
-                              tripId={trip.id}
-                              tripNumber={trip.tripNumber}
-                              date={trip.date}
-                              priceEgp={trip.priceEgp}
-                              status={trip.status}
-                              isStandalone={trip.isStandalone}
-                              paymentStatus={trip.paymentStatus}
-                            />
-                          </div>
-                        )}
-                        {!isDriver && needsPayment && (
-                          <div style={{ padding: "0 18px 16px" }}>
-                            <ContinueCheckoutButton
-                              bookingId={
-                                trip.isStandalone ? trip.id : trip.requestId
-                              }
-                              amountEgp={
-                                trip.isStandalone
-                                  ? trip.priceEgp
-                                  : trip.bookingAmountEgp
-                              }
-                              walletBalance={walletBalance}
-                            />
-                          </div>
-                        )}
-                        {!isDriver && displayStatus.canRate && (
-                          <div style={{ padding: "0 18px 16px" }}>
-                            <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
 
-            <Pagination page={page} totalPages={totalPages} />
-          </>
-        )}
+                <Pagination page={page} totalPages={totalPages} />
+              </>
+            )}
           </div>
         </div>
       </main>

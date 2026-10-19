@@ -27,6 +27,7 @@ const RidePassengerSchema = new Schema(
   {
     tripId: { type: Types.ObjectId, ref: "Trip", required: true },
     userId: { type: Types.ObjectId, ref: "User", required: true },
+    passengerNumber: { type: Number, required: false, min: 1 },
     pickup: { type: PointSchema, required: true },
     dropoff: { type: PointSchema, required: true },
     pickupOrder: { type: Number, required: true, min: 0 },
@@ -36,6 +37,8 @@ const RidePassengerSchema = new Schema(
     pickupStation: { type: StationSchema, required: false },
     dropoffStation: { type: StationSchema, required: false },
     seatNumbers: { type: [Number], default: [] },
+    arrivedAt: { type: Date, required: false, default: null },
+    noShowAt: { type: Date, required: false, default: null },
     status: {
       type: String,
       required: true,
@@ -133,6 +136,10 @@ const RideSchema = new Schema(
     },
     // combined, ordered pickup/dropoff sequence across all passengers on this ride
     route: { type: [RideRouteStopSchema], default: [] },
+    routeCoordinates: {
+      type: [{ lat: { type: Number, required: true }, lng: { type: Number, required: true } }],
+      default: [],
+    },
     pickupStation: { type: StationSchema, required: false },
     dropoffStation: { type: StationSchema, required: false },
     driverOrigin: { type: PointSchema, required: false },
@@ -140,6 +147,8 @@ const RideSchema = new Schema(
     startTime: { type: String, required: true },
     endTime: { type: String, required: true },
     passengers: { type: [RidePassengerSchema], default: [] },
+    passengersCount: { type: Number, min: 0, required: false },
+    passengerNumberSequence: { type: Number, required: true, min: 0, default: 0 },
     totalCost: { type: Number, required: true, default: 0 },
     additionalFees: { type: Number, required: false, default: 0 },
     kmRate: { type: Number, required: false, default: 0 },
@@ -163,10 +172,12 @@ const RideSchema = new Schema(
       default: "matched",
       enum: ["matched", "confirmed", "active", "completed", "cancelled"],
     },
+    completedAt: { type: Date, required: false },
     // Broadcast ride-offer bookkeeping — does not change the status enum above.
     offeredToDriverIds: { type: [Types.ObjectId], ref: "User", default: [] },
     rejectedByDriverIds: { type: [Types.ObjectId], ref: "User", default: [] },
     needsManualAssignment: { type: Boolean, required: true, default: false },
+    hasOpenIncident: { type: Boolean, required: true, default: false },
   },
   { timestamps: true, collection: "rides" },
 );
@@ -178,6 +189,21 @@ RideSchema.index({ "passengers.tripId": 1 });
 const existingRideModel = models.Ride;
 if (existingRideModel && !existingRideModel.schema.path("regionCode")) {
   existingRideModel.schema.add({ regionCode: RideSchema.obj.regionCode });
+}
+if (existingRideModel && !existingRideModel.schema.path("passengersCount")) {
+  existingRideModel.schema.add({
+    passengersCount: RideSchema.obj.passengersCount,
+  });
+}
+if (existingRideModel && !existingRideModel.schema.path("hasOpenIncident")) {
+  existingRideModel.schema.add({
+    hasOpenIncident: RideSchema.obj.hasOpenIncident,
+  });
+}
+if (existingRideModel && !existingRideModel.schema.path("routeCoordinates")) {
+  existingRideModel.schema.add({
+    routeCoordinates: RideSchema.obj.routeCoordinates,
+  });
 }
 
 export type RideDoc = InferSchemaType<typeof RideSchema>;

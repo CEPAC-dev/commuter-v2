@@ -9,6 +9,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   Route,
+  ShieldAlert,
   Smartphone,
   UserRound,
   X,
@@ -20,7 +21,9 @@ type AdminActivityItem = {
     | "paid_trip_created"
     | "completed_paid_trip"
     | "waiting_list_trip_created"
-    | "admin_campaign_claim";
+    | "admin_campaign_claim"
+    | "ride_incident_reported"
+    | "ride_incident_withdrawn";
   title: string;
   body: string;
   data: Record<string, unknown>;
@@ -44,6 +47,12 @@ function decodeVapidKey(value: string): ArrayBuffer {
 
 function eventIcon(eventType: AdminActivityItem["eventType"]) {
   if (eventType === "waiting_list_trip_created") return ClipboardList;
+  if (
+    eventType === "ride_incident_reported" ||
+    eventType === "ride_incident_withdrawn"
+  ) {
+    return ShieldAlert;
+  }
   return eventType === "completed_paid_trip" ? Route : CircleDollarSign;
 }
 

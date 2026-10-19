@@ -25,7 +25,8 @@ interface Tx {
     | "compensation"
     | "earning"
     | "referral_bonus"
-    | "withdrawal";
+    | "withdrawal"
+    | "debt_repayment";
   amountEgp: number;
   status: "pending" | "completed" | "failed";
   description: string;
@@ -35,6 +36,7 @@ interface Tx {
 
 interface WalletData {
   balanceEgp: number;
+  owedEgp?: number;
   reserveAmount?: number;
   pendingWithdrawalAmount?: number;
   withdrawalLimit?: number | null;
@@ -132,6 +134,9 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
       if (transaction.description === "Trip earnings") {
         return t("wallet.earning_description_no_number");
       }
+    }
+    if (transaction.type === "debt_repayment") {
+      return t("wallet.debt_repayment_description");
     }
     if (transaction.type === "withdrawal") {
       const match = transaction.description.match(/^Withdrawal to (.+)$/);
@@ -445,6 +450,18 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
               color: "rgba(255,255,255,0.9)",
             }}
           >
+            {(data.owedEgp ?? 0) > 0 && (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <span
+                  style={{ opacity: 0.75, display: "block", marginBottom: 2 }}
+                >
+                  {t("wallet.outstanding_amount")}
+                </span>
+                <strong style={{ fontSize: 14 }}>
+                  {formatNumber(data.owedEgp ?? 0)} {t("wallet.egp_suffix")}
+                </strong>
+              </div>
+            )}
             <div>
               <span
                 style={{ opacity: 0.75, display: "block", marginBottom: 2 }}
