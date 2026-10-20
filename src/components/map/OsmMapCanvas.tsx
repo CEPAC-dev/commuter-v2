@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type {
+  LayerGroup,
+  LeafletMouseEvent,
+  Map as LeafletMap,
+  Marker as LeafletMarker,
+} from "leaflet";
 import { OSM_THEMES, type OsmMapThemeName } from "@/lib/config/mapSettings";
 
 type LeafletModule = typeof import("leaflet");
@@ -17,6 +23,17 @@ interface ZonePreviewSettings {
   regionCode: "EG-CAIRO" | "SA" | "AE-ABU-DHABI";
 }
 
+interface PreviewStation {
+  objectId: number;
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+interface ZoneFeature {
+  geometry?: { type?: string; coordinates?: unknown };
+}
+
 interface OsmMapCanvasProps {
   center?: OsmPoint;
   zoom?: number;
@@ -25,7 +42,9 @@ interface OsmMapCanvasProps {
   cursor?: string;
   theme?: OsmMapThemeName;
   zoneSettings?: ZonePreviewSettings;
-  onReady?: (map: L.Map | null) => void;
+  stations?: PreviewStation[];
+  onStationMove?: (objectId: number, lat: number, lng: number) => void;
+  onReady?: (map: LeafletMap | null) => void;
   onClick?: (point: OsmPoint) => void;
 }
 
@@ -33,10 +52,9 @@ const CAIRO = { lat: 30.0444, lng: 31.2357 };
 
 async function loadZoneData() {
   const response = await fetch("/geo/zone_polygon.geojson");
-  if (!response.ok)
-    return [] as Array<{ geometry?: { type?: string; coordinates?: unknown } }>;
+  if (!response.ok) return [] as ZoneFeature[];
   const geojson = await response.json();
-  return geojson.features ?? [];
+  return (geojson.features ?? []) as ZoneFeature[];
 }
 
 export default function OsmMapCanvas({
@@ -47,14 +65,17 @@ export default function OsmMapCanvas({
   cursor,
   theme = "app",
   zoneSettings,
+  stations = [],
+  onStationMove,
   onReady,
   onClick,
 }: OsmMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const leafletRef = useRef<LeafletModule | null>(null);
-  const mapRef = useRef<any>(null);
-  const overlayRef = useRef<any>(null);
-  const zoneLayerRef = useRef<any>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const overlayRef = useRef<LayerGroup | null>(null);
+  const zoneLayerRef = useRef<LayerGroup | null>(null);
+  const stationLayerRef = useRef<LayerGroup | null>(null);
   const readyRef = useRef(onReady);
   const clickRef = useRef(onClick);
   const viewRef = useRef({ center, zoom });
@@ -85,11 +106,12 @@ export default function OsmMapCanvas({
         attribution: "&copy; OpenStreetMap contributors",
         maxZoom: 19,
       }).addTo(map);
-      map.on("click", (event: any) => {
+      map.on("click", (event: LeafletMouseEvent) => {
         clickRef.current?.({ lat: event.latlng.lat, lng: event.latlng.lng });
       });
       overlayRef.current = L.layerGroup().addTo(map);
       zoneLayerRef.current = L.layerGroup().addTo(map);
+      stationLayerRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
       readyRef.current?.(map);
     });
@@ -101,13 +123,16 @@ export default function OsmMapCanvas({
         readyRef.current?.(null);
         overlayRef.current?.clearLayers();
         zoneLayerRef.current?.clearLayers();
+        stationLayerRef.current?.clearLayers();
         overlayRef.current?.remove();
         zoneLayerRef.current?.remove();
+        stationLayerRef.current?.remove();
         map.remove();
       }
       mapRef.current = null;
       overlayRef.current = null;
       zoneLayerRef.current = null;
+      stationLayerRef.current = null;
     };
   }, []);
 
@@ -174,14 +199,14 @@ export default function OsmMapCanvas({
       }
 
       const activeZoneLayer = zoneLayerRef.current;
-      features.forEach((feature: any) => {
+      features.forEach((feature) => {
         const geometry = feature?.geometry;
         if (!geometry || geometry.type !== "Polygon") return;
+        const coordinates = geometry.coordinates as Array<
+          Array<[number, number]>
+        >;
         const polygon = L.polygon(
-          geometry.coordinates[0].map(([lng, lat]: [number, number]) => [
-            lat,
-            lng,
-          ]),
+          coordinates[0].map(([lng, lat]) => [lat, lng]),
           {
             color: primary,
             weight: 2,
@@ -234,6 +259,31 @@ export default function OsmMapCanvas({
       zoneLayer.clearLayers();
     };
   }, [theme, zoneSettings]);
+
+  useEffect(() => {
+    const L = leafletRef.current;
+    const layer = stationLayerRef.current;
+    if (!L || !layer) return;
+
+    layer.clearLayers();
+    stations.forEach((station) => {
+      const marker = L.marker([station.lat, station.lng], {
+        draggable: true,
+        title: `#${station.objectId} ${station.name}`,
+        icon: L.divIcon({
+          className: "",
+          html: `<span style="display:grid;place-items:center;width:25px;height:25px;border:2px solid #fff;border-radius:50%;background:${OSM_THEMES[theme].accent};color:#0B1E3D;font-size:9px;font-weight:800;box-shadow:0 1px 5px rgba(0,0,0,.45)">${station.objectId}</span>`,
+          iconSize: [25, 25],
+          iconAnchor: [12, 12],
+        }),
+      }).addTo(layer);
+      marker.bindTooltip(`#${station.objectId} ${station.name}`);
+      marker.on("dragend", (event: { target: LeafletMarker }) => {
+        const point = event.target.getLatLng();
+        onStationMove?.(station.objectId, point.lat, point.lng);
+      });
+    });
+  }, [onStationMove, stations, theme]);
 
   return (
     <div

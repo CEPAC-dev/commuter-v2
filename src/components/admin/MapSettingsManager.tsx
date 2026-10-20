@@ -28,6 +28,44 @@ const field: React.CSSProperties = {
 };
 
 type ZoneOption = { id: string; name: string };
+type PreviewStation = {
+  objectId: number;
+  name: string;
+  lat: number;
+  lng: number;
+  active: boolean;
+};
+type ActiveDataset = {
+  version: number;
+  stationCount: number;
+  file?: { originalName?: string };
+};
+type GoogleMapLike = object;
+type GoogleMarkerLike = {
+  addListener: (
+    event: string,
+    callback: (event: {
+      latLng: { lat: () => number; lng: () => number } | null;
+    }) => void,
+  ) => void;
+  setMap: (map: GoogleMapLike | null) => void;
+};
+type GoogleMapsApi = {
+  maps: {
+    Marker: new (options: {
+      map: GoogleMapLike;
+      position: { lat: number; lng: number };
+      title: string;
+      draggable: boolean;
+      label: {
+        text: string;
+        color: string;
+        fontSize: string;
+        fontWeight: string;
+      };
+    }) => GoogleMarkerLike;
+  };
+};
 
 export default function MapSettingsManager() {
   const [regionCode, setRegionCode] = useState<RegionCode>("EG-CAIRO");
@@ -35,6 +73,56 @@ export default function MapSettingsManager() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [zoneOptions, setZoneOptions] = useState<ZoneOption[]>([]);
+  const [stationPreview, setStationPreview] = useState<{
+    regionCode: RegionCode;
+    stations: PreviewStation[];
+    activeDataset: ActiveDataset | null;
+  } | null>(null);
+  const previewStations =
+    stationPreview?.regionCode === regionCode ? stationPreview.stations : [];
+  const activeDataset =
+    stationPreview?.regionCode === regionCode
+      ? stationPreview.activeDataset
+      : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch(`/api/admin/stations?region=${regionCode}&active=true&limit=all`),
+      fetch(`/api/admin/station-operations/summary?region=${regionCode}`),
+    ])
+      .then(async ([stationsResponse, summaryResponse]) => {
+        const [stationsJson, summaryJson] = await Promise.all([
+          stationsResponse.json(),
+          summaryResponse.json(),
+        ]);
+        if (!stationsResponse.ok)
+          throw new Error(stationsJson.error ?? "Could not load stations.");
+        if (!summaryResponse.ok)
+          throw new Error(
+            summaryJson.error ?? "Could not load station dataset status.",
+          );
+        return { stationsJson, summaryJson };
+      })
+      .then(({ stationsJson, summaryJson }) => {
+        if (cancelled) return;
+        setStationPreview({
+          regionCode,
+          stations: stationsJson.stations ?? [],
+          activeDataset: summaryJson.activeDataset ?? null,
+        });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setMessage(
+            error instanceof Error ? error.message : "Could not load stations.",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [regionCode]);
 
   useEffect(() => {
     if (regionCode !== "EG-CAIRO") return;
@@ -109,6 +197,55 @@ export default function MapSettingsManager() {
     setSettings((current) =>
       current ? { ...current, [key]: value } : current,
     );
+
+  async function moveStation(objectId: number, lat: number, lng: number) {
+    const previous = previewStations.find(
+      (station) => station.objectId === objectId,
+    );
+    if (!previous) return;
+    setStationPreview((current) =>
+      current?.regionCode === regionCode
+        ? {
+            ...current,
+            stations: current.stations.map((station) =>
+              station.objectId === objectId
+                ? { ...station, lat, lng }
+                : station,
+            ),
+          }
+        : current,
+    );
+    try {
+      const response = await fetch(
+        `/api/stations/${objectId}?region=${encodeURIComponent(regionCode)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat, lng }),
+        },
+      );
+      const json = await response.json();
+      if (!response.ok)
+        throw new Error(json.error ?? "Could not move station.");
+      setMessage(`Station #${objectId} location saved for this region.`);
+    } catch (error) {
+      setStationPreview((current) =>
+        current?.regionCode === regionCode
+          ? {
+              ...current,
+              stations: current.stations.map((station) =>
+                station.objectId === objectId
+                  ? { ...station, lat: previous.lat, lng: previous.lng }
+                  : station,
+              ),
+            }
+          : current,
+      );
+      setMessage(
+        error instanceof Error ? error.message : "Could not move station.",
+      );
+    }
+  }
   return (
     <div style={{ display: "grid", gap: 20 }}>
       <section className="map-settings-card">
@@ -243,20 +380,20 @@ export default function MapSettingsManager() {
                       padding: "3px 10px",
                       borderRadius: 999,
                       background:
-                        regionCode === "EG-CAIRO"
+                        regionCode === "EG-CAIRO" && zoneOptions.length > 0
                           ? "rgba(0, 194, 168, 0.1)"
                           : "rgba(11, 30, 61, 0.06)",
                       color:
-                        regionCode === "EG-CAIRO"
+                        regionCode === "EG-CAIRO" && zoneOptions.length > 0
                           ? "#00897B"
                           : "var(--color-muted)",
                       fontSize: 11,
                       fontWeight: 800,
                     }}
                   >
-                    {regionCode === "EG-CAIRO"
-                      ? "Polygon active"
-                      : "No zone dataset"}
+                    {regionCode === "EG-CAIRO" && zoneOptions.length > 0
+                      ? `${zoneOptions.length} zone polygons active`
+                      : "No zone polygon"}
                   </span>
                 </div>
 
@@ -452,6 +589,16 @@ export default function MapSettingsManager() {
                 This map reflects the currently selected provider, canvas/theme,
                 and service-zone toggles in real time.
               </p>
+              <p className="map-settings-note">
+                {previewStations.length
+                  ? `${previewStations.length} active station markers loaded for ${REGION_LIST.find((item) => item.code === regionCode)?.label}${activeDataset ? ` · dataset v${activeDataset.version}${activeDataset.file?.originalName ? ` (${activeDataset.file.originalName})` : ""}` : ""}. Drag a marker to move it; the location is saved as a station override.`
+                  : `No active station markers are loaded for this region${activeDataset ? `, although dataset v${activeDataset.version} is published` : " and no station dataset is published"}.`}{" "}
+                <a
+                  href={`/${REGION_LIST.find((item) => item.code === regionCode)?.urlSlug}/admin/operation`}
+                >
+                  Manage this region’s station dataset
+                </a>
+              </p>
               <MapSearchProvider provider={settings.provider}>
                 <SearchDemo />
               </MapSearchProvider>
@@ -463,6 +610,8 @@ export default function MapSettingsManager() {
               osmTheme={settings.osmTheme}
               regionCode={regionCode}
               settings={settings}
+              stations={settings.showStations ? previewStations : []}
+              onStationMove={moveStation}
             />
           </section>
           <section className="map-settings-card map-settings-info">
@@ -728,13 +877,49 @@ function MapCanvas({
   regionCode,
   osmTheme,
   settings,
+  stations,
+  onStationMove,
 }: {
   provider: MapSettings["provider"];
   style: MapSettings["canvasStyle"];
   regionCode: RegionCode;
   osmTheme: MapSettings["osmTheme"];
   settings: MapSettings;
+  stations: PreviewStation[];
+  onStationMove: (objectId: number, lat: number, lng: number) => void;
 }) {
+  const [googleMap, setGoogleMap] = useState<GoogleMapLike | null>(null);
+  useEffect(() => {
+    const google = (window as Window & { google?: GoogleMapsApi }).google;
+    if (provider !== "google" || !googleMap || !google?.maps?.Marker) return;
+
+    const markers = stations.map((station) => {
+      const marker = new google.maps.Marker({
+        map: googleMap,
+        position: { lat: station.lat, lng: station.lng },
+        title: `#${station.objectId} ${station.name}`,
+        draggable: true,
+        label: {
+          text: String(station.objectId),
+          color: "#0B1E3D",
+          fontSize: "10px",
+          fontWeight: "700",
+        },
+      });
+      marker.addListener("dragend", (event) => {
+        if (event.latLng) {
+          onStationMove(
+            station.objectId,
+            event.latLng.lat(),
+            event.latLng.lng(),
+          );
+        }
+      });
+      return marker;
+    });
+    return () => markers.forEach((marker) => marker.setMap(null));
+  }, [googleMap, onStationMove, provider, stations]);
+
   const region = REGION_LIST.find((item) => item.code === regionCode)!;
   if (provider === "osm")
     return (
@@ -749,6 +934,8 @@ function MapCanvas({
             maskOutsideZones: settings.maskOutsideZones,
             regionCode,
           }}
+          stations={stations}
+          onStationMove={onStationMove}
         />
       </div>
     );
@@ -769,6 +956,7 @@ function MapCanvas({
           mapTypeId: style === "satellite" ? "satellite" : "roadmap",
           styles: style === "light" ? MAP_STYLE : undefined,
         }}
+        onReady={setGoogleMap}
       />
     </div>
   );
