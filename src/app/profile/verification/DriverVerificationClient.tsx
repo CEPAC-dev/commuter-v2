@@ -364,7 +364,12 @@ export default function DriverVerificationClient({
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
       const uploadData = await uploadRes.json();
       if (!uploadRes.ok) {
-        console.error(uploadData.error ?? "Upload failed.");
+        const errMsg = uploadData.error ?? "Upload failed.";
+        const debugInfo = uploadData.debug
+          ? ` (File: ${uploadData.debug.filename}, Type: ${uploadData.debug.mimeType})`
+          : "";
+        alert(`${errMsg}${debugInfo}`);
+        console.error("Upload error:", uploadData);
         return;
       }
 
@@ -381,8 +386,12 @@ export default function DriverVerificationClient({
       if (res.ok) {
         setDocuments((d) => ({ ...d, [key]: uploadData.path }));
       } else {
-        console.error(data.error ?? "Failed to save document.");
+        alert(data.error ?? "Failed to save document.");
+        console.error("Save error:", data);
       }
+    } catch (err) {
+      alert("Network error. Please check your connection.");
+      console.error("Upload exception:", err);
     } finally {
       setUploading((u) => ({ ...u, [key]: false }));
       if (fileInputs.current[key]) fileInputs.current[key]!.value = "";
@@ -563,7 +572,7 @@ export default function DriverVerificationClient({
                     <input
                       ref={(el) => { fileInputs.current[doc.key] = el; }}
                       type="file"
-                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
                       id={`vdoc-${doc.key}`}
                       style={{ display: "none" }}
                       onChange={(e) => handleFileChange(doc.key, e.target.files?.[0] ?? null)}

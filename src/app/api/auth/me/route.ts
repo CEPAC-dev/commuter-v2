@@ -10,6 +10,7 @@ import {
   normalizePlainText,
   validateMutationRequest,
 } from "@/lib/security/request";
+import { notifyAdminsDriverUpdate } from "@/lib/services/driverNotification";
 
 export async function GET() {
   const session = await getSession();
@@ -182,11 +183,54 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // Check if driver is making verification-related changes
+    const hasVerificationChanges =
+      Object.keys(driverUpdate).length > 0 &&
+      (driverUpdate.carType ||
+        driverUpdate.carBrand ||
+        driverUpdate.carModel ||
+        driverUpdate.modelYear ||
+        driverUpdate.vehicleColor ||
+        driverUpdate.plateChar1 ||
+        driverUpdate.plateChar2 ||
+        driverUpdate.plateChar3 ||
+        driverUpdate.plateDigits ||
+        driverUpdate.licenseExpiry ||
+        Object.keys(driverUpdate).some((k) => k.startsWith("documents.")));
+
+    // Get current driver status before update
+    const currentDriver = await Driver.findOne({ userId: session.userId })
+      .select("verificationStatus")
+      .lean();
+
+    // If driver is verified or pending and making changes, reset to pending
+    if (
+      hasVerificationChanges &&
+      currentDriver &&
+      (currentDriver.verificationStatus === "verified" ||
+        currentDriver.verificationStatus === "pending")
+    ) {
+      driverUpdate.verificationStatus = "pending";
+    }
+
     const driver = await Driver.findOneAndUpdate(
       { userId: session.userId },
       driverUpdate,
       { returnDocument: "after" },
     ).lean();
+
+    // Notify admins if verification status was reset to pending
+    if (
+      hasVerificationChanges &&
+      currentDriver?.verificationStatus === "verified" &&
+      driverUpdate.verificationStatus === "pending"
+    ) {
+      await notifyAdminsDriverUpdate(
+        String(driver?._id),
+        safeName,
+        false // Update, not first submit
+      );
+    }
 
     return NextResponse.json({ ...user, driver });
   } catch {

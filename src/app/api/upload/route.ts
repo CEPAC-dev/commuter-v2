@@ -6,12 +6,32 @@ import { connectDB } from "@/lib/db/mongoose";
 
 const ALLOWED_TYPES: Record<string, string> = {
   "image/jpeg": ".jpg",
+  "image/jpg": ".jpg",
   "image/png": ".png",
   "image/webp": ".webp",
+  "image/heic": ".heic",
+  "image/heif": ".heif",
   "application/pdf": ".pdf",
 };
 
+const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".pdf"];
+
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+
+function getFileExtension(file: File): string | null {
+  // Try MIME type first
+  if (file.type && ALLOWED_TYPES[file.type]) {
+    return ALLOWED_TYPES[file.type];
+  }
+
+  // Fallback: extract extension from filename
+  const name = file.name.toLowerCase();
+  const lastDot = name.lastIndexOf(".");
+  if (lastDot === -1) return null;
+
+  const ext = name.slice(lastDot);
+  return ALLOWED_EXTENSIONS.includes(ext) ? ext : null;
+}
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -25,10 +45,16 @@ export async function POST(req: NextRequest) {
     if (!(file instanceof File))
       return NextResponse.json({ error: "No file provided." }, { status: 400 });
 
-    const ext = ALLOWED_TYPES[file.type];
+    const ext = getFileExtension(file);
     if (!ext)
       return NextResponse.json(
-        { error: "Unsupported file type. Use JPG, PNG, WEBP or PDF." },
+        {
+          error: "Unsupported file type. Use JPG, PNG, WEBP or PDF.",
+          debug: {
+            mimeType: file.type || "empty",
+            filename: file.name
+          }
+        },
         { status: 400 },
       );
 
