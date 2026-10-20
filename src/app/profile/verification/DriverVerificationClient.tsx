@@ -250,6 +250,9 @@ export default function DriverVerificationClient({
   const [plateChar2, setPlateChar2] = useState(initialPlateChar2);
   const [plateChar3, setPlateChar3] = useState(initialPlateChar3);
   const [plateDigits, setPlateDigits] = useState(initialPlateDigits);
+  const [plateLettersCount, setPlateLettersCount] = useState<2 | 3>(
+    initialPlateChar3 ? 3 : initialPlateChar1 && initialPlateChar2 ? 2 : 3
+  );
   const [licenseExpiry, setLicenseExpiry] = useState(initialLicenseExpiry);
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsMsg, setDetailsMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -283,10 +286,10 @@ export default function DriverVerificationClient({
     vehicleColor.trim(),
     /^[\u0600-\u06FF]$/.test(plateChar1) ? plateChar1 : "",
     /^[\u0600-\u06FF]$/.test(plateChar2) ? plateChar2 : "",
-    /^[\u0600-\u06FF]$/.test(plateChar3) ? plateChar3 : "",
+    plateLettersCount === 3 ? (/^[\u0600-\u06FF]$/.test(plateChar3) ? plateChar3 : "") : "skip",
     /^\d{3,4}$/.test(plateDigits) ? plateDigits : "",
     licenseExpiry.trim(),
-  ];
+  ].filter(f => f !== "skip");
   const detailsFilledCount = DETAIL_FIELDS.filter(Boolean).length;
   const detailsPct = Math.round((detailsFilledCount / DETAIL_FIELDS.length) * 100);
   const detailsComplete = detailsPct === 100;
@@ -315,7 +318,7 @@ export default function DriverVerificationClient({
       !vehicleColor.trim() ||
       !/^[\u0600-\u06FF]$/.test(plateChar1) ||
       !/^[\u0600-\u06FF]$/.test(plateChar2) ||
-      !/^[\u0600-\u06FF]$/.test(plateChar3) ||
+      (plateLettersCount === 3 && !/^[\u0600-\u06FF]$/.test(plateChar3)) ||
       !/^\d{3,4}$/.test(plateDigits) ||
       !licenseExpiry.trim()
     ) {
@@ -338,7 +341,7 @@ export default function DriverVerificationClient({
           vehicleColor: vehicleColor.trim(),
           plateChar1,
           plateChar2,
-          plateChar3,
+          plateChar3: plateLettersCount === 3 ? plateChar3 : "",
           plateDigits,
           licenseExpiry: licenseExpiry.trim(),
         }),
@@ -428,18 +431,27 @@ export default function DriverVerificationClient({
         setHasUnsavedChanges(false);
       }
 
-      // Then submit for review
-      const res = await fetch("/api/driver/submit-review", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        const missingText = Array.isArray(data.missing)
-          ? `Missing: ${data.missing.join(", ")}.`
-          : (data.error ?? t("error.submit_failed"));
-        setSubmitMsg({ ok: false, text: missingText });
-        return;
+      // Then submit for review (only for incomplete)
+      if (verificationStatus === "incomplete") {
+        const res = await fetch("/api/driver/submit-review", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) {
+          const missingText = Array.isArray(data.missing)
+            ? `Missing: ${data.missing.join(", ")}.`
+            : (data.error ?? t("error.submit_failed"));
+          setSubmitMsg({ ok: false, text: missingText });
+          return;
+        }
+        setVerificationStatus("pending");
+        setSubmitMsg({ ok: true, text: t("profile.submit_review_success") });
+      } else {
+        // For verified/pending, just show success message
+        const successMsg = dir === "rtl"
+          ? "تم حفظ التغييرات بنجاح. سيتم مراجعة المستندات المحدثة."
+          : "Changes saved successfully. Updated documents will be reviewed.";
+        setSubmitMsg({ ok: true, text: successMsg });
+        setVerificationStatus("pending");
       }
-      setVerificationStatus("pending");
-      setSubmitMsg({ ok: true, text: t("profile.submit_review_success") });
     } catch {
       setSubmitMsg({ ok: false, text: t("error.network") });
     } finally {
@@ -512,28 +524,133 @@ export default function DriverVerificationClient({
             </div>
             <div>
               <label style={labelStyle}>{t("profile.plate_letters")} / {t("profile.plate_numbers")}</label>
+
+              {/* Letters count selector */}
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlateLettersCount(2);
+                    setPlateChar3("");
+                  }}
+                  style={{
+                    flex: 1,
+                    height: 36,
+                    borderRadius: 8,
+                    border: `2px solid ${plateLettersCount === 2 ? "#0B1E3D" : "#e8edf0"}`,
+                    background: plateLettersCount === 2 ? "#0B1E3D" : "#ffffff",
+                    color: plateLettersCount === 2 ? "#ffffff" : "#5A6A7A",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  {dir === "rtl" ? "\u062D\u0631\u0641\u064A\u0646" : "2 Letters"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPlateLettersCount(3)}
+                  style={{
+                    flex: 1,
+                    height: 36,
+                    borderRadius: 8,
+                    border: `2px solid ${plateLettersCount === 3 ? "#0B1E3D" : "#e8edf0"}`,
+                    background: plateLettersCount === 3 ? "#0B1E3D" : "#ffffff",
+                    color: plateLettersCount === 3 ? "#ffffff" : "#5A6A7A",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  {dir === "rtl" ? "\u0663 \u062D\u0631\u0648\u0641" : "3 Letters"}
+                </button>
+              </div>
+
               <div dir="rtl" style={{ display: "flex", gap: 8, direction: "rtl" }}>
-                {[
-                  [plateChar1, setPlateChar1, plateChar1Ref, plateChar2Ref] as const,
-                  [plateChar2, setPlateChar2, plateChar2Ref, plateChar3Ref] as const,
-                  [plateChar3, setPlateChar3, plateChar3Ref, plateDigitsRef] as const,
-                ].map(([val, setVal, currentRef, nextRef], i) => (
+                {plateLettersCount === 3 && (
                   <input
-                    key={i}
-                    ref={currentRef}
+                    ref={plateChar1Ref}
                     dir="rtl"
                     type="text"
                     inputMode="text"
                     maxLength={1}
-                    value={val}
+                    value={plateChar1}
                     onChange={(e) => {
                       const ch = e.target.value.replace(/[^\u0600-\u06FF]/g, "").slice(-1);
-                      setVal(ch);
-                      if (ch) nextRef.current?.focus();
+                      setPlateChar1(ch);
+                      if (ch) plateChar2Ref.current?.focus();
                     }}
                     style={{ ...inputStyle, textAlign: "center", width: 52, flexShrink: 0 }}
                   />
-                ))}
+                )}
+                {plateLettersCount === 3 && (
+                  <input
+                    ref={plateChar2Ref}
+                    dir="rtl"
+                    type="text"
+                    inputMode="text"
+                    maxLength={1}
+                    value={plateChar2}
+                    onChange={(e) => {
+                      const ch = e.target.value.replace(/[^\u0600-\u06FF]/g, "").slice(-1);
+                      setPlateChar2(ch);
+                      if (ch) plateChar3Ref.current?.focus();
+                    }}
+                    style={{ ...inputStyle, textAlign: "center", width: 52, flexShrink: 0 }}
+                  />
+                )}
+                {plateLettersCount === 3 && (
+                  <input
+                    ref={plateChar3Ref}
+                    dir="rtl"
+                    type="text"
+                    inputMode="text"
+                    maxLength={1}
+                    value={plateChar3}
+                    onChange={(e) => {
+                      const ch = e.target.value.replace(/[^\u0600-\u06FF]/g, "").slice(-1);
+                      setPlateChar3(ch);
+                      if (ch) plateDigitsRef.current?.focus();
+                    }}
+                    style={{ ...inputStyle, textAlign: "center", width: 52, flexShrink: 0 }}
+                  />
+                )}
+                {plateLettersCount === 2 && (
+                  <input
+                    ref={plateChar1Ref}
+                    dir="rtl"
+                    type="text"
+                    inputMode="text"
+                    maxLength={1}
+                    value={plateChar1}
+                    onChange={(e) => {
+                      const ch = e.target.value.replace(/[^\u0600-\u06FF]/g, "").slice(-1);
+                      setPlateChar1(ch);
+                      if (ch) plateChar2Ref.current?.focus();
+                    }}
+                    style={{ ...inputStyle, textAlign: "center", width: 52, flexShrink: 0 }}
+                  />
+                )}
+                {plateLettersCount === 2 && (
+                  <input
+                    ref={plateChar2Ref}
+                    dir="rtl"
+                    type="text"
+                    inputMode="text"
+                    maxLength={1}
+                    value={plateChar2}
+                    onChange={(e) => {
+                      const ch = e.target.value.replace(/[^\u0600-\u06FF]/g, "").slice(-1);
+                      setPlateChar2(ch);
+                      if (ch) plateDigitsRef.current?.focus();
+                    }}
+                    style={{ ...inputStyle, textAlign: "center", width: 52, flexShrink: 0 }}
+                  />
+                )}
                 <input
                   ref={plateDigitsRef}
                   dir="rtl"
@@ -646,8 +763,8 @@ export default function DriverVerificationClient({
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#F5A623", flexShrink: 0 }} />
                 <p style={{ margin: 0, fontSize: 13, color: "#E65100", fontWeight: 500 }}>
                   {dir === "rtl"
-                    ? "لديك مستندات غير محفوظة. اضغط على إرسال للمراجعة لحفظها."
-                    : "You have unsaved documents. Click Submit for Review to save them."}
+                    ? "لديك مستندات غير محفوظة. اضغط على حفظ التغييرات لحفظها."
+                    : "You have unsaved documents. Click Save Changes to save them."}
                 </p>
               </div>
             )}
@@ -679,14 +796,28 @@ export default function DriverVerificationClient({
             )}
 
             {verificationStatus !== "incomplete" && (
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
                 <button type="button" onClick={() => setStep(0)} style={actionButtonStyle(false, "ghost")}>
                   {dir === "rtl" ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
                   {t("verification.back")}
                 </button>
-                <button type="button" onClick={() => router.push("/profile")} style={actionButtonStyle(false)}>
-                  {t("verification.done")}
-                </button>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+                  {submitMsg && (
+                    <p role="status" aria-live="polite" style={{ fontSize: 13, margin: 0, color: submitMsg.ok ? "#27AE60" : "#e74c3c" }}>
+                      {submitMsg.text}
+                    </p>
+                  )}
+                  {hasUnsavedChanges ? (
+                    <button type="button" onClick={submitForReview} disabled={submitting} style={actionButtonStyle(submitting)}>
+                      {submitting ? <Loader2 size={16} className="spin" aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
+                      {submitting ? t("action.saving") : (dir === "rtl" ? "حفظ التغييرات" : "Save Changes")}
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => router.push("/profile")} style={actionButtonStyle(false)}>
+                      {t("verification.done")}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </>
