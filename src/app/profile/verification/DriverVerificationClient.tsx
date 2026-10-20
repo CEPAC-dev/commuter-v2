@@ -276,6 +276,7 @@ export default function DriverVerificationClient({
   const [submitting, setSubmitting] = useState(false);
   const [submitMsg, setSubmitMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [errorModal, setErrorModal] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
 
   const DETAIL_FIELDS = [
     carType,
@@ -364,6 +365,18 @@ export default function DriverVerificationClient({
 
   async function handleFileChange(key: string, file: File | null) {
     if (!file) return;
+
+    // Check file size (5MB max)
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      const sizeMsg = dir === "rtl"
+        ? `حجم الملف كبير جداً. الحد الأقصى ${Math.round(MAX_SIZE / (1024 * 1024))} ميجابايت.`
+        : `File size is too large. Maximum ${Math.round(MAX_SIZE / (1024 * 1024))}MB allowed.`;
+      setErrorModal({ show: true, message: sizeMsg });
+      if (fileInputs.current[key]) fileInputs.current[key]!.value = "";
+      return;
+    }
+
     setUploading((u) => ({ ...u, [key]: true }));
     try {
       const formData = new FormData();
@@ -371,11 +384,27 @@ export default function DriverVerificationClient({
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
       const uploadData = await uploadRes.json();
       if (!uploadRes.ok) {
-        const errMsg = uploadData.error ?? "Upload failed.";
+        let errMsg = uploadData.error ?? "Upload failed.";
+
+        // Translate common errors to Arabic
+        if (dir === "rtl") {
+          if (errMsg.includes("too large")) {
+            errMsg = "حجم الملف كبير جداً. الحد الأقصى 5 ميجابايت.";
+          } else if (errMsg.includes("Unsupported file type")) {
+            errMsg = "نوع الملف غير مدعوم. استخدم JPG أو PNG أو PDF.";
+          } else if (errMsg.includes("No file provided")) {
+            errMsg = "لم يتم اختيار ملف.";
+          } else if (errMsg.includes("Unauthorized")) {
+            errMsg = "انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.";
+          } else if (errMsg.includes("Upload failed")) {
+            errMsg = "فشل رفع الملف. يرجى المحاولة مرة أخرى.";
+          }
+        }
+
         const debugInfo = uploadData.debug
-          ? ` (File: ${uploadData.debug.filename}, Type: ${uploadData.debug.mimeType})`
+          ? ` (${uploadData.debug.filename})`
           : "";
-        alert(`${errMsg}${debugInfo}`);
+        setErrorModal({ show: true, message: `${errMsg}${debugInfo}` });
         console.error("Upload error:", uploadData);
         return;
       }
@@ -385,7 +414,10 @@ export default function DriverVerificationClient({
       setDocuments((d) => ({ ...d, [key]: uploadData.path }));
       setHasUnsavedChanges(true);
     } catch (err) {
-      alert("Network error. Please check your connection.");
+      const networkMsg = dir === "rtl"
+        ? "خطأ في الاتصال بالإنترنت. يرجى التحقق من الاتصال والمحاولة مرة أخرى."
+        : "Network connection error. Please check your internet connection and try again.";
+      setErrorModal({ show: true, message: networkMsg });
       console.error("Upload exception:", err);
     } finally {
       setUploading((u) => ({ ...u, [key]: false }));
@@ -746,6 +778,9 @@ export default function DriverVerificationClient({
                           {dir === "rtl" ? "• غير محفوظ" : "• Unsaved"}
                         </span>
                       )}
+                      <span style={{ display: "block", fontSize: 11, color: "#9CA3AF", marginTop: 2, fontWeight: 400 }}>
+                        {dir === "rtl" ? "الحد الأقصى: 5 ميجابايت" : "Max: 5MB"}
+                      </span>
                     </label>
                     {done && (
                       <a href={path ?? undefined} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 600, color: "#00806E", textDecoration: "none" }}>
@@ -956,6 +991,80 @@ export default function DriverVerificationClient({
                 }}
               >
                 {dir === "rtl" ? "تأكيد" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Modal */}
+      {errorModal.show && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(11, 30, 61, 0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 20,
+          }}
+          onClick={() => setErrorModal({ show: false, message: "" })}
+        >
+          <div
+            dir={dir}
+            style={{
+              background: "#ffffff",
+              borderRadius: 16,
+              padding: "28px 24px 20px",
+              maxWidth: 420,
+              width: "100%",
+              boxShadow: "0 8px 32px rgba(11, 30, 61, 0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              style={{
+                margin: "0 0 12px",
+                fontSize: 18,
+                fontWeight: 700,
+                color: "#e74c3c",
+                textAlign: dir === "rtl" ? "right" : "left",
+              }}
+            >
+              {dir === "rtl" ? "حدث خطأ" : "Error"}
+            </h3>
+            <p
+              style={{
+                margin: "0 0 24px",
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: "#5A6A7A",
+                textAlign: dir === "rtl" ? "right" : "left",
+                wordBreak: "break-word",
+              }}
+            >
+              {errorModal.message}
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setErrorModal({ show: false, message: "" })}
+                style={{
+                  height: 44,
+                  padding: "0 24px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "#e74c3c",
+                  color: "#ffffff",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                {dir === "rtl" ? "حسناً" : "OK"}
               </button>
             </div>
           </div>
