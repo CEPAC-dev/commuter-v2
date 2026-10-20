@@ -16,6 +16,8 @@ const AdminActivityNotificationSchema = new Schema(
         "trip_chat_reported",
         "ride_incident_reported",
         "ride_incident_withdrawn",
+        "driver_verification_submitted",
+        "driver_verification_updated",
       ],
       index: true,
     },
