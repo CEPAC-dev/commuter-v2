@@ -158,8 +158,13 @@ export async function PATCH(req: NextRequest) {
       driverUpdate.plateChar1 = plateChar1;
     if (typeof plateChar2 === "string" && /^[\u0600-\u06FF]$/.test(plateChar2))
       driverUpdate.plateChar2 = plateChar2;
-    if (typeof plateChar3 === "string" && /^[\u0600-\u06FF]$/.test(plateChar3))
-      driverUpdate.plateChar3 = plateChar3;
+    if (typeof plateChar3 === "string") {
+      if (/^[\u0600-\u06FF]$/.test(plateChar3)) {
+        driverUpdate.plateChar3 = plateChar3;
+      } else if (plateChar3 === "") {
+        driverUpdate.plateChar3 = ""; // Clear the field
+      }
+    }
     if (typeof plateDigits === "string" && /^\d{3,4}$/.test(plateDigits))
       driverUpdate.plateDigits = plateDigits;
     if (licenseExpiry?.trim())

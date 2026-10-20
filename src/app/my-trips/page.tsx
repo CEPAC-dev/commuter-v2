@@ -52,6 +52,7 @@ import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import RateTripModal from "@/components/trips/RateTripModal";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 import CancelTripModal from "@/components/trips/CancelTripModal";
+import TripReportButton from "@/components/trips/TripReportButton";
 import RequestGroupCancellationControls from "@/components/trips/RequestGroupCancellationControls";
 import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
 import { buildTripTabView, type TripTabKey } from "@/lib/tripTabView.ts";
@@ -3072,6 +3073,11 @@ export default async function MyTripsPage({
                                   tripId={trip.id}
                                   initialRating={trip.rating ?? null}
                                 />
+                              </div>
+                            )}
+                            {!isDriver && trip.status === "completed" && !displayStatus.canRate && (
+                              <div style={{ padding: "0 18px 16px" }}>
+                                <TripReportButton tripId={trip.id} locale={locale} />
                               </div>
                             )}
                           </div>

@@ -22,6 +22,7 @@ import SharedRideDetails from "@/components/trips/SharedRideDetails";
 import RateTripModal from "@/components/trips/RateTripModal";
 import CancelTripModal from "@/components/trips/CancelTripModal";
 import NoShowReviewNotice from "@/components/trips/NoShowReviewNotice";
+import ReportTripModal from "@/components/trips/ReportTripModal";
 import ContinueCheckoutButton from "@/components/shared/ContinueCheckoutButton";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
@@ -39,6 +40,7 @@ import { translate, formatDate, formatTime, formatEgp, localeDirection } from "@
 import { getServerLocale } from "@/lib/i18n/server";
 import { canShare } from "@/lib/liveShare/eligibility";
 import { TripShare } from "@/models/TripShare";
+import { TripReport } from "@/models/TripReport";
 export const metadata = { title: "Trip detail — Commuter" };
 export const dynamic = "force-dynamic";
 
@@ -88,13 +90,18 @@ function TripActions({
   displayStatus,
   walletBalance,
   isDriver,
+  locale,
+  hasReport,
 }: {
   trip: UserTripDetail;
   displayStatus: ReturnType<typeof getDisplayStatus>;
   walletBalance: number;
   isDriver: boolean;
+  locale: "en" | "ar";
+  hasReport: boolean;
 }) {
   if (isDriver) return null;
+  const showReport = trip.status === "completed" && !displayStatus.canRate;
   if (trip.isStandalone) {
     return (
       <div style={{ display: "grid", gap: 8 }}>
@@ -118,6 +125,13 @@ function TripActions({
         )}
         {displayStatus.canRate && (
           <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />
+        )}
+        {showReport && (
+          <ReportTripModal
+            tripId={trip.id}
+            locale={locale}
+            hasExistingReport={hasReport}
+          />
         )}
       </div>
     );
@@ -150,6 +164,15 @@ function TripActions({
   }
   if (displayStatus.canRate) {
     return <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />;
+  }
+  if (showReport) {
+    return (
+      <ReportTripModal
+        tripId={trip.id}
+        locale={locale}
+        hasExistingReport={hasReport}
+      />
+    );
   }
   return null;
 }
@@ -302,6 +325,14 @@ export default async function TripDetailPage({
         expiresAt: { $gt: new Date() },
       }),
     );
+  const hasReport =
+    !isDriver &&
+    Boolean(
+      await TripReport.exists({
+        tripId: trip.id,
+        userId: session.userId,
+      }),
+    );
   const showRefundBadge =
     !rejectionDisplay.showReasonCard &&
     displayStatus.key !== "status.expired" &&
@@ -317,7 +348,7 @@ export default async function TripDetailPage({
   });
   const hasPrimaryAction =
     !rejectionDisplay.showReasonCard &&
-    (displayStatus.canPay || displayStatus.canCancel || displayStatus.canRate);
+    (displayStatus.canPay || displayStatus.canCancel || displayStatus.canRate || (status === "completed" && !displayStatus.canRate));
   const paymentBreakdown = trip.paymentBreakdown;
 
   return (
@@ -885,7 +916,14 @@ export default async function TripDetailPage({
               )}
 
               <div className="trip-detail-desktop-actions">
-                <TripActions trip={trip} displayStatus={displayStatus} walletBalance={checkoutWallet?.balanceEgp ?? 0} isDriver={isDriver} />
+                <TripActions
+                  trip={trip}
+                  displayStatus={displayStatus}
+                  walletBalance={checkoutWallet?.balanceEgp ?? 0}
+                  isDriver={isDriver}
+                  locale={locale}
+                  hasReport={hasReport}
+                />
               </div>
             </aside>
 
@@ -1033,6 +1071,8 @@ export default async function TripDetailPage({
                 displayStatus={displayStatus}
                 walletBalance={checkoutWallet?.balanceEgp ?? 0}
                 isDriver={isDriver}
+                locale={locale}
+                hasReport={hasReport}
               />
             </div>
           </div>

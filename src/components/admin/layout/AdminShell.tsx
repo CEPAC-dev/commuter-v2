@@ -24,6 +24,7 @@ import {
   TicketPercent,
   Users,
   X,
+  AlertCircle,
 } from "lucide-react";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import AdminActivityBell from "@/components/admin/layout/AdminActivityBell";
@@ -95,6 +96,12 @@ const sections = [
     label: "Ride incidents",
     icon: ShieldAlert,
     statKey: "incidents",
+  },
+  {
+    href: "/admin/trip-reports",
+    label: "Trip reports",
+    icon: AlertCircle,
+    statKey: null,
   },
   { href: "/admin/vehicles", label: "Vehicles", icon: CarFront, statKey: null },
   {
