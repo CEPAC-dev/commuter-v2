@@ -1793,4 +1793,11 @@ export const ar: Record<MessageKey, string> = {
   "faq.q17": "كيف أتواصل مع فريق الدعم؟",
   "faq.a17":
     "يمكنك التواصل مع فريق كوميوتر عبر البريد الإلكتروني الموضح على الموقع، وسيساعدك فريق الدعم في أي استفسار متعلق بالحجز أو الرحلات.",
+  "report.category.vehicle_condition": "حالة العربية كانت سيئة",
+  "report.category.driver_behavior": "السواق كان غير محترم أو غير مهني",
+  "report.category.route_issue": "المسار كان خطأ أو غير فعال",
+  "report.category.safety_concern": "مشكلة أمان (سرعة زائدة، قيادة متهورة)",
+  "report.category.pricing_issue": "مشكلة في السعر أو الفاتورة",
+  "report.category.cleanliness": "العربية مش نضيفة",
+  "report.category.other": "مشكلة أخرى",
 };

@@ -9,6 +9,7 @@ import {
   FileText,
   Loader2,
   Upload,
+  X,
 } from "lucide-react";
 import AppHeader from "@/components/layout/AppHeader";
 import { CAR_TYPE_LIST, type CarType } from "@/lib/config/driver";
@@ -274,6 +275,7 @@ export default function DriverVerificationClient({
   const [verificationStatus, setVerificationStatus] = useState(initialVerificationStatus);
   const [submitting, setSubmitting] = useState(false);
   const [submitMsg, setSubmitMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const DETAIL_FIELDS = [
     carType,
@@ -391,6 +393,22 @@ export default function DriverVerificationClient({
     }
   }
 
+  function cancelUpload(key: string) {
+    // Remove from uploaded paths
+    setUploadedPaths((prev) => {
+      const newPaths = { ...prev };
+      delete newPaths[key];
+      return newPaths;
+    });
+    // Revert to original document
+    setDocuments((d) => ({ ...d, [key]: initialDocuments[key] }));
+    // Check if there are still unsaved changes
+    setHasUnsavedChanges((prev) => {
+      const remainingChanges = Object.keys(uploadedPaths).filter(k => k !== key);
+      return remainingChanges.length > 0;
+    });
+  }
+
   const profileSinceLabel = new Date(profileSince).toLocaleDateString("en-EG", {
     year: "numeric",
     month: "long",
@@ -400,13 +418,15 @@ export default function DriverVerificationClient({
   async function submitForReview() {
     // Confirmation dialog for verified/pending drivers with changes
     if ((verificationStatus === "verified" || verificationStatus === "pending") && hasUnsavedChanges) {
-      const confirmMsg = dir === "rtl"
-        ? "هل أنت متأكد؟ سيتم إرسال المستندات المحدثة للمراجعة مرة أخرى."
-        : "Are you sure? Updated documents will be sent for review again.";
-
-      if (!confirm(confirmMsg)) return;
+      setShowConfirmModal(true);
+      return;
     }
 
+    await performSubmit();
+  }
+
+  async function performSubmit() {
+    setShowConfirmModal(false);
     setSubmitting(true);
     setSubmitMsg(null);
     try {
@@ -529,10 +549,7 @@ export default function DriverVerificationClient({
               <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setPlateLettersCount(2);
-                    setPlateChar3("");
-                  }}
+                  onClick={() => setPlateLettersCount(2)}
                   style={{
                     flex: 1,
                     height: 36,
@@ -545,6 +562,9 @@ export default function DriverVerificationClient({
                     fontFamily: "inherit",
                     cursor: "pointer",
                     transition: "all 0.2s ease",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                   }}
                 >
                   {dir === "rtl" ? "\u062D\u0631\u0641\u064A\u0646" : "2 Letters"}
@@ -564,6 +584,9 @@ export default function DriverVerificationClient({
                     fontFamily: "inherit",
                     cursor: "pointer",
                     transition: "all 0.2s ease",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                   }}
                 >
                   {dir === "rtl" ? "\u0663 \u062D\u0631\u0648\u0641" : "3 Letters"}
@@ -729,6 +752,28 @@ export default function DriverVerificationClient({
                         {t("doc.view")}
                       </a>
                     )}
+                    {isNewUpload && (
+                      <button
+                        type="button"
+                        onClick={() => cancelUpload(doc.key)}
+                        aria-label={dir === "rtl" ? "إلغاء الرفع" : "Cancel upload"}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          border: "1.5px solid #e8edf0",
+                          background: "#ffffff",
+                          color: "#e74c3c",
+                          cursor: "pointer",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => fileInputs.current[doc.key]?.click()}
@@ -823,6 +868,100 @@ export default function DriverVerificationClient({
           </>
         )}
       </main>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(11, 30, 61, 0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 20,
+          }}
+          onClick={() => setShowConfirmModal(false)}
+        >
+          <div
+            dir={dir}
+            style={{
+              background: "#ffffff",
+              borderRadius: 16,
+              padding: "28px 24px 20px",
+              maxWidth: 420,
+              width: "100%",
+              boxShadow: "0 8px 32px rgba(11, 30, 61, 0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              style={{
+                margin: "0 0 12px",
+                fontSize: 18,
+                fontWeight: 700,
+                color: "#0B1E3D",
+                textAlign: dir === "rtl" ? "right" : "left",
+              }}
+            >
+              {dir === "rtl" ? "تأكيد الحفظ" : "Confirm Save"}
+            </h3>
+            <p
+              style={{
+                margin: "0 0 24px",
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: "#5A6A7A",
+                textAlign: dir === "rtl" ? "right" : "left",
+              }}
+            >
+              {dir === "rtl"
+                ? "هل أنت متأكد؟ سيتم إرسال المستندات المحدثة للمراجعة مرة أخرى."
+                : "Are you sure? Updated documents will be sent for review again."}
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                style={{
+                  height: 44,
+                  padding: "0 20px",
+                  borderRadius: 10,
+                  border: "1.5px solid #e8edf0",
+                  background: "#ffffff",
+                  color: "#5A6A7A",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                {dir === "rtl" ? "إلغاء" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={performSubmit}
+                style={{
+                  height: 44,
+                  padding: "0 24px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "#0B1E3D",
+                  color: "#ffffff",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                {dir === "rtl" ? "تأكيد" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } } .spin { animation: spin 0.8s linear infinite; }`}</style>
     </div>
   );
