@@ -1817,6 +1817,13 @@ export const en = {
   "faq.q17": "How can I contact support?",
   "faq.a17":
     "You can contact the Commuter support team through the email address listed on our website.",
+  "report.category.vehicle_condition": "Vehicle was in poor condition",
+  "report.category.driver_behavior": "Driver was rude or unprofessional",
+  "report.category.route_issue": "Wrong or inefficient route taken",
+  "report.category.safety_concern": "Safety concern (speeding, reckless driving)",
+  "report.category.pricing_issue": "Pricing or billing issue",
+  "report.category.cleanliness": "Vehicle was not clean",
+  "report.category.other": "Other issue",
 } as const;
 
 export type MessageKey = keyof typeof en;
