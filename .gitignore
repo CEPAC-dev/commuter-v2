@@ -51,3 +51,5 @@ commuter.postman_collection.json
 
 # Backup files
 backup
+
+/docs/*

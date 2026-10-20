@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Driver } from "@/models/Driver";
 import { getSession } from "@/lib/auth/session";
+import { notifyAdminsDriverUpdate } from "@/lib/services/driverNotification";
 
 const REQUIRED_VEHICLE_FIELDS = [
   "carType",
@@ -54,12 +55,15 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   await connectDB();
-  const driver = await Driver.findOne({ userId: session.userId }).lean<{
-    _id: string;
-    verificationStatus: string;
-    documents?: Record<string, string | null>;
-    [key: string]: unknown;
-  }>();
+  const driver = await Driver.findOne({ userId: session.userId })
+    .populate("userId", "name")
+    .lean<{
+      _id: string;
+      userId: { _id: string; name: string };
+      verificationStatus: string;
+      documents?: Record<string, string | null>;
+      [key: string]: unknown;
+    }>();
   if (!driver)
     return NextResponse.json(
       { error: "Driver profile not found." },
@@ -95,6 +99,13 @@ export async function POST() {
   await Driver.updateOne(
     { userId: session.userId },
     { verificationStatus: "pending" },
+  );
+
+  // Notify admins
+  await notifyAdminsDriverUpdate(
+    String(driver._id),
+    driver.userId.name,
+    true // First submit
   );
 
   return NextResponse.json({ ok: true, verificationStatus: "pending" });

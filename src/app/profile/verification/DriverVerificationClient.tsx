@@ -256,9 +256,11 @@ export default function DriverVerificationClient({
 
   const capacity = carType ? CAR_TYPE_LIST.find((c) => c.key === carType)?.capacity : carCapacity;
 
-  // Documents
+  // Documents - local state only (saved on submit)
   const [documents, setDocuments] = useState(initialDocuments);
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
+  const [uploadedPaths, setUploadedPaths] = useState<Record<string, string>>({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const plateChar1Ref = useRef<HTMLInputElement>(null);
@@ -364,25 +366,22 @@ export default function DriverVerificationClient({
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
       const uploadData = await uploadRes.json();
       if (!uploadRes.ok) {
-        console.error(uploadData.error ?? "Upload failed.");
+        const errMsg = uploadData.error ?? "Upload failed.";
+        const debugInfo = uploadData.debug
+          ? ` (File: ${uploadData.debug.filename}, Type: ${uploadData.debug.mimeType})`
+          : "";
+        alert(`${errMsg}${debugInfo}`);
+        console.error("Upload error:", uploadData);
         return;
       }
 
-      const res = await fetch("/api/auth/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          phone: phone.trim(),
-          documents: { [key]: uploadData.path },
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setDocuments((d) => ({ ...d, [key]: uploadData.path }));
-      } else {
-        console.error(data.error ?? "Failed to save document.");
-      }
+      // Store uploaded path locally (not saved to DB yet)
+      setUploadedPaths((prev) => ({ ...prev, [key]: uploadData.path }));
+      setDocuments((d) => ({ ...d, [key]: uploadData.path }));
+      setHasUnsavedChanges(true);
+    } catch (err) {
+      alert("Network error. Please check your connection.");
+      console.error("Upload exception:", err);
     } finally {
       setUploading((u) => ({ ...u, [key]: false }));
       if (fileInputs.current[key]) fileInputs.current[key]!.value = "";
@@ -396,9 +395,40 @@ export default function DriverVerificationClient({
   });
 
   async function submitForReview() {
+    // Confirmation dialog for verified/pending drivers with changes
+    if ((verificationStatus === "verified" || verificationStatus === "pending") && hasUnsavedChanges) {
+      const confirmMsg = dir === "rtl"
+        ? "هل أنت متأكد؟ سيتم إرسال المستندات المحدثة للمراجعة مرة أخرى."
+        : "Are you sure? Updated documents will be sent for review again.";
+
+      if (!confirm(confirmMsg)) return;
+    }
+
     setSubmitting(true);
     setSubmitMsg(null);
     try {
+      // First save any uploaded documents
+      if (Object.keys(uploadedPaths).length > 0) {
+        const saveRes = await fetch("/api/auth/me", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            phone: phone.trim(),
+            documents: uploadedPaths,
+          }),
+        });
+        const saveData = await saveRes.json();
+        if (!saveRes.ok) {
+          setSubmitMsg({ ok: false, text: saveData.error ?? t("error.save_failed") });
+          return;
+        }
+        // Clear uploaded paths after save
+        setUploadedPaths({});
+        setHasUnsavedChanges(false);
+      }
+
+      // Then submit for review
       const res = await fetch("/api/driver/submit-review", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
@@ -545,6 +575,7 @@ export default function DriverVerificationClient({
                 const path = documents[doc.key];
                 const done = Boolean(path);
                 const busy = Boolean(uploading[doc.key]);
+                const isNewUpload = Boolean(uploadedPaths[doc.key]);
                 return (
                   <div
                     key={doc.key}
@@ -554,22 +585,27 @@ export default function DriverVerificationClient({
                       gap: 10,
                       padding: "10px 14px",
                       minHeight: 52,
-                      background: "#f8f9fa",
-                      border: `1.5px solid ${done ? "#00C2A8" : "#e8edf0"}`,
+                      background: isNewUpload ? "#FFF8E1" : "#f8f9fa",
+                      border: `1.5px solid ${isNewUpload ? "#F5A623" : done ? "#00C2A8" : "#e8edf0"}`,
                       borderRadius: 12,
                     }}
                   >
-                    <FileText size={18} style={{ color: done ? "#00C2A8" : "#5A6A7A", flexShrink: 0 }} aria-hidden="true" />
+                    <FileText size={18} style={{ color: isNewUpload ? "#F5A623" : done ? "#00C2A8" : "#5A6A7A", flexShrink: 0 }} aria-hidden="true" />
                     <input
                       ref={(el) => { fileInputs.current[doc.key] = el; }}
                       type="file"
-                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
                       id={`vdoc-${doc.key}`}
                       style={{ display: "none" }}
                       onChange={(e) => handleFileChange(doc.key, e.target.files?.[0] ?? null)}
                     />
                     <label htmlFor={`vdoc-${doc.key}`} style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#0B1E3D", cursor: "pointer" }}>
                       {t(doc.label)}
+                      {isNewUpload && (
+                        <span style={{ marginInlineStart: 6, fontSize: 11, fontWeight: 700, color: "#F5A623", textTransform: "uppercase" }}>
+                          {dir === "rtl" ? "• غير محفوظ" : "• Unsaved"}
+                        </span>
+                      )}
                     </label>
                     {done && (
                       <a href={path ?? undefined} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 600, color: "#00806E", textDecoration: "none" }}>
@@ -604,6 +640,17 @@ export default function DriverVerificationClient({
                 );
               })}
             </div>
+
+            {hasUnsavedChanges && (
+              <div style={{ padding: "10px 14px", background: "#FFF8E1", border: "1.5px solid #F5A623", borderRadius: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#F5A623", flexShrink: 0 }} />
+                <p style={{ margin: 0, fontSize: 13, color: "#E65100", fontWeight: 500 }}>
+                  {dir === "rtl"
+                    ? "لديك مستندات غير محفوظة. اضغط على إرسال للمراجعة لحفظها."
+                    : "You have unsaved documents. Click Submit for Review to save them."}
+                </p>
+              </div>
+            )}
 
             {verificationStatus === "incomplete" && (
               <div style={{ ...cardStyle, marginTop: 16 }}>
