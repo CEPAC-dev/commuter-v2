@@ -103,8 +103,32 @@ export function formatMinutes(locale: Locale, minutes: number): string {
   return locale === "ar" ? toArabicDigits(out) : out;
 }
 
-export function formatEgp(locale: Locale, amount: number): string {
-  const intl = locale === "ar" ? "ar-EG" : "en-EG";
-  const out = `${amount.toLocaleString(intl)} ${locale === "ar" ? "جنيه" : "EGP"}`;
+export function formatEgp(
+  locale: Locale,
+  amount: number,
+  regionCode?: string,
+): string {
+  const fallbackRegion =
+    regionCode && regionCode !== "EGP" ? regionCode : "EG-CAIRO";
+  const region =
+    regionCode && ["EG-CAIRO", "SA", "AE-ABU-DHABI"].includes(regionCode)
+      ? regionCode
+      : fallbackRegion;
+  const currency =
+    region === "SA"
+      ? { code: "SAR", locale: locale === "ar" ? "ar-SA" : "en-SA" }
+      : region === "AE-ABU-DHABI"
+        ? { code: "AED", locale: locale === "ar" ? "ar-AE" : "en-AE" }
+        : { code: "EGP", locale: locale === "ar" ? "ar-EG" : "en-EG" };
+  const intl = currency.locale;
+  const suffix =
+    locale === "ar"
+      ? currency.code === "SAR"
+        ? "ريال"
+        : currency.code === "AED"
+          ? "درهم"
+          : "جنيه"
+      : currency.code;
+  const out = `${amount.toLocaleString(intl)} ${suffix}`;
   return locale === "ar" ? toArabicDigits(out) : out;
 }

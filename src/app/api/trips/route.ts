@@ -25,6 +25,7 @@ import {
   getTripPassengerCount,
   isVehiclePassengerCountAllowed,
 } from "@/lib/rideCapacity";
+import { getCurrencyConfig } from "@/lib/config/regions";
 import { resolveActiveRegion } from "@/lib/regions/resolveActiveRegion";
 import { bookingWindow } from "@/lib/time/bookingDates";
 import {
@@ -994,6 +995,7 @@ export async function POST(req: NextRequest) {
         _id: instance.id,
         tripNumber: await nextSequence("tripNumber"),
         regionCode: userRegion,
+        currencyCode: getCurrencyConfig(userRegion).code,
         userId: new Types.ObjectId(userId),
         date: candidate.date,
         cycleIndex: instance.cycleIndex,
@@ -1045,6 +1047,7 @@ export async function POST(req: NextRequest) {
                 _id: requestId,
                 userId: new Types.ObjectId(userId),
                 regionCode: userRegion,
+                currencyCode: getCurrencyConfig(userRegion).code,
                 tripIds: documents.map((trip) => trip._id),
                 dates: candidates.map((candidate) => candidate.date),
                 amountEgp,

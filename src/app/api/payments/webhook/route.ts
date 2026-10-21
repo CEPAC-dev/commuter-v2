@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { connectDB } from "@/lib/db/mongoose";
+import { DEFAULT_REGION, getCurrencyConfig } from "@/lib/config/regions";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { Payment } from "@/models/Payment";
@@ -36,6 +37,27 @@ import { handlePaidRequestPayment } from "@/lib/payments/requestPaymentRecovery"
 import { ACTIVE_PAYMENT_STATUSES } from "@/lib/payments/settlementAttempt";
 
 const REFUND_LOCK_STALE_MS = 5 * 60_000;
+
+async function resolveExpectedCurrencyCode(orderId: string): Promise<string> {
+  const payment = await Payment.findById(orderId)
+    .select("currencyCode")
+    .lean<{ currencyCode?: string } | null>();
+  if (payment?.currencyCode) return payment.currencyCode;
+
+  const request = await Request.findById(orderId)
+    .select("currencyCode regionCode")
+    .lean<{ currencyCode?: string; regionCode?: string } | null>();
+  if (request?.currencyCode) return request.currencyCode;
+  if (request?.regionCode) return getCurrencyConfig(request.regionCode).code;
+
+  const trip = await Trip.findById(orderId)
+    .select("currencyCode regionCode")
+    .lean<{ currencyCode?: string; regionCode?: string } | null>();
+  if (trip?.currencyCode) return trip.currencyCode;
+  if (trip?.regionCode) return getCurrencyConfig(trip.regionCode).code;
+
+  return getCurrencyConfig(DEFAULT_REGION).code;
+}
 
 function verifyLegacySignature(
   p: Record<string, unknown>,
@@ -142,17 +164,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
+  await connectDB();
+
+  const expectedCurrencyCode = await resolveExpectedCurrencyCode(orderId || "");
   if (
     (merchantId && merchantId !== expectedMerchantId) ||
-    String(currency).toUpperCase() !== "EGP"
+    (orderId &&
+      String(currency).toUpperCase() !== expectedCurrencyCode.toUpperCase())
   ) {
     return NextResponse.json(
       { error: "Invalid payment details" },
       { status: 400 },
     );
   }
-
-  await connectDB();
 
   const receivedAmount = Number(amount);
   if (!Number.isFinite(receivedAmount)) {
@@ -406,7 +430,10 @@ export async function POST(req: NextRequest) {
             paymentId: String(payment._id),
             kashierTransactionId: transactionId,
           };
-          console.warn("[Payment] Webhook received for blocked Trip", blockedTripDetails);
+          console.warn(
+            "[Payment] Webhook received for blocked Trip",
+            blockedTripDetails,
+          );
           await Payment.updateOne(
             { _id: payment._id },
             {

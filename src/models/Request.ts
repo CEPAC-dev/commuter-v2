@@ -14,6 +14,12 @@ const RequestSchema = new Schema(
       default: null,
       index: true,
     },
+    currencyCode: {
+      type: String,
+      enum: ["EGP", "SAR", "AED"],
+      default: "EGP",
+      index: true,
+    },
     tripIds: {
       type: [Types.ObjectId],
       ref: "Trip",
@@ -31,9 +37,20 @@ const RequestSchema = new Schema(
     },
     amountEgp: { type: Number, required: true },
     note: { type: String, default: "", trim: true, maxlength: 1000 },
-    reviewedBy: { type: Types.ObjectId, ref: "User", required: false, default: null },
+    reviewedBy: {
+      type: Types.ObjectId,
+      ref: "User",
+      required: false,
+      default: null,
+    },
     reviewedAt: { type: Date, required: false, default: null },
-    rejectionReason: { type: String, required: false, trim: true, maxlength: 500, default: null },
+    rejectionReason: {
+      type: String,
+      required: false,
+      trim: true,
+      maxlength: 500,
+      default: null,
+    },
     paymentStatus: {
       type: String,
       required: true,
@@ -82,10 +99,7 @@ requestSchema.pre(
   }) {
     if (
       this.isNew &&
-      !(
-        this.$locals.groupCreationApproved === true &&
-        this.$session()
-      )
+      !(this.$locals.groupCreationApproved === true && this.$session())
     ) {
       throw new Error(REQUEST_CREATION_DISABLED);
     }

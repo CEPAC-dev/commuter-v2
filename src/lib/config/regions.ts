@@ -11,6 +11,7 @@ export type LegacyRegionCode = (typeof LEGACY_REGION_CODES)[number];
 
 /** Temporary compatibility type for persisted pre-migration User.region values. */
 export type RegionKey = RegionCode | LegacyRegionCode;
+export type CurrencyCode = "EGP" | "SAR" | "AED";
 
 export interface RegionBounds {
   minLat: number;
@@ -26,7 +27,7 @@ export interface RegionConfig {
   labelAr: string;
   countryCode: "EG" | "SA" | "AE";
   currency: {
-    code: "EGP" | "SAR" | "AED";
+    code: CurrencyCode;
     locale: string;
     decimalDigits: number;
   };
@@ -104,7 +105,9 @@ export const REGION_LIST = Object.values(REGIONS);
 export const DEFAULT_REGION: RegionCode = "EG-CAIRO";
 
 /** Which regions each vehicle type is offered in ("all" = every region). */
-export const VEHICLE_REGIONS: Partial<Record<VehicleKey, RegionCode[] | "all">> = {
+export const VEHICLE_REGIONS: Partial<
+  Record<VehicleKey, RegionCode[] | "all">
+> = {
   private_car: ["EG-CAIRO", "SA"],
   taxi_private: "all",
   taxi_shared: "all",
