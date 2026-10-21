@@ -7,15 +7,12 @@ import {
   Search,
   Car,
   ShieldCheck,
-  Clock,
   CircleAlert,
   CircleCheck,
   CircleX,
   Phone,
   Mail,
   CalendarDays,
-  FileText,
-  ExternalLink,
   Gauge,
   Palette,
   Gift,
@@ -35,22 +32,19 @@ import { REGION_CODES, REGIONS, type RegionCode } from "@/lib/config/regions";
  * Types (kept as JSDoc-style comments since this file is plain JSX)
  * ---------------------------------------------------------------------
  * DriverProfile: {
- *   verificationStatus?: "incomplete" | "pending" | "verified",
  *   carType, carBrand, carModel, modelYear, vehicleColor,
  *   plateChar1, plateChar2, plateChar3, plateDigits,
- *   licenseExpiry, carCapacity, documents: Record<string, string|null>
+ *   licenseExpiry, carCapacity
  * }
  * UserRow: { _id, name, phone, email, role, createdAt, driver? }
  */
 
 type UserRole = "passenger" | "driver" | "admin";
-type VerificationStatus = "incomplete" | "pending" | "verified";
 type ToneKey = "slate" | "amber" | "teal" | "navy";
 type UserSort = "createdAt" | "referralUsageCount";
 type SortDirection = "asc" | "desc";
 
 type DriverProfile = {
-  verificationStatus?: VerificationStatus;
   carType?: string;
   carBrand?: string;
   carModel?: string;
@@ -62,7 +56,6 @@ type DriverProfile = {
   plateDigits?: string;
   licenseExpiry?: string;
   carCapacity?: number;
-  documents?: Record<string, string | null | undefined>;
 };
 
 type UserRow = {
@@ -102,26 +95,6 @@ type UserManagementClientProps = {
 
 const ROLE_OPTIONS: string[] = ["passenger", "driver", "admin"];
 
-const VERIFICATION_META: Record<
-  VerificationStatus,
-  { label: string; tone: ToneKey; Icon: LucideIcon }
-> = {
-  incomplete: { label: "Incomplete", tone: "slate", Icon: CircleAlert },
-  pending: { label: "Pending", tone: "amber", Icon: Clock },
-  verified: { label: "Verified", tone: "teal", Icon: CircleCheck },
-};
-
-const DOC_LABELS: Record<string, string> = {
-  nationalIdFront: "National ID (front)",
-  nationalIdBack: "National ID (back)",
-  drivingLicense: "Driving license",
-  carLicenseFront: "Car license (front)",
-  carLicenseBack: "Car license (back)",
-  criminalRecord: "Criminal record",
-  profilePic: "Profile picture",
-  carImage: "Car image",
-};
-
 const TONE_CLASSES: Record<ToneKey, string> = {
   slate:
     "bg-[var(--color-background)] text-[var(--color-muted)] ring-[var(--color-border)]",
@@ -141,7 +114,6 @@ const SAMPLE_USERS: UserRow[] = [
     role: "driver",
     createdAt: "2025-02-11T10:00:00.000Z",
     driver: {
-      verificationStatus: "pending",
       carType: "Sedan",
       carBrand: "Hyundai",
       carModel: "Elantra",
@@ -153,14 +125,6 @@ const SAMPLE_USERS: UserRow[] = [
       plateDigits: "4471",
       licenseExpiry: "2027-05-01",
       carCapacity: 4,
-      documents: {
-        nationalIdFront:
-          "https://images.unsplash.com/photo-1586771107445-d3ca888129ff?w=400",
-        drivingLicense:
-          "https://images.unsplash.com/photo-1586771107445-d3ca888129ff?w=400",
-        carImage:
-          "https://images.unsplash.com/photo-1541443131876-44b03de101c5?w=400",
-      },
     },
   },
   {
@@ -184,7 +148,7 @@ const SAMPLE_USERS: UserRow[] = [
 export default function UserManagementClient({
   initialUsers = SAMPLE_USERS,
   title = "User management",
-  description = "Review accounts, verify drivers, and manage access levels.",
+  description = "Review accounts and manage access levels.",
   emptyMessage = "No users match your search.",
 }: UserManagementClientProps) {
   const [rows, setRows] = useState<UserRow[]>(initialUsers);
@@ -193,8 +157,6 @@ export default function UserManagementClient({
   const [feedback, setFeedback] = useState<FeedbackState>({});
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole>("passenger");
-  const [verificationFilter, setVerificationFilter] =
-    useState<VerificationStatus | null>(null);
   const [signupDate, setSignupDate] = useState("");
   const [sortBy, setSortBy] = useState<UserSort>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -202,7 +164,6 @@ export default function UserManagementClient({
   function resetFilters() {
     setQuery("");
     setRoleFilter("passenger");
-    setVerificationFilter(null);
     setSignupDate("");
     setSortBy("createdAt");
     setSortDirection("desc");
@@ -223,12 +184,6 @@ export default function UserManagementClient({
       }
       const rowRole = row.role || "passenger";
       if (rowRole !== roleFilter) return false;
-      if (
-        roleFilter === "driver" &&
-        verificationFilter &&
-        row.driver?.verificationStatus !== verificationFilter
-      )
-        return false;
       const search = query.trim();
       if (!search) return true;
 
@@ -259,7 +214,6 @@ export default function UserManagementClient({
     rows,
     query,
     roleFilter,
-    verificationFilter,
     signupDate,
     sortBy,
     sortDirection,
@@ -295,19 +249,12 @@ export default function UserManagementClient({
 
     try {
       const payload: {
-        role: string;
         defaultRegionCode?: RegionCode;
         allowedRegionCodes?: RegionCode[];
-        verificationStatus?: VerificationStatus;
       } = {
-        role: user.role ?? "passenger",
         defaultRegionCode,
         allowedRegionCodes,
       };
-      if (user.driver) {
-        payload.verificationStatus =
-          user.driver.verificationStatus ?? "incomplete";
-      }
 
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
@@ -460,26 +407,6 @@ export default function UserManagementClient({
               </button>
             ))}
           </div>
-          {roleFilter === "driver" && (
-            <div className="flex gap-2 overflow-x-auto">
-              {Object.entries(VERIFICATION_META).map(([value, meta]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() =>
-                    setVerificationFilter(value as VerificationStatus)
-                  }
-                  className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition ${
-                    verificationFilter === value
-                      ? "bg-[var(--color-secondary)] text-[var(--color-on-secondary)] shadow-sm"
-                      : "bg-[var(--color-background)] text-[var(--color-muted)] hover:bg-[var(--color-secondary-tint)]"
-                  }`}
-                >
-                  {value === "verified" ? "Completed" : meta.label}
-                </button>
-              ))}
-            </div>
-          )}
           <div className="flex flex-wrap gap-2">
             <label className="flex items-center gap-2 text-xs font-semibold text-[var(--color-muted)]">
               Signed up on
@@ -540,9 +467,6 @@ export default function UserManagementClient({
           {filteredRows.map((user) => {
             const expanded = expandedId === user._id;
             const feedbackMessage = feedback[user._id];
-            const verification = user.driver?.verificationStatus
-              ? VERIFICATION_META[user.driver.verificationStatus]
-              : null;
 
             return (
               <div
@@ -603,28 +527,22 @@ export default function UserManagementClient({
 
                   <div className="flex shrink-0 items-center gap-2">
                     <RoleBadge role={user.role} />
-                    {verification && (
-                      <span className="hidden sm:inline-flex">
-                        <AdminStatusBadge
-                          status={
-                            user.driver?.verificationStatus ?? "incomplete"
-                          }
-                          label={verification.label}
-                          tone={
-                            verification.tone === "teal"
-                              ? "success"
-                              : verification.tone === "amber"
-                                ? "warning"
-                                : "muted"
-                          }
-                        />
-                      </span>
-                    )}
                     <ChevronDown
                       className={`h-4 w-4 text-[var(--color-muted)] transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
                     />
                   </div>
                 </button>
+
+                {user.role === "driver" && (
+                  <div className="border-t border-[var(--color-border)] bg-[var(--color-panel)] px-4 py-2 sm:px-5">
+                    <a
+                      href={`/admin/drivers?driver=${encodeURIComponent(user._id)}`}
+                      className="inline-flex w-fit items-center rounded-full border border-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--color-primary)] transition hover:bg-[var(--color-primary-tint)]"
+                    >
+                      Open in Drivers
+                    </a>
+                  </div>
+                )}
 
                 {expanded && (
                   <div className="grid gap-4 border-t border-[var(--color-border)] bg-[var(--color-background)] p-4 sm:p-5">
@@ -679,15 +597,6 @@ export default function UserManagementClient({
                       </InfoCard>
 
                       <InfoCard title="Admin controls">
-                        <FieldSelect
-                          label="Role"
-                          value={user.role || "passenger"}
-                          onChange={(value) =>
-                            updateRow(user._id, { role: value })
-                          }
-                          options={ROLE_OPTIONS}
-                        />
-
                         <FieldSelect
                           label="Default region"
                           value={user.defaultRegionCode ?? "EG-CAIRO"}
@@ -753,30 +662,6 @@ export default function UserManagementClient({
                             );
                           })}
                         </div>
-
-                        {user.driver && (
-                          <FieldSelect
-                            label="Verification status"
-                            value={
-                              user.driver.verificationStatus || "incomplete"
-                            }
-                            onChange={(value) =>
-                              updateRow(user._id, {
-                                driver: {
-                                  ...(user.driver ?? {}),
-                                  verificationStatus:
-                                    value as VerificationStatus,
-                                },
-                              })
-                            }
-                            options={Object.keys(VERIFICATION_META)}
-                            optionLabels={Object.fromEntries(
-                              Object.entries(VERIFICATION_META).map(
-                                ([k, v]) => [k, v.label],
-                              ),
-                            )}
-                          />
-                        )}
 
                         <button
                           type="button"
@@ -893,61 +778,6 @@ export default function UserManagementClient({
                           )}
                         </InfoCard>
 
-                        <InfoCard title="Uploaded documents">
-                          {user.driver.documents &&
-                          Object.values(user.driver.documents).some(Boolean) ? (
-                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                              {Object.entries(user.driver.documents ?? {}).map(
-                                ([key, value]) => {
-                                  if (!value) return null;
-                                  const docLabel =
-                                    key in DOC_LABELS ? DOC_LABELS[key] : key;
-                                  const fileUrl = value;
-                                  const isImage =
-                                    /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(
-                                      value,
-                                    );
-                                  return (
-                                    <a
-                                      key={key}
-                                      href={fileUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="group overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] transition hover:border-[var(--color-secondary)] hover:shadow-md"
-                                    >
-                                      <div className="relative aspect-4/3 w-full overflow-hidden bg-[var(--color-background)]">
-                                        {isImage ? (
-                                          <img
-                                            src={fileUrl}
-                                            alt={docLabel}
-                                            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                                          />
-                                        ) : (
-                                          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-[var(--color-muted)]">
-                                            <FileText className="h-6 w-6" />
-                                            <span className="text-[11px] font-medium">
-                                              File
-                                            </span>
-                                          </div>
-                                        )}
-                                        <div className="absolute right-2 top-2 rounded-full bg-[var(--color-panel)] p-1 opacity-0 shadow-sm transition group-hover:opacity-100">
-                                          <ExternalLink className="h-3 w-3 text-[var(--color-muted)]" />
-                                        </div>
-                                      </div>
-                                      <div className="px-2.5 py-2 text-[11px] font-semibold text-[var(--color-muted)]">
-                                        {docLabel}
-                                      </div>
-                                    </a>
-                                  );
-                                },
-                              )}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-[var(--color-muted)]">
-                              No documents uploaded yet.
-                            </p>
-                          )}
-                        </InfoCard>
                       </>
                     )}
                   </div>

@@ -384,22 +384,10 @@ export default function DriverVerificationClient({
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
       const uploadData = await uploadRes.json();
       if (!uploadRes.ok) {
-        let errMsg = uploadData.error ?? "Upload failed.";
-
-        // Translate common errors to Arabic
-        if (dir === "rtl") {
-          if (errMsg.includes("too large")) {
-            errMsg = "حجم الملف كبير جداً. الحد الأقصى 5 ميجابايت.";
-          } else if (errMsg.includes("Unsupported file type")) {
-            errMsg = "نوع الملف غير مدعوم. استخدم JPG أو PNG أو PDF.";
-          } else if (errMsg.includes("No file provided")) {
-            errMsg = "لم يتم اختيار ملف.";
-          } else if (errMsg.includes("Unauthorized")) {
-            errMsg = "انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.";
-          } else if (errMsg.includes("Upload failed")) {
-            errMsg = "فشل رفع الملف. يرجى المحاولة مرة أخرى.";
-          }
-        }
+        const errMsg =
+          dir === "rtl" && uploadData.errorAr
+            ? uploadData.errorAr
+            : (uploadData.error ?? "Upload failed.");
 
         const debugInfo = uploadData.debug
           ? ` (${uploadData.debug.filename})`
@@ -435,7 +423,7 @@ export default function DriverVerificationClient({
     // Revert to original document
     setDocuments((d) => ({ ...d, [key]: initialDocuments[key] }));
     // Check if there are still unsaved changes
-    setHasUnsavedChanges((prev) => {
+    setHasUnsavedChanges(() => {
       const remainingChanges = Object.keys(uploadedPaths).filter(k => k !== key);
       return remainingChanges.length > 0;
     });
@@ -488,9 +476,19 @@ export default function DriverVerificationClient({
         const res = await fetch("/api/driver/submit-review", { method: "POST" });
         const data = await res.json();
         if (!res.ok) {
-          const missingText = Array.isArray(data.missing)
-            ? `Missing: ${data.missing.join(", ")}.`
-            : (data.error ?? t("error.submit_failed"));
+          const missingList =
+            dir === "rtl" && Array.isArray(data.missingAr)
+              ? data.missingAr
+              : Array.isArray(data.missing)
+                ? data.missing
+                : null;
+          const missingText = missingList
+            ? dir === "rtl"
+              ? `الحقول الناقصة: ${missingList.join("، ")}.`
+              : `Missing: ${missingList.join(", ")}.`
+            : dir === "rtl"
+              ? (data.errorAr ?? t("error.submit_failed"))
+              : (data.error ?? t("error.submit_failed"));
           setSubmitMsg({ ok: false, text: missingText });
           return;
         }

@@ -48,12 +48,37 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
     const body = await req.json();
 
-    const updates: Record<string, unknown> = {};
-    if (["passenger", "driver", "admin"].includes(body.role)) {
-      updates.role = body.role;
-    } else if (body.role !== undefined) {
-      return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+    if (
+      body &&
+      typeof body === "object" &&
+      Object.prototype.hasOwnProperty.call(body, "verificationStatus")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Driver verification must be changed from /admin/drivers.",
+          errorAr:
+            "يجب تغيير حالة التحقق من السائق من خلال صفحة /admin/drivers.",
+        },
+        { status: 400 },
+      );
     }
+
+    if (
+      body &&
+      typeof body === "object" &&
+      Object.prototype.hasOwnProperty.call(body, "role")
+    ) {
+      return NextResponse.json(
+        {
+          error: "Role changes are not allowed from the admin panel.",
+          errorAr: "لا يُسمح بتغيير دور المستخدم من لوحة الإدارة.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const updates: Record<string, unknown> = {};
 
     if (body.defaultRegionCode !== undefined) {
       if (!isRegionCode(body.defaultRegionCode)) {
@@ -94,17 +119,6 @@ export async function PATCH(
         );
       }
       updates.allowedRegionCodes = allowedRegionCodes;
-    }
-
-    if (body.verificationStatus) {
-      const allowedStatuses = ["incomplete", "pending", "verified"];
-      if (allowedStatuses.includes(body.verificationStatus)) {
-        await Driver.findOneAndUpdate(
-          { userId: id },
-          { verificationStatus: body.verificationStatus },
-          { upsert: true },
-        );
-      }
     }
 
     const user = await User.findByIdAndUpdate(id, updates, {
