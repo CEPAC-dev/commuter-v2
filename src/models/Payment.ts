@@ -36,6 +36,12 @@ const PaymentSchema = new Schema(
       ref: "Booking",
       required: true,
     },
+    currencyCode: {
+      type: String,
+      enum: ["EGP", "SAR", "AED"],
+      default: "EGP",
+      index: true,
+    },
 
     totalEgp: { type: Number, required: true, min: 0 },
     walletAmountEgp: { type: Number, required: true, default: 0, min: 0 },

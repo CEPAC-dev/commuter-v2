@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
+import { DEFAULT_REGION, getCurrencyConfig } from "@/lib/config/regions";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { Payment } from "@/models/Payment";
@@ -10,9 +11,7 @@ import {
   releaseReservation,
 } from "@/lib/wallet/wallet";
 import { createNotification } from "@/lib/notifications/createNotification";
-import {
-  notifyAdminsOfPaidTrip,
-} from "@/lib/notifications/adminActivity";
+import { notifyAdminsOfPaidTrip } from "@/lib/notifications/adminActivity";
 import mongoose, { Types } from "mongoose";
 import { validateMutationRequest } from "@/lib/security/request";
 import { getCairoNowParts } from "@/lib/cancellationPolicy";
@@ -56,9 +55,7 @@ async function tripPaymentCanContinue(
       .select("status paymentStatus")
       .lean<{ status: string; paymentStatus: string } | null>(),
     Payment.findOne({ _id: paymentId, bookingId: tripId })
-      .select(
-        "overallStatus walletStatus walletReservationTxId gatewayStatus",
-      )
+      .select("overallStatus walletStatus walletReservationTxId gatewayStatus")
       .lean<{
         overallStatus: string;
         walletStatus: string;
@@ -97,14 +94,11 @@ async function tripPaymentCanContinue(
       ? String(payment.walletReservationTxId)
       : null);
   if (reservationTxId) {
-    released = await releaseReservation(
-      reservationTxId,
-      {
-        description: `Released — trip ${String(tripId)} is no longer payable.`,
-        paymentId: String(paymentId),
-        bookingId: String(tripId),
-      },
-    );
+    released = await releaseReservation(reservationTxId, {
+      description: `Released — trip ${String(tripId)} is no longer payable.`,
+      paymentId: String(paymentId),
+      bookingId: String(tripId),
+    });
     if (released) walletStatus = "released";
   }
   const setCancelled = {
@@ -144,6 +138,14 @@ function tripNotPayableResponse() {
     { errorCode: "TRIP_NOT_PAYABLE", error: "This trip is no longer payable." },
     { status: 409 },
   );
+}
+
+function resolveBookingCurrencyCode(
+  booking: { currencyCode?: string | null; regionCode?: string | null } | null,
+): "EGP" | "SAR" | "AED" {
+  const value = booking?.currencyCode;
+  if (value === "EGP" || value === "SAR" || value === "AED") return value;
+  return getCurrencyConfig(booking?.regionCode ?? DEFAULT_REGION).code;
 }
 
 /**
@@ -259,7 +261,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           errorCode: "APPROVED_TRIP_IN_PAST",
-          error: "This request has a trip whose pickup time has passed. Please book again.",
+          error:
+            "This request has a trip whose pickup time has passed. Please book again.",
         },
         { status: 409 },
       );
@@ -279,7 +282,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         errorCode: "APPROVED_TRIP_IN_PAST",
-        error: "This request has a trip whose pickup time has passed. Please book again.",
+        error:
+          "This request has a trip whose pickup time has passed. Please book again.",
       },
       { status: 409 },
     );
@@ -315,14 +319,11 @@ export async function POST(req: NextRequest) {
   const gatewayAmount = totalEgp - walletAmount;
   let appUrl: string | null = null;
   if (gatewayAmount > 0) {
-    const validation = validatePaymentAppUrl(
-      process.env.APP_URL,
-      {
-        nodeEnv: process.env.NODE_ENV,
-        appEnv: process.env.APP_ENV,
-        kashierMode: process.env.KASHIER_MODE,
-      },
-    );
+    const validation = validatePaymentAppUrl(process.env.APP_URL, {
+      nodeEnv: process.env.NODE_ENV,
+      appEnv: process.env.APP_ENV,
+      kashierMode: process.env.KASHIER_MODE,
+    });
     if (!validation.valid) {
       console.error("Invalid APP_URL for Kashier session", {
         host: validation.host,
@@ -346,12 +347,19 @@ export async function POST(req: NextRequest) {
   let tripChangedDuringSessionCreation = false;
   const requestSessionState: {
     changed: boolean;
-    block: ReturnType<typeof getRequestPaymentSessionBlock> | "REQUEST_CHANGED" | null;
+    block:
+      | ReturnType<typeof getRequestPaymentSessionBlock>
+      | "REQUEST_CHANGED"
+      | null;
   } = { changed: false, block: null };
   try {
+    const bookingCurrencyCode = resolveBookingCurrencyCode(
+      booking as { currencyCode?: string | null; regionCode?: string | null },
+    );
     const paymentData = {
       userId: new Types.ObjectId(session.userId),
       bookingId: booking._id,
+      currencyCode: bookingCurrencyCode,
       totalEgp,
       walletAmountEgp: walletAmount,
       gatewayAmountEgp: gatewayAmount,
@@ -532,10 +540,7 @@ export async function POST(req: NextRequest) {
   if (walletAmount > 0) {
     if (
       resolved.kind === "trip" &&
-      !(await tripPaymentCanContinue(
-        bookingObjectId,
-        payment._id,
-      ))
+      !(await tripPaymentCanContinue(bookingObjectId, payment._id))
     ) {
       return tripNotPayableResponse();
     }
@@ -547,10 +552,7 @@ export async function POST(req: NextRequest) {
     if (!reserved) {
       if (
         resolved.kind === "trip" &&
-        !(await tripPaymentCanContinue(
-          bookingObjectId,
-          payment._id,
-        ))
+        !(await tripPaymentCanContinue(bookingObjectId, payment._id))
       ) {
         return tripNotPayableResponse();
       }
@@ -589,10 +591,7 @@ export async function POST(req: NextRequest) {
         },
       },
     );
-    if (
-      resolved.kind === "trip" &&
-      reservationTransition.modifiedCount !== 1
-    ) {
+    if (resolved.kind === "trip" && reservationTransition.modifiedCount !== 1) {
       await releaseReservation(reservationTxId, {
         description: `Released — trip ${String(booking._id)} is no longer payable.`,
         paymentId: String(payment._id),
@@ -637,7 +636,10 @@ export async function POST(req: NextRequest) {
           },
         );
         return NextResponse.json(
-          { errorCode: "TRIP_NOT_PAYABLE", error: "This trip is no longer payable." },
+          {
+            errorCode: "TRIP_NOT_PAYABLE",
+            error: "This trip is no longer payable.",
+          },
           { status: 409 },
         );
       }
@@ -761,8 +763,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const expireAt = new Date(Date.now() + KASHIER_SESSION_DURATION_MS).toISOString();
+  const expireAt = new Date(
+    Date.now() + KASHIER_SESSION_DURATION_MS,
+  ).toISOString();
 
+  const bookingCurrencyCode = resolveBookingCurrencyCode(
+    booking as { currencyCode?: string | null; regionCode?: string | null },
+  );
   const kashierBody = {
     merchantOrderId: String(payment._id),
     merchantId: process.env.KASHIER_MERCHANT_ID!,
@@ -770,7 +777,7 @@ export async function POST(req: NextRequest) {
       resolved.kind === "trip"
         ? formatKashierAmount(gatewayAmount)
         : String(gatewayAmount),
-    currency: "EGP",
+    currency: bookingCurrencyCode,
     paymentType: "credit",
     type: "one-time",
     maxFailureAttempts: 3,
@@ -810,13 +817,10 @@ export async function POST(req: NextRequest) {
       cause && typeof cause === "object" && "code" in cause
         ? cause.code
         : undefined;
-    console.error(
-      "Kashier session request failed:",
-      {
-        name: err instanceof Error ? err.name : "UnknownError",
-        causeCode: typeof causeCode === "string" ? causeCode : undefined,
-      },
-    );
+    console.error("Kashier session request failed:", {
+      name: err instanceof Error ? err.name : "UnknownError",
+      causeCode: typeof causeCode === "string" ? causeCode : undefined,
+    });
     if (reservationTxId) {
       await releaseReservation(reservationTxId, {
         description: `Released — gateway unreachable`,
@@ -938,10 +942,7 @@ export async function POST(req: NextRequest) {
       },
     },
   );
-  if (
-    resolved.kind === "trip" &&
-    sessionTransition.modifiedCount !== 1
-  ) {
+  if (resolved.kind === "trip" && sessionTransition.modifiedCount !== 1) {
     if (reservationTxId) {
       await releaseReservation(reservationTxId, {
         description: `Released — trip ${String(booking._id)} is no longer payable.`,
@@ -982,12 +983,12 @@ export async function POST(req: NextRequest) {
       : booking.tripIds?.[0]
         ? String(booking.tripIds[0])
         : String(
-        (
-          await Trip.findOne({ requestId: booking._id })
-            .sort({ date: 1, cycleIndex: 1 })
-            .select("_id")
-            .lean<{ _id: Types.ObjectId } | null>()
-        )?._id ?? "",
+            (
+              await Trip.findOne({ requestId: booking._id })
+                .sort({ date: 1, cycleIndex: 1 })
+                .select("_id")
+                .lean<{ _id: Types.ObjectId } | null>()
+            )?._id ?? "",
           );
 
   await createNotification({

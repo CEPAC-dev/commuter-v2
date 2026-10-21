@@ -3,6 +3,8 @@ import { Schema, model, models, type InferSchemaType } from "mongoose";
 const VehicleRegionConfigSchema = new Schema(
   {
     regionCode: { type: String, required: true },
+    currencyCode: { type: String, required: true, enum: ["EGP", "SAR", "AED"] },
+    pricingConfigured: { type: Boolean, required: true, default: false },
     active: { type: Boolean, required: true, default: true },
     rate: { type: Number, required: true },
     additional_rate: { type: Number, required: true, default: 0 },
@@ -40,7 +42,11 @@ const VehicleSchema = new Schema(
     vehicle_type: { type: Number, required: true, default: 0 },
     trip_type: { type: Number, required: true, default: 0 },
     regionCodes: { type: [String], required: true, default: [] },
-    regionConfigs: { type: [VehicleRegionConfigSchema], required: true, default: [] },
+    regionConfigs: {
+      type: [VehicleRegionConfigSchema],
+      required: true,
+      default: [],
+    },
     sortOrder: { type: Number, required: true, default: 0 },
     active: { type: Boolean, required: true, default: true },
   },

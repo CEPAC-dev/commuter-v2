@@ -1,4 +1,5 @@
 import { bookingWindow } from "../time/bookingDates.ts";
+import type { CurrencyCode } from "./regions";
 
 /** Database keys are deliberately open-ended: admins can add vehicle classes. */
 export type VehicleKey = string;
@@ -23,11 +24,14 @@ export interface VehicleConfig {
   active?: boolean;
   sortOrder?: number;
   currencyCode?: string;
+  pricingConfigured?: boolean;
   regionConfigs?: VehicleRegionConfig[];
 }
 
 export interface VehicleRegionConfig {
   regionCode: string;
+  currencyCode: CurrencyCode;
+  pricingConfigured: boolean;
   /** Regional availability. Inactive types remain visible but cannot be booked. */
   active: boolean;
   rate: number;

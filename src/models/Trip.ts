@@ -102,6 +102,12 @@ const TripSchema = new Schema(
       default: null,
       index: true,
     },
+    currencyCode: {
+      type: String,
+      enum: ["EGP", "SAR", "AED"],
+      default: "EGP",
+      index: true,
+    },
     userId: { type: Types.ObjectId, ref: "User", required: true, index: true },
     driverId: {
       type: Types.ObjectId,
