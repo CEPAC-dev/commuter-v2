@@ -78,7 +78,10 @@ export default function CreateMapGoogle({
 }: Props) {
   const mapRef = useRef<GoogleMapInstance | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [zones, setZones] = useState<ZoneFeature[]>([]);
+  const [zoneState, setZoneState] = useState<{
+    regionCode: RegionCode;
+    features: ZoneFeature[];
+  } | null>(null);
   const points = useMemo(
     () =>
       trips.flatMap((trip) =>
@@ -89,31 +92,35 @@ export default function CreateMapGoogle({
     [trips],
   );
   const activeZones = useMemo(
-    () => (mapSettings.showZones && regionCode === "EG-CAIRO" ? zones : []),
-    [mapSettings.showZones, regionCode, zones],
+    () =>
+      mapSettings.showZones && zoneState?.regionCode === regionCode
+        ? zoneState.features
+        : [],
+    [mapSettings.showZones, regionCode, zoneState],
   );
 
   useEffect(() => {
-    if (!mapSettings.showZones || regionCode !== "EG-CAIRO") return;
+    if (!mapSettings.showZones) return;
     let cancelled = false;
-    fetch("/geo/zone_polygon.geojson")
+    fetch(`/api/zones?region=${encodeURIComponent(regionCode)}`)
       .then((response) => {
         if (!response.ok) throw new Error("Unable to load zone data.");
         return response.json();
       })
       .then((geojson: { features?: ZoneFeature[] }) => {
         if (!cancelled) {
-          setZones(
-            (geojson.features ?? []).filter(
+          setZoneState({
+            regionCode,
+            features: (geojson.features ?? []).filter(
               (feature) =>
                 feature.geometry?.type === "Polygon" ||
                 feature.geometry?.type === "MultiPolygon",
             ),
-          );
+          });
         }
       })
       .catch(() => {
-        if (!cancelled) setZones([]);
+        if (!cancelled) setZoneState({ regionCode, features: [] });
       });
     return () => {
       cancelled = true;

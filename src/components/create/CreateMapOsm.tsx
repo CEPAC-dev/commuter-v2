@@ -58,14 +58,6 @@ function escapeHtml(value: string) {
   );
 }
 
-function zoneLabelHtml(name: string, zoom: number) {
-  const scale = Math.max(0.8, Math.min(1.4, 0.8 + (zoom - 20) * 0.12));
-  const fontSize = Math.round(11 * scale);
-  const paddingX = Math.round(8 * scale);
-  const paddingY = Math.round(3 * scale);
-  return `<div style="background:rgba(255,255,255,0.15);color:#0B1E3D;width:max-content;border:1px solid rgba(11,30,61,0.16);border-radius:999px;padding:${paddingY}px ${paddingX}px;font-size:${fontSize}px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.08)">${name}</div>`;
-}
-
 type ZoneFeature = {
   type: "Feature";
   id?: string | number;
@@ -189,7 +181,7 @@ export default function CreateMapOsm({
 
   useEffect(() => {
     if (!isLeafletMapReady(map)) return;
-    if (regionCode !== "EG-CAIRO" || !mapSettings.showZones) {
+    if (!mapSettings.showZones) {
       zoneFeaturesRef.current = [];
       return;
     }
@@ -197,6 +189,9 @@ export default function CreateMapOsm({
     const maskLayer = L.layerGroup().addTo(map);
     const zoneLayer = L.layerGroup().addTo(map);
     let cancelled = false;
+    zoneFeaturesRef.current = [];
+    maskLayer.clearLayers();
+    zoneLayer.clearLayers();
 
     const refreshMask = () => {
       if (cancelled || !isLeafletMapReady(map)) return;
@@ -254,7 +249,7 @@ export default function CreateMapOsm({
     map.on("moveend", refreshMask);
     map.on("zoomend", refreshMask);
 
-    fetch("/geo/zone_polygon.geojson")
+    fetch(`/api/zones?region=${encodeURIComponent(regionCode)}`)
       .then((response) => response.json())
       .then((geojson: { features?: ZoneFeature[] }) => {
         if (cancelled || !isLeafletMapReady(map)) return;

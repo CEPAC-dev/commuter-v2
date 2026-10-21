@@ -10,7 +10,9 @@ import {
   X,
 } from "lucide-react";
 import { AdminPageContainer, AdminPageHeader } from "@/components/admin/layout";
-import AdminTripMap, { type TripMapPoint } from "@/components/admin/AdminTripMap";
+import AdminTripMap, {
+  type TripMapPoint,
+} from "@/components/admin/AdminTripMap";
 import StationLocationPicker from "@/components/admin/StationLocationPicker";
 import { useClientLocale } from "@/lib/locale.client";
 import type { RegionCode } from "@/lib/config/regions";
@@ -93,7 +95,9 @@ export default function StationSuggestionsClient({
         );
         const data = await response.json();
         if (!response.ok) {
-          throw new Error(data.error ?? t("admin.station_suggestions.load_error"));
+          throw new Error(
+            data.error ?? t("admin.station_suggestions.load_error"),
+          );
         }
         const pages = Math.max(1, data.totalPages ?? 1);
         if (page > pages) {
@@ -104,7 +108,8 @@ export default function StationSuggestionsClient({
         setTotal(data.total ?? 0);
         setTotalPages(pages);
       } catch (loadError) {
-        if (loadError instanceof Error && loadError.name === "AbortError") return;
+        if (loadError instanceof Error && loadError.name === "AbortError")
+          return;
         setError(
           loadError instanceof Error
             ? loadError.message
@@ -248,7 +253,10 @@ export default function StationSuggestionsClient({
         title={t("admin.station_suggestions.title")}
         description={t("admin.station_suggestions.subtitle")}
       />
-      <section className="station-suggestion-admin" dir={locale === "ar" ? "rtl" : "ltr"}>
+      <section
+        className="station-suggestion-admin"
+        dir={locale === "ar" ? "rtl" : "ltr"}
+      >
         <div className="station-suggestion-toolbar">
           <label className="station-suggestion-search">
             <Search size={17} aria-hidden="true" />
@@ -321,7 +329,9 @@ export default function StationSuggestionsClient({
               ) : requests.length ? (
                 requests.map((request) => (
                   <tr key={request._id}>
-                    <td data-label={t("admin.station_suggestions.request_number")}>
+                    <td
+                      data-label={t("admin.station_suggestions.request_number")}
+                    >
                       <strong>#{request.requestNumber}</strong>
                     </td>
                     <td data-label={t("admin.station_suggestions.requester")}>
@@ -331,7 +341,9 @@ export default function StationSuggestionsClient({
                         {request.requester.userNumber}
                       </small>
                     </td>
-                    <td data-label={t("admin.station_suggestions.location_type")}>
+                    <td
+                      data-label={t("admin.station_suggestions.location_type")}
+                    >
                       {request.locationType === "pickup"
                         ? t("admin.station_suggestions.pickup")
                         : t("admin.station_suggestions.dropoff")}
@@ -387,7 +399,11 @@ export default function StationSuggestionsClient({
               onClick={() => setPage((current) => Math.max(1, current - 1))}
               aria-label={t("admin.station_suggestions.previous")}
             >
-              {locale === "ar" ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+              {locale === "ar" ? (
+                <ChevronRight size={17} />
+              ) : (
+                <ChevronLeft size={17} />
+              )}
               {t("admin.station_suggestions.previous")}
             </button>
             <span>
@@ -404,7 +420,11 @@ export default function StationSuggestionsClient({
               aria-label={t("admin.station_suggestions.next")}
             >
               {t("admin.station_suggestions.next")}
-              {locale === "ar" ? <ChevronLeft size={17} /> : <ChevronRight size={17} />}
+              {locale === "ar" ? (
+                <ChevronLeft size={17} />
+              ) : (
+                <ChevronRight size={17} />
+              )}
             </button>
           </div>
         </footer>
@@ -460,7 +480,9 @@ export default function StationSuggestionsClient({
               </div>
               <div className="station-suggestion-review-details">
                 <div>
-                  <strong>{t("admin.station_suggestions.location_type")}</strong>
+                  <strong>
+                    {t("admin.station_suggestions.location_type")}
+                  </strong>
                   <span>
                     {selected.locationType === "pickup"
                       ? t("admin.station_suggestions.pickup")
@@ -468,7 +490,9 @@ export default function StationSuggestionsClient({
                   </span>
                 </div>
                 <div>
-                  <strong>{t("admin.station_suggestions.target_location")}</strong>
+                  <strong>
+                    {t("admin.station_suggestions.target_location")}
+                  </strong>
                   <span>{selected.targetLocation.address}</span>
                 </div>
                 <div>
@@ -476,14 +500,18 @@ export default function StationSuggestionsClient({
                   <span>{selected.description}</span>
                 </div>
                 <div>
-                  <strong>{t("admin.station_suggestions.suggested_station")}</strong>
+                  <strong>
+                    {t("admin.station_suggestions.suggested_station")}
+                  </strong>
                   <span>
                     {selected.suggestedPoint.lat.toFixed(6)},{" "}
                     {selected.suggestedPoint.lng.toFixed(6)}
                   </span>
                 </div>
                 <div>
-                  <strong>{t("admin.station_suggestions.station_zones")}</strong>
+                  <strong>
+                    {t("admin.station_suggestions.station_zones")}
+                  </strong>
                   <span>{selected.zoneName || "—"}</span>
                 </div>
                 <div>
@@ -492,7 +520,9 @@ export default function StationSuggestionsClient({
                 </div>
                 {selected.rejectionReason && (
                   <div>
-                    <strong>{t("admin.station_suggestions.rejection_reason")}</strong>
+                    <strong>
+                      {t("admin.station_suggestions.rejection_reason")}
+                    </strong>
                     <span>{selected.rejectionReason}</span>
                   </div>
                 )}
@@ -588,13 +618,19 @@ export default function StationSuggestionsClient({
                           required
                         >
                           <option value="1">
-                            {t("admin.station_suggestions.station_type_option_1")}
+                            {t(
+                              "admin.station_suggestions.station_type_option_1",
+                            )}
                           </option>
                           <option value="2">
-                            {t("admin.station_suggestions.station_type_option_2")}
+                            {t(
+                              "admin.station_suggestions.station_type_option_2",
+                            )}
                           </option>
                           <option value="3">
-                            {t("admin.station_suggestions.station_type_option_3")}
+                            {t(
+                              "admin.station_suggestions.station_type_option_3",
+                            )}
                           </option>
                         </select>
                       </label>
@@ -608,7 +644,10 @@ export default function StationSuggestionsClient({
                             max="90"
                             value={station.lat}
                             onChange={(event) =>
-                              setStation({ ...station, lat: event.target.value })
+                              setStation({
+                                ...station,
+                                lat: event.target.value,
+                              })
                             }
                             required
                           />
@@ -622,13 +661,17 @@ export default function StationSuggestionsClient({
                             max="180"
                             value={station.lng}
                             onChange={(event) =>
-                              setStation({ ...station, lng: event.target.value })
+                              setStation({
+                                ...station,
+                                lng: event.target.value,
+                              })
                             }
                             required
                           />
                         </label>
                       </div>
                       <StationLocationPicker
+                        regionCode={regionCode}
                         initialPoint={{
                           lat: Number(station.lat),
                           lng: Number(station.lng),
@@ -680,7 +723,11 @@ export default function StationSuggestionsClient({
                       disabled={saving}
                     >
                       {saving && (
-                        <Loader2 size={16} className="spin" aria-hidden="true" />
+                        <Loader2
+                          size={16}
+                          className="spin"
+                          aria-hidden="true"
+                        />
                       )}
                       {decision === "approve"
                         ? t("admin.station_suggestions.create_and_approve")

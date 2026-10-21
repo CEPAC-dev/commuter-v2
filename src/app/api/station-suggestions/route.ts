@@ -68,13 +68,13 @@ export async function POST(req: NextRequest) {
   await connectDB();
   const region = await resolveActiveRegion({ userId: session.userId });
   const mapSettings = await getMapSettings(region.code);
-  if (region.code !== "EG-CAIRO" || !mapSettings.showZones) {
+  if (!mapSettings.showZones) {
     return NextResponse.json(
       { error: "Station suggestions require an active service zone." },
       { status: 400 },
     );
   }
-  const zones = await loadServiceZones();
+  const zones = await loadServiceZones(region.code);
   const containingZone = findZoneAtPoint(
     [suggestedPoint.lng, suggestedPoint.lat],
     zones,

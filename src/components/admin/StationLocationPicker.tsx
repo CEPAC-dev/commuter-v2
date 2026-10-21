@@ -3,17 +3,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { loadLeaflet, MAP_COLORS } from "@/lib/leaflet";
-import { findZoneAtPoint, getZoneName, type ZoneFeature } from "@/lib/geo/zones";
+import {
+  findZoneAtPoint,
+  getZoneName,
+  type ZoneFeature,
+} from "@/lib/geo/zones";
 import { useClientLocale } from "@/lib/locale.client";
+import type { RegionCode } from "@/lib/config/regions";
 
 type Coordinates = { lat: number; lng: number };
 type ZoneCollection = { features?: ZoneFeature[] };
 
 export default function StationLocationPicker({
   initialPoint,
+  regionCode,
   onSelect,
 }: {
   initialPoint: Coordinates;
+  regionCode: RegionCode;
   onSelect: (point: Coordinates, zoneName: string) => void;
 }) {
   const { t } = useClientLocale();
@@ -28,9 +35,7 @@ export default function StationLocationPicker({
   const [selectionEnabled, setSelectionEnabled] = useState(false);
   const zoneName = useMemo(
     () =>
-      getZoneName(
-        findZoneAtPoint([initialPoint.lng, initialPoint.lat], zones),
-      ),
+      getZoneName(findZoneAtPoint([initialPoint.lng, initialPoint.lat], zones)),
     [initialPoint.lat, initialPoint.lng, zones],
   );
 
@@ -57,9 +62,10 @@ export default function StationLocationPicker({
       try {
         const [L, response] = await Promise.all([
           loadLeaflet(),
-          fetch("/geo/zone_polygon.geojson"),
+          fetch(`/api/zones?region=${encodeURIComponent(regionCode)}`),
         ]);
-        if (!response.ok) throw new Error(t("admin.station_suggestions.location_map_error"));
+        if (!response.ok)
+          throw new Error(t("admin.station_suggestions.location_map_error"));
         const collection = (await response.json()) as ZoneCollection;
         zoneFeatures = (collection.features ?? []).filter(
           (feature) =>
@@ -67,7 +73,9 @@ export default function StationLocationPicker({
             feature.geometry?.type === "MultiPolygon",
         );
         if (!zoneFeatures.length) {
-          throw new Error(t("admin.station_suggestions.location_zones_unavailable"));
+          throw new Error(
+            t("admin.station_suggestions.location_zones_unavailable"),
+          );
         }
         if (cancelled || !mapElement.current) return;
         setZones(zoneFeatures);
@@ -164,7 +172,7 @@ export default function StationLocationPicker({
       window.clearTimeout(invalidateTimer);
       map?.remove();
     };
-  }, [t]);
+  }, [regionCode, t]);
 
   useEffect(() => {
     markerRef.current?.setLatLng([initialPoint.lat, initialPoint.lng]);
@@ -177,7 +185,10 @@ export default function StationLocationPicker({
         <p>{t("admin.station_suggestions.location_map_prompt")}</p>
       </div>
       <div className="station-location-picker-map">
-        <div ref={mapElement} aria-label={t("admin.station_suggestions.location_map_aria")} />
+        <div
+          ref={mapElement}
+          aria-label={t("admin.station_suggestions.location_map_aria")}
+        />
         <div className="station-location-picker-legend" aria-hidden="true">
           <span>
             <i className="station-location-picker-zone-swatch" />

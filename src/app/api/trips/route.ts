@@ -41,9 +41,8 @@ import {
   type Station as GeoStation,
   type StationOption,
 } from "@/lib/geo/stations";
-import { isPointInZone, type ZoneFeature } from "@/lib/geo/zones";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isPointInAnyZone, isPointInZone } from "@/lib/geo/zones";
+import { loadServiceZones } from "@/lib/geo/zones.server";
 import type { StopInput, TripInput } from "@/types/forms";
 import type { PaymentStatus } from "@/types/booking";
 import { listUserTrips } from "@/lib/services/trips";
@@ -127,24 +126,6 @@ function isDuplicateKeyError(error: unknown): boolean {
   );
 }
 
-let cachedZoneFeatures: ZoneFeature[] | null = null;
-
-async function loadZoneFeatures() {
-  if (cachedZoneFeatures) return cachedZoneFeatures;
-  const contents = await readFile(
-    join(process.cwd(), "public", "geo", "zone_polygon.geojson"),
-    "utf8",
-  );
-  const geojson = JSON.parse(contents) as { features?: ZoneFeature[] };
-  cachedZoneFeatures = (geojson.features ?? []).filter(
-    (feature) =>
-      feature.id != null &&
-      (feature.geometry?.type === "Polygon" ||
-        feature.geometry?.type === "MultiPolygon"),
-  );
-  return cachedZoneFeatures;
-}
-
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session)
@@ -172,13 +153,16 @@ export async function GET(req: NextRequest) {
     paymentStatus: payment as PaymentStatus | undefined,
     vehicleType: vehicleType ?? undefined,
   });
-  return NextResponse.json({
-    data: result.rows,
-    page: result.page,
-    pageSize: 12,
-    total: result.total,
-    totalPages: Math.ceil(result.total / 12),
-  }, { headers: { "Cache-Control": "private, no-store" } });
+  return NextResponse.json(
+    {
+      data: result.rows,
+      page: result.page,
+      pageSize: 12,
+      total: result.total,
+      totalPages: Math.ceil(result.total / 12),
+    },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -283,9 +267,33 @@ export async function POST(req: NextRequest) {
   const mapSettings = await getMapSettings(userRegion);
   const vehiclesMap = await getVehicles(userRegion);
   const zoneFeatures =
-    mapSettings.stationAssignmentMode === "zones" && userRegion === "EG-CAIRO"
-      ? await loadZoneFeatures()
+    mapSettings.stationAssignmentMode === "zones" || mapSettings.showZones
+      ? await loadServiceZones(userRegion)
       : [];
+  if (
+    (mapSettings.showZones || mapSettings.stationAssignmentMode === "zones") &&
+    !zoneFeatures.length
+  ) {
+    return NextResponse.json(
+      { error: "Service zones are not configured for this region." },
+      { status: 503 },
+    );
+  }
+  if (mapSettings.showZones) {
+    for (const trip of trips) {
+      for (const point of [trip.pickup, trip.dropoff]) {
+        if (point && !isPointInAnyZone([point.lng, point.lat], zoneFeatures)) {
+          return NextResponse.json(
+            {
+              error:
+                "Pickup and dropoff must be inside this region’s service zones.",
+            },
+            { status: 400 },
+          );
+        }
+      }
+    }
+  }
   const usesStationsForPoint = (
     point: { lat: number; lng: number },
     vehicleType: string,
@@ -293,7 +301,6 @@ export async function POST(req: NextRequest) {
     if (mapSettings.stationAssignmentMode !== "zones") {
       return vehiclesMap[vehicleType]?.ride === "shared";
     }
-    if (userRegion !== "EG-CAIRO") return false;
     const pointIsInZoneList = (zoneIds: string[]) =>
       zoneFeatures.some(
         (feature) =>

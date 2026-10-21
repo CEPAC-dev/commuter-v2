@@ -11,6 +11,7 @@ import {
 import { MapSearchProvider } from "@/lib/MapSearchContext";
 import { OSM_THEMES, type MapSettings } from "@/lib/config/mapSettings";
 import { REGION_LIST, type RegionCode } from "@/lib/config/regions";
+import type { ZoneFeature } from "@/lib/geo/zones";
 import AddressInput from "@/components/landing/AddressInput";
 import OsmMapCanvas from "@/components/map/OsmMapCanvas";
 import GoogleMapCanvas from "@/components/map/GoogleMapCanvas";
@@ -27,7 +28,13 @@ const field: React.CSSProperties = {
   font: "inherit",
 };
 
-type ZoneOption = { id: string; name: string };
+type ZoneConfiguration = {
+  regionCode: RegionCode;
+  features: ZoneFeature[];
+  sourceName: string | null;
+  source: "database" | "legacy-file" | "none" | "draft";
+  dirty: boolean;
+};
 type PreviewStation = {
   objectId: number;
   name: string;
@@ -64,6 +71,14 @@ type GoogleMapsApi = {
         fontWeight: string;
       };
     }) => GoogleMarkerLike;
+    Polygon: new (options: {
+      map: GoogleMapLike;
+      paths: Array<Array<{ lat: number; lng: number }>>;
+      strokeColor: string;
+      strokeWeight: number;
+      fillColor: string;
+      fillOpacity: number;
+    }) => GoogleMarkerLike;
   };
 };
 
@@ -71,8 +86,23 @@ export default function MapSettingsManager() {
   const [regionCode, setRegionCode] = useState<RegionCode>("EG-CAIRO");
   const [settings, setSettings] = useState<MapSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingZones, setSavingZones] = useState(false);
   const [message, setMessage] = useState("");
-  const [zoneOptions, setZoneOptions] = useState<ZoneOption[]>([]);
+  const [zoneConfiguration, setZoneConfiguration] =
+    useState<ZoneConfiguration | null>(null);
+  const currentZoneConfiguration =
+    zoneConfiguration?.regionCode === regionCode ? zoneConfiguration : null;
+  const zoneFeatures = currentZoneConfiguration?.features ?? [];
+  const zoneOptions = zoneFeatures.flatMap((feature) =>
+    feature.id == null
+      ? []
+      : [
+          {
+            id: String(feature.id),
+            name: feature.properties?.NAME || String(feature.id),
+          },
+        ],
+  );
   const [stationPreview, setStationPreview] = useState<{
     regionCode: RegionCode;
     stations: PreviewStation[];
@@ -125,35 +155,132 @@ export default function MapSettingsManager() {
   }, [regionCode]);
 
   useEffect(() => {
-    if (regionCode !== "EG-CAIRO") return;
     let cancelled = false;
-    fetch("/geo/zone_polygon.geojson")
-      .then((response) => response.json())
-      .then(
-        (geojson: {
-          features?: Array<{
-            id?: string | number;
-            properties?: { NAME?: string };
-          }>;
-        }) => {
-          if (cancelled) return;
-          setZoneOptions(
-            (geojson.features ?? [])
-              .filter((feature) => feature.id != null)
-              .map((feature) => ({
-                id: String(feature.id),
-                name: feature.properties?.NAME || String(feature.id),
-              })),
-          );
-        },
-      )
+    fetch(`/api/admin/maps/zones?regionCode=${encodeURIComponent(regionCode)}`)
+      .then(async (response) => {
+        const json = await response.json();
+        if (!response.ok)
+          throw new Error(json.error ?? "Could not load zones.");
+        return json;
+      })
+      .then((configuration) => {
+        if (cancelled) return;
+        setZoneConfiguration({
+          regionCode,
+          features: configuration.features ?? [],
+          sourceName: configuration.sourceName ?? null,
+          source: configuration.source ?? "none",
+          dirty: false,
+        });
+      })
       .catch(() => {
-        if (!cancelled) setMessage("Could not load the service-zone list.");
+        if (!cancelled) {
+          setZoneConfiguration({
+            regionCode,
+            features: [],
+            sourceName: null,
+            source: "none",
+            dirty: false,
+          });
+          setMessage("Could not load the service-zone configuration.");
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [regionCode]);
+
+  async function stageZoneFile(file: File | null) {
+    if (!file) return;
+    try {
+      const geojson = JSON.parse(await file.text()) as {
+        type?: string;
+        features?: ZoneFeature[];
+      };
+      if (
+        geojson.type !== "FeatureCollection" ||
+        !Array.isArray(geojson.features)
+      ) {
+        throw new Error("Choose a GeoJSON FeatureCollection.");
+      }
+      const features = geojson.features
+        .filter(
+          (feature) =>
+            feature.geometry?.type === "Polygon" ||
+            feature.geometry?.type === "MultiPolygon",
+        )
+        .map((feature, index) => ({
+          ...feature,
+          id: feature.id ?? `ZONE-${index + 1}`,
+          properties: {
+            ...feature.properties,
+            NAME: feature.properties?.NAME?.trim() || `Zone ${index + 1}`,
+          },
+        }));
+      if (!features.length) {
+        throw new Error(
+          "The file contains no Polygon or MultiPolygon features.",
+        );
+      }
+      setZoneConfiguration({
+        regionCode,
+        features,
+        sourceName: file.name,
+        source: "draft",
+        dirty: true,
+      });
+      setSettings((current) =>
+        current?.regionCode === regionCode
+          ? { ...current, showZones: true }
+          : current,
+      );
+      setMessage(
+        `${features.length} zone features loaded for live preview. Save the zone configuration to apply them.`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not read GeoJSON.",
+      );
+    }
+  }
+
+  async function saveZoneConfiguration() {
+    if (!currentZoneConfiguration?.dirty) return;
+    setSavingZones(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/maps/zones", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          regionCode,
+          sourceName: currentZoneConfiguration.sourceName,
+          geojson: {
+            type: "FeatureCollection",
+            features: currentZoneConfiguration.features,
+          },
+        }),
+      });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error ?? "Could not save zones.");
+      setZoneConfiguration({
+        regionCode,
+        features: json.data.features,
+        sourceName: json.data.sourceName,
+        source: "database",
+        dirty: false,
+      });
+      setMessage(
+        `Zone configuration saved for ${REGION_LIST.find((item) => item.code === regionCode)?.label}. Save map configuration to enable it for riders.`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not save zones.",
+      );
+    } finally {
+      setSavingZones(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -379,22 +506,50 @@ export default function MapSettingsManager() {
                       minHeight: 24,
                       padding: "3px 10px",
                       borderRadius: 999,
-                      background:
-                        regionCode === "EG-CAIRO" && zoneOptions.length > 0
-                          ? "rgba(0, 194, 168, 0.1)"
-                          : "rgba(11, 30, 61, 0.06)",
-                      color:
-                        regionCode === "EG-CAIRO" && zoneOptions.length > 0
-                          ? "#00897B"
-                          : "var(--color-muted)",
+                      background: zoneFeatures.length
+                        ? "rgba(0, 194, 168, 0.1)"
+                        : "rgba(11, 30, 61, 0.06)",
+                      color: zoneFeatures.length
+                        ? "#00897B"
+                        : "var(--color-muted)",
                       fontSize: 11,
                       fontWeight: 800,
                     }}
                   >
-                    {regionCode === "EG-CAIRO" && zoneOptions.length > 0
-                      ? `${zoneOptions.length} zone polygons active`
-                      : "No zone polygon"}
+                    {zoneFeatures.length
+                      ? `${zoneFeatures.length} polygons${currentZoneConfiguration?.dirty ? " · unsaved" : " configured"}`
+                      : "No zone polygon configured"}
                   </span>
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  <label>
+                    <span>Zone polygon GeoJSON for this region</span>
+                    <input
+                      type="file"
+                      accept=".json,.geojson,application/geo+json,application/json"
+                      onChange={(event) => {
+                        void stageZoneFile(event.target.files?.[0] ?? null);
+                        event.target.value = "";
+                      }}
+                      style={{ ...field, padding: 10 }}
+                    />
+                  </label>
+                  <span className="map-settings-note">
+                    {currentZoneConfiguration?.sourceName
+                      ? `Source: ${currentZoneConfiguration.sourceName}${currentZoneConfiguration.source === "legacy-file" ? " (legacy Cairo fallback)" : ""}`
+                      : "No saved polygon source for this region yet."}
+                  </span>
+                  <button
+                    type="button"
+                    className="map-settings-save"
+                    onClick={() => void saveZoneConfiguration()}
+                    disabled={!currentZoneConfiguration?.dirty || savingZones}
+                  >
+                    {savingZones
+                      ? "Saving zone polygons…"
+                      : "Save zone polygons for this region"}
+                  </button>
                 </div>
 
                 <div style={{ display: "grid", gap: 10 }}>
@@ -405,11 +560,11 @@ export default function MapSettingsManager() {
                     <span>Border</span>
                     <select
                       value={
-                        settings.showZones && regionCode === "EG-CAIRO"
+                        settings.showZones && zoneFeatures.length > 0
                           ? "enabled"
                           : "disabled"
                       }
-                      disabled={regionCode !== "EG-CAIRO"}
+                      disabled={!zoneFeatures.length}
                       style={field}
                       onChange={(event) =>
                         set("showZones", event.target.value === "enabled")
@@ -427,9 +582,7 @@ export default function MapSettingsManager() {
                     <span>Labels</span>
                     <select
                       value={settings.showZoneLabels ? "visible" : "hidden"}
-                      disabled={
-                        !settings.showZones || regionCode !== "EG-CAIRO"
-                      }
+                      disabled={!settings.showZones || !zoneFeatures.length}
                       style={field}
                       onChange={(event) =>
                         set("showZoneLabels", event.target.value === "visible")
@@ -447,9 +600,7 @@ export default function MapSettingsManager() {
                     <span>Outside mask</span>
                     <select
                       value={settings.maskOutsideZones ? "on" : "off"}
-                      disabled={
-                        !settings.showZones || regionCode !== "EG-CAIRO"
-                      }
+                      disabled={!settings.showZones || !zoneFeatures.length}
                       style={field}
                       onChange={(event) =>
                         set("maskOutsideZones", event.target.value === "on")
@@ -476,7 +627,7 @@ export default function MapSettingsManager() {
               <h2>Choose how locations use stations</h2>
               <p>
                 Keep the existing vehicle-based behavior, or choose station
-                behavior by Cairo zone.
+                behavior by configured service zone.
               </p>
             </div>
             <div className="map-settings-grid">
@@ -493,7 +644,7 @@ export default function MapSettingsManager() {
                 onClick={() => set("stationAssignmentMode", "zones")}
               />
             </div>
-            {regionCode === "EG-CAIRO" &&
+            {zoneFeatures.length > 0 &&
               settings.stationAssignmentMode === "zones" && (
                 <div style={{ display: "grid", gap: 12 }}>
                   <p className="map-settings-note">
@@ -570,11 +721,11 @@ export default function MapSettingsManager() {
                   </div>
                 </div>
               )}
-            {regionCode !== "EG-CAIRO" &&
+            {!zoneFeatures.length &&
               settings.stationAssignmentMode === "zones" && (
                 <p className="map-settings-note">
-                  Zone-based station assignment is available for Cairo, where
-                  the zone dataset is configured.
+                  Upload and save a polygon dataset for this region before
+                  configuring zone-based station assignment.
                 </p>
               )}
           </section>
@@ -610,6 +761,7 @@ export default function MapSettingsManager() {
               osmTheme={settings.osmTheme}
               regionCode={regionCode}
               settings={settings}
+              zones={zoneFeatures}
               stations={settings.showStations ? previewStations : []}
               onStationMove={moveStation}
             />
@@ -675,7 +827,7 @@ function ZoneListEditor({
   onRemove,
 }: {
   title: string;
-  zoneOptions: ZoneOption[];
+  zoneOptions: Array<{ id: string; name: string }>;
   zoneIds: string[];
   assignedIds: string[];
   onAdd: (zoneId: string) => void;
@@ -877,6 +1029,7 @@ function MapCanvas({
   regionCode,
   osmTheme,
   settings,
+  zones,
   stations,
   onStationMove,
 }: {
@@ -885,6 +1038,7 @@ function MapCanvas({
   regionCode: RegionCode;
   osmTheme: MapSettings["osmTheme"];
   settings: MapSettings;
+  zones: ZoneFeature[];
   stations: PreviewStation[];
   onStationMove: (objectId: number, lat: number, lng: number) => void;
 }) {
@@ -893,7 +1047,8 @@ function MapCanvas({
     const google = (window as Window & { google?: GoogleMapsApi }).google;
     if (provider !== "google" || !googleMap || !google?.maps?.Marker) return;
 
-    const markers = stations.map((station) => {
+    const overlays: GoogleMarkerLike[] = [];
+    stations.forEach((station) => {
       const marker = new google.maps.Marker({
         map: googleMap,
         position: { lat: station.lat, lng: station.lng },
@@ -915,10 +1070,76 @@ function MapCanvas({
           );
         }
       });
-      return marker;
+      overlays.push(marker);
     });
-    return () => markers.forEach((marker) => marker.setMap(null));
-  }, [googleMap, onStationMove, provider, stations]);
+
+    if (settings.showZones) {
+      const theme = OSM_THEMES[osmTheme];
+      zones.forEach((feature) => {
+        const geometry = feature.geometry;
+        if (!geometry) return;
+        const polygons =
+          geometry.type === "Polygon"
+            ? [geometry.coordinates]
+            : geometry.coordinates;
+        polygons.forEach((polygon) => {
+          const paths = polygon.map((ring) =>
+            ring.map(([lng, lat]) => ({ lat, lng })),
+          );
+          overlays.push(
+            new google.maps.Polygon({
+              map: googleMap,
+              paths,
+              strokeColor: theme.primary,
+              strokeWeight: 2,
+              fillColor: theme.primary,
+              fillOpacity: 0.08,
+            }),
+          );
+        });
+        if (settings.showZoneLabels) {
+          const coordinates =
+            geometry.type === "Polygon"
+              ? geometry.coordinates[0]
+              : geometry.coordinates[0]?.[0];
+          if (!coordinates?.length) return;
+          const center = coordinates.reduce(
+            (sum, [lng, lat]) => ({ lat: sum.lat + lat, lng: sum.lng + lng }),
+            { lat: 0, lng: 0 },
+          );
+          const name = feature.properties?.NAME || String(feature.id ?? "Zone");
+          overlays.push(
+            new google.maps.Marker({
+              map: googleMap,
+              position: {
+                lat: center.lat / coordinates.length,
+                lng: center.lng / coordinates.length,
+              },
+              title: name,
+              draggable: false,
+              label: {
+                text: name,
+                color: theme.secondary,
+                fontSize: "11px",
+                fontWeight: "700",
+              },
+            }),
+          );
+        }
+      });
+    }
+
+    return () => overlays.forEach((overlay) => overlay.setMap(null));
+  }, [
+    googleMap,
+    onStationMove,
+    osmTheme,
+    provider,
+    settings.showZoneLabels,
+    settings.showZones,
+    stations,
+    zones,
+  ]);
 
   const region = REGION_LIST.find((item) => item.code === regionCode)!;
   if (provider === "osm")
@@ -934,6 +1155,7 @@ function MapCanvas({
             maskOutsideZones: settings.maskOutsideZones,
             regionCode,
           }}
+          zoneFeatures={zones}
           stations={stations}
           onStationMove={onStationMove}
         />
