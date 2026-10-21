@@ -7,12 +7,7 @@ import { findZoneAtPoint, getZoneName } from "@/lib/geo/zones";
 import { loadServiceZones } from "@/lib/geo/zones.server";
 
 const PAGE_SIZE = 20;
-const STATUSES = new Set([
-  "pending",
-  "processing",
-  "approved",
-  "rejected",
-]);
+const STATUSES = new Set(["pending", "processing", "approved", "rejected"]);
 
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -43,7 +38,10 @@ export async function GET(req: NextRequest) {
     Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const status = req.nextUrl.searchParams.get("status") ?? "pending";
   if (status !== "all" && !STATUSES.has(status)) {
-    return NextResponse.json({ error: "Invalid status filter." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid status filter." },
+      { status: 400 },
+    );
   }
 
   const search = (req.nextUrl.searchParams.get("search") ?? "")
@@ -60,12 +58,14 @@ export async function GET(req: NextRequest) {
       { "requester.name": safeSearch },
       { "requester.email": safeSearch },
       { "requester.phone": safeSearch },
-      { "requester.userNumber": Number.isFinite(requestNumber) ? requestNumber : -1 },
+      {
+        "requester.userNumber": Number.isFinite(requestNumber)
+          ? requestNumber
+          : -1,
+      },
       { description: safeSearch },
       { "targetLocation.address": safeSearch },
-      ...(Number.isSafeInteger(requestNumber)
-        ? [{ requestNumber }]
-        : []),
+      ...(Number.isSafeInteger(requestNumber) ? [{ requestNumber }] : []),
     ];
   }
 
@@ -77,8 +77,9 @@ export async function GET(req: NextRequest) {
       .lean(),
     StationSuggestion.countDocuments(filter),
   ]);
-  const zones =
-    requests.some((request) => !request.zoneName) ? await loadServiceZones() : [];
+  const zones = requests.some((request) => !request.zoneName)
+    ? await loadServiceZones(auth.region.code)
+    : [];
 
   return NextResponse.json({
     requests: requests.map((request) => ({

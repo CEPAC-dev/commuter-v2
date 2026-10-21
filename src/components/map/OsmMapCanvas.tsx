@@ -8,6 +8,7 @@ import type {
   Marker as LeafletMarker,
 } from "leaflet";
 import { OSM_THEMES, type OsmMapThemeName } from "@/lib/config/mapSettings";
+import type { ZoneFeature } from "@/lib/geo/zones";
 
 type LeafletModule = typeof import("leaflet");
 
@@ -30,10 +31,6 @@ interface PreviewStation {
   lng: number;
 }
 
-interface ZoneFeature {
-  geometry?: { type?: string; coordinates?: unknown };
-}
-
 interface OsmMapCanvasProps {
   center?: OsmPoint;
   zoom?: number;
@@ -42,6 +39,7 @@ interface OsmMapCanvasProps {
   cursor?: string;
   theme?: OsmMapThemeName;
   zoneSettings?: ZonePreviewSettings;
+  zoneFeatures?: ZoneFeature[];
   stations?: PreviewStation[];
   onStationMove?: (objectId: number, lat: number, lng: number) => void;
   onReady?: (map: LeafletMap | null) => void;
@@ -50,11 +48,18 @@ interface OsmMapCanvasProps {
 
 const CAIRO = { lat: 30.0444, lng: 31.2357 };
 
-async function loadZoneData() {
-  const response = await fetch("/geo/zone_polygon.geojson");
-  if (!response.ok) return [] as ZoneFeature[];
-  const geojson = await response.json();
-  return (geojson.features ?? []) as ZoneFeature[];
+function escapeHtml(value: string) {
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      })[character] ?? character,
+  );
 }
 
 export default function OsmMapCanvas({
@@ -65,6 +70,7 @@ export default function OsmMapCanvas({
   cursor,
   theme = "app",
   zoneSettings,
+  zoneFeatures = [],
   stations = [],
   onStationMove,
   onReady,
@@ -156,15 +162,10 @@ export default function OsmMapCanvas({
       overlay.clearLayers();
       zoneLayer.clearLayers();
 
-      if (
-        !zoneSettings ||
-        !zoneSettings.showZones ||
-        zoneSettings.regionCode !== "EG-CAIRO"
-      ) {
+      if (!zoneSettings?.showZones || !zoneFeatures.length) {
         return;
       }
 
-      const features = await loadZoneData();
       if (
         cancelled ||
         !mapRef.current ||
@@ -199,31 +200,29 @@ export default function OsmMapCanvas({
       }
 
       const activeZoneLayer = zoneLayerRef.current;
-      features.forEach((feature) => {
+      zoneFeatures.forEach((feature) => {
         const geometry = feature?.geometry;
-        if (!geometry || geometry.type !== "Polygon") return;
-        const coordinates = geometry.coordinates as Array<
-          Array<[number, number]>
-        >;
-        const polygon = L.polygon(
-          coordinates[0].map(([lng, lat]) => [lat, lng]),
-          {
+        if (!geometry) return;
+        const geometryLayer = L.geoJSON(feature as GeoJSON.GeoJsonObject, {
+          style: {
             color: primary,
             weight: 2,
-            opacity: zoneSettings.showZones ? 1 : 0,
-            fillColor: "transparent",
+            opacity: 1,
+            fillColor: primary,
             fillOpacity: 0,
-            dashArray: zoneSettings.showZoneLabels ? undefined : "6 6",
           },
-        );
-        polygon.addTo(activeZoneLayer);
+          interactive: false,
+        }).addTo(activeZoneLayer);
 
         if (zoneSettings.showZoneLabels) {
-          const center = polygon.getCenter();
+          const center = geometryLayer.getBounds().getCenter();
+          const label = escapeHtml(
+            feature.properties?.NAME || String(feature.id ?? "Zone"),
+          );
           L.marker([center.lat, center.lng], {
             icon: L.divIcon({
               className: "",
-              html: `<div style="background:${themeColors.surface};color:${secondary};border:1px solid ${primary};padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.08)">Zone</div>`,
+              html: `<div style="background:${themeColors.surface};color:${secondary};border:1px solid ${primary};padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.08)">${label}</div>`,
               iconSize: [70, 24],
               iconAnchor: [35, 12],
             }),
@@ -258,7 +257,7 @@ export default function OsmMapCanvas({
       overlay.clearLayers();
       zoneLayer.clearLayers();
     };
-  }, [theme, zoneSettings]);
+  }, [theme, zoneFeatures, zoneSettings]);
 
   useEffect(() => {
     const L = leafletRef.current;

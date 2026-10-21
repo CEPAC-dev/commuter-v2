@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSON, LayerGroup, Map as LeafletMap } from "leaflet";
+import type { FeatureCollection } from "geojson";
 import type { TripData } from "./TripCycle";
 import { reverseGeocode, formatDisplayName } from "@/lib/nominatim";
 import { loadLeaflet, svgDataUrl, MAP_COLORS } from "@/lib/leaflet";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import { isSharedVehicle } from "@/lib/geo/stations";
 import type { RegionCode, RegionConfig } from "@/lib/config/regions";
+import type { MapSettings } from "@/lib/config/mapSettings";
 
 const ROUTE_COLORS = [
   MAP_COLORS.route,
@@ -60,6 +62,7 @@ function routeLabelHtml(text: string, color: string): string {
 interface Props {
   regionCode: RegionCode;
   mapConfig: RegionConfig["map"];
+  mapSettings: MapSettings;
   trips: TripData[];
   picking?: { tripId: string; field: "pickup" | "dropoff" } | null;
   onMapPick?: (point: TripPoint) => void;
@@ -69,6 +72,7 @@ interface Props {
 export default function CreateMap({
   regionCode,
   mapConfig,
+  mapSettings,
   trips,
   picking,
   onMapPick,
@@ -129,21 +133,27 @@ export default function CreateMap({
       setLeafletReady(true);
       map.on("zoomend", () => setZoom(map.getZoom()));
 
-      if (regionCode === "EG-CAIRO") {
-        fetch("/geo/zone_polygon.geojson")
+      if (mapSettings.showZones) {
+        fetch(`/api/zones?region=${encodeURIComponent(regionCode)}`)
           .then((response) => response.json())
-          .then((geojson) => {
+          .then((configuration: { features?: unknown[] }) => {
             if (!mapRef.current) return;
-            zoneLayerRef.current = L.geoJSON(geojson, {
-              style: {
-                fillColor: "rgb(10, 0, 168)",
-                fillOpacity: 0.08,
-                color: "rgba(255, 0, 168, 1)",
-                weight: 1.2,
-                opacity: 0.6,
+            zoneLayerRef.current = L.geoJSON(
+              {
+                type: "FeatureCollection",
+                features: configuration.features ?? [],
+              } as unknown as FeatureCollection,
+              {
+                style: {
+                  fillColor: "rgb(10, 0, 168)",
+                  fillOpacity: 0.08,
+                  color: "rgba(255, 0, 168, 1)",
+                  weight: 1.2,
+                  opacity: 0.6,
+                },
+                interactive: false,
               },
-              interactive: false,
-            }).addTo(mapRef.current);
+            ).addTo(mapRef.current);
           })
           .catch(() => {});
       }
@@ -164,6 +174,7 @@ export default function CreateMap({
     mapConfig.defaultCenter.lng,
     mapConfig.defaultZoom,
     regionCode,
+    mapSettings.showZones,
   ]);
 
   useEffect(() => {

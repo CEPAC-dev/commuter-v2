@@ -98,7 +98,9 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   }
   if (suggestion.status !== "pending") {
     return NextResponse.json(
-      { error: "This request has already been reviewed or is being processed." },
+      {
+        error: "This request has already been reviewed or is being processed.",
+      },
       { status: 409 },
     );
   }
@@ -150,7 +152,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const lat = stationInput?.lat;
   const lng = stationInput?.lng;
   const stationType = stationInput?.stationType;
-  const zones = await loadServiceZones();
+  const zones = await loadServiceZones(auth.region.code);
   const finalZoneName =
     validCoordinate(lat, -90, 90) && validCoordinate(lng, -180, 180)
       ? getZoneName(findZoneAtPoint([lng, lat], zones))
