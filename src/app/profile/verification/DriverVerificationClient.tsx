@@ -156,6 +156,12 @@ function actionButtonStyle(loading: boolean, variant: "primary" | "ghost" = "pri
   };
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+}
+
 const STEPS = [
   { key: "vehicle", label: "Vehicle details" },
   { key: "documents", label: "Documents" },
@@ -290,6 +296,7 @@ export default function DriverVerificationClient({
   const [documents, setDocuments] = useState(initialDocuments);
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [uploadedPaths, setUploadedPaths] = useState<Record<string, string>>({});
+  const [fileSizes, setFileSizes] = useState<Record<string, number>>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -410,7 +417,7 @@ export default function DriverVerificationClient({
     try {
       let fileToUpload = file;
 
-      // Compress images only (not PDFs)
+      // Compress images only
       const isImage = file.type.startsWith("image/");
       const MAX_SIZE_MB = 5;
       const COMPRESS_THRESHOLD_MB = 3; // Compress only if larger than 3MB
@@ -443,10 +450,8 @@ export default function DriverVerificationClient({
         }
       }
 
-      // Final size check (10MB max for PDFs, 5MB for images after compression)
-      const maxAllowedSize = file.type === "application/pdf"
-        ? 10 * 1024 * 1024  // 10MB for PDFs
-        : 5 * 1024 * 1024;  // 5MB for images
+      // Final size check (5MB max for images after compression)
+      const maxAllowedSize = 5 * 1024 * 1024;  // 5MB
 
       if (fileToUpload.size > maxAllowedSize) {
         const maxSizeMB = Math.round(maxAllowedSize / (1024 * 1024));
@@ -471,7 +476,7 @@ export default function DriverVerificationClient({
           if (errMsg.includes("too large")) {
             errMsg = "حجم الملف كبير جداً. الحد الأقصى 5 ميجابايت.";
           } else if (errMsg.includes("Unsupported file type")) {
-            errMsg = "نوع الملف غير مدعوم. استخدم JPG أو PNG أو PDF.";
+            errMsg = "نوع الملف غير مدعوم. استخدم JPG أو PNG فقط.";
           } else if (errMsg.includes("No file provided")) {
             errMsg = "لم يتم اختيار ملف.";
           } else if (errMsg.includes("Unauthorized")) {
@@ -492,6 +497,7 @@ export default function DriverVerificationClient({
       // Store uploaded path locally (not saved to DB yet)
       setUploadedPaths((prev) => ({ ...prev, [key]: uploadData.path }));
       setDocuments((d) => ({ ...d, [key]: uploadData.path }));
+      setFileSizes((prev) => ({ ...prev, [key]: fileToUpload.size }));
       setHasUnsavedChanges(true);
     } catch (err) {
       const networkMsg = dir === "rtl"
@@ -511,6 +517,12 @@ export default function DriverVerificationClient({
       const newPaths = { ...prev };
       delete newPaths[key];
       return newPaths;
+    });
+    // Remove file size
+    setFileSizes((prev) => {
+      const newSizes = { ...prev };
+      delete newSizes[key];
+      return newSizes;
     });
     // Revert to original document
     setDocuments((d) => ({ ...d, [key]: initialDocuments[key] }));
@@ -891,7 +903,8 @@ export default function DriverVerificationClient({
                     <input
                       ref={(el) => { fileInputs.current[doc.key] = el; }}
                       type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
+                      capture="environment"
                       id={`vdoc-${doc.key}`}
                       style={{ display: "none" }}
                       onChange={(e) => handleFileChange(doc.key, e.target.files?.[0] ?? null)}
@@ -904,9 +917,15 @@ export default function DriverVerificationClient({
                         </span>
                       )}
                       <span style={{ display: "block", fontSize: 11, color: "#9CA3AF", marginTop: 2, fontWeight: 400 }}>
-                        {dir === "rtl"
-                          ? "الحد الأقصى: 5 ميجابايت (صور) • 10 ميجابايت (PDF)"
-                          : "Max: 5MB (images) • 10MB (PDF)"}
+                        {fileSizes[doc.key] ? (
+                          <>
+                            {formatFileSize(fileSizes[doc.key])}
+                            {" • "}
+                            {dir === "rtl" ? "الحد الأقصى: 5 ميجابايت" : "Max: 5MB"}
+                          </>
+                        ) : (
+                          dir === "rtl" ? "الحد الأقصى: 5 ميجابايت" : "Max: 5MB"
+                        )}
                       </span>
                     </label>
                     {done && (

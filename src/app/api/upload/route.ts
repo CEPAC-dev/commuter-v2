@@ -12,7 +12,6 @@ const ALLOWED_TYPES: Record<string, string> = {
   "image/webp": ".webp",
   "image/heic": ".heic",
   "image/heif": ".heif",
-  "application/pdf": ".pdf",
 };
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
@@ -56,8 +55,8 @@ export async function POST(req: NextRequest) {
     if (!ext)
       return NextResponse.json(
         {
-          error: "Unsupported file type. Use JPG, PNG, WEBP or PDF.",
-          errorAr: "نوع الملف غير مدعوم. استخدم JPG أو PNG أو WEBP أو PDF.",
+          error: "Unsupported file type. Use JPG, PNG, WEBP or HEIC.",
+          errorAr: "نوع الملف غير مدعوم. استخدم JPG أو PNG أو WEBP.",
           debug: {
             mimeType: file.type || "empty",
             filename: file.name
