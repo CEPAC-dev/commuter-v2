@@ -30,6 +30,7 @@ import {
   type RegionCode,
 } from "@/lib/config/regions";
 import { createWelcomeNotification } from "@/lib/notifications/welcomeNotification";
+import { normalizeCarColor } from "@/lib/carColors";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -41,16 +42,24 @@ export async function POST(req: NextRequest) {
       password,
       email,
       gender,
+      vehicleColor,
       referralCodeUsed,
       securityQuestionId,
       securityAnswer,
       regionCode,
     } = await req.json();
     const safeName = normalizePlainText(name, { maxLength: 100 });
+    const safeVehicleColor = normalizeCarColor(vehicleColor);
 
-    if (!safeName || typeof phone !== "string" || !phone.trim() || !password)
+    if (
+      !safeName ||
+      !safeVehicleColor ||
+      typeof phone !== "string" ||
+      !phone.trim() ||
+      !password
+    )
       return NextResponse.json(
-        { error: "Name, phone and password are required." },
+        { error: "Name, phone, password and vehicle color are required." },
         { status: 400 },
       );
     if (!isSafePassword(password))
@@ -174,6 +183,7 @@ export async function POST(req: NextRequest) {
     await Driver.create({
       userId: user._id,
       gender,
+      vehicleColor: safeVehicleColor,
       verificationStatus: "incomplete",
     });
 

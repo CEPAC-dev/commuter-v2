@@ -2,6 +2,7 @@
 
 import { Phone, Car } from "lucide-react";
 import { useClientLocale } from "@/lib/locale.client";
+import { getCarColorDisplay } from "@/lib/carColors";
 
 interface DriverCardData {
   name?: string;
@@ -166,7 +167,9 @@ export default function DriverCard({
               fontWeight: 600,
             }}
           >
-            {carColor ? `Color: ${carColor}` : t("my_trips.vehicle_pending")}
+            {carColor
+              ? `Color: ${getCarColorDisplay(carColor, dir === "rtl" ? "ar" : "en")}`
+              : t("my_trips.vehicle_pending")}
           </p>
           <p
             style={{

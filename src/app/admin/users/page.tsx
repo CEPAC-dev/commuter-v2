@@ -38,7 +38,11 @@ export default async function AdminUsersPage() {
         .sort({ createdAt: -1 })
         .select("-passwordHash +securityAnswerHash")
         .lean(),
-      Driver.find({}).lean(),
+      Driver.find({})
+        .select(
+          "-_id userId carType carBrand carModel modelYear vehicleColor plateChar1 plateChar2 plateChar3 plateDigits licenseExpiry carCapacity",
+        )
+        .lean(),
       ReferralUsage.aggregate<{ _id: unknown; count: number }>([
         { $group: { _id: "$referrer", count: { $sum: 1 } } },
       ]),
@@ -120,14 +124,7 @@ export default async function AdminUsersPage() {
       referralUsageCount: referralUsageMap.get(String(plainUser._id)) ?? 0,
       referralAdditions: referralAdditionsMap.get(String(plainUser._id)) ?? [],
       driver: plainDriver
-        ? {
-            _id: String(plainDriver._id),
-            userId: String(plainDriver.userId),
-            verificationStatus: plainDriver.verificationStatus as
-              | "incomplete"
-              | "pending"
-              | "verified"
-              | undefined,
+          ? {
             carType: plainDriver.carType as string | undefined,
             carBrand: plainDriver.carBrand as string | undefined,
             carModel: plainDriver.carModel as string | undefined,
@@ -139,9 +136,6 @@ export default async function AdminUsersPage() {
             plateDigits: plainDriver.plateDigits as string | undefined,
             licenseExpiry: plainDriver.licenseExpiry as string | undefined,
             carCapacity: plainDriver.carCapacity as number | undefined,
-            documents: plainDriver.documents as
-              | Record<string, string | null>
-              | undefined,
           }
         : undefined,
     };
@@ -151,12 +145,12 @@ export default async function AdminUsersPage() {
     <AdminPageContainer>
       <AdminPageHeader
         title="Users"
-        description="Change roles, review driver information, and update verification status."
+        description="Manage registered accounts and access levels."
       />
       <UserManagementClient
         initialUsers={rows}
         title="Registered accounts"
-        description="Open any row to inspect documents and update driver approval."
+        description="Open any row to manage account details."
         emptyMessage="No users found."
       />
       <UnlimitedReferralCards />
