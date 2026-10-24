@@ -11,6 +11,12 @@ import {
 import { useClientLocale } from "@/lib/i18n/client";
 import { useVerificationConfig } from "@/lib/auth/useVerificationConfig";
 import type { RegionCode } from "@/lib/config/regions";
+import {
+  CAR_COLOR_OPTIONS,
+  getCarColorOptionLabel,
+  normalizeCarColor,
+  MAX_CAR_COLOR_LENGTH,
+} from "@/lib/carColors";
 
 const labelStyle: React.CSSProperties = {
   fontSize: 13,
@@ -76,8 +82,14 @@ export default function DriverRegisterForm({
     useVerificationConfig();
   const [securityQuestionId, setSecurityQuestionId] = useState("");
   const [securityAnswer, setSecurityAnswer] = useState("");
+  const [vehicleColorOption, setVehicleColorOption] = useState("");
+  const [customVehicleColor, setCustomVehicleColor] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const vehicleColor =
+    vehicleColorOption === "أخرى"
+      ? customVehicleColor.trim()
+      : vehicleColorOption;
 
   function validate(): string {
     if (!name.trim() || !phone.trim() || !password)
@@ -87,6 +99,13 @@ export default function DriverRegisterForm({
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return t("auth.driver.invalid_email");
     if (!gender) return t("auth.driver.gender_required");
+    if (!normalizeCarColor(vehicleColor)) {
+      if (vehicleColorOption === "أخرى")
+        return locale === "ar"
+          ? "أدخل لوناً آخر للسيارة."
+          : "Enter another vehicle color.";
+      return locale === "ar" ? "يرجى اختيار لون السيارة." : "Choose a vehicle color.";
+    }
     if (verificationMethod === "security_question") {
       if (!securityQuestionId) return t("security_question.error_choose");
       if (securityAnswer.trim().length < 2)
@@ -115,6 +134,7 @@ export default function DriverRegisterForm({
           password,
           email,
           gender,
+          vehicleColor: normalizeCarColor(vehicleColor),
           referralCodeUsed: referralCode || undefined,
           regionCode: region,
           ...(verificationMethod === "security_question" && {
@@ -261,6 +281,58 @@ export default function DriverRegisterForm({
             <option value="male">{t("auth.driver.gender_male")}</option>
             <option value="female">{t("auth.driver.gender_female")}</option>
           </select>
+        </div>
+        <div>
+          <label htmlFor="d-vehicleColor" style={labelStyle}>
+            {t("profile.vehicle_color")} {" "}
+            <span aria-hidden="true" style={{ color: "#e74c3c" }}>*</span>
+          </label>
+          <select
+            id="d-vehicleColor"
+            required
+            value={vehicleColorOption}
+            onChange={(e) => setVehicleColorOption(e.target.value)}
+            style={{
+              ...selectStyle,
+              direction: locale === "ar" ? "rtl" : "ltr",
+              textAlign: locale === "ar" ? "right" : "left",
+            }}
+          >
+            <option value="">
+              {locale === "ar" ? "اختر اللون" : "Select color"}
+            </option>
+            {CAR_COLOR_OPTIONS.map((color) => (
+              <option key={color.value} value={color.value}>
+                {getCarColorOptionLabel(color, locale)}
+              </option>
+            ))}
+          </select>
+          {vehicleColorOption === "أخرى" && (
+            <>
+              <label
+                htmlFor="d-customVehicleColor"
+                style={{ ...labelStyle, marginTop: 8 }}
+              >
+                {locale === "ar" ? "لون آخر" : "Other color"}
+              </label>
+              <input
+                id="d-customVehicleColor"
+                type="text"
+                required
+                maxLength={MAX_CAR_COLOR_LENGTH}
+                aria-label={locale === "ar" ? "لون آخر" : "Other color"}
+                placeholder={locale === "ar" ? "اكتب لون السيارة" : "Enter color"}
+                value={customVehicleColor}
+                onChange={(e) => setCustomVehicleColor(e.target.value)}
+                dir={locale === "ar" ? "rtl" : "ltr"}
+                style={{
+                  ...inputStyle,
+                  direction: locale === "ar" ? "rtl" : "ltr",
+                  textAlign: locale === "ar" ? "right" : "left",
+                }}
+              />
+            </>
+          )}
         </div>
         <div>
           <label htmlFor="d-email" style={labelStyle}>

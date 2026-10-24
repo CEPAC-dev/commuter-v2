@@ -60,6 +60,7 @@ import { buildTripTabView, type TripTabKey } from "@/lib/tripTabView.ts";
 import { normalizePassengerTabKey } from "@/lib/tripTabs.ts";
 import { getNextTrip } from "@/lib/nextTrip.ts";
 import { multiDayBookingCountKey } from "@/lib/i18n/multiDayBooking.ts";
+import { getCarColorDisplay } from "@/lib/carColors";
 
 export const metadata = { title: "My trips — Commuter" };
 export const dynamic = "force-dynamic";
@@ -2896,10 +2897,13 @@ export default async function MyTripsPage({
                                               Color
                                             </span>
                                             <span>
-                                              {trip.assignedDriver
-                                                ?.vehicleColor ??
-                                                trip.assignedDriver?.carColor ??
-                                                "—"}
+                                              {getCarColorDisplay(
+                                                trip.assignedDriver
+                                                  ?.vehicleColor ??
+                                                  trip.assignedDriver?.carColor ??
+                                                  "—",
+                                                locale,
+                                              )}
                                             </span>
                                           </span>
                                         </div>

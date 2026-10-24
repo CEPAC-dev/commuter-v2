@@ -5457,8 +5457,75 @@
                 "value": "application/json"
               }
             ],
-            "description": "Update Admin Users Id.\n\nAccess: Admin session required.\nAdmin session required.\nPath variables are Postman collection variables and must be replaced with IDs returned by earlier calls.\nThe example body is editable JSON unless the request is documented as multipart form-data.",
+            "description": "Update Admin Users Id.\n\nAccess: Admin session required.\nAdmin session required.\nPath variables are Postman collection variables and must be replaced with IDs returned by earlier calls.\nDriver verification is no longer accepted here; change it from /admin/drivers.\nThe example body is editable JSON unless the request is documented as multipart form-data.",
             "url": "{{baseUrl}}/api/admin/users/{{userId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Example 200 response",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "description": "Update Admin Users Id.\n\nAccess: Admin session required.\nAdmin session required.\nPath variables are Postman collection variables and must be replaced with IDs returned by earlier calls.\nDriver verification is no longer accepted here; change it from /admin/drivers.\nThe example body is editable JSON unless the request is documented as multipart form-data.",
+                "url": "{{baseUrl}}/api/admin/users/{{userId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": true,\n  \"data\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "PATCH /api/admin/drivers/{{driverId}}/status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Update Admin Drivers Id Status.\n\nAccess: Admin session required.\nAdmin session required.\nPath variables are Postman collection variables and must be replaced with IDs returned by earlier calls.",
+            "url": "{{baseUrl}}/api/admin/drivers/{{driverId}}/status",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"verificationStatus\": \"verified\"\n}",
@@ -5484,8 +5551,8 @@
                     "value": "application/json"
                   }
                 ],
-                "description": "Update Admin Users Id.\n\nAccess: Admin session required.\nAdmin session required.\nPath variables are Postman collection variables and must be replaced with IDs returned by earlier calls.\nThe example body is editable JSON unless the request is documented as multipart form-data.",
-                "url": "{{baseUrl}}/api/admin/users/{{userId}}",
+                "description": "Update Admin Drivers Id Status.\n\nAccess: Admin session required.\nAdmin session required.\nPath variables are Postman collection variables and must be replaced with IDs returned by earlier calls.",
+                "url": "{{baseUrl}}/api/admin/drivers/{{driverId}}/status",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"verificationStatus\": \"verified\"\n}",
@@ -5506,7 +5573,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"ok\": true,\n  \"data\": {}\n}"
+              "body": "{\n  \"message\": \"Status updated successfully\",\n  \"driver\": {\n    \"_id\": \"{{driverId}}\",\n    \"verificationStatus\": \"verified\"\n  }\n}"
             }
           ]
         },

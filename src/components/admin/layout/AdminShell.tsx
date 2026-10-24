@@ -65,6 +65,12 @@ const sections = [
   },
   { href: "/admin/users", label: "Users", icon: Users, statKey: "users" },
   {
+    href: "/admin/drivers",
+    label: "Drivers",
+    icon: CarFront,
+    statKey: null,
+  },
+  {
     href: "/admin/waiting-list",
     label: "Waiting list",
     icon: ListChecks,
