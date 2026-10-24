@@ -11,6 +11,7 @@ import {
   validateMutationRequest,
 } from "@/lib/security/request";
 import { notifyAdminsDriverUpdate } from "@/lib/services/driverNotification";
+import { normalizeCarColor } from "@/lib/carColors";
 
 export async function GET() {
   const session = await getSession();
@@ -130,10 +131,7 @@ export async function PATCH(req: NextRequest) {
       maxLength: 60,
       allowEmpty: true,
     });
-    const safeVehicleColor = normalizePlainText(vehicleColor, {
-      maxLength: 40,
-      allowEmpty: true,
-    });
+    const safeVehicleColor = normalizeCarColor(vehicleColor);
     if (carBrand !== undefined && safeCarBrand === null)
       return NextResponse.json(
         { error: "Invalid car brand." },

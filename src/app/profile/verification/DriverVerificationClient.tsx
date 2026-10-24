@@ -11,10 +11,18 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import imageCompression from "browser-image-compression";
 import AppHeader from "@/components/layout/AppHeader";
 import { CAR_TYPE_LIST, type CarType } from "@/lib/config/driver";
 import { useClientLocale } from "@/lib/locale.client";
 import { useRouter } from "next/navigation";
+import {
+  CAR_COLOR_OPTIONS,
+  getCarColorOptionLabel,
+  isKnownCarColor,
+  MAX_CAR_COLOR_LENGTH,
+  normalizeCarColor,
+} from "@/lib/carColors";
 
 interface DocKey {
   key:
@@ -238,6 +246,7 @@ export default function DriverVerificationClient({
 }: Props) {
   const { dir, t } = useClientLocale();
   const router = useRouter();
+  const colorLanguage = dir === "rtl" ? "ar" : "en";
   const selectStyle = getSelectStyle(dir);
   const [step, setStep] = useState<0 | 1>(0);
 
@@ -246,7 +255,24 @@ export default function DriverVerificationClient({
   const [carBrand, setCarBrand] = useState(initialCarBrand);
   const [carModel, setCarModel] = useState(initialCarModel);
   const [modelYear, setModelYear] = useState(initialModelYear ? String(initialModelYear) : "");
-  const [vehicleColor, setVehicleColor] = useState(initialVehicleColor);
+  const initialColorIsSelectable =
+    isKnownCarColor(initialVehicleColor) && initialVehicleColor !== "أخرى";
+  const initialColorIsCustom =
+    Boolean(initialVehicleColor) && !initialColorIsSelectable;
+  const [vehicleColorOption, setVehicleColorOption] = useState(() =>
+    initialColorIsSelectable
+      ? initialVehicleColor
+      : initialColorIsCustom
+        ? "أخرى"
+        : "",
+  );
+  const [customVehicleColor, setCustomVehicleColor] = useState(() =>
+    initialColorIsCustom ? initialVehicleColor : "",
+  );
+  const vehicleColor =
+    vehicleColorOption === "أخرى"
+      ? customVehicleColor.trim()
+      : vehicleColorOption;
   const [plateChar1, setPlateChar1] = useState(initialPlateChar1);
   const [plateChar2, setPlateChar2] = useState(initialPlateChar2);
   const [plateChar3, setPlateChar3] = useState(initialPlateChar3);
@@ -286,7 +312,7 @@ export default function DriverVerificationClient({
       const y = Number(modelYear);
       return modelYear.trim() && Number.isInteger(y) && y >= 1900 && y <= 2100 ? modelYear : "";
     })(),
-    vehicleColor.trim(),
+    normalizeCarColor(vehicleColor) ?? "",
     /^[\u0600-\u06FF]$/.test(plateChar1) ? plateChar1 : "",
     /^[\u0600-\u06FF]$/.test(plateChar2) ? plateChar2 : "",
     plateLettersCount === 3 ? (/^[\u0600-\u06FF]$/.test(plateChar3) ? plateChar3 : "") : "skip",
@@ -310,6 +336,21 @@ export default function DriverVerificationClient({
   async function saveDetails(e: React.FormEvent) {
     e.preventDefault();
     const yearNum = Number(modelYear);
+    const safeVehicleColor = normalizeCarColor(vehicleColor);
+    if (!safeVehicleColor) {
+      setDetailsMsg({
+        ok: false,
+        text:
+          vehicleColorOption === "أخرى"
+            ? dir === "rtl"
+              ? "أدخل لوناً آخر للسيارة."
+              : "Enter another vehicle color."
+            : dir === "rtl"
+              ? "يرجى اختيار لون السيارة."
+              : "Choose a vehicle color.",
+      });
+      return;
+    }
     if (
       !carType ||
       !carBrand.trim() ||
@@ -318,7 +359,6 @@ export default function DriverVerificationClient({
       !Number.isInteger(yearNum) ||
       yearNum < 1900 ||
       yearNum > 2100 ||
-      !vehicleColor.trim() ||
       !/^[\u0600-\u06FF]$/.test(plateChar1) ||
       !/^[\u0600-\u06FF]$/.test(plateChar2) ||
       (plateLettersCount === 3 && !/^[\u0600-\u06FF]$/.test(plateChar3)) ||
@@ -341,7 +381,7 @@ export default function DriverVerificationClient({
           carBrand: carBrand.trim(),
           carModel: carModel.trim(),
           modelYear: yearNum,
-          vehicleColor: vehicleColor.trim(),
+          vehicleColor: safeVehicleColor,
           plateChar1,
           plateChar2,
           plateChar3: plateLettersCount === 3 ? plateChar3 : "",
@@ -366,28 +406,80 @@ export default function DriverVerificationClient({
   async function handleFileChange(key: string, file: File | null) {
     if (!file) return;
 
-    // Check file size (5MB max)
-    const MAX_SIZE = 5 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-      const sizeMsg = dir === "rtl"
-        ? `حجم الملف كبير جداً. الحد الأقصى ${Math.round(MAX_SIZE / (1024 * 1024))} ميجابايت.`
-        : `File size is too large. Maximum ${Math.round(MAX_SIZE / (1024 * 1024))}MB allowed.`;
-      setErrorModal({ show: true, message: sizeMsg });
-      if (fileInputs.current[key]) fileInputs.current[key]!.value = "";
-      return;
-    }
-
     setUploading((u) => ({ ...u, [key]: true }));
     try {
+      let fileToUpload = file;
+
+      // Compress images only (not PDFs)
+      const isImage = file.type.startsWith("image/");
+      const MAX_SIZE_MB = 5;
+      const COMPRESS_THRESHOLD_MB = 3; // Compress only if larger than 3MB
+
+      if (isImage && file.size > COMPRESS_THRESHOLD_MB * 1024 * 1024) {
+        try {
+          const compressionMsg = dir === "rtl"
+            ? "جاري ضغط الصورة..."
+            : "Compressing image...";
+          console.log(compressionMsg, `Original: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+
+          const options = {
+            maxSizeMB: MAX_SIZE_MB,
+            maxWidthOrHeight: 1920, // Keep good quality
+            useWebWorker: true,
+            fileType: file.type as "image/jpeg" | "image/png" | "image/webp",
+            initialQuality: 0.85, // High quality (85%)
+          };
+
+          fileToUpload = await imageCompression(file, options);
+
+          console.log(
+            dir === "rtl" ? "تم الضغط:" : "Compressed:",
+            `${(fileToUpload.size / (1024 * 1024)).toFixed(2)}MB`
+          );
+        } catch (compressionErr) {
+          console.warn("Compression failed, using original file:", compressionErr);
+          // If compression fails, use original file
+          fileToUpload = file;
+        }
+      }
+
+      // Final size check (10MB max for PDFs, 5MB for images after compression)
+      const maxAllowedSize = file.type === "application/pdf"
+        ? 10 * 1024 * 1024  // 10MB for PDFs
+        : 5 * 1024 * 1024;  // 5MB for images
+
+      if (fileToUpload.size > maxAllowedSize) {
+        const maxSizeMB = Math.round(maxAllowedSize / (1024 * 1024));
+        const sizeMsg = dir === "rtl"
+          ? `حجم الملف كبير جداً. الحد الأقصى ${maxSizeMB} ميجابايت.`
+          : `File size is too large. Maximum ${maxSizeMB}MB allowed.`;
+        setErrorModal({ show: true, message: sizeMsg });
+        if (fileInputs.current[key]) fileInputs.current[key]!.value = "";
+        return;
+      }
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", fileToUpload);
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
       const uploadData = await uploadRes.json();
+
       if (!uploadRes.ok) {
-        const errMsg =
-          dir === "rtl" && uploadData.errorAr
-            ? uploadData.errorAr
-            : (uploadData.error ?? "Upload failed.");
+        let errMsg = uploadData.error ?? "Upload failed.";
+
+        // Translate common errors to Arabic
+        if (dir === "rtl") {
+          if (errMsg.includes("too large")) {
+            errMsg = "حجم الملف كبير جداً. الحد الأقصى 5 ميجابايت.";
+          } else if (errMsg.includes("Unsupported file type")) {
+            errMsg = "نوع الملف غير مدعوم. استخدم JPG أو PNG أو PDF.";
+          } else if (errMsg.includes("No file provided")) {
+            errMsg = "لم يتم اختيار ملف.";
+          } else if (errMsg.includes("Unauthorized")) {
+            errMsg = "انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.";
+          } else if (errMsg.includes("Upload failed")) {
+            errMsg = "فشل رفع الملف. يرجى المحاولة مرة أخرى.";
+          }
+        }
 
         const debugInfo = uploadData.debug
           ? ` (${uploadData.debug.filename})`
@@ -569,7 +661,42 @@ export default function DriverVerificationClient({
               </div>
               <div>
                 <label htmlFor="d-vehicleColor" style={labelStyle}>{t("profile.vehicle_color")}</label>
-                <input id="d-vehicleColor" type="text" value={vehicleColor} onChange={(e) => setVehicleColor(e.target.value)} style={inputStyle} />
+                <select
+                  id="d-vehicleColor"
+                  required
+                  value={vehicleColorOption}
+                  onChange={(e) => setVehicleColorOption(e.target.value)}
+                  style={selectStyle}
+                >
+                  <option value="">{dir === "rtl" ? "اختر اللون" : "Select color"}</option>
+                  {CAR_COLOR_OPTIONS.map((color) => (
+                    <option key={color.value} value={color.value}>
+                      {getCarColorOptionLabel(color, colorLanguage)}
+                    </option>
+                  ))}
+                </select>
+                {vehicleColorOption === "أخرى" && (
+                  <>
+                    <label
+                      htmlFor="d-customVehicleColor"
+                      style={{ ...labelStyle, marginTop: 8 }}
+                    >
+                      {dir === "rtl" ? "لون آخر" : "Other color"}
+                    </label>
+                    <input
+                      id="d-customVehicleColor"
+                      type="text"
+                      required
+                      maxLength={MAX_CAR_COLOR_LENGTH}
+                      aria-label={dir === "rtl" ? "لون آخر" : "Other color"}
+                      placeholder={dir === "rtl" ? "اكتب لون السيارة" : "Enter color"}
+                      value={customVehicleColor}
+                      onChange={(e) => setCustomVehicleColor(e.target.value)}
+                      dir={dir}
+                      style={{ ...inputStyle, direction: dir, textAlign: dir === "rtl" ? "right" : "left" }}
+                    />
+                  </>
+                )}
               </div>
             </div>
             <div>
@@ -777,7 +904,9 @@ export default function DriverVerificationClient({
                         </span>
                       )}
                       <span style={{ display: "block", fontSize: 11, color: "#9CA3AF", marginTop: 2, fontWeight: 400 }}>
-                        {dir === "rtl" ? "الحد الأقصى: 5 ميجابايت" : "Max: 5MB"}
+                        {dir === "rtl"
+                          ? "الحد الأقصى: 5 ميجابايت (صور) • 10 ميجابايت (PDF)"
+                          : "Max: 5MB (images) • 10MB (PDF)"}
                       </span>
                     </label>
                     {done && (

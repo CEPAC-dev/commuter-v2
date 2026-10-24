@@ -16,6 +16,7 @@ import {
   type PublicLiveShare,
 } from "@/lib/liveShare/viewer";
 import { resolveLiveTileUrl } from "@/lib/liveShare/tileUrl";
+import { getCarColorDisplay } from "@/lib/carColors";
 
 interface LiveLocationViewerProps {
   token: string;
@@ -741,7 +742,7 @@ export default function LiveLocationViewer({
                   </strong>
                   <span style={{ color: "#526262", fontSize: 13 }}>
                     {[
-                      data.driver.vehicle.color,
+                      getCarColorDisplay(data.driver.vehicle.color, locale),
                       data.driver.vehicle.make,
                       data.driver.vehicle.model,
                     ]
