@@ -21,8 +21,6 @@ const AdminReferralCampaignSchema = new Schema(
   { timestamps: true, collection: "admin_referral_campaigns" },
 );
 
-AdminReferralCampaignSchema.index({ role: 1 }, { unique: true });
-
 export type AdminReferralCampaignDoc = InferSchemaType<
   typeof AdminReferralCampaignSchema
 >;
