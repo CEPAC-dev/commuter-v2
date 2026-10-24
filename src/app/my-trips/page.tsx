@@ -53,6 +53,7 @@ import RateTripModal from "@/components/trips/RateTripModal";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 import CancelTripModal from "@/components/trips/CancelTripModal";
 import TripReportButton from "@/components/trips/TripReportButton";
+import PrivateRideOfferDecision from "@/components/trips/PrivateRideOfferDecision";
 import RequestGroupCancellationControls from "@/components/trips/RequestGroupCancellationControls";
 import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
 import { buildTripTabView, type TripTabKey } from "@/lib/tripTabView.ts";
@@ -100,6 +101,11 @@ function getStatusPill(locale: "en" | "ar") {
       label: translate(locale, "request_status.waiting_for_approval"),
       bg: "#FFF8E1",
       color: "#8A5A00",
+    },
+    private_ride_offered: {
+      label: translate(locale, "status.private_ride_offer_pending"),
+      bg: "#E8FAF7",
+      color: "#007A6A",
     },
     approved: {
       label: translate(locale, "request_status.approved_pay_now"),
@@ -2295,11 +2301,14 @@ export default async function MyTripsPage({
                               "request_status.waiting_for_approval",
                               "status.waiting_list",
                               "status.pending_payment",
+                              "status.private_ride_offer_pending",
                             ].includes(displayStatus.key));
                         if (compactPendingPassengerTrip) {
-                          const checkoutAmount = trip.isStandalone
-                            ? trip.priceEgp
-                            : trip.bookingAmountEgp;
+                          const checkoutAmount =
+                            trip.status === "private_ride_offered" ||
+                            trip.isStandalone
+                              ? trip.priceEgp
+                              : trip.bookingAmountEgp;
                           const waitingForApproval = [
                             "request_status.waiting_for_approval",
                             "status.waiting_list",
@@ -2391,6 +2400,14 @@ export default async function MyTripsPage({
                                     triggerClassName="my-trips-booking-action booking-action-danger"
                                   />
                                 )}
+                                {trip.status === "private_ride_offered" &&
+                                trip.privateRideOffer ? (
+                                  <PrivateRideOfferDecision
+                                    tripId={trip.id}
+                                    currentPriceEgp={trip.priceEgp}
+                                    offer={trip.privateRideOffer}
+                                  />
+                                ) : null}
                                 <Link
                                   href={`/my-trips/${trip.id}`}
                                   className="my-trips-booking-action booking-action-icon trip-pending-single-view"

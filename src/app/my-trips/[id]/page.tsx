@@ -18,6 +18,7 @@ import RouteMap from "@/components/shared/RouteMapOsmLoader";
 import DriverCard from "@/components/trips/DriverCard";
 import TripChat from "@/components/shared/TripChat";
 import PrivateRideDetails from "@/components/trips/PrivateRideDetails";
+import PrivateRideOfferDecision from "@/components/trips/PrivateRideOfferDecision";
 import SharedRideDetails from "@/components/trips/SharedRideDetails";
 import RateTripModal from "@/components/trips/RateTripModal";
 import CancelTripModal from "@/components/trips/CancelTripModal";
@@ -101,6 +102,15 @@ function TripActions({
   hasReport: boolean;
 }) {
   if (isDriver) return null;
+  if (trip.status === "private_ride_offered" && trip.privateRideOffer) {
+    return (
+      <PrivateRideOfferDecision
+        tripId={trip.id}
+        currentPriceEgp={trip.priceEgp}
+        offer={trip.privateRideOffer}
+      />
+    );
+  }
   const showReport = trip.status === "completed" && !displayStatus.canRate;
   if (trip.isStandalone) {
     return (
@@ -348,7 +358,11 @@ export default async function TripDetailPage({
   });
   const hasPrimaryAction =
     !rejectionDisplay.showReasonCard &&
-    (displayStatus.canPay || displayStatus.canCancel || displayStatus.canRate || (status === "completed" && !displayStatus.canRate));
+    (status === "private_ride_offered" ||
+      displayStatus.canPay ||
+      displayStatus.canCancel ||
+      displayStatus.canRate ||
+      (status === "completed" && !displayStatus.canRate));
   const paymentBreakdown = trip.paymentBreakdown;
 
   return (

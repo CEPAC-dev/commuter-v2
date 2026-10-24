@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { useState, InputHTMLAttributes } from 'react';
 import { Eye, EyeOff, Lock } from 'lucide-react';
 interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {

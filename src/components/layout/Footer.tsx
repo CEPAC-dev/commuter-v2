@@ -186,7 +186,7 @@ export default function Footer() {
           <p style={{ fontSize: 13, margin: 0, color: "rgba(255,255,255,0.4)" }}>
             {t("footer.copyright", { year: year.toString() })}
           </p>
-          
+
         </div>
       </div>
 

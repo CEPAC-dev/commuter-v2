@@ -1,31 +1,29 @@
-import { REGION_CODES } from "@/lib/config/regions";
-import { VEHICLES } from "@/lib/config/vehicles";
+import { REGIONS, REGION_CODES } from "@/lib/config/regions";
 import { normalizePlainText } from "@/lib/security/request";
 
 const numericFields = ["rate", "additional_rate", "buffer", "window", "capacity", "occupancy", "min_occupancy", "minimum_charge", "vehicle_type", "trip_type", "sortOrder"] as const;
 const integers = new Set(["capacity", "occupancy", "min_occupancy", "vehicle_type", "trip_type", "sortOrder"]);
 
-function cleanRegionConfig(input: unknown, fixedCapacity?: number) {
+function cleanRegionConfig(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { error: "Invalid region configuration." };
   const value = input as Record<string, unknown>;
   if (typeof value.regionCode !== "string" || !REGION_CODES.includes(value.regionCode as (typeof REGION_CODES)[number])) return { error: "Invalid region." };
   if (value.active !== undefined && typeof value.active !== "boolean") return { error: `Invalid active flag for ${value.regionCode}.` };
-  const config: Record<string, string | number | boolean> = { regionCode: value.regionCode, active: value.active !== false };
+  if (value.pricingConfigured !== undefined && typeof value.pricingConfigured !== "boolean") return { error: `Invalid pricing flag for ${value.regionCode}.` };
+  const regionCode = value.regionCode as (typeof REGION_CODES)[number];
+  const config: Record<string, string | number | boolean> = {
+    regionCode,
+    // Currency belongs to the region; never accept a client-supplied currency.
+    currencyCode: REGIONS[regionCode].currency.code,
+    pricingConfigured: value.pricingConfigured === true,
+    active: value.active !== false,
+  };
   for (const field of numericFields) {
     const number = Number(value[field]);
     if (!Number.isFinite(number) || number < 0) return { error: `Invalid ${field} for ${value.regionCode}.` };
     config[field] = integers.has(field) ? Math.round(number) : number;
   }
   if (Number(config.occupancy) > Number(config.capacity)) return { error: `Occupancy cannot exceed capacity for ${value.regionCode}.` };
-  if (
-    fixedCapacity !== undefined &&
-    (Number(config.capacity) !== fixedCapacity ||
-      Number(config.occupancy) !== fixedCapacity)
-  ) {
-    return {
-      error: `Capacity and occupancy are fixed at ${fixedCapacity} for this vehicle.`,
-    };
-  }
   return { config };
 }
 
@@ -60,8 +58,7 @@ export function cleanVehicle(
   }
   if (input.regionConfigs !== undefined) {
     if (!Array.isArray(input.regionConfigs)) return { error: "Invalid regional configurations." };
-    const fixedCapacity = VEHICLES[key]?.capacity;
-    const parsed: Array<{ config?: Record<string, string | number | boolean>; error?: string }> = input.regionConfigs.map((config) => cleanRegionConfig(config, fixedCapacity));
+    const parsed: Array<{ config?: Record<string, string | number | boolean>; error?: string }> = input.regionConfigs.map(cleanRegionConfig);
     const failed = parsed.find((result) => "error" in result);
     if (failed?.error) return { error: failed.error };
     const configs = parsed.map((result) => result.config as Record<string, string | number | boolean>);

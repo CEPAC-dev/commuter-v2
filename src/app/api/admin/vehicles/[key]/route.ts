@@ -13,19 +13,24 @@ function checkPassword(value: unknown) {
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ key: string }> }) {
-  const invalid = validateMutationRequest(req);
-  if (invalid) return invalid;
-  const auth = await adminAuth();
-  if (!auth.authorized) return auth.response;
-  const body = await req.json().catch(() => null);
-  if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
-  const { key } = await params;
-  const parsed = cleanVehicle(body as Record<string, unknown>, true, key);
-  if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const vehicle = await Vehicle.findOneAndUpdate({ key }, parsed.update, { returnDocument: "after", runValidators: true });
-  if (!vehicle) return NextResponse.json({ error: "Vehicle not found." }, { status: 404 });
-  invalidateVehiclesCache();
-  return NextResponse.json({ vehicle });
+  try {
+    const invalid = validateMutationRequest(req);
+    if (invalid) return invalid;
+    const auth = await adminAuth();
+    if (!auth.authorized) return auth.response;
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    const { key } = await params;
+    const parsed = cleanVehicle(body as Record<string, unknown>, true, key);
+    if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const vehicle = await Vehicle.findOneAndUpdate({ key }, parsed.update, { returnDocument: "after", runValidators: true });
+    if (!vehicle) return NextResponse.json({ error: "Vehicle not found." }, { status: 404 });
+    invalidateVehiclesCache();
+    return NextResponse.json({ vehicle });
+  } catch (error) {
+    console.error("Admin vehicle update failed:", error);
+    return NextResponse.json({ error: "Could not save vehicle." }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ key: string }> }) {

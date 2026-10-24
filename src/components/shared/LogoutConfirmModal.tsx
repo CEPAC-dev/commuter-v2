@@ -10,7 +10,7 @@ interface Props {
 
 export default function LogoutConfirmModal({ open, onConfirm, onCancel }: Props) {
   const { t } = useClientLocale();
-  
+
   if (!open) return null;
 
   return (

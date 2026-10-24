@@ -724,6 +724,7 @@ export const en = {
   "status.ongoing": "Ongoing",
   "status.nomatch": "No match found",
   "status.waiting_list": "Waiting list",
+  "status.private_ride_offer_pending": "Private-ride option awaiting your response",
   "status.approved_by_admin": "Approved by admin",
   "status.searching_for_ride": "Searching for a ride",
   "status.matched": "Matched",
@@ -743,6 +744,16 @@ export const en = {
   "history.filter_rejected": "Rejected",
   "history.filter_expired": "Expired",
   "request_status.waiting_for_approval": "Waiting for admin approval",
+  "private_ride_offer.review": "Review private-ride offer",
+  "private_ride_offer.title": "A private-ride option is available",
+  "private_ride_offer.description":
+    "We couldn't find available passengers in your area for this shared trip. Changing to a {vehicleType} will update the fare from {oldPrice} to {newPrice}. Would you like to accept the new fare or cancel this trip?",
+  "private_ride_offer.accept": "Accept new fare",
+  "private_ride_offer.cancel_trip": "Cancel this trip",
+  "private_ride_offer.close": "Not now",
+  "private_ride_offer.accept_success": "Your trip is now private. Continue to payment to confirm it.",
+  "private_ride_offer.cancel_success": "The trip has been cancelled.",
+  "private_ride_offer.error": "Could not update the trip. Please try again.",
   "request_status.waiting_payment_explanation":
     "Payment will be available only after your trip is approved.",
   "request_status.approved_pay_now": "Approved — pay to confirm",
@@ -1345,6 +1356,15 @@ export const en = {
   "admin.transactions.description_contains": "Description contains",
   "admin.waiting_list.approve": "Approve",
   "admin.waiting_list.reject": "Reject",
+  "admin.waiting_list.change_to_private": "Change to private ride",
+  "admin.waiting_list.confirm_private_offer_title": "Offer a private ride instead?",
+  "admin.waiting_list.confirm_private_offer_description":
+    "The passenger will be notified that no passengers are currently available in their area and offered the option to switch this trip to a private ride or cancel it.",
+  "admin.waiting_list.private_offer_success": "The private-ride option was sent to the passenger.",
+  "admin.waiting_list.private_offer_pricing_error":
+    "Private-ride pricing is not configured for this trip's region.",
+  "admin.waiting_list.private_offer_pending_error":
+    "Wait for the passenger to respond to the private-ride offer before reviewing this request.",
   "admin.waiting_list.confirm_approve_title": "Approve this request?",
   "admin.waiting_list.confirm_approve_description": "The passenger will be notified and can continue to payment.",
   "admin.waiting_list.confirm_reject_title": "Reject this request?",

@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
         .lean(),
       Trip.find({ ...query, requestId: null })
         .select(
-          "_id userId requestId date pickup dropoff pickupTime arrivalTime vehicleType numberOfPassengers priceEgp appliedPromoCode note createdAt",
+          "_id userId requestId date pickup dropoff pickupTime arrivalTime vehicleType numberOfPassengers priceEgp appliedPromoCode note createdAt status",
         )
         .populate({ path: "userId", select: WAITING_LIST_PASSENGER_SELECT })
         .sort({ createdAt: 1, _id: 1 })
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
         status: { $ne: "cancelled" },
       })
         .select(
-          "_id requestId date pickup dropoff pickupTime arrivalTime vehicleType numberOfPassengers preferedGender priceEgp appliedPromoCode",
+          "_id requestId date pickup dropoff pickupTime arrivalTime vehicleType numberOfPassengers preferedGender priceEgp appliedPromoCode status",
         )
         .sort({ date: 1, cycleIndex: 1 })
         .lean()

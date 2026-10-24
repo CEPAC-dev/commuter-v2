@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import mongoose, { Types } from "mongoose";
 import ExcelJS from "exceljs";
 import { connectDB } from "@/lib/db/mongoose";

@@ -34,6 +34,7 @@ type WaitingListTrip = {
   pickupTime: string;
   arrivalTime: string;
   vehicleType: string;
+  status: string;
   numberOfPassengers: number;
   preferedGender: "male" | "female" | null;
   fare: number;
@@ -66,6 +67,10 @@ type ListResponse = {
 type DialogState = {
   action: "approve" | "reject";
   item: WaitingListItem;
+} | {
+  action: "offer_private";
+  item: WaitingListItem;
+  trip: WaitingListTrip;
 } | null;
 
 function displayValue(value: string | undefined | null) {
@@ -235,6 +240,11 @@ export default function WaitingListClient() {
     setDialog({ action, item });
   }
 
+  function openPrivateRideOfferDialog(item: WaitingListItem, trip: WaitingListTrip) {
+    setReason("");
+    setDialog({ action: "offer_private", item, trip });
+  }
+
   async function submitDecision() {
     if (!dialog) return;
     const { action, item } = dialog;
@@ -248,6 +258,7 @@ export default function WaitingListClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action,
+          ...(action === "offer_private" ? { tripId: dialog.trip.id } : {}),
           ...(action === "reject" ? { reason: reason.trim() } : {}),
         }),
       });
@@ -257,19 +268,30 @@ export default function WaitingListClient() {
       } | null;
       if (response.ok) {
         toast.success(
-          action === "approve"
-            ? t(item.kind === "trip" ? "admin.waiting_list.trip_approved_success" : "admin.waiting_list.approved_success")
-            : t(item.kind === "trip" ? "admin.waiting_list.trip_rejected_success" : "admin.waiting_list.rejected_success"),
+          action === "offer_private"
+            ? t("admin.waiting_list.private_offer_success")
+            : action === "approve"
+              ? t(item.kind === "trip" ? "admin.waiting_list.trip_approved_success" : "admin.waiting_list.approved_success")
+              : t(item.kind === "trip" ? "admin.waiting_list.trip_rejected_success" : "admin.waiting_list.rejected_success"),
         );
         setDialog(null);
         setReason("");
+        if (action === "offer_private" && item.kind === "request") {
+          await fetchRequests(page);
+          window.dispatchEvent(new Event("waiting-list-updated"));
+          return;
+        }
         setItems((current) => current.filter((entry) => entry.id !== item.id));
         window.dispatchEvent(new Event("waiting-list-updated"));
         return;
       }
 
       const message =
-        response.status === 409 && payload?.errorCode === "WAITING_LIST_TRIP_IN_PAST"
+        payload?.errorCode === "PRIVATE_RIDE_PRICING_UNAVAILABLE"
+          ? t("admin.waiting_list.private_offer_pricing_error")
+          : payload?.errorCode === "PRIVATE_RIDE_RESPONSE_PENDING"
+            ? t("admin.waiting_list.private_offer_pending_error")
+            : response.status === 409 && payload?.errorCode === "WAITING_LIST_TRIP_IN_PAST"
           ? t(item.kind === "trip" ? "admin.waiting_list.trip_past_error" : "admin.waiting_list.past_error")
           : response.status === 409
             ? t(item.kind === "trip" ? "admin.waiting_list.trip_conflict" : "admin.waiting_list.conflict")
@@ -500,6 +522,17 @@ export default function WaitingListClient() {
                               {isPerDay("preferedGender") && <span><b>{t("admin.waiting_list.gender_preference")}:</b> {trip.preferedGender ? t(`gender.${trip.preferedGender}`) : t("admin.waiting_list.no_gender_preference")}</span>}
                             </div>
                           )}
+                          {["taxi_shared", "shared_car"].includes(trip.vehicleType) &&
+                          trip.status !== "private_ride_offered" ? (
+                            <AdminButton
+                              variant="secondary"
+                              size="md"
+                              disabled={isBusy}
+                              onClick={() => openPrivateRideOfferDialog(item, trip)}
+                            >
+                              {t("admin.waiting_list.change_to_private")}
+                            </AdminButton>
+                          ) : null}
                         </div>
                       );
                     })}
@@ -552,8 +585,8 @@ export default function WaitingListClient() {
           }}
         >
           <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="waiting-list-dialog-title" className="waiting-list-dialog" dir={dir}>
-            <h2 id="waiting-list-dialog-title">{t(dialog.action === "approve" ? "admin.waiting_list.confirm_approve_title" : "admin.waiting_list.confirm_reject_title")}</h2>
-            <p>{t(dialog.action === "approve" ? "admin.waiting_list.confirm_approve_description" : dialog.item.kind === "trip" ? "admin.waiting_list.trip_reject_description" : "admin.waiting_list.confirm_reject_description")}</p>
+            <h2 id="waiting-list-dialog-title">{t(dialog.action === "offer_private" ? "admin.waiting_list.confirm_private_offer_title" : dialog.action === "approve" ? "admin.waiting_list.confirm_approve_title" : "admin.waiting_list.confirm_reject_title")}</h2>
+            <p>{t(dialog.action === "offer_private" ? "admin.waiting_list.confirm_private_offer_description" : dialog.action === "approve" ? "admin.waiting_list.confirm_approve_description" : dialog.item.kind === "trip" ? "admin.waiting_list.trip_reject_description" : "admin.waiting_list.confirm_reject_description")}</p>
             {dialog.action === "reject" ? (
               <label style={{ display: "grid", gap: 6 }}>
                 <span>{t("admin.waiting_list.reason_label")}</span>
@@ -565,7 +598,7 @@ export default function WaitingListClient() {
               <AdminButton variant="ghost" disabled={Boolean(busyId)} onClick={() => { setDialog(null); setReason(""); }}>
                 {t("admin.waiting_list.cancel")}
               </AdminButton>
-              <AdminButton variant={dialog.action === "approve" ? "primary" : "destructive"} disabled={Boolean(busyId) || (dialog.action === "reject" && !reason.trim())} onClick={() => void submitDecision()}>
+              <AdminButton variant={dialog.action === "reject" ? "destructive" : "primary"} disabled={Boolean(busyId) || (dialog.action === "reject" && !reason.trim())} onClick={() => void submitDecision()}>
                 {busyId ? <Loader2 size={15} className="animate-spin" /> : null}
                 {t("admin.waiting_list.confirm")}
               </AdminButton>

@@ -4,12 +4,18 @@ import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
+import { Vehicle } from "@/models/Vehicle";
 import { getCairoNowParts } from "@/lib/cancellationPolicy";
 import { createNotification } from "@/lib/notifications/createNotification";
+import {
+  privateRideCounterpart,
+  privateRidePrice,
+} from "@/lib/privateRideOffer";
 import {
   releasePromoCodeUsageForTrip,
   releasePromoForRequest,
 } from "@/lib/promoCode";
+import { isRegionKey, normalizeRegion } from "@/lib/config/regions";
 import {
   buildWaitingListApprovedNotification,
   buildWaitingListRejectedNotification,
@@ -23,6 +29,208 @@ import {
 
 const WAITING_LIST_CONFLICT = "WAITING_LIST_CONFLICT";
 const WAITING_LIST_TRIP_CONFLICT = "WAITING_LIST_TRIP_CONFLICT";
+const PRIVATE_RIDE_OFFER_CONFLICT = "PRIVATE_RIDE_OFFER_CONFLICT";
+const PRIVATE_RIDE_RESPONSE_PENDING = "PRIVATE_RIDE_RESPONSE_PENDING";
+
+async function createPrivateRideOffer(
+  requestId: string,
+  tripId: string,
+  adminId: string,
+) {
+  if (!Types.ObjectId.isValid(tripId)) {
+    return NextResponse.json({ error: "Invalid trip id." }, { status: 400 });
+  }
+
+  const tripObjectId = new Types.ObjectId(tripId);
+  const trip = await Trip.findById(tripObjectId)
+    .select("_id userId requestId status date pickupTime vehicleType distanceKm regionCode")
+    .lean<{
+      _id: Types.ObjectId;
+      userId: Types.ObjectId;
+      requestId?: Types.ObjectId | null;
+      status: string;
+      date: string;
+      pickupTime: string;
+      vehicleType: string;
+      distanceKm: number;
+      regionCode?: string | null;
+    } | null>();
+
+  if (!trip) {
+    return NextResponse.json({ error: "Waiting-list trip not found." }, { status: 404 });
+  }
+  if (String(trip.requestId ?? trip._id) !== requestId) {
+    return NextResponse.json({ error: "Trip does not belong to this request." }, { status: 404 });
+  }
+
+  let regionCode = isRegionKey(trip.regionCode)
+    ? normalizeRegion(trip.regionCode)
+    : null;
+  if (!regionCode && trip.requestId) {
+    const parentRequest = await Request.findById(trip.requestId)
+      .select("regionCode")
+      .lean<{ regionCode?: string | null } | null>();
+    if (isRegionKey(parentRequest?.regionCode)) {
+      regionCode = normalizeRegion(parentRequest.regionCode);
+    }
+  }
+
+  const privateVehicleType = privateRideCounterpart(trip.vehicleType);
+  if (!privateVehicleType) {
+    return NextResponse.json(
+      {
+        errorCode: "PRIVATE_RIDE_CONVERSION_UNAVAILABLE",
+        error: "This shared vehicle has no private equivalent.",
+      },
+      { status: 409 },
+    );
+  }
+
+  if (
+    hasPastWaitingListTrip(
+      [{ date: trip.date, pickupTime: trip.pickupTime }],
+      getCairoNowParts(),
+    )
+  ) {
+    return NextResponse.json(
+      {
+        errorCode: "WAITING_LIST_TRIP_IN_PAST",
+        error: "This trip's pickup time has already passed.",
+      },
+      { status: 409 },
+    );
+  }
+
+  const vehicle = await Vehicle.findOne({ key: privateVehicleType })
+    .select("active regionConfigs")
+    .lean<{
+      active?: boolean;
+      regionConfigs?: {
+        regionCode: string;
+        rate: number;
+        active: boolean;
+        pricingConfigured: boolean;
+      }[];
+    } | null>();
+  const regionPricing = vehicle?.regionConfigs?.find(
+    (config) => config.regionCode === regionCode,
+  );
+  if (
+    !vehicle ||
+    vehicle.active === false ||
+    !regionCode ||
+    !regionPricing ||
+    !regionPricing.active ||
+    !regionPricing.pricingConfigured ||
+    !Number.isFinite(regionPricing.rate)
+  ) {
+    return NextResponse.json(
+      {
+        errorCode: "PRIVATE_RIDE_PRICING_UNAVAILABLE",
+        error: "Private-ride pricing is not configured for this trip's region.",
+      },
+      { status: 409 },
+    );
+  }
+
+  const priceEgp = privateRidePrice(trip.distanceKm, regionPricing.rate);
+  const offeredAt = new Date();
+  const dbSession = await mongoose.startSession();
+
+  try {
+    await dbSession.withTransaction(async () => {
+      const expectedStatus = trip.requestId ? "pending_payment" : "waiting_list";
+      if (trip.requestId) {
+        const parentLock = await Request.updateOne(
+          { _id: trip.requestId, status: "waiting_list" },
+          { $inc: { __v: 1 } },
+          { session: dbSession },
+        );
+        if (parentLock.matchedCount !== 1) {
+          throw new Error(PRIVATE_RIDE_OFFER_CONFLICT);
+        }
+      }
+
+      const offeredTrip = await Trip.findOneAndUpdate(
+        {
+          _id: tripObjectId,
+          userId: trip.userId,
+          requestId: trip.requestId ?? null,
+          status: expectedStatus,
+        },
+        {
+          $set: {
+            status: "private_ride_offered",
+            privateRideOffer: {
+              vehicleType: privateVehicleType,
+              priceEgp,
+              offeredBy: new Types.ObjectId(adminId),
+              offeredAt,
+              respondedAt: null,
+              decision: null,
+            },
+          },
+        },
+        { new: true, session: dbSession },
+      ).lean();
+
+      if (!offeredTrip) throw new Error(PRIVATE_RIDE_OFFER_CONFLICT);
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === PRIVATE_RIDE_OFFER_CONFLICT) {
+      return NextResponse.json(
+        {
+          errorCode: "WAITING_LIST_TRIP_CONFLICT",
+          error: "This trip has already been reviewed.",
+        },
+        { status: 409 },
+      );
+    }
+    console.error(
+      `[Admin waiting list] Failed to offer a private ride for trip ${tripId}:`,
+      error,
+    );
+    return NextResponse.json(
+      { error: "Could not create the private-ride offer." },
+      { status: 500 },
+    );
+  } finally {
+    await dbSession.endSession();
+  }
+
+  try {
+    await createNotification({
+      userId: String(trip.userId),
+      type: "private_ride_offer",
+      title: "A private-ride option is available",
+      body: `We couldn't find available passengers in your area for this shared trip. You can switch to a private ride for ${priceEgp} EGP or cancel the trip.`,
+      titleAr: "يتوفر خيار رحلة خاصة",
+      bodyAr: `لم نتمكن من العثور على ركاب متاحين في منطقتك لهذه الرحلة المشتركة. يمكنك تحويلها إلى رحلة خاصة مقابل ${priceEgp} جنيه أو إلغاء الرحلة.`,
+      data: {
+        bookingId: String(trip.requestId ?? trip._id),
+        tripId,
+        priceEgp,
+        vehicleType: privateVehicleType,
+        linkUrl: `/my-trips/${tripId}`,
+        linkLabel: "Review private-ride option",
+      },
+    });
+  } catch (error) {
+    console.error(
+      `[Admin waiting list] Private-ride offer notification failed for trip ${tripId}:`,
+      error,
+    );
+  }
+
+  return NextResponse.json({
+    data: {
+      tripId,
+      status: "private_ride_offered",
+      vehicleType: privateVehicleType,
+      priceEgp,
+    },
+  });
+}
 
 type ReviewedTrip = {
   _id: Types.ObjectId;
@@ -62,6 +270,17 @@ export async function PATCH(
   }
 
   await connectDB();
+  if (parsed.value.action === "offer_private") {
+    const tripId = parsed.value.tripId;
+    if (!tripId) {
+      return NextResponse.json(
+        { error: "tripId is required for a private-ride offer." },
+        { status: 400 },
+      );
+    }
+    return createPrivateRideOffer(id, tripId, auth.userId);
+  }
+
   const tripId = new Types.ObjectId(id);
   const standaloneTrip = await Trip.findOne({ _id: tripId, requestId: null })
     .select("_id userId status date pickupTime")
@@ -198,6 +417,21 @@ export async function PATCH(
       { status: 409 },
     );
   }
+  if (
+    await Trip.exists({
+      requestId: new Types.ObjectId(id),
+      status: "private_ride_offered",
+    })
+  ) {
+    return NextResponse.json(
+      {
+        errorCode: "PRIVATE_RIDE_RESPONSE_PENDING",
+        error:
+          "Wait for the passenger to respond to the private-ride offer before reviewing this request.",
+      },
+      { status: 409 },
+    );
+  }
 
   if (parsed.value.action === "approve") {
     const trips = await Trip.find({ requestId: new Types.ObjectId(id) })
@@ -223,6 +457,15 @@ export async function PATCH(
 
   try {
     await dbSession.withTransaction(async () => {
+      if (
+        await Trip.exists({
+          requestId: new Types.ObjectId(id),
+          status: "private_ride_offered",
+        }).session(dbSession)
+      ) {
+        throw new Error(PRIVATE_RIDE_RESPONSE_PENDING);
+      }
+
       reviewResult.request = await Request.findOneAndUpdate(
         buildWaitingListTransitionFilter(new Types.ObjectId(id)),
         buildWaitingListReviewUpdate(
@@ -248,6 +491,19 @@ export async function PATCH(
       await releasePromoForRequest(id, { session: dbSession });
     });
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === PRIVATE_RIDE_RESPONSE_PENDING
+    ) {
+      return NextResponse.json(
+        {
+          errorCode: "PRIVATE_RIDE_RESPONSE_PENDING",
+          error:
+            "Wait for the passenger to respond to the private-ride offer before reviewing this request.",
+        },
+        { status: 409 },
+      );
+    }
     if (error instanceof Error && error.message === WAITING_LIST_CONFLICT) {
       const current = await Request.findById(id).select("status").lean<{ status?: string }>();
       return NextResponse.json(

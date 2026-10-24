@@ -52,6 +52,8 @@ export function getTripTab({
   const requestStatus = parent.status;
   const pastPickup = isPastPickup(trip, now);
 
+  if (childStatus === "private_ride_offered") return "pending";
+
   if (trip.isStandalone) {
     if (["pending_payment", "waiting_list"].includes(childStatus ?? "")) {
       return "pending";

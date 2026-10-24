@@ -80,6 +80,26 @@ const AssignedDriverSchema = new Schema(
   { _id: false },
 );
 
+const PrivateRideOfferSchema = new Schema(
+  {
+    vehicleType: {
+      type: String,
+      required: true,
+      enum: ["private_car", "taxi_private"],
+    },
+    priceEgp: { type: Number, required: true, min: 0 },
+    offeredBy: { type: Types.ObjectId, ref: "User", required: true },
+    offeredAt: { type: Date, required: true },
+    respondedAt: { type: Date, required: false, default: null },
+    decision: {
+      type: String,
+      required: false,
+      enum: ["accepted", "cancelled"],
+    },
+  },
+  { _id: false },
+);
+
 const TripSchema = new Schema(
   {
     tripNumber: {
@@ -187,6 +207,11 @@ const TripSchema = new Schema(
       maxlength: 500,
       default: null,
     },
+    privateRideOffer: {
+      type: PrivateRideOfferSchema,
+      required: false,
+      default: null,
+    },
     kashierSessionId: { type: String, required: false },
     kashierOrderId: { type: String, required: false },
     kashierTransactionIds: {
@@ -230,6 +255,7 @@ const TripSchema = new Schema(
       enum: [
         "pending_payment",
         "waiting_list",
+        "private_ride_offered",
         "approved",
         "rejected",
         "submitted",
@@ -345,5 +371,35 @@ if (existingTripModel && !existingTripModel.schema.path("preferedGender")) {
   existingTripModel.schema.add({
     preferedGender: TripSchema.obj.preferedGender,
   });
+}
+if (existingTripModel && !existingTripModel.schema.path("privateRideOffer")) {
+  existingTripModel.schema.add({
+    privateRideOffer: TripSchema.obj.privateRideOffer,
+  });
+}
+if (existingTripModel) {
+  const statusPath = existingTripModel.schema.path("status");
+  if (statusPath) {
+    statusPath.validators = statusPath.validators.filter(
+      (validator: { type?: string }) => validator.type !== "enum",
+    );
+    statusPath.enum(
+      "pending_payment",
+      "waiting_list",
+      "private_ride_offered",
+      "approved",
+      "rejected",
+      "submitted",
+      "matched",
+      "nomatch",
+      "confirmed",
+      "active",
+      "completed",
+      "no_show",
+      "refunded",
+      "cancelled",
+      "time_out",
+    );
+  }
 }
 export const Trip = existingTripModel || model("Trip", TripSchema);

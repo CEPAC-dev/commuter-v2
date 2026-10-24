@@ -718,6 +718,7 @@ export const ar: Record<MessageKey, string> = {
   "status.ongoing": "جارية",
   "status.nomatch": "لم يتم إيجاد سائق",
   "status.waiting_list": "قائمة الانتظار",
+  "status.private_ride_offer_pending": "خيار الرحلة الخاصة بانتظار ردك",
   "status.approved_by_admin": "تمت الموافقة من الإدارة",
   "status.searching_for_ride": "بندور على سائق",
   "status.matched": "تم العثور على سائق",
@@ -737,6 +738,16 @@ export const ar: Record<MessageKey, string> = {
   "history.filter_rejected": "مرفوضة",
   "history.filter_expired": "منتهية",
   "request_status.waiting_for_approval": "بانتظار موافقة الإدارة",
+  "private_ride_offer.review": "مراجعة عرض الرحلة الخاصة",
+  "private_ride_offer.title": "يتوفر خيار رحلة خاصة",
+  "private_ride_offer.description":
+    "لم نتمكن من العثور على ركاب متاحين في منطقتك لهذه الرحلة المشتركة. تحويلها إلى {vehicleType} سيغيّر السعر من {oldPrice} إلى {newPrice}. هل تقبل السعر الجديد أم تريد إلغاء الرحلة؟",
+  "private_ride_offer.accept": "قبول السعر الجديد",
+  "private_ride_offer.cancel_trip": "إلغاء الرحلة",
+  "private_ride_offer.close": "ليس الآن",
+  "private_ride_offer.accept_success": "أصبحت رحلتك خاصة. أكمل الدفع لتأكيدها.",
+  "private_ride_offer.cancel_success": "تم إلغاء الرحلة.",
+  "private_ride_offer.error": "تعذر تحديث الرحلة. حاول مرة أخرى.",
   "request_status.waiting_payment_explanation":
     "هيكون الدفع متاح بعد الموافقة على الرحلة.",
   "request_status.approved_pay_now": "تمت الموافقة، أكّد رحلتك بالدفع",
@@ -1332,6 +1343,15 @@ export const ar: Record<MessageKey, string> = {
   "admin.transactions.description_contains": "الوصف يحتوي على",
   "admin.waiting_list.approve": "موافقة",
   "admin.waiting_list.reject": "رفض",
+  "admin.waiting_list.change_to_private": "تغيير إلى رحلة خاصة",
+  "admin.waiting_list.confirm_private_offer_title": "عرض رحلة خاصة بدلاً منها؟",
+  "admin.waiting_list.confirm_private_offer_description":
+    "سيتم إخطار الراكب بعدم توفر ركاب في منطقته، وسيُعرض عليه تحويل الرحلة إلى خاصة أو إلغاؤها.",
+  "admin.waiting_list.private_offer_success": "تم إرسال خيار الرحلة الخاصة إلى الراكب.",
+  "admin.waiting_list.private_offer_pricing_error":
+    "تسعير الرحلة الخاصة غير مضبوط لمنطقة هذه الرحلة.",
+  "admin.waiting_list.private_offer_pending_error":
+    "انتظر رد الراكب على عرض الرحلة الخاصة قبل مراجعة هذا الطلب.",
   "admin.waiting_list.confirm_approve_title": "توافق على الطلب؟",
   "admin.waiting_list.confirm_approve_description": "الراكب هيتبلغ ويقدر يكمل الدفع.",
   "admin.waiting_list.confirm_reject_title": "ترفض الطلب؟",

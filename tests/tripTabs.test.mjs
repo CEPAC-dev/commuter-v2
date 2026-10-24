@@ -37,6 +37,24 @@ test("waiting-list trip is pending after the creation-time toggle decision", () 
   );
 });
 
+test("private-ride offers remain visible in Pending for standalone and grouped trips", () => {
+  for (const isStandalone of [true, false]) {
+    assert.equal(
+      getTripTab({
+        request: { status: "waiting_list" },
+        trip: {
+          isStandalone,
+          status: "private_ride_offered",
+          date: "2026-10-05",
+          pickupTime: "09:00",
+        },
+        now,
+      }),
+      "pending",
+    );
+  }
+});
+
 test("approved request with a past pickup belongs to history", () => {
   assert.equal(
     getTripTab({
@@ -114,6 +132,7 @@ test("standalone Trip statuses map directly to passenger tabs", () => {
   const expected = {
     pending_payment: "pending",
     waiting_list: "pending",
+    private_ride_offered: "pending",
     approved: "pending",
     submitted: "upcoming",
     matched: "upcoming",
