@@ -7,11 +7,7 @@ import {
   type CurrencyCode,
   type RegionCode,
 } from "@/lib/config/regions";
-import {
-  getVehiclePassengerCapacity,
-  VEHICLES,
-  type VehicleRegionConfig,
-} from "@/lib/config/vehicles";
+import type { VehicleRegionConfig } from "@/lib/config/vehicles";
 
 type Vehicle = {
   key: string;
@@ -115,18 +111,12 @@ function normalizeVehicle(vehicle: VehicleResponse): Vehicle {
           sortOrder: vehicle.sortOrder ?? 0,
         } satisfies VehicleRegionConfig;
       });
-  const fixedCapacity = VEHICLES[vehicle.key]
-    ? getVehiclePassengerCapacity(vehicle.key)
-    : undefined;
   return {
     key: vehicle.key,
     label: vehicle.label,
     ride: vehicle.ride,
     regionConfigs: regionConfigs.map((config) => ({
       ...config,
-      ...(fixedCapacity !== undefined
-        ? { capacity: fixedCapacity, occupancy: fixedCapacity }
-        : {}),
       active: config.active !== false,
     })),
   };
@@ -189,25 +179,11 @@ export default function VehiclesManager() {
   ) {
     setDraft((current) => {
       if (!current) return current;
-      const fixedCapacity = VEHICLES[current.key]
-        ? getVehiclePassengerCapacity(current.key)
-        : undefined;
       return {
         ...current,
         regionConfigs: current.regionConfigs.map((config) =>
           config.regionCode === regionCode
-            ? {
-                ...config,
-                [field]:
-                  fixedCapacity !== undefined &&
-                  (field === "capacity" || field === "occupancy")
-                    ? fixedCapacity
-                    : value,
-                ...(fixedCapacity !== undefined &&
-                (field === "capacity" || field === "occupancy")
-                  ? { capacity: fixedCapacity, occupancy: fixedCapacity }
-                  : {}),
-              }
+            ? { ...config, [field]: value }
             : config,
         ),
       };
@@ -220,6 +196,23 @@ export default function VehiclesManager() {
             ...current,
             regionConfigs: current.regionConfigs.map((config) =>
               config.regionCode === regionCode ? { ...config, active } : config,
+            ),
+          }
+        : current,
+    );
+  }
+  function setRegionPricingConfigured(
+    regionCode: string,
+    pricingConfigured: boolean,
+  ) {
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            regionConfigs: current.regionConfigs.map((config) =>
+              config.regionCode === regionCode
+                ? { ...config, pricingConfigured }
+                : config,
             ),
           }
         : current,
@@ -240,7 +233,7 @@ export default function VehiclesManager() {
           body: JSON.stringify(draft),
         },
       );
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok)
         throw new Error(data.error ?? "Could not save vehicle.");
       await load();
@@ -484,7 +477,6 @@ export default function VehiclesManager() {
                 const region = REGION_LIST.find(
                   (item) => item.code === config.regionCode,
                 )!;
-                const fixedCapacity = Boolean(VEHICLES[draft.key]);
                 return (
                   <details
                     key={config.regionCode}
@@ -515,6 +507,19 @@ export default function VehiclesManager() {
                           />
                           <span>{config.active ? "Active" : "Inactive"}</span>
                         </label>
+                        <label className="vehicles-switch">
+                          <input
+                            type="checkbox"
+                            checked={config.pricingConfigured}
+                            onChange={(event) =>
+                              setRegionPricingConfigured(
+                                config.regionCode,
+                                event.target.checked,
+                              )
+                            }
+                          />
+                          <span>Pricing configured</span>
+                        </label>
                         <ChevronDown size={18} />
                       </span>
                     </summary>
@@ -528,11 +533,7 @@ export default function VehiclesManager() {
                             field === "additional_rate" ||
                             field === "minimum_charge"
                               ? region.currency.code
-                              : fixedCapacity &&
-                                  (field === "capacity" ||
-                                    field === "occupancy")
-                                ? "Fixed by vehicle type"
-                                : undefined
+                              : undefined
                           }
                         >
                           <input
@@ -540,10 +541,6 @@ export default function VehiclesManager() {
                             min="0"
                             step="any"
                             value={config[field]}
-                            disabled={
-                              fixedCapacity &&
-                              (field === "capacity" || field === "occupancy")
-                            }
                             onChange={(event) =>
                               updateConfig(
                                 config.regionCode,

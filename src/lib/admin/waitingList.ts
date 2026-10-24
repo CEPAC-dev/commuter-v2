@@ -2,10 +2,11 @@ import { hasPastPickup, type CairoNowParts } from "../time/cairoTime.ts";
 
 export const WAITING_LIST_PASSENGER_SELECT = "name phone email";
 
-export type WaitingListAction = "approve" | "reject";
+export type WaitingListAction = "approve" | "reject" | "offer_private";
 
 export type WaitingListActionInput = {
   action: WaitingListAction;
+  tripId?: string;
   reason?: string;
 };
 
@@ -67,8 +68,32 @@ export function validateWaitingListAction(
   }
 
   const input = body as Record<string, unknown>;
-  if (input.action !== "approve" && input.action !== "reject") {
-    return { ok: false, error: "action must be approve or reject." };
+  if (
+    input.action !== "approve" &&
+    input.action !== "reject" &&
+    input.action !== "offer_private"
+  ) {
+    return {
+      ok: false,
+      error: "action must be approve, reject, or offer_private.",
+    };
+  }
+
+  if (input.action === "offer_private") {
+    if (typeof input.tripId !== "string" || !input.tripId.trim()) {
+      return { ok: false, error: "tripId is required for a private-ride offer." };
+    }
+    if (input.reason !== undefined) {
+      return { ok: false, error: "reason is not accepted for a private-ride offer." };
+    }
+    return {
+      ok: true,
+      value: { action: "offer_private", tripId: input.tripId.trim() },
+    };
+  }
+
+  if (input.tripId !== undefined) {
+    return { ok: false, error: "tripId is only accepted for a private-ride offer." };
   }
 
   if (input.action === "approve" && input.reason !== undefined) {
@@ -192,6 +217,7 @@ export type WaitingListTripRecord = {
   pickupTime: string;
   arrivalTime: string;
   vehicleType: string;
+  status?: string;
   preferedGender?: string | null;
   numberOfPassengers: number;
   priceEgp: number;
@@ -356,6 +382,7 @@ export function mapWaitingListRequest(input: {
       pickupTime: trip.pickupTime,
       arrivalTime: trip.arrivalTime,
       vehicleType: trip.vehicleType,
+      status: trip.status ?? "pending_payment",
       numberOfPassengers: trip.numberOfPassengers,
       preferedGender: trip.preferedGender ?? null,
       fare: trip.priceEgp,
@@ -395,6 +422,7 @@ export function mapWaitingListTrip(input: {
         pickupTime: input.trip.pickupTime,
         arrivalTime: input.trip.arrivalTime,
         vehicleType: input.trip.vehicleType,
+        status: input.trip.status ?? "waiting_list",
         numberOfPassengers: input.trip.numberOfPassengers,
         fare: input.trip.priceEgp,
       },

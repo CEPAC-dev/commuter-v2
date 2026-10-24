@@ -103,6 +103,8 @@ export function getDisplayStatus({
     const refundOptions = { showRefundBadge };
 
     switch (status) {
+      case "private_ride_offered":
+        return result("status.private_ride_offer_pending", "warning");
       case "waiting_list":
         return result("request_status.waiting_for_approval", "warning", {
           canCancel: cancellation.kind !== "blocked",
@@ -228,6 +230,8 @@ export function getDisplayStatus({
 
   const refundOptions = { showRefundBadge };
   switch (child.status) {
+    case "private_ride_offered":
+      return result("status.private_ride_offer_pending", "warning");
     case "pending_payment":
       if (parent.status === "waiting_list") {
         return result("status.waiting_list", "warning", refundOptions);

@@ -17,6 +17,7 @@ import {
   formatTimeRange,
   formatHourMinuteRange,
   formatDistanceKm,
+  formatEgp,
   formatMinutes,
   toArabicDigits,
 } from "@/lib/i18n";
@@ -1627,7 +1628,7 @@ export default function TripCycle({
                   marginLeft: "auto",
                 }}
               >
-                {displayedPrice} EGP
+                {formatEgp(locale, displayedPrice, regionCode)}
               </span>
             )}
             {canRemove && (

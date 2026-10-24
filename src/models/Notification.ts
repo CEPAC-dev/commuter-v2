@@ -19,6 +19,7 @@ const NOTIFICATION_TYPES = [
   "waiting_list_created",
   "waiting_list_approved",
   "waiting_list_rejected",
+  "private_ride_offer",
   "station_suggestion_submitted",
   "station_suggestion_reviewed",
   "ride_incident",

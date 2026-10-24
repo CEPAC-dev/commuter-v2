@@ -163,6 +163,9 @@ export function buildTripTabView<T extends TripTabRow>(
     ...Array.from(pendingByRequest)
       .filter(([requestId]) => !unpaidRequestIds.has(requestId))
       .flatMap(([, trips]) => trips),
+    ...Array.from(pendingByRequest.values()).flatMap((trips) =>
+      trips.filter((trip) => trip.status === "private_ride_offered"),
+    ),
     ...pendingStandalone,
   ].map((trip) => ({
     kind: "trip" as const,

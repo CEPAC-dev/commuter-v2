@@ -26,6 +26,7 @@ export type BookingStatus =
 export type TripStatus =
   | "pending_payment"
   | "waiting_list"
+  | "private_ride_offered"
   | "approved"
   | "rejected"
   | "submitted"
@@ -124,6 +125,10 @@ export interface TripListRow {
   date: string;
   paymentStatus: PaymentStatus;
   status: TripStatus;
+  privateRideOffer?: {
+    vehicleType: "private_car" | "taxi_private";
+    priceEgp: number;
+  } | null;
   vehicleType: string;
   pickupAddress: string;
   dropoffAddress: string;

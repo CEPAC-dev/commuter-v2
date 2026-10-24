@@ -86,7 +86,7 @@ export default function AdminSignupPage() {
           <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--color-muted)", textDecoration: "none", fontSize: 14 }}>
             <ArrowLeft size={16} /> {t("auth.back_to_home")}
           </Link>
-          
+
           {/* Language toggle button */}
           <button
             onClick={toggleLanguage}

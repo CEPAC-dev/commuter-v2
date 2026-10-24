@@ -5,13 +5,13 @@ export default function MyTripsLoading() {
       <div className="loading-heading" />
       <div className="loading-hero">
         <div className="loading-copy">
-          <i /> 
+          <i />
           <i />
           <i />
           <i />
         </div>
-        <i className="loading-action" />  
-      </div>  
+        <i className="loading-action" />
+      </div>
       <div className="loading-tabs"><i /><i /><i /><i /></div>
       <div className="loading-layout">
         <div className="loading-list">

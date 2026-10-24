@@ -2,7 +2,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { getTripPassengerCount, isVehiclePassengerCountAllowed } from "@/lib/rideCapacity";
+import {
+  getTripPassengerCount,
+  isVehiclePassengerCountAllowed,
+} from "@/lib/rideCapacity";
 import {
   Plus,
   Eye,
@@ -516,27 +519,27 @@ export default function CreateClient({
                 max: Number(data.max) || 1,
               })
             : data.error === "TRIP_SPACING_CONFLICT" &&
-            typeof data.conflict?.date === "string" &&
-            typeof data.conflict?.arrivalTime === "string" &&
-            typeof data.conflict?.window?.start === "string" &&
-            typeof data.conflict?.window?.end === "string"
-            ? formatSpacingConflict({
-                date: data.conflict.date,
-                arrivalTime: data.conflict.arrivalTime,
-                window: {
-                  start: data.conflict.window.start,
-                  end: data.conflict.window.end,
-                },
-              })
-            : data.error === "MULTIPLE_DATES_NOT_SUPPORTED"
-              ? t("errors.MULTIPLE_DATES_NOT_SUPPORTED")
-              : data.error === "MULTIPLE_TRIPS_NOT_SUPPORTED"
-                ? t("errors.MULTIPLE_TRIPS_NOT_SUPPORTED")
-                : data.errorCode === "BOOKING_BUSY"
-                  ? t("errors.BOOKING_BUSY")
-                  : data.error === "INVALID_TRIP_COUNT"
-                    ? t("errors.INVALID_TRIP_COUNT")
-                    : (data.error ?? t("create.booking_create_failed")),
+                typeof data.conflict?.date === "string" &&
+                typeof data.conflict?.arrivalTime === "string" &&
+                typeof data.conflict?.window?.start === "string" &&
+                typeof data.conflict?.window?.end === "string"
+              ? formatSpacingConflict({
+                  date: data.conflict.date,
+                  arrivalTime: data.conflict.arrivalTime,
+                  window: {
+                    start: data.conflict.window.start,
+                    end: data.conflict.window.end,
+                  },
+                })
+              : data.error === "MULTIPLE_DATES_NOT_SUPPORTED"
+                ? t("errors.MULTIPLE_DATES_NOT_SUPPORTED")
+                : data.error === "MULTIPLE_TRIPS_NOT_SUPPORTED"
+                  ? t("errors.MULTIPLE_TRIPS_NOT_SUPPORTED")
+                  : data.errorCode === "BOOKING_BUSY"
+                    ? t("errors.BOOKING_BUSY")
+                    : data.error === "INVALID_TRIP_COUNT"
+                      ? t("errors.INVALID_TRIP_COUNT")
+                      : (data.error ?? t("create.booking_create_failed")),
         );
         return null;
       }
@@ -903,10 +906,10 @@ export default function CreateClient({
           arrivalTime: trip.arrivalTime,
           status: "pending_payment",
         }));
-      const conflict = findSpacingConflict(
-        { date, arrivalTime },
-        [...(existingTripsByDate[date] ?? []), ...otherSubmissionTrips],
-      );
+      const conflict = findSpacingConflict({ date, arrivalTime }, [
+        ...(existingTripsByDate[date] ?? []),
+        ...otherSubmissionTrips,
+      ]);
       if (conflict) return conflict;
     }
     return null;
@@ -1584,7 +1587,7 @@ export default function CreateClient({
                           fontWeight: 800,
                         }}
                       >
-                        {formatEgp(locale, grandTotalEgp)}
+                        {formatEgp(locale, grandTotalEgp, region)}
                       </strong>
                       {
                         selectedDates.length > 1
@@ -1862,7 +1865,11 @@ export default function CreateClient({
                               fontVariantNumeric: "tabular-nums",
                             }}
                           >
-                            {formatEgp(locale, getTripPriceForSubmission(trip))}
+                            {formatEgp(
+                              locale,
+                              getTripPriceForSubmission(trip),
+                              region,
+                            )}
                           </span>
                         </div>
                       )}
@@ -2338,7 +2345,7 @@ export default function CreateClient({
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
-                      {formatEgp(locale, grandTotalEgp)}
+                      {formatEgp(locale, grandTotalEgp, region)}
                     </span>
                   </div>
                 )}
@@ -2500,7 +2507,7 @@ export default function CreateClient({
                 }}
               >
                 <span>{t("create.total_amount_label")}</span>
-                <strong>{formatEgp(locale, grandTotalEgp)}</strong>
+                <strong>{formatEgp(locale, grandTotalEgp, region)}</strong>
               </div>
               <p
                 style={{
@@ -2726,7 +2733,7 @@ export default function CreateClient({
                       fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {formatEgp(locale, checkoutTotalEgp)}
+                    {formatEgp(locale, checkoutTotalEgp, region)}
                   </span>
                 </div>
 
@@ -2788,7 +2795,7 @@ export default function CreateClient({
                               fontVariantNumeric: "tabular-nums",
                             }}
                           >
-                            {formatEgp(locale, cardPortion)}
+                            {formatEgp(locale, cardPortion, region)}
                           </strong>
                         </div>
                       )}
@@ -2828,11 +2835,11 @@ export default function CreateClient({
                               ? t("create.loading_balance")
                               : `${t("create.wallet_balance_label").replace(
                                   "{amount}",
-                                  formatEgp(locale, walletBalance),
+                                  formatEgp(locale, walletBalance, region),
                                 )}${
                                   walletAvailable !== null &&
                                   walletAvailable !== walletBalance
-                                    ? ` · ${formatEgp(locale, walletAvailable)} available`
+                                    ? ` · ${formatEgp(locale, walletAvailable, region)} available`
                                     : ""
                                 }`}
                           </span>
@@ -2874,7 +2881,7 @@ export default function CreateClient({
                           <strong
                             style={{ fontVariantNumeric: "tabular-nums" }}
                           >
-                            {formatEgp(locale, checkoutTotalEgp)}
+                            {formatEgp(locale, checkoutTotalEgp, region)}
                           </strong>
                         </div>
                         {walletPortion > 0 && (
@@ -2889,7 +2896,7 @@ export default function CreateClient({
                             <strong
                               style={{ fontVariantNumeric: "tabular-nums" }}
                             >
-                              −{formatEgp(locale, walletPortion)}
+                              −{formatEgp(locale, walletPortion, region)}
                             </strong>
                           </div>
                         )}
@@ -2910,7 +2917,7 @@ export default function CreateClient({
                           <strong
                             style={{ fontVariantNumeric: "tabular-nums" }}
                           >
-                            {formatEgp(locale, cardPortion)}
+                            {formatEgp(locale, cardPortion, region)}
                           </strong>
                         </div>
                       </div>
@@ -3076,7 +3083,7 @@ export default function CreateClient({
             overflow: hidden !important;
             height: 100% !important;
           }
-          .create-left { 
+          .create-left {
             position: absolute !important;
             left: 0 !important;
             right: 0 !important;
@@ -3085,7 +3092,7 @@ export default function CreateClient({
             width: auto !important;
             height: min(100dvh, calc(var(--drawer-height-vh, 74) * 1dvh)) !important;
             max-height: 90dvh !important;
-            margin: 0 !important; 
+            margin: 0 !important;
             border: 1px solid #dfe5eb !important;
             border-bottom: none !important;
             border-radius: 20px 20px 0 0 !important;

@@ -57,6 +57,28 @@ test("one-day unpaid Requests remain individual Pending trips", () => {
   assert.equal(view.items[0].trip.id, "one-day");
 });
 
+test("private-ride offers in unpaid Requests appear in All and Pending", () => {
+  const offeredTrip = {
+    id: "offered-trip",
+    requestId: "waiting-request",
+    isStandalone: false,
+    status: "private_ride_offered",
+    parentRequestStatus: "waiting_list",
+    parentPaymentStatus: "pending",
+    date: "2026-10-05",
+    pickupTime: "09:00",
+  };
+  const all = buildTripTabView([offeredTrip], "all", now);
+  const pending = buildTripTabView([offeredTrip], "pending", now);
+
+  assert.deepEqual(all.items.map((item) => item.kind === "trip" && item.trip.id), [
+    "offered-trip",
+  ]);
+  assert.deepEqual(pending.items.map((item) => item.kind === "trip" && item.trip.id), [
+    "offered-trip",
+  ]);
+});
+
 test("approval-waiting groups and single trips add no payable Pending items", () => {
   const view = buildTripTabView(
     [
