@@ -15,47 +15,9 @@ export interface CreateNotificationPayload {
 export async function createNotification(payload: CreateNotificationPayload) {
   if (!payload?.userId) return null;
 
-  await connectDB();
-  const doc = await Notification.create({
-    userId: payload.userId,
-    type: payload.type,
-    title: payload.title,
-    body: payload.body,
-    titleAr: payload.titleAr ?? "",
-    bodyAr: payload.bodyAr ?? "",
-    data: payload.data ?? {},
-  });
-
-  await sendPushPayloadToUser(String(doc.userId), {
-    id: String(doc._id),
-    title: doc.title,
-    body: doc.body,
-    titleAr: doc.titleAr ?? "",
-    bodyAr: doc.bodyAr ?? "",
-    data: doc.data ?? {},
-    url:
-      typeof doc.data?.linkUrl === "string"
-        ? doc.data.linkUrl
-        : "/user/notifications",
-  });
-
-  return {
-    id: String(doc._id),
-    type: doc.type,
-    title: doc.title,
-    body: doc.body,
-    data: doc.data ?? {},
-    isRead: Boolean(doc.isRead),
-    createdAt: doc.createdAt?.toISOString?.() ?? new Date().toISOString(),
-  };
-}
-
-export async function createNotifications(payloads: CreateNotificationPayload[]) {
-  if (payloads.length === 0) return [];
-
-  await connectDB();
-  const docs = await Notification.insertMany(
-    payloads.map((payload) => ({
+  try {
+    await connectDB();
+    const doc = await Notification.create({
       userId: payload.userId,
       type: payload.type,
       title: payload.title,
@@ -63,7 +25,59 @@ export async function createNotifications(payloads: CreateNotificationPayload[])
       titleAr: payload.titleAr ?? "",
       bodyAr: payload.bodyAr ?? "",
       data: payload.data ?? {},
-    })),
-  );
-  return docs;
+    });
+
+    try {
+      await sendPushPayloadToUser(String(doc.userId), {
+        id: String(doc._id),
+        title: doc.title,
+        body: doc.body,
+        titleAr: doc.titleAr ?? "",
+        bodyAr: doc.bodyAr ?? "",
+        data: doc.data ?? {},
+        url:
+          typeof doc.data?.linkUrl === "string"
+            ? doc.data.linkUrl
+            : "/user/notifications",
+      });
+    } catch (pushError) {
+      console.error("Notification push failed; record was still created:", pushError);
+    }
+
+    return {
+      id: String(doc._id),
+      type: doc.type,
+      title: doc.title,
+      body: doc.body,
+      data: doc.data ?? {},
+      isRead: Boolean(doc.isRead),
+      createdAt: doc.createdAt?.toISOString?.() ?? new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Could not create notification:", error);
+    return null;
+  }
+}
+
+export async function createNotifications(payloads: CreateNotificationPayload[]) {
+  if (payloads.length === 0) return [];
+
+  try {
+    await connectDB();
+    const docs = await Notification.insertMany(
+      payloads.map((payload) => ({
+        userId: payload.userId,
+        type: payload.type,
+        title: payload.title,
+        body: payload.body,
+        titleAr: payload.titleAr ?? "",
+        bodyAr: payload.bodyAr ?? "",
+        data: payload.data ?? {},
+      })),
+    );
+    return docs;
+  } catch (error) {
+    console.error("Could not create notifications:", error);
+    return [];
+  }
 }

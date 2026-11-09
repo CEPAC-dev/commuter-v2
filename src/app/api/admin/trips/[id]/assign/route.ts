@@ -140,7 +140,7 @@ export async function PATCH(
     );
   }
 
-  await Promise.all([
+  await Promise.allSettled([
     createNotification({
       userId: String(trip.userId),
       type: "driver_assigned",
