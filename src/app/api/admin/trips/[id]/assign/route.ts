@@ -8,6 +8,13 @@ import { getTripPassengerCount } from "@/lib/rideCapacity";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { Types } from "mongoose";
 
+type TripStopForRide = {
+  point: unknown;
+  boarding: number;
+  alighting: number;
+  waitingMinutes: number;
+};
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -77,7 +84,7 @@ export async function PATCH(
             alighting: [],
             waitingMinutes: 0,
           },
-          ...trip.stops.map((stop) => ({
+          ...trip.stops.map((stop: TripStopForRide) => ({
             point: stop.point,
             boardingNumber: stop.boarding,
             alightingNumber: stop.alighting,

@@ -12,7 +12,11 @@ import {
 } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getDriverRide } from "@/lib/services/rideService";
-import { getUserTrip, getDriverTrip, type UserTripDetail } from "@/lib/services/trips";
+import {
+  getUserTrip,
+  getDriverTrip,
+  type UserTripDetail,
+} from "@/lib/services/trips";
 import AppHeader from "@/components/layout/AppHeader";
 import RouteMap from "@/components/shared/RouteMapOsmLoader";
 import DriverCard from "@/components/trips/DriverCard";
@@ -37,7 +41,13 @@ import type {
   RideDetailView,
   TripStatus,
 } from "@/types/booking";
-import { translate, formatDate, formatTime, formatEgp, localeDirection } from "@/lib/i18n";
+import {
+  translate,
+  formatDate,
+  formatTime,
+  formatEgp,
+  localeDirection,
+} from "@/lib/i18n";
 import { getServerLocale } from "@/lib/i18n/server";
 import { canShare } from "@/lib/liveShare/eligibility";
 import { TripShare } from "@/models/TripShare";
@@ -53,6 +63,11 @@ const PAY_PILL: Record<
 > = {
   pending: { label: "Awaiting payment", bg: "#FFF8E1", color: "#E65100" },
   paid: { label: "Paid", bg: "#E8F5E9", color: "#27AE60" },
+  partially_refunded: {
+    label: "Partially refunded",
+    bg: "#FFF3E0",
+    color: "#E65100",
+  },
   failed: { label: "Payment failed", bg: "#FFEBEE", color: "#E74C3C" },
   refunded: { label: "Refunded", bg: "#EDE7F6", color: "#6A1B9A" },
   expired: { label: "Expired", bg: "#F5F5F5", color: "#9aa7b4" },
@@ -153,7 +168,7 @@ function TripActions({
         amountEgp={
           trip.isStandalone
             ? trip.priceEgp
-            : trip.requestAmountEgp ?? trip.priceEgp
+            : (trip.requestAmountEgp ?? trip.priceEgp)
         }
         walletBalance={walletBalance}
       />
@@ -173,7 +188,9 @@ function TripActions({
     );
   }
   if (displayStatus.canRate) {
-    return <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />;
+    return (
+      <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />
+    );
   }
   if (showReport) {
     return (
@@ -236,7 +253,11 @@ export default async function TripDetailPage({
 
   let slicedRouteCoordinates: { lat: number; lng: number }[] | null = null;
 
-  if (!isDriver && trip.rideDetails?.route && trip.rideDetails.route.length > 0) {
+  if (
+    !isDriver &&
+    trip.rideDetails?.route &&
+    trip.rideDetails.route.length > 0
+  ) {
     const rideRoute = trip.rideDetails.route;
     const fullRouteCoords = trip.rideDetails.routeCoordinates;
     if (fullRouteCoords && fullRouteCoords.length > 1) {
@@ -301,7 +322,8 @@ export default async function TripDetailPage({
       : null;
   const isOngoing =
     !rejectionDisplay.showReasonCard &&
-    (displayStatus.key === "status.in_progress" || displayStatus.key === "status.matched");
+    (displayStatus.key === "status.in_progress" ||
+      displayStatus.key === "status.matched");
   const distinctPassengers = (trip.passengers ?? []).filter(
     (p) => !p.sameAsMain && p.pickup && p.dropoff,
   );
@@ -366,7 +388,10 @@ export default async function TripDetailPage({
   const paymentBreakdown = trip.paymentBreakdown;
 
   return (
-    <div dir={localeDirection(locale)} style={{ minHeight: "100dvh", background: "#f8f9fa" }}>
+    <div
+      dir={localeDirection(locale)}
+      style={{ minHeight: "100dvh", background: "#f8f9fa" }}
+    >
       <AppHeader
         authed
         email={session.email}
@@ -544,15 +569,35 @@ export default async function TripDetailPage({
               background: "#FFF8F7",
             }}
           >
-            <h2 id="rejection-title" style={{ margin: "0 0 8px", color: "#8F2D28", fontSize: 18, fontWeight: 800 }}>
+            <h2
+              id="rejection-title"
+              style={{
+                margin: "0 0 8px",
+                color: "#8F2D28",
+                fontSize: 18,
+                fontWeight: 800,
+              }}
+            >
               {translate(locale, "rejection.title")}
             </h2>
-            <p style={{ margin: 0, color: "#402B2A", fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-              {rejectionDisplay.reason ?? translate(locale, "rejection.no_reason")}
+            <p
+              style={{
+                margin: 0,
+                color: "#402B2A",
+                fontSize: 14,
+                lineHeight: 1.65,
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {rejectionDisplay.reason ??
+                translate(locale, "rejection.no_reason")}
             </p>
             {reviewedDateLabel && (
               <p style={{ margin: "8px 0 0", color: "#6E5B59", fontSize: 12 }}>
-                {translate(locale, "rejection.reviewed_date", { date: reviewedDateLabel })}
+                {translate(locale, "rejection.reviewed_date", {
+                  date: reviewedDateLabel,
+                })}
               </p>
             )}
             <Link
@@ -582,26 +627,82 @@ export default async function TripDetailPage({
             <Car size={28} />
           </div>
           <div className="trip-detail-heading-copy">
-            <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 800, lineHeight: 1.2, color: "#0B1E3D" }}>
+            <h1
+              style={{
+                margin: "0 0 4px",
+                fontSize: 22,
+                fontWeight: 800,
+                lineHeight: 1.2,
+                color: "#0B1E3D",
+              }}
+            >
               {vLabel}
             </h1>
             <p style={{ margin: "0 0 9px", fontSize: 13, color: "#5A6A7A" }}>
-              {trip.tripNumber != null && translate(locale, "my_trips.ride_number", { rideNumber: trip.tripNumber })}{trip.tripNumber != null ? " · " : ""}{formatDate(locale, trip.date)}
+              {trip.tripNumber != null &&
+                translate(locale, "my_trips.ride_number", {
+                  rideNumber: trip.tripNumber,
+                })}
+              {trip.tripNumber != null ? " · " : ""}
+              {formatDate(locale, trip.date)}
             </p>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <Pill label={translate(locale, trip.rideType === "shared" ? "ride.shared" : "ride.private")} bg="#EEF2F2" color="#405555" />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                flexWrap: "wrap",
+              }}
+            >
+              <Pill
+                label={translate(
+                  locale,
+                  trip.rideType === "shared" ? "ride.shared" : "ride.private",
+                )}
+                bg="#EEF2F2"
+                color="#405555"
+              />
               <Pill
                 label={translate(locale, displayStatus.key)}
-                bg={{ neutral: "#EEF2F2", warning: "#FFF3E0", success: "#E8F5E9", danger: "#FFEBEE", info: "#E2F8F5" }[displayStatus.tone]}
-                color={{ neutral: "#526262", warning: "#E65100", success: "#166B48", danger: "#8F2D28", info: "#006D60" }[displayStatus.tone]}
+                bg={
+                  {
+                    neutral: "#EEF2F2",
+                    warning: "#FFF3E0",
+                    success: "#E8F5E9",
+                    danger: "#FFEBEE",
+                    info: "#E2F8F5",
+                  }[displayStatus.tone]
+                }
+                color={
+                  {
+                    neutral: "#526262",
+                    warning: "#E65100",
+                    success: "#166B48",
+                    danger: "#8F2D28",
+                    info: "#006D60",
+                  }[displayStatus.tone]
+                }
               />
-              <strong style={{ fontSize: 14, color: "#0B1E3D", fontVariantNumeric: "tabular-nums" }}>
+              <strong
+                style={{
+                  fontSize: 14,
+                  color: "#0B1E3D",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
                 {formatEgp(locale, trip.priceEgp)}
               </strong>
             </div>
             {!rejectionDisplay.showReasonCard &&
               (displayStatus.secondaryKey || displayStatus.secondaryText) && (
-                <p style={{ margin: "8px 0 0", color: "#526262", fontSize: 12, lineHeight: 1.5 }}>
+                <p
+                  style={{
+                    margin: "8px 0 0",
+                    color: "#526262",
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                  }}
+                >
                   {displayStatus.secondaryKey
                     ? translate(locale, displayStatus.secondaryKey)
                     : displayStatus.secondaryText}
@@ -610,7 +711,12 @@ export default async function TripDetailPage({
           </div>
         </div>
 
-        <div className="trip-detail-grid" style={rejectionDisplay.showReasonCard ? { opacity: 0.68 } : undefined}>
+        <div
+          className="trip-detail-grid"
+          style={
+            rejectionDisplay.showReasonCard ? { opacity: 0.68 } : undefined
+          }
+        >
           {/* Primary Column: Hero, Route Map, Seating, Driver info & Chat */}
           <div className="trip-detail-primary">
             {/* Route map */}
@@ -642,13 +748,41 @@ export default async function TripDetailPage({
 
             {!isDriver && <PickupPinCard tripId={trip.id} />}
 
-            <section className="trip-route-card" aria-labelledby="trip-route-title">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
-                <h2 id="trip-route-title" style={{ margin: 0, color: "#173337", fontSize: 16, fontWeight: 800 }}>
-                  {translate(locale, trip.rideType === "shared" ? "trip_detail.shared_route" : "trip_detail.route")}
+            <section
+              className="trip-route-card"
+              aria-labelledby="trip-route-title"
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  marginBottom: 12,
+                }}
+              >
+                <h2
+                  id="trip-route-title"
+                  style={{
+                    margin: 0,
+                    color: "#173337",
+                    fontSize: 16,
+                    fontWeight: 800,
+                  }}
+                >
+                  {translate(
+                    locale,
+                    trip.rideType === "shared"
+                      ? "trip_detail.shared_route"
+                      : "trip_detail.route",
+                  )}
                 </h2>
                 {displayStatus.key === "status.matched" && (
-                  <MatchedTripCountdown date={trip.date} pickupTime={trip.pickupTime} locale={locale} />
+                  <MatchedTripCountdown
+                    date={trip.date}
+                    pickupTime={trip.pickupTime}
+                    locale={locale}
+                  />
                 )}
               </div>
               <div className="trip-route-timeline">
@@ -658,22 +792,72 @@ export default async function TripDetailPage({
                   <span className="trip-route-point end" />
                 </div>
                 <div className="trip-route-stops">
-                  <div className={`trip-route-stop${trip.rideType === "shared" ? " boarding" : ""}`}>
-                    <span style={{ color: "#526262", fontSize: 11, fontWeight: 700 }}>
-                      {translate(locale, trip.rideType === "shared" ? "ride.pickup_station_label" : "ride.pickup")}
+                  <div
+                    className={`trip-route-stop${trip.rideType === "shared" ? " boarding" : ""}`}
+                  >
+                    <span
+                      style={{
+                        color: "#526262",
+                        fontSize: 11,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {translate(
+                        locale,
+                        trip.rideType === "shared"
+                          ? "ride.pickup_station_label"
+                          : "ride.pickup",
+                      )}
                     </span>
-                    <strong>{trip.rideType === "shared" ? trip.pickupStation?.name ?? trip.pickup.address : trip.pickup.address}</strong>
-                    <span style={trip.rideType === "shared" ? { color: "#7A4A05", fontWeight: 800 } : undefined}>
-                      {translate(locale, trip.rideType === "shared" ? "ride.board_by" : "ride.pickup_time")} · {formatTime(locale, trip.pickupTime)}
+                    <strong>
+                      {trip.rideType === "shared"
+                        ? (trip.pickupStation?.name ?? trip.pickup.address)
+                        : trip.pickup.address}
+                    </strong>
+                    <span
+                      style={
+                        trip.rideType === "shared"
+                          ? { color: "#7A4A05", fontWeight: 800 }
+                          : undefined
+                      }
+                    >
+                      {translate(
+                        locale,
+                        trip.rideType === "shared"
+                          ? "ride.board_by"
+                          : "ride.pickup_time",
+                      )}{" "}
+                      · {formatTime(locale, trip.pickupTime)}
                     </span>
                   </div>
                   <div className="trip-route-stop">
-                    <span style={{ color: "#526262", fontSize: 11, fontWeight: 700 }}>
-                      {translate(locale, trip.rideType === "shared" ? "ride.dropoff_station_label" : "ride.destination")}
+                    <span
+                      style={{
+                        color: "#526262",
+                        fontSize: 11,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {translate(
+                        locale,
+                        trip.rideType === "shared"
+                          ? "ride.dropoff_station_label"
+                          : "ride.destination",
+                      )}
                     </span>
-                    <strong>{trip.rideType === "shared" ? trip.dropoffStation?.name ?? trip.dropoff.address : trip.dropoff.address}</strong>
+                    <strong>
+                      {trip.rideType === "shared"
+                        ? (trip.dropoffStation?.name ?? trip.dropoff.address)
+                        : trip.dropoff.address}
+                    </strong>
                     <span>
-                      {translate(locale, trip.rideType === "shared" ? "ride.arrive_by" : "ride.dropoff_time")} · {formatTime(locale, trip.arrivalTime)}
+                      {translate(
+                        locale,
+                        trip.rideType === "shared"
+                          ? "ride.arrive_by"
+                          : "ride.dropoff_time",
+                      )}{" "}
+                      · {formatTime(locale, trip.arrivalTime)}
                     </span>
                   </div>
                 </div>
@@ -682,7 +866,9 @@ export default async function TripDetailPage({
 
             {trip.rideType === "private" && (
               <details className="trip-expandable-details">
-                <summary>{translate(locale, "trip_detail.private_details")}</summary>
+                <summary>
+                  {translate(locale, "trip_detail.private_details")}
+                </summary>
                 <div className="trip-expandable-content">
                   <PrivateRideDetails
                     locale={locale}
@@ -702,7 +888,9 @@ export default async function TripDetailPage({
             )}
             {trip.rideType === "shared" && (
               <details className="trip-expandable-details">
-                <summary>{translate(locale, "trip_detail.shared_details")}</summary>
+                <summary>
+                  {translate(locale, "trip_detail.shared_details")}
+                </summary>
                 <div className="trip-expandable-content">
                   <SharedRideDetails
                     locale={locale}
@@ -757,12 +945,14 @@ export default async function TripDetailPage({
               />
             )}
 
-            {!isDriver && trip.rideType === "private" && trip.assignedDriver && (
-              <DriverCard
-                driver={{ ...trip.assignedDriver, rating: trip.rating }}
-                showCall={false}
-              />
-            )}
+            {!isDriver &&
+              trip.rideType === "private" &&
+              trip.assignedDriver && (
+                <DriverCard
+                  driver={{ ...trip.assignedDriver, rating: trip.rating }}
+                  showCall={false}
+                />
+              )}
             {!isDriver && trip.assignedDriver?.phone && isOngoing && (
               <a
                 href={`tel:${trip.assignedDriver.phone}`}
@@ -788,28 +978,74 @@ export default async function TripDetailPage({
 
           {/* Secondary Column: Breakdown, Passenger stops & timestamp */}
           <div className="trip-detail-secondary">
-            <aside className="trip-summary-card" aria-labelledby="trip-summary-title">
-              <h2 id="trip-summary-title" style={{ margin: 0, color: "#173337", fontSize: 16, fontWeight: 800 }}>
+            <aside
+              className="trip-summary-card"
+              aria-labelledby="trip-summary-title"
+            >
+              <h2
+                id="trip-summary-title"
+                style={{
+                  margin: 0,
+                  color: "#173337",
+                  fontSize: 16,
+                  fontWeight: 800,
+                }}
+              >
                 {translate(locale, "trip_detail.summary")}
               </h2>
               <div>
-                <p className="trip-summary-label">{translate(locale, "trip_detail.status")}</p>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 7 }}>
+                <p className="trip-summary-label">
+                  {translate(locale, "trip_detail.status")}
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    marginTop: 7,
+                  }}
+                >
                   <Pill
                     label={translate(locale, displayStatus.key)}
-                    bg={{ neutral: "#EEF2F2", warning: "#FFF3E0", success: "#E8F5E9", danger: "#FFEBEE", info: "#E2F8F5" }[displayStatus.tone]}
-                    color={{ neutral: "#526262", warning: "#8B4A08", success: "#166B48", danger: "#8F2D28", info: "#006D60" }[displayStatus.tone]}
+                    bg={
+                      {
+                        neutral: "#EEF2F2",
+                        warning: "#FFF3E0",
+                        success: "#E8F5E9",
+                        danger: "#FFEBEE",
+                        info: "#E2F8F5",
+                      }[displayStatus.tone]
+                    }
+                    color={
+                      {
+                        neutral: "#526262",
+                        warning: "#8B4A08",
+                        success: "#166B48",
+                        danger: "#8F2D28",
+                        info: "#006D60",
+                      }[displayStatus.tone]
+                    }
                   />
                   {!rejectionDisplay.showReasonCard &&
                     (trip.isStandalone
                       ? trip.status !== "waiting_list"
                       : trip.parentRequestStatus !== "waiting_list") && (
-                    <Pill
-                      label={translate(locale, `payments.${parentPaymentStatus}`)}
-                      bg={PAY_PILL[parentPaymentStatus]?.bg ?? PAY_PILL.pending.bg}
-                      color={PAY_PILL[parentPaymentStatus]?.color ?? PAY_PILL.pending.color}
-                    />
-                  )}
+                      <Pill
+                        label={translate(
+                          locale,
+                          `payments.${parentPaymentStatus}`,
+                        )}
+                        bg={
+                          PAY_PILL[parentPaymentStatus]?.bg ??
+                          PAY_PILL.pending.bg
+                        }
+                        color={
+                          PAY_PILL[parentPaymentStatus]?.color ??
+                          PAY_PILL.pending.color
+                        }
+                      />
+                    )}
                 </div>
               </div>
 
@@ -822,49 +1058,107 @@ export default async function TripDetailPage({
               )}
 
               <div>
-                <p className="trip-summary-label">{translate(locale, "trip_detail.trip_price")}</p>
-                <p className="trip-summary-price">{formatEgp(locale, trip.priceEgp)}</p>
-                {trip.requestAmountEgp !== undefined && trip.requestAmountEgp !== trip.priceEgp && (
-                  <p style={{ margin: "4px 0 0", color: "#526262", fontSize: 12 }}>
-                    {translate(locale, "my_trips.request_total")}: {formatEgp(locale, trip.requestAmountEgp)}
-                  </p>
-                )}
+                <p className="trip-summary-label">
+                  {translate(locale, "trip_detail.trip_price")}
+                </p>
+                <p className="trip-summary-price">
+                  {formatEgp(locale, trip.priceEgp)}
+                </p>
+                {trip.requestAmountEgp !== undefined &&
+                  trip.requestAmountEgp !== trip.priceEgp && (
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        color: "#526262",
+                        fontSize: 12,
+                      }}
+                    >
+                      {translate(locale, "my_trips.request_total")}:{" "}
+                      {formatEgp(locale, trip.requestAmountEgp)}
+                    </p>
+                  )}
               </div>
 
               <details className="trip-price-breakdown">
-                <summary>{translate(locale, "trip_detail.price_breakdown")}</summary>
+                <summary>
+                  {translate(locale, "trip_detail.price_breakdown")}
+                </summary>
                 <div className="trip-price-line">
                   <span>{translate(locale, "my_trips.trip_fare")}</span>
                   <strong>{formatEgp(locale, trip.priceEgp)}</strong>
                 </div>
-                {trip.requestAmountEgp !== undefined && trip.requestAmountEgp !== trip.priceEgp && (
-                  <div className="trip-price-line">
-                    <span>{translate(locale, "my_trips.request_total")}</span>
-                    <strong>{formatEgp(locale, trip.requestAmountEgp)}</strong>
-                  </div>
-                )}
+                {trip.requestAmountEgp !== undefined &&
+                  trip.requestAmountEgp !== trip.priceEgp && (
+                    <div className="trip-price-line">
+                      <span>{translate(locale, "my_trips.request_total")}</span>
+                      <strong>
+                        {formatEgp(locale, trip.requestAmountEgp)}
+                      </strong>
+                    </div>
+                  )}
               </details>
 
-              {paymentBreakdown && (paymentBreakdown.walletAmountEgp > 0 || paymentBreakdown.gatewayAmountEgp > 0) && (
-                <div className="trip-payment-method" aria-label={translate(locale, "trip_detail.payment_method")}>
-                  <p className="trip-summary-label">{translate(locale, "trip_detail.payment_method")}</p>
-                  <div style={{ display: "grid", gap: 5, marginTop: 6, color: "#405555", fontSize: 12 }}>
-                    {paymentBreakdown.walletAmountEgp > 0 && (
-                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <Wallet size={14} aria-hidden="true" /> {translate(locale, "trip_detail.wallet_part")}: {formatEgp(locale, paymentBreakdown.walletAmountEgp)}
-                      </span>
-                    )}
-                    {paymentBreakdown.gatewayAmountEgp > 0 && (
-                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <CreditCard size={14} aria-hidden="true" /> {translate(locale, "trip_detail.gateway_part")}: {formatEgp(locale, paymentBreakdown.gatewayAmountEgp)}
-                      </span>
-                    )}
+              {paymentBreakdown &&
+                (paymentBreakdown.walletAmountEgp > 0 ||
+                  paymentBreakdown.gatewayAmountEgp > 0) && (
+                  <div
+                    className="trip-payment-method"
+                    aria-label={translate(locale, "trip_detail.payment_method")}
+                  >
+                    <p className="trip-summary-label">
+                      {translate(locale, "trip_detail.payment_method")}
+                    </p>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 5,
+                        marginTop: 6,
+                        color: "#405555",
+                        fontSize: 12,
+                      }}
+                    >
+                      {paymentBreakdown.walletAmountEgp > 0 && (
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <Wallet size={14} aria-hidden="true" />{" "}
+                          {translate(locale, "trip_detail.wallet_part")}:{" "}
+                          {formatEgp(locale, paymentBreakdown.walletAmountEgp)}
+                        </span>
+                      )}
+                      {paymentBreakdown.gatewayAmountEgp > 0 && (
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <CreditCard size={14} aria-hidden="true" />{" "}
+                          {translate(locale, "trip_detail.gateway_part")}:{" "}
+                          {formatEgp(locale, paymentBreakdown.gatewayAmountEgp)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {showRefundBadge && cancellation && (
-                <div role="status" style={{ padding: "9px 10px", borderRadius: 6, background: "#FFF8E9", color: "#71470D", fontSize: 12, fontWeight: 700 }}>
+                <div
+                  role="status"
+                  style={{
+                    padding: "9px 10px",
+                    borderRadius: 6,
+                    background: "#FFF8E9",
+                    color: "#71470D",
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
                   {cancellation.refundStatus === "approved"
                     ? `${translate(locale, "payments.refunded")} · ${formatEgp(locale, cancellation.refundAmount)}`
                     : cancellation.refundStatus === "rejected"
@@ -875,8 +1169,19 @@ export default async function TripDetailPage({
 
               {trip.rideType === "shared" && sharedStepper.step !== null && (
                 <div className="trip-stepper-card">
-                  <p className="trip-summary-label" style={{ marginBottom: 10 }}>{translate(locale, "trip_detail.shared_progress")}</p>
-                  <ol className="trip-shared-stepper" aria-label={translate(locale, "trip_detail.shared_progress")}>
+                  <p
+                    className="trip-summary-label"
+                    style={{ marginBottom: 10 }}
+                  >
+                    {translate(locale, "trip_detail.shared_progress")}
+                  </p>
+                  <ol
+                    className="trip-shared-stepper"
+                    aria-label={translate(
+                      locale,
+                      "trip_detail.shared_progress",
+                    )}
+                  >
                     {[
                       "trip_detail.step_request_sent",
                       "trip_detail.step_admin_review",
@@ -886,10 +1191,17 @@ export default async function TripDetailPage({
                       <li
                         key={key}
                         className={`trip-shared-step${sharedStepper.step === index ? " current" : ""}${sharedStepper.rejected && index === 1 ? " rejected" : ""}`}
-                        aria-current={sharedStepper.step === index ? "step" : undefined}
+                        aria-current={
+                          sharedStepper.step === index ? "step" : undefined
+                        }
                       >
-                        <span className="trip-shared-step-mark" aria-hidden="true">
-                          {sharedStepper.rejected && index === 1 ? "×" : index + 1}
+                        <span
+                          className="trip-shared-step-mark"
+                          aria-hidden="true"
+                        >
+                          {sharedStepper.rejected && index === 1
+                            ? "×"
+                            : index + 1}
                         </span>
                         <span>{translate(locale, key)}</span>
                       </li>
@@ -899,21 +1211,50 @@ export default async function TripDetailPage({
               )}
 
               {trip.rideType === "shared" && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#526262", fontSize: 12 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    color: "#526262",
+                    fontSize: 12,
+                  }}
+                >
                   <Users size={15} aria-hidden="true" />
-                  <span>{translate(locale, "trip_detail.passengers_count", { count: trip.numberOfPassengers })}</span>
+                  <span>
+                    {translate(locale, "trip_detail.passengers_count", {
+                      count: trip.numberOfPassengers,
+                    })}
+                  </span>
                   {trip.seatNumbers && trip.seatNumbers.length > 0 && (
-                    <span>{translate(locale, "trip_detail.seats", { seats: trip.seatNumbers.join(", ") })}</span>
+                    <span>
+                      {translate(locale, "trip_detail.seats", {
+                        seats: trip.seatNumbers.join(", "),
+                      })}
+                    </span>
                   )}
                 </div>
               )}
 
               {trip.rideType === "shared" && otherTrips.length > 0 && (
                 <div>
-                  <p className="trip-summary-label" style={{ marginBottom: 8 }}>{translate(locale, "my_trips.other_dates_in_booking")}</p>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))", gap: 6 }}>
+                  <p className="trip-summary-label" style={{ marginBottom: 8 }}>
+                    {translate(locale, "my_trips.other_dates_in_booking")}
+                  </p>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(96px, 1fr))",
+                      gap: 6,
+                    }}
+                  >
                     {otherTrips.map((otherTrip) => (
-                      <Link key={otherTrip.id} href={`/my-trips/${otherTrip.id}`} className="trip-sibling-link">
+                      <Link
+                        key={otherTrip.id}
+                        href={`/my-trips/${otherTrip.id}`}
+                        className="trip-sibling-link"
+                      >
                         {formatDate(locale, otherTrip.date)}
                       </Link>
                     ))}
@@ -944,44 +1285,44 @@ export default async function TripDetailPage({
             {/* Private ride: origin, stops, destination, distance/time breakdown */}
             {trip.rideType === "private" && (
               <div className="trip-secondary-details">
-              <PrivateRideDetails
-                locale={locale}
-                pickup={trip.pickup}
-                dropoff={trip.dropoff}
-                pickupTime={trip.pickupTime}
-                arrivalTime={trip.arrivalTime}
-                numberOfPassengers={trip.numberOfPassengers}
-                stops={trip.stops ?? []}
-                distanceKm={trip.distanceKm}
-                durationMinutes={trip.durationMinutes}
-                to12h={to12h}
-                showDistanceBreakdown={!rejectionDisplay.showReasonCard}
-              />
+                <PrivateRideDetails
+                  locale={locale}
+                  pickup={trip.pickup}
+                  dropoff={trip.dropoff}
+                  pickupTime={trip.pickupTime}
+                  arrivalTime={trip.arrivalTime}
+                  numberOfPassengers={trip.numberOfPassengers}
+                  stops={trip.stops ?? []}
+                  distanceKm={trip.distanceKm}
+                  durationMinutes={trip.durationMinutes}
+                  to12h={to12h}
+                  showDistanceBreakdown={!rejectionDisplay.showReasonCard}
+                />
               </div>
             )}
 
             {/* Shared ride: origin/station, destination/station, distance/time breakdown */}
             {trip.rideType === "shared" && (
               <div className="trip-secondary-details">
-              <SharedRideDetails
-                locale={locale}
-                pickup={trip.pickup}
-                dropoff={trip.dropoff}
-                pickupTime={trip.pickupTime}
-                arrivalTime={trip.arrivalTime}
-                extraPassengers={trip.extraPassengers}
-                pickupStation={trip.pickupStation}
-                dropoffStation={trip.dropoffStation}
-                pickupStationOptions={trip.pickupStationOptions}
-                dropoffStationOptions={trip.dropoffStationOptions}
-                walkingMinToStation={trip.walkingMinToStation}
-                walkingMinFromStation={trip.walkingMinFromStation}
-                distanceKm={trip.distanceKm}
-                durationMinutes={trip.durationMinutes}
-                to12h={to12h}
-                isDriver={isDriver}
-                showDistanceBreakdown={!rejectionDisplay.showReasonCard}
-              />
+                <SharedRideDetails
+                  locale={locale}
+                  pickup={trip.pickup}
+                  dropoff={trip.dropoff}
+                  pickupTime={trip.pickupTime}
+                  arrivalTime={trip.arrivalTime}
+                  extraPassengers={trip.extraPassengers}
+                  pickupStation={trip.pickupStation}
+                  dropoffStation={trip.dropoffStation}
+                  pickupStationOptions={trip.pickupStationOptions}
+                  dropoffStationOptions={trip.dropoffStationOptions}
+                  walkingMinToStation={trip.walkingMinToStation}
+                  walkingMinFromStation={trip.walkingMinFromStation}
+                  distanceKm={trip.distanceKm}
+                  durationMinutes={trip.durationMinutes}
+                  to12h={to12h}
+                  isDriver={isDriver}
+                  showDistanceBreakdown={!rejectionDisplay.showReasonCard}
+                />
               </div>
             )}
 
@@ -1020,7 +1361,11 @@ export default async function TripDetailPage({
                       {translate(locale, "my_trips.passenger_singular")} {i + 1}
                     </p>
                     <div
-                      style={{ display: "flex", flexDirection: "column", gap: 4 }}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                      }}
                     >
                       <div
                         style={{
@@ -1062,7 +1407,8 @@ export default async function TripDetailPage({
               </div>
             )}
 
-            <p className="trip-secondary-details"
+            <p
+              className="trip-secondary-details"
               style={{
                 fontSize: 12,
                 color: "#9aa7b4",
@@ -1078,7 +1424,10 @@ export default async function TripDetailPage({
           </div>
         </div>
         {hasPrimaryAction && !isDriver && (
-          <div className="trip-detail-mobile-actions" aria-label={translate(locale, "trip_detail.actions")}>
+          <div
+            className="trip-detail-mobile-actions"
+            aria-label={translate(locale, "trip_detail.actions")}
+          >
             <div className="trip-action-wrap">
               <TripActions
                 trip={trip}

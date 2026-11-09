@@ -16,8 +16,8 @@ import { reconcileRequestSummary } from "@/lib/payments/requestReconciliation";
 
 type ClaimedRefundRequest = {
   _id: { toString(): string };
-  tripId: mongoose.Types.ObjectId;
-  passengerId: mongoose.Types.ObjectId;
+  tripId: Types.ObjectId;
+  passengerId: Types.ObjectId;
   refundAmount: number;
   tier: string;
 };
