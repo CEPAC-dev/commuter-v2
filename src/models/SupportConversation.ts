@@ -6,10 +6,11 @@ const SupportConversationSchema = new Schema(
     contactName: { type: String, required: true, trim: true, maxlength: 100 },
     contactEmail: {
       type: String,
-      required: true,
+      required: false,
       trim: true,
       lowercase: true,
       maxlength: 254,
+      default: "",
     },
     category: {
       type: String,

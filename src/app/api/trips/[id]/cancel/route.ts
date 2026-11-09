@@ -33,6 +33,7 @@ import {
   RequestGroupCancellationError,
 } from "@/lib/requestGroupCancellation";
 import { logMultiDayEvent } from "@/lib/logging/multiday";
+import { reconcileRequestSummary } from "@/lib/payments/requestReconciliation";
 
 const REQUEST_NOT_CANCELLABLE = "REQUEST_NOT_CANCELLABLE";
 
@@ -44,7 +45,8 @@ async function getParentCancellationConflict(requestId: unknown) {
     return NextResponse.json(
       {
         errorCode: REQUEST_NOT_CANCELLABLE,
-        error: "Trips in waiting or rejected requests cannot be cancelled individually.",
+        error:
+          "Trips in waiting or rejected requests cannot be cancelled individually.",
       },
       { status: 409 },
     );
@@ -109,16 +111,17 @@ export async function GET(
         trip.date,
         trip.priceEgp,
       );
-      const evaluation = mode.kind === "unpaid"
-        ? {
-            ...policyEvaluation,
-            allowed: true,
-            refundPercent: 0,
-            penaltyPercent: 0,
-            refundAmount: 0,
-            retainedAmount: 0,
-          }
-        : policyEvaluation;
+      const evaluation =
+        mode.kind === "unpaid"
+          ? {
+              ...policyEvaluation,
+              allowed: true,
+              refundPercent: 0,
+              penaltyPercent: 0,
+              refundAmount: 0,
+              retainedAmount: 0,
+            }
+          : policyEvaluation;
 
       return NextResponse.json({
         success: true,
@@ -134,10 +137,7 @@ export async function GET(
     const parentConflict = await getParentCancellationConflict(trip.requestId);
     if (parentConflict) return parentConflict;
 
-    const evaluation = await evaluateTripCancellation(
-      trip.date,
-      trip.priceEgp,
-    );
+    const evaluation = await evaluateTripCancellation(trip.date, trip.priceEgp);
 
     return NextResponse.json({
       success: true,
@@ -151,8 +151,7 @@ export async function GET(
   } catch (error: unknown) {
     return NextResponse.json(
       {
-        error:
-          error instanceof Error ? error.message : "Internal server error",
+        error: error instanceof Error ? error.message : "Internal server error",
       },
       { status: 500 },
     );
@@ -374,16 +373,17 @@ export async function POST(
           { status: 400 },
         );
       }
-      evaluation = mode.kind === "unpaid"
-        ? {
-            ...policyEvaluation,
-            allowed: true,
-            refundPercent: 0,
-            penaltyPercent: 0,
-            refundAmount: 0,
-            retainedAmount: 0,
-          }
-        : policyEvaluation;
+      evaluation =
+        mode.kind === "unpaid"
+          ? {
+              ...policyEvaluation,
+              allowed: true,
+              refundPercent: 0,
+              penaltyPercent: 0,
+              refundAmount: 0,
+              retainedAmount: 0,
+            }
+          : policyEvaluation;
       refundAmount = evaluation.refundAmount;
       retainedAmount = evaluation.retainedAmount;
       refundStatus = refundAmount > 0 ? "pending" : "none";
@@ -433,7 +433,9 @@ export async function POST(
                       $in: ["created", "wallet_reserved", "kashier_pending"],
                     },
                   })
-                    .select("_id walletStatus walletReservationTxId gatewayStatus")
+                    .select(
+                      "_id walletStatus walletReservationTxId gatewayStatus",
+                    )
                     .session(dbSession)
                     .lean<
                       {
@@ -472,7 +474,11 @@ export async function POST(
                       {
                         _id: payment._id,
                         overallStatus: {
-                          $in: ["created", "wallet_reserved", "kashier_pending"],
+                          $in: [
+                            "created",
+                            "wallet_reserved",
+                            "kashier_pending",
+                          ],
                         },
                       },
                       {
@@ -572,7 +578,9 @@ export async function POST(
       trip.cancelReason = reason;
       trip.cancellation = cancellation;
     } else {
-      const parentConflict = await getParentCancellationConflict(trip.requestId);
+      const parentConflict = await getParentCancellationConflict(
+        trip.requestId,
+      );
       if (parentConflict) return parentConflict;
 
       if (trip.status === "cancelled") {
@@ -630,7 +638,6 @@ export async function POST(
           status: "pending",
         });
       }
-
     }
 
     // Unassign from Ride if matched.
@@ -704,6 +711,10 @@ export async function POST(
       } else {
         await trip.save();
       }
+    }
+
+    if (trip.requestId) {
+      await reconcileRequestSummary(String(trip.requestId));
     }
 
     // Log cancellation event

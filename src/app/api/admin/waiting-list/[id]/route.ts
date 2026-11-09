@@ -9,6 +9,7 @@ import { getCairoNowParts } from "@/lib/cancellationPolicy";
 import { createNotification } from "@/lib/notifications/createNotification";
 import {
   privateRideCounterpart,
+  privateRideOfferExpiresAt,
   privateRidePrice,
 } from "@/lib/privateRideOffer";
 import {
@@ -135,6 +136,17 @@ async function createPrivateRideOffer(
 
   const priceEgp = privateRidePrice(trip.distanceKm, regionPricing.rate);
   const offeredAt = new Date();
+  const expiresAt = privateRideOfferExpiresAt(offeredAt);
+  const deadlineText = new Intl.DateTimeFormat("en-EG", {
+    timeZone: "Africa/Cairo",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(expiresAt);
+  const deadlineTextAr = new Intl.DateTimeFormat("ar-EG", {
+    timeZone: "Africa/Cairo",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(expiresAt);
   const dbSession = await mongoose.startSession();
 
   try {
@@ -166,6 +178,7 @@ async function createPrivateRideOffer(
               priceEgp,
               offeredBy: new Types.ObjectId(adminId),
               offeredAt,
+              expiresAt,
               respondedAt: null,
               decision: null,
             },
@@ -203,9 +216,9 @@ async function createPrivateRideOffer(
       userId: String(trip.userId),
       type: "private_ride_offer",
       title: "A private-ride option is available",
-      body: `We couldn't find available passengers in your area for this shared trip. You can switch to a private ride for ${priceEgp} EGP or cancel the trip.`,
+      body: `We couldn't find available passengers in your area for this shared trip. You can switch to a private ride for ${priceEgp} EGP or cancel the trip. Respond by ${deadlineText} Cairo time to avoid automatic cancellation.`,
       titleAr: "يتوفر خيار رحلة خاصة",
-      bodyAr: `لم نتمكن من العثور على ركاب متاحين في منطقتك لهذه الرحلة المشتركة. يمكنك تحويلها إلى رحلة خاصة مقابل ${priceEgp} جنيه أو إلغاء الرحلة.`,
+      bodyAr: `لم نتمكن من العثور على ركاب متاحين في منطقتك لهذه الرحلة المشتركة. يمكنك تحويلها إلى رحلة خاصة مقابل ${priceEgp} جنيه أو إلغاء الرحلة. يرجى الرد قبل ${deadlineTextAr} بتوقيت القاهرة لتجنب الإلغاء التلقائي.`,
       data: {
         bookingId: String(trip.requestId ?? trip._id),
         tripId,

@@ -7,6 +7,7 @@ import {
   RegionAccessError,
   resolveActiveRegion,
 } from "@/lib/regions/resolveActiveRegion";
+import { getAdminIdentity } from "@/lib/admin/getAdminIdentity";
 
 export default async function RegionalAdminLayout({
   children,
@@ -38,10 +39,12 @@ export default async function RegionalAdminLayout({
       label: REGIONS[code].label,
     }),
   );
+  const adminIdentity = await getAdminIdentity(session.userId);
   return (
     <AdminShell
       activeRegionSlug={activeRegion.config.urlSlug}
       allowedRegions={allowedRegions}
+      adminIdentity={adminIdentity}
     >
       {children}
     </AdminShell>

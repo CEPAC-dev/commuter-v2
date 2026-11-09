@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, CheckCheck, LoaderCircle, Send } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  LoaderCircle,
+  MessageSquarePlus,
+  Search,
+  Send,
+} from "lucide-react";
 import { AdminPageContainer, AdminPageHeader } from "@/components/admin/layout";
 
 type ConversationStatus = "open" | "waiting" | "resolved";
@@ -37,6 +44,15 @@ interface ConversationDetail {
   messages: ThreadMessage[];
 }
 
+interface SupportUser {
+  id: string;
+  userNumber: number | null;
+  name: string;
+  email: string;
+  phone: string;
+  role: "passenger" | "driver";
+}
+
 const FILTERS: { id: StatusFilter; label: string }[] = [
   { id: "all", label: "All conversations" },
   { id: "open", label: "Needs reply" },
@@ -68,6 +84,15 @@ export default function SupportCenter() {
   const [loadingList, setLoadingList] = useState(true);
   const [sending, setSending] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [userQuery, setUserQuery] = useState("");
+  const [userResults, setUserResults] = useState<SupportUser[]>([]);
+  const [selectedUser, setSelectedUser] = useState<SupportUser | null>(null);
+  const [userSearchError, setUserSearchError] = useState("");
+  const [newConversationError, setNewConversationError] = useState("");
+  const [newConversationMessage, setNewConversationMessage] = useState("");
+  const [newConversationCategory, setNewConversationCategory] = useState("other");
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -222,12 +247,170 @@ export default function SupportCenter() {
     }
   }
 
+  async function searchUsers(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = userQuery.trim();
+    if (query.length < 2) {
+      setUserSearchError("Enter at least 2 characters to search.");
+      return;
+    }
+    setSearchingUsers(true);
+    setUserSearchError("");
+    setSelectedUser(null);
+    try {
+      const response = await fetch(
+        `/api/admin/support/users?q=${encodeURIComponent(query)}`,
+        { cache: "no-store" },
+      );
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error ?? "Could not search users.");
+      setUserResults(result.data);
+      if (!result.data.length) setUserSearchError("No matching users found.");
+    } catch (error) {
+      setUserResults([]);
+      setUserSearchError(
+        error instanceof Error ? error.message : "Could not search users.",
+      );
+    } finally {
+      setSearchingUsers(false);
+    }
+  }
+
+  async function startConversation(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedUser || !newConversationMessage.trim() || creatingConversation)
+      return;
+    setCreatingConversation(true);
+    setNewConversationError("");
+    try {
+      const response = await fetch("/api/admin/support", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          category: newConversationCategory,
+          message: newConversationMessage.trim(),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error ?? "Could not start conversation.");
+      setNewConversationMessage("");
+      setUserQuery("");
+      setUserResults([]);
+      setSelectedUser(null);
+      setFilter("all");
+      setSelectedId(result.data.id);
+      setDetail(null);
+    } catch (error) {
+      setNewConversationError(
+        error instanceof Error ? error.message : "Could not start conversation.",
+      );
+    } finally {
+      setCreatingConversation(false);
+    }
+  }
+
   return (
     <AdminPageContainer>
       <AdminPageHeader
         title="Support center"
-        description="Review customer handoffs, reply to messages, and resolve conversations."
+        description="Start conversations with users, reply to messages, and resolve support requests."
       />
+      <section className="support-center-panel support-center-start" aria-label="Start a conversation">
+        <h2>Start a conversation</h2>
+        <p>Search for any passenger or driver to contact them directly.</p>
+        <form className="support-center-user-search" onSubmit={(event) => void searchUsers(event)}>
+          <label className="support-center-visually-hidden" htmlFor="support-user-search">
+            Search users by name, email, phone, or user number
+          </label>
+          <input
+            id="support-user-search"
+            value={userQuery}
+            onChange={(event) => {
+              setUserQuery(event.target.value);
+              setSelectedUser(null);
+              setUserResults([]);
+              setUserSearchError("");
+            }}
+            placeholder="Name, email, phone, or #user number"
+            maxLength={100}
+          />
+          <button type="submit" disabled={searchingUsers}>
+            {searchingUsers ? (
+              <LoaderCircle size={16} className="support-center-spin" aria-hidden="true" />
+            ) : (
+              <Search size={16} aria-hidden="true" />
+            )}
+            Search
+          </button>
+        </form>
+        {userSearchError ? (
+          <p role="status" className="support-center-error">{userSearchError}</p>
+        ) : null}
+        {userResults.length ? (
+          <div className="support-center-user-results" aria-label="Search results">
+            {userResults.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                aria-pressed={selectedUser?.id === user.id}
+                className={`support-center-user-result${selectedUser?.id === user.id ? " is-selected" : ""}`}
+                onClick={() => {
+                  setSelectedUser(user);
+                  setNewConversationError("");
+                }}
+              >
+                <strong>{user.name}</strong>
+                <span>
+                  {user.role} · {user.phone}
+                  {user.email ? ` · ${user.email}` : ""}
+                  {user.userNumber ? ` · #${user.userNumber}` : ""}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {selectedUser ? (
+          <form className="support-center-start-form" onSubmit={(event) => void startConversation(event)}>
+            <p>
+              Message to <strong>{selectedUser.name}</strong>
+              {selectedUser.email ? ` (${selectedUser.email})` : ""}
+            </p>
+            <label htmlFor="support-new-category">Category</label>
+            <select
+              id="support-new-category"
+              value={newConversationCategory}
+              onChange={(event) => setNewConversationCategory(event.target.value)}
+            >
+              <option value="booking">Booking</option>
+              <option value="trip">Trip</option>
+              <option value="payment">Payment</option>
+              <option value="account">Account</option>
+              <option value="safety">Safety</option>
+              <option value="other">Other</option>
+            </select>
+            <label htmlFor="support-new-message">First message</label>
+            <textarea
+              id="support-new-message"
+              rows={3}
+              required
+              maxLength={2000}
+              value={newConversationMessage}
+              onChange={(event) => setNewConversationMessage(event.target.value)}
+              placeholder="Write a message to start the conversation…"
+            />
+            {newConversationError ? (
+              <p role="alert" className="support-center-error">{newConversationError}</p>
+            ) : null}
+            <button type="submit" disabled={creatingConversation || !newConversationMessage.trim()}>
+              <MessageSquarePlus size={16} aria-hidden="true" />
+              {creatingConversation ? "Starting…" : "Start conversation"}
+            </button>
+          </form>
+        ) : null}
+      </section>
       <div className="support-center-grid">
         <section className="support-center-panel" aria-label="Support inbox">
           <div className="support-center-filters" role="group" aria-label="Filter conversations">
@@ -300,9 +483,13 @@ export default function SupportCenter() {
               <header className="support-center-thread-header">
                 <div>
                   <h2>{selectedConversation.conversation.contactName}</h2>
-                  <a href={`mailto:${selectedConversation.conversation.contactEmail}`}>
-                    {selectedConversation.conversation.contactEmail}
-                  </a>
+                  {selectedConversation.conversation.contactEmail ? (
+                    <a href={`mailto:${selectedConversation.conversation.contactEmail}`}>
+                      {selectedConversation.conversation.contactEmail}
+                    </a>
+                  ) : (
+                    <span>No email address on file</span>
+                  )}
                   <p>
                     {selectedConversation.conversation.category} · Opened{" "}
                     {formatDate(selectedConversation.conversation.createdAt)}

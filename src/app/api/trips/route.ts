@@ -28,6 +28,8 @@ import {
 import { getCurrencyConfig } from "@/lib/config/regions";
 import { resolveActiveRegion } from "@/lib/regions/resolveActiveRegion";
 import { bookingWindow } from "@/lib/time/bookingDates";
+import { fetchDirections } from "@/app/api/directions/route";
+import { getVerifiedRoute } from "@/lib/pricing/verifiedRoute";
 import {
   ARRIVAL_SLOT_END_MIN,
   ARRIVAL_SLOT_START_MIN,
@@ -106,6 +108,7 @@ function stationPayload(
 const PAYMENT_STATUSES = new Set<PaymentStatus>([
   "pending",
   "paid",
+  "partially_refunded",
   "failed",
   "refunded",
   "expired",
@@ -428,7 +431,6 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    let routeCoordinates: [number, number][] | undefined;
     if (t.routeCoordinates != null) {
       if (
         !Array.isArray(t.routeCoordinates) ||
@@ -450,7 +452,6 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      routeCoordinates = t.routeCoordinates;
     }
 
     if (tripRideType === "private") {
@@ -543,10 +544,6 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      const routeDistanceKm = submittedLegs.reduce(
-        (sum, leg) => sum + leg.distanceKm,
-        0,
-      );
       if (!Number.isFinite(t.durationMinutes) || t.durationMinutes < 0) {
         return NextResponse.json(
           { error: "Invalid trip durationMinutes" },
@@ -567,25 +564,9 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      let passengersOnboard = numberOfPassengers;
-      const routeLegs = submittedLegs.map((submittedLeg, index) => {
-        const leg = {
-          distanceKm: submittedLeg.distanceKm,
-          passengers: submittedLeg.passengers ?? passengersOnboard,
-        };
-        const stop = stops[index];
-        if (stop) passengersOnboard += stop.boarding - stop.alighting;
-        return leg;
-      });
       const waitingMinutes = stops.reduce(
         (sum, stop) => sum + stop.waitingMinutes,
         0,
-      );
-      const priceEgp = computePrivateTripPriceEgp(
-        routeLegs,
-        waitingMinutes,
-        vKey,
-        vehiclesMap,
       );
 
       const zoneBasedStations = mapSettings.stationAssignmentMode === "zones";
@@ -630,6 +611,63 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const privateRoutePoints =
+        stops.length > 0
+          ? [
+              selectedPickup ?? t.pickup,
+              ...stops.map((stop) => stop.point!),
+              selectedDropoff ?? t.dropoff,
+            ]
+          : distinctPassengers.length > 0
+            ? [
+                t.pickup,
+                ...distinctPassengers.map((passenger) => passenger.pickup!),
+                ...distinctPassengers.map((passenger) => passenger.dropoff!),
+                t.dropoff,
+              ]
+            : [selectedPickup ?? t.pickup, selectedDropoff ?? t.dropoff];
+      const verifiedPrivateRoute = await getVerifiedRoute(
+        privateRoutePoints,
+        fetchDirections,
+      );
+      if (!verifiedPrivateRoute) {
+        return NextResponse.json(
+          { error: "Could not verify the driving route. Please try again." },
+          { status: 503 },
+        );
+      }
+      if (distinctPassengers.length > 0) {
+        const verifiedBaseRoute = await getVerifiedRoute(
+          [t.pickup, t.dropoff],
+          fetchDirections,
+        );
+        if (
+          !verifiedBaseRoute ||
+          verifiedPrivateRoute.distanceKm > verifiedBaseRoute.distanceKm * 1.25
+        ) {
+          return NextResponse.json(
+            { error: "Passenger detours exceed the allowed route limit." },
+            { status: 400 },
+          );
+        }
+      }
+      let passengersOnboard = numberOfPassengers;
+      const routeLegs = verifiedPrivateRoute.legs.map((verifiedLeg, index) => {
+        const leg = {
+          distanceKm: verifiedLeg.distanceKm,
+          passengers: passengersOnboard,
+        };
+        const stop = stops[index];
+        if (stop) passengersOnboard += stop.boarding - stop.alighting;
+        return leg;
+      });
+      const priceEgp = computePrivateTripPriceEgp(
+        routeLegs,
+        waitingMinutes,
+        vKey,
+        vehiclesMap,
+      );
+
       const nearPickup = zoneBasedStations
         ? selectedPickup
         : findNearestStation(
@@ -654,9 +692,9 @@ export async function POST(req: NextRequest) {
         rideType: tripRideType,
         arrivalTime,
         pickupTime,
-        distanceKm: routeDistanceKm,
+        distanceKm: verifiedPrivateRoute.distanceKm,
         durationMinutes: Math.round(Number(t.durationMinutes)),
-        ...(routeCoordinates && { routeCoordinates }),
+        routeCoordinates: verifiedPrivateRoute.coordinates,
         priceEgp,
         extraPassengers: 0,
         preferedGender,
@@ -731,18 +769,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!Number.isFinite(t.distanceKm) || t.distanceKm < 0) {
+    const verifiedSharedRoute = await getVerifiedRoute(
+      [selectedPickup ?? t.pickup, selectedDropoff ?? t.dropoff],
+      fetchDirections,
+    );
+    if (!verifiedSharedRoute) {
       return NextResponse.json(
-        { error: "Invalid trip distanceKm" },
-        { status: 400 },
+        { error: "Could not verify the driving route. Please try again." },
+        { status: 503 },
       );
     }
-    if (!Number.isFinite(t.durationMinutes) || t.durationMinutes < 0) {
-      return NextResponse.json(
-        { error: "Invalid trip durationMinutes" },
-        { status: 400 },
-      );
-    }
+
     const pickupTime = t.pickupTime;
     if (!pickupTime || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(pickupTime)) {
       return NextResponse.json(
@@ -768,7 +805,7 @@ export async function POST(req: NextRequest) {
     }
     const arrivalTime = snapToArrivalSlotMidpoint(t.arrivalTime);
     const priceEgp = computeTripPriceEgp({
-      distanceKm: Number(t.distanceKm),
+      distanceKm: verifiedSharedRoute.distanceKm,
       vehicleType: vKey,
       extraPassengers: Math.max(0, Math.round(Number(t.extraPassengers ?? 0))),
       vehiclesMap,
@@ -793,9 +830,9 @@ export async function POST(req: NextRequest) {
       rideType: tripRideType,
       arrivalTime,
       pickupTime,
-      distanceKm: Number(t.distanceKm),
+      distanceKm: verifiedSharedRoute.distanceKm,
       durationMinutes: Math.round(Number(t.durationMinutes)),
-      ...(routeCoordinates && { routeCoordinates }),
+      routeCoordinates: verifiedSharedRoute.coordinates,
       priceEgp,
       extraPassengers,
       preferedGender,

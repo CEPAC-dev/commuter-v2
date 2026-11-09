@@ -748,6 +748,8 @@ export const en = {
   "private_ride_offer.title": "A private-ride option is available",
   "private_ride_offer.description":
     "We couldn't find available passengers in your area for this shared trip. Changing to a {vehicleType} will update the fare from {oldPrice} to {newPrice}. Would you like to accept the new fare or cancel this trip?",
+  "private_ride_offer.expiration_note":
+    "If you don't respond by {deadline} (Cairo time), this trip will be canceled automatically.",
   "private_ride_offer.accept": "Accept new fare",
   "private_ride_offer.cancel_trip": "Cancel this trip",
   "private_ride_offer.close": "Not now",

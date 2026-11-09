@@ -59,6 +59,7 @@ const WalletTransactionSchema = new Schema(
       index: true,
       sparse: true,
     },
+    refundOperationId: { type: String, trim: true },
     tripId: { type: Types.ObjectId, ref: "Trip" },
     referralUsageId: {
       type: Types.ObjectId,
@@ -109,6 +110,13 @@ WalletTransactionSchema.index({ type: 1, status: 1, createdAt: -1 });
 WalletTransactionSchema.index({ userId: 1, createdAt: -1 });
 WalletTransactionSchema.index({ kashierOrderId: 1 });
 WalletTransactionSchema.index(
+  { refundOperationId: 1, type: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { refundOperationId: { $type: "string" } },
+  },
+);
+WalletTransactionSchema.index(
   { kashierRefundId: 1 },
   {
     unique: true,
@@ -141,6 +149,14 @@ if (
 ) {
   existingWalletTransactionModel.schema.add({
     kashierRefundId: { type: String },
+  });
+}
+if (
+  existingWalletTransactionModel &&
+  !existingWalletTransactionModel.schema.path("refundOperationId")
+) {
+  existingWalletTransactionModel.schema.add({
+    refundOperationId: { type: String, trim: true },
   });
 }
 export const WalletTransaction =

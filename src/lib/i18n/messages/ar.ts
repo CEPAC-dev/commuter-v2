@@ -742,6 +742,8 @@ export const ar: Record<MessageKey, string> = {
   "private_ride_offer.title": "يتوفر خيار رحلة خاصة",
   "private_ride_offer.description":
     "لم نتمكن من العثور على ركاب متاحين في منطقتك لهذه الرحلة المشتركة. تحويلها إلى {vehicleType} سيغيّر السعر من {oldPrice} إلى {newPrice}. هل تقبل السعر الجديد أم تريد إلغاء الرحلة؟",
+  "private_ride_offer.expiration_note":
+    "إذا لم ترد قبل {deadline} بتوقيت القاهرة، سيتم إلغاء الرحلة تلقائيًا.",
   "private_ride_offer.accept": "قبول السعر الجديد",
   "private_ride_offer.cancel_trip": "إلغاء الرحلة",
   "private_ride_offer.close": "ليس الآن",

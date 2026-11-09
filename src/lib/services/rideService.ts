@@ -12,7 +12,10 @@ import {
 import { createNotification } from "@/lib/notifications/createNotification";
 import { notifyRideCancellationPassengers } from "@/lib/notifications/rideIncident";
 import { getEligibleDriverIds } from "@/lib/services/rideMatching";
-import { getAdminSettings, getCancellationTier } from "@/lib/cancellationPolicy";
+import {
+  getAdminSettings,
+  getCancellationTier,
+} from "@/lib/cancellationPolicy";
 import { getDriverRideCancellationDecision } from "@/lib/rideCancellationAccess";
 import { isRegionCode } from "@/lib/config/regions";
 import { NO_SHOW_MIN_WAIT_MINUTES } from "@/lib/noShowRules";
@@ -181,10 +184,20 @@ async function createRide(matchResult: MatchResult) {
     // mutated here.
 
     const tripIds = matchResult.passengers.map((p) => p.tripId);
+    if (matchResult.driverId) {
+      const conflictingRide = await Ride.exists({
+        driverId: matchResult.driverId,
+        date: matchResult.date,
+        status: { $in: ["matched", "confirmed", "active"] },
+        startTime: { $lt: matchResult.endTime },
+        endTime: { $gt: matchResult.startTime },
+      }).session(session);
+      if (conflictingRide) {
+        throw new Error("This driver already has an overlapping Ride.");
+      }
+    }
     const trips = await Trip.find({ _id: { $in: tripIds } })
-      .select(
-        "pickupStation dropoffStation numberOfPassengers extraPassengers",
-      )
+      .select("pickupStation dropoffStation numberOfPassengers extraPassengers")
       .session(session)
       .lean<
         {
@@ -240,7 +253,9 @@ async function createRide(matchResult: MatchResult) {
         passengersForRide.map((passenger) => passenger.numberOfPassengers),
       )
     ) {
-      throw new Error("Selected trips exceed this vehicle's passenger capacity.");
+      throw new Error(
+        "Selected trips exceed this vehicle's passenger capacity.",
+      );
     }
 
     const firstTrip = tripById.get(String(matchResult.passengers[0]?.tripId));
@@ -273,9 +288,16 @@ async function createRide(matchResult: MatchResult) {
         : {}),
     });
 
-    const recalculatedRoute = await recalculateRouteFromPassengers(
-      passengersForRide,
-    );
+    const suppliedRoutePoints = recordArray(matchResult.route)
+      .map((stop) => toGeoPoint(stop.point))
+      .filter((point): point is GeoPoint => point !== null);
+    const recalculatedRoute =
+      suppliedRoutePoints.length >= 2
+        ? {
+            stops: normalizeRoutePayload(matchResult.route),
+            coordinates: await recalculateRouteCoordinates(suppliedRoutePoints),
+          }
+        : await recalculateRouteFromPassengers(passengersForRide);
     if (!matchResult.route) {
       rideDoc.route = normalizeRoutePayload(recalculatedRoute.stops);
     }
@@ -284,6 +306,10 @@ async function createRide(matchResult: MatchResult) {
     const expectedTripIds = matchResult.passengers.map((passenger) =>
       String(passenger.tripId),
     );
+    const claimedTripStatus =
+      matchResult.driverId && matchResult.status === "confirmed"
+        ? "confirmed"
+        : "matched";
     const claimedTripIds: string[] = [];
     for (const p of matchResult.passengers) {
       const assigned = passengersForRide.find(
@@ -299,7 +325,7 @@ async function createRide(matchResult: MatchResult) {
         {
           $set: {
             rideId: rideDoc._id,
-            status: "matched",
+            status: claimedTripStatus,
             driverId: matchResult.driverId,
             seatNumbers: assigned?.seatNumbers ?? [],
           },
@@ -451,6 +477,17 @@ async function recalculateRouteFromPassengers(
   }
 
   const points = stops.map((stop) => stop.point);
+  return {
+    stops,
+    coordinates: await recalculateRouteCoordinates(points, previousCoordinates),
+  };
+}
+
+async function recalculateRouteCoordinates(
+  points: GeoPoint[],
+  previousCoordinates: Array<{ lat: number; lng: number }> = [],
+): Promise<Array<{ lat: number; lng: number }>> {
+  if (points.length < 2) return previousCoordinates;
   const origin = points[0];
   const destination = points[points.length - 1];
   const waypoints = points
@@ -468,16 +505,13 @@ async function recalculateRouteFromPassengers(
     if (!coordinates || coordinates.length < 2) {
       throw new Error("OSRM returned no route geometry");
     }
-    return {
-      stops,
-      coordinates: coordinates.map(([lat, lng]) => ({ lat, lng })),
-    };
+    return coordinates.map(([lat, lng]) => ({ lat, lng }));
   } catch (error) {
     console.error(
       "[rideService] OSRM route recalculation failed; keeping previous geometry",
       error,
     );
-    return { stops, coordinates: previousCoordinates };
+    return previousCoordinates;
   }
 }
 
@@ -775,10 +809,7 @@ export async function ensureRidePassengerNumbers(
         if (!entry || typeof entry !== "object") continue;
         const passenger = entry as Record<string, unknown>;
         const assignedNumber = numberByTripId.get(String(passenger.tripId));
-        if (
-          assignedNumber &&
-          passenger.passengerNumber !== assignedNumber
-        ) {
+        if (assignedNumber && passenger.passengerNumber !== assignedNumber) {
           passenger.passengerNumber = assignedNumber;
           changed = true;
         }
@@ -991,7 +1022,8 @@ async function addPassengerToRide(
         pickupStation?: StationSelection;
         dropoffStation?: StationSelection;
       }>();
-    if (!trip) throw new Error("Trip is no longer eligible for ride assignment");
+    if (!trip)
+      throw new Error("Trip is no longer eligible for ride assignment");
 
     ride.passengers.push({
       tripId: passenger.tripId,
@@ -1009,10 +1041,8 @@ async function addPassengerToRide(
       dropoffStation: trip?.dropoffStation ?? undefined,
       status: "waiting",
     });
-    ride.passengerNumberSequence = getNextPassengerNumber(
-      ride.passengers,
-      ride.passengerNumberSequence,
-    ) - 1;
+    ride.passengerNumberSequence =
+      getNextPassengerNumber(ride.passengers, ride.passengerNumberSequence) - 1;
 
     // recompute route
     const recalculatedRoute = await recalculateRouteFromPassengers(
@@ -1132,10 +1162,12 @@ async function cancelRide(rideId: string | Types.ObjectId, _reason?: string) {
     // unlink trips
     const tripIds = collectRideTripIds(ride);
     const ridePickupStatusByTripId = new Map(
-      ((ride.passengers || []) as Array<{
-        tripId?: unknown;
-        status?: string | null;
-      }>).map((passenger) => [
+      (
+        (ride.passengers || []) as Array<{
+          tripId?: unknown;
+          status?: string | null;
+        }>
+      ).map((passenger) => [
         String(passenger.tripId),
         String(passenger.status ?? "waiting"),
       ]),
@@ -1314,7 +1346,9 @@ async function cancelRideByDriver(
     );
 
     if (evaluation.action === "blocked") {
-      throw new Error("Cancellation is not allowed between 5:00 PM and 7:00 PM.");
+      throw new Error(
+        "Cancellation is not allowed between 5:00 PM and 7:00 PM.",
+      );
     }
 
     let penaltyAmount = 0;
@@ -1324,7 +1358,9 @@ async function cancelRideByDriver(
       // no-op: recurring driver Availability stays untouched
     } else {
       // Penalty applies
-      penaltyAmount = Math.round((ride.totalCost * evaluation.penaltyPercent) / 100);
+      penaltyAmount = Math.round(
+        (ride.totalCost * evaluation.penaltyPercent) / 100,
+      );
 
       if (penaltyAmount > 0) {
         const userId = new Types.ObjectId(String(driverUserId));
@@ -1397,7 +1433,9 @@ async function cancelRideByDriver(
     await ride.save({ session });
 
     // Unlink trips / notify passengers
-    const ridePassengers = (ride.passengers || []) as Array<{ tripId?: unknown }>;
+    const ridePassengers = (ride.passengers || []) as Array<{
+      tripId?: unknown;
+    }>;
     const tripIds = ridePassengers
       .map((p) => String(p.tripId))
       .filter((id) => Types.ObjectId.isValid(id));

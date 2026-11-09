@@ -3,10 +3,13 @@ import mongoose, { Types } from "mongoose";
 import { getSession } from "@/lib/auth/session";
 import { connectDB } from "@/lib/db/mongoose";
 import { releasePromoCodeUsageForTrip } from "@/lib/promoCode";
+import { privateRideOfferExpiresAt } from "@/lib/privateRideOffer";
+import { expirePrivateRideOffer } from "@/lib/services/privateRideOfferExpiry";
 import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 
 const PRIVATE_RIDE_OFFER_CONFLICT = "PRIVATE_RIDE_OFFER_CONFLICT";
+const PRIVATE_RIDE_RESPONSE_EXPIRED = "PRIVATE_RIDE_RESPONSE_EXPIRED";
 
 type OfferTrip = {
   _id: Types.ObjectId;
@@ -19,6 +22,8 @@ type OfferTrip = {
     vehicleType: "private_car" | "taxi_private";
     priceEgp: number;
     offeredBy: Types.ObjectId;
+    offeredAt: Date | string;
+    expiresAt?: Date | string | null;
   } | null;
 };
 
@@ -54,6 +59,17 @@ export async function PATCH(
   await connectDB();
   const tripId = new Types.ObjectId(id);
   const userId = new Types.ObjectId(session.userId);
+  const receivedAt = new Date();
+  if (await expirePrivateRideOffer(tripId, receivedAt, userId)) {
+    return NextResponse.json(
+      {
+        errorCode: PRIVATE_RIDE_RESPONSE_EXPIRED,
+        error: "This offer expired and the trip was automatically cancelled.",
+      },
+      { status: 409 },
+    );
+  }
+
   const dbSession = await mongoose.startSession();
   let result: { status: string; requestId: string | null } | null = null;
 
@@ -69,6 +85,14 @@ export async function PATCH(
 
       if (!trip?.privateRideOffer) {
         throw new Error(PRIVATE_RIDE_OFFER_CONFLICT);
+      }
+
+      const now = new Date();
+      const expiresAt = trip.privateRideOffer.expiresAt
+        ? new Date(trip.privateRideOffer.expiresAt)
+        : privateRideOfferExpiresAt(trip.privateRideOffer.offeredAt);
+      if (now >= expiresAt) {
+        throw new Error(PRIVATE_RIDE_RESPONSE_EXPIRED);
       }
 
       const requestId = trip.requestId ?? null;
@@ -105,8 +129,6 @@ export async function PATCH(
             .session(dbSession)
             .lean<{ _id: Types.ObjectId; date: string; priceEgp: number }[]>()
         : [];
-      const now = new Date();
-
       if (action === "accept") {
         await releasePromoCodeUsageForTrip(tripId, dbSession);
 
@@ -255,6 +277,19 @@ export async function PATCH(
       };
     });
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === PRIVATE_RIDE_RESPONSE_EXPIRED
+    ) {
+      await expirePrivateRideOffer(tripId, new Date(), userId);
+      return NextResponse.json(
+        {
+          errorCode: PRIVATE_RIDE_RESPONSE_EXPIRED,
+          error: "This offer expired and the trip was automatically cancelled.",
+        },
+        { status: 409 },
+      );
+    }
     if (error instanceof Error && error.message === PRIVATE_RIDE_OFFER_CONFLICT) {
       return NextResponse.json(
         {

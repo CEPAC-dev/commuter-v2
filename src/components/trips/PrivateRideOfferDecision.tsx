@@ -11,6 +11,7 @@ type PrivateRideOfferDecisionProps = {
   offer: {
     vehicleType: "private_car" | "taxi_private";
     priceEgp: number;
+    expiresAt?: string | null;
   };
 };
 
@@ -23,6 +24,15 @@ export default function PrivateRideOfferDecision({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const expirationDate = offer.expiresAt ? new Date(offer.expiresAt) : null;
+  const deadline =
+    expirationDate && Number.isFinite(expirationDate.getTime())
+      ? new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-EG", {
+          timeZone: "Africa/Cairo",
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(expirationDate)
+      : "7:00 PM";
 
   async function respond(action: "accept" | "cancel") {
     setBusy(true);
@@ -116,6 +126,9 @@ export default function PrivateRideOfferDecision({
                   newPrice: formatEgp(locale, offer.priceEgp),
                   vehicleType: t(`vehicles.${offer.vehicleType}`),
                 })}
+              </p>
+              <p style={{ margin: "10px 0 0", lineHeight: 1.6, color: "#B42318", fontWeight: 600 }}>
+                {t("private_ride_offer.expiration_note", { deadline })}
               </p>
             </div>
             {error ? (

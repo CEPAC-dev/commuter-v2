@@ -410,6 +410,8 @@ export async function listUserTrips(
     privateRideOffer?: {
       vehicleType: "private_car" | "taxi_private";
       priceEgp: number;
+      offeredAt?: Date | string | null;
+      expiresAt?: Date | string | null;
     } | null;
   };
 
@@ -777,6 +779,7 @@ export interface UserTripDetail {
   privateRideOffer?: {
     vehicleType: "private_car" | "taxi_private";
     priceEgp: number;
+    expiresAt?: string | null;
   } | null;
   createdAt: string;
   assignedDriver?: AssignedDriver | null;
@@ -839,6 +842,8 @@ export async function getDriverTrip(
     privateRideOffer?: {
       vehicleType: "private_car" | "taxi_private";
       priceEgp: number;
+      offeredAt?: Date | string | null;
+      expiresAt?: Date | string | null;
     } | null;
     cancelledBy?: string;
     cancelReason?: string;
@@ -873,6 +878,7 @@ export async function getDriverTrip(
     requestId: trip.requestId ? String(trip.requestId) : String(trip._id),
     isStandalone: trip.requestId == null,
     requestAmountEgp: parentRequest?.amountEgp ?? trip.priceEgp,
+    privateRideOffer: serializePrivateRideOffer(trip.privateRideOffer),
     parentRequestStatus: parentRequest?.status,
     parentPaymentStatus: parentRequest?.paymentStatus,
     rejectionReason:
@@ -963,10 +969,11 @@ export async function getUserTrip(
     privateRideOffer?: {
       vehicleType: "private_car" | "taxi_private";
       priceEgp: number;
+      offeredAt?: Date | string | null;
+      expiresAt?: Date | string | null;
       offeredBy?: unknown;
-      offeredAt?: Date | string;
       respondedAt?: Date | string | null;
-      decision?: "accepted" | "cancelled";
+      decision?: "accepted" | "cancelled" | "expired";
     } | null;
     createdAt: Date | string;
   }>();

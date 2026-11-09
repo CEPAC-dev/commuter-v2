@@ -6,6 +6,7 @@ import type { BookingStatus, PaymentStatus } from "@/types/booking";
 const PAYMENT_STATUSES = new Set<PaymentStatus>([
   "pending",
   "paid",
+  "partially_refunded",
   "failed",
   "refunded",
   "expired",

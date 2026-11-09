@@ -6,6 +6,7 @@ import { Trip } from "@/models/Trip";
 import { getAdminSettings, getNomatchSweepFilter } from "@/lib/cancellationPolicy";
 import { logTripNomatch } from "@/lib/services/logActionHelpers";
 import { expireStandaloneTrips } from "@/lib/services/standaloneTripExpiry";
+import { expireDuePrivateRideOffers } from "@/lib/services/privateRideOfferExpiry";
 import {
   buildUnlinkedTripExpiryFilter,
   buildPendingRequestExpiryFilter,
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
     }
   }
   const standaloneExpiry = await expireStandaloneTrips();
+  const expiredPrivateRideOffers = await expireDuePrivateRideOffers();
 
   // Auto-mark unmatched "submitted" trips as "nomatch" past the admin-configured cutoff.
   const settings = await getAdminSettings();
@@ -114,6 +116,7 @@ export async function POST(req: NextRequest) {
     expiredRequests,
     expiredTrips,
     expiredStandaloneTrips: standaloneExpiry.expiredTrips,
+    expiredPrivateRideOffers,
     cancelledStandalonePayments: standaloneExpiry.cancelledPayments,
     releasedStandaloneWalletReservations:
       standaloneExpiry.releasedWalletReservations,

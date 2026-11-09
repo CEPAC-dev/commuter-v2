@@ -1,10 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  availabilityCoversTimeWindow,
+  availabilityDayOfWeek,
   isValidAvailabilityId,
   normalizeAvailabilityOrigin,
   validateAvailabilityWindow,
 } from "../src/lib/time/availabilityWindow.ts";
+
+test("maps calendar dates to recurring availability weekdays", () => {
+  assert.equal(availabilityDayOfWeek("2026-11-08"), "sun");
+  assert.equal(availabilityDayOfWeek("2026-11-09"), "mon");
+  assert.equal(availabilityDayOfWeek("2026-02-30"), null);
+});
+
+test("requires a recurring shift to cover the full ride time window", () => {
+  assert.equal(availabilityCoversTimeWindow("07:00", "15:00", "08:00", "14:00"), true);
+  assert.equal(availabilityCoversTimeWindow("07:00", "13:59", "08:00", "14:00"), false);
+  assert.equal(availabilityCoversTimeWindow("08:00", "15:00", "07:59", "14:00"), false);
+});
 
 test("accepts an availability window of exactly eight hours", () => {
   assert.equal(validateAvailabilityWindow("08:00", "16:00"), null);
