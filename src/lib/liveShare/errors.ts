@@ -30,5 +30,15 @@ export function logLiveShareFailure(routeLabel: string, error: unknown): void {
     console.error(routeLabel, errorName, error.code);
     return;
   }
-  console.error(routeLabel, errorName);
+  const details =
+    error && typeof error === "object"
+      ? (error as { code?: unknown; statusCode?: unknown })
+      : null;
+  const code =
+    typeof details?.code === "string" || typeof details?.code === "number"
+      ? details.code
+      : undefined;
+  const statusCode =
+    typeof details?.statusCode === "number" ? details.statusCode : undefined;
+  console.error(routeLabel, errorName, { code, statusCode });
 }

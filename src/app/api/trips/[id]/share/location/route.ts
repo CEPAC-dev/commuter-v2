@@ -36,7 +36,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   }
 
   const now = new Date();
-  const validation = validateLocationInput(body, now);
+  const validation = validateLocationInput(body);
   if (!validation.valid) {
     return NextResponse.json(
       { error: validation.reason, ...(validation.errorCode ? { errorCode: validation.errorCode } : {}) },

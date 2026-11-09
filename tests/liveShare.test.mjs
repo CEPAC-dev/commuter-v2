@@ -233,7 +233,7 @@ test("detected trip end time uses the terminal status timestamp for delayed poll
   );
 });
 
-test("location validation accepts supported readings and rejects invalid, stale, future, or inaccurate data", () => {
+test("location validation accepts clock-skewed timestamps and rejects invalid measurements", () => {
   const valid = validateLocationInput(
     {
       lat: -90,
@@ -243,7 +243,6 @@ test("location validation accepts supported readings and rejects invalid, stale,
       speed: 0,
       recordedAt: NOW.toISOString(),
     },
-    NOW,
   );
   assert.equal(valid.valid, true);
 
@@ -253,11 +252,22 @@ test("location validation accepts supported readings and rejects invalid, stale,
     { lat: 30, lng: -181, recordedAt: NOW },
     { lat: 30, lng: 31, heading: 361, recordedAt: NOW },
     { lat: 30, lng: 31, speed: -1, recordedAt: NOW },
-    { lat: 30, lng: 31, recordedAt: new Date(NOW.getTime() - 120_001) },
-    { lat: 30, lng: 31, recordedAt: new Date(NOW.getTime() + 30_001) },
+    { lat: 30, lng: 31, recordedAt: new Date(Number.NaN) },
   ]) {
-    assert.equal(validateLocationInput(input, NOW).valid, false);
+    assert.equal(validateLocationInput(input).valid, false);
   }
+  assert.equal(
+    validateLocationInput(
+      { lat: 30, lng: 31, recordedAt: new Date(NOW.getTime() - 86_400_000) },
+    ).valid,
+    true,
+  );
+  assert.equal(
+    validateLocationInput(
+      { lat: 30, lng: 31, recordedAt: new Date(NOW.getTime() + 86_400_000) },
+    ).valid,
+    true,
+  );
   const overAccuracyCap = validateLocationInput(
     {
       lat: 30,

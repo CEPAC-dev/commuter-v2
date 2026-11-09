@@ -3,9 +3,18 @@ import Ably from "ably";
 
 let client: Ably.Rest | null = null;
 
+class AblyConfigurationError extends Error {
+  readonly code = "ABLY_API_KEY_MISSING";
+
+  constructor() {
+    super("ABLY_API_KEY is not configured.");
+    this.name = "AblyConfigurationError";
+  }
+}
+
 function getClient(): Ably.Rest {
   const key = process.env.ABLY_API_KEY?.trim();
-  if (!key) throw new Error("ABLY_API_KEY is not configured.");
+  if (!key) throw new AblyConfigurationError();
   if (!client) client = new Ably.Rest({ key });
   return client;
 }
