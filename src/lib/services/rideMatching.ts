@@ -3,22 +3,12 @@ import { Availability } from "@/models/Availability";
 import { Driver } from "@/models/Driver";
 import { Ride } from "@/models/Ride";
 import { getAdminSettings } from "@/lib/cancellationPolicy";
+import { isCarTypeCompatible } from "@/lib/config/driver";
+import { isRegionCode } from "@/lib/config/regions";
 import {
   availabilityCoversTimeWindow,
   availabilityDayOfWeek,
 } from "@/lib/time/availabilityWindow";
-
-function vehicleCompatible(
-  carType: string | undefined,
-  vehicleType: string,
-): boolean {
-  if (!carType) return false;
-  if (vehicleType === "private_car") return carType === "private";
-  if (vehicleType === "taxi_private") return carType === "taxi";
-  if (vehicleType === "van_shared") return carType === "van";
-  if (vehicleType === "microbus_shared") return carType === "microbus";
-  return true;
-}
 
 type StationPoint = { lat: number; lng: number };
 
@@ -38,6 +28,7 @@ function haversineKm(first: StationPoint, second: StationPoint): number {
 export async function getEligibleDriverIds(ride: {
   _id: unknown;
   date: string;
+  regionCode?: string | null;
   startTime: string;
   endTime: string;
   vehicleType: string;
@@ -50,9 +41,14 @@ export async function getEligibleDriverIds(ride: {
   }[];
 }): Promise<Types.ObjectId[]> {
   const settings = await getAdminSettings();
+  if (!isRegionCode(ride.regionCode)) return [];
   const dayOfWeek = availabilityDayOfWeek(ride.date);
   if (!dayOfWeek) return [];
-  const availability = await Availability.find({ dayOfWeek, active: true })
+  const availability = await Availability.find({
+    dayOfWeek,
+    active: true,
+    regionCode: ride.regionCode,
+  })
     .select(
       "driverId origin startNearestStation destinationNearestStation startTime endTime",
     )
@@ -91,7 +87,7 @@ export async function getEligibleDriverIds(ride: {
 
   for (const item of availability) {
     const driver = driverMap.get(String(item.driverId));
-    if (!driver || !vehicleCompatible(driver.carType, ride.vehicleType))
+    if (!driver || !isCarTypeCompatible(driver.carType, ride.vehicleType))
       continue;
     if (
       !availabilityCoversTimeWindow(

@@ -28,7 +28,7 @@ const DriverSchema = new Schema(
     // ── Driver details (filled in later via /profile) ──
     carType: {
       type: String,
-      enum: ["private", "taxi", "van", "microbus"],
+      enum: ["passenger_car", "taxi", "van", "microbus", "minibus"],
     },
     carBrand: { type: String, trim: true },
     carModel: { type: String, trim: true },

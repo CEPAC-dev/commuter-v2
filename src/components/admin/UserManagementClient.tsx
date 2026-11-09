@@ -26,6 +26,8 @@ import {
   AdminStatusBadge,
 } from "@/components/admin/layout";
 import { REGION_CODES, REGIONS, type RegionCode } from "@/lib/config/regions";
+import { useClientLocale } from "@/lib/locale.client";
+import { normalizeCarType } from "@/lib/config/driver";
 
 /**
  * ---------------------------------------------------------------------
@@ -151,6 +153,11 @@ export default function UserManagementClient({
   description = "Review accounts and manage access levels.",
   emptyMessage = "No users match your search.",
 }: UserManagementClientProps) {
+  const { t } = useClientLocale();
+  const carTypeLabel = (value?: string) => {
+    const carType = normalizeCarType(value);
+    return carType ? t(`vehicles.${carType}`) : (value ?? "—");
+  };
   const [rows, setRows] = useState<UserRow[]>(initialUsers);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
@@ -210,14 +217,7 @@ export default function UserManagementClient({
       const comparison = leftValue - rightValue;
       return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [
-    rows,
-    query,
-    roleFilter,
-    signupDate,
-    sortBy,
-    sortDirection,
-  ]);
+  }, [rows, query, roleFilter, signupDate, sortBy, sortDirection]);
 
   const signupDateCount = useMemo(() => {
     if (!signupDate) return null;
@@ -747,7 +747,7 @@ export default function UserManagementClient({
                               {buildPlate(user.driver) || "—"}
                             </span>
                             <span className="ml-2 text-xs text-[var(--color-muted)]">
-                              {user.driver.carType || "—"} ·{" "}
+                              {carTypeLabel(user.driver.carType)} ·{" "}
                               {user.driver.modelYear || "—"}
                             </span>
                           </div>
@@ -777,7 +777,6 @@ export default function UserManagementClient({
                             </p>
                           )}
                         </InfoCard>
-
                       </>
                     )}
                   </div>

@@ -3,7 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
 import { getSession } from "@/lib/auth/session";
-import { carTypeToCapacity, type CarType } from "@/lib/config/driver";
+import { carTypeToCapacity, normalizeCarType } from "@/lib/config/driver";
 import { isRegionKey, normalizeRegion } from "@/lib/config/regions";
 import { getProfile } from "@/lib/services/profile";
 import {
@@ -118,10 +118,11 @@ export async function PATCH(req: NextRequest) {
 
     const driverUpdate: Record<string, unknown> = {};
     if (gender === "male" || gender === "female") driverUpdate.gender = gender;
-    if (["private", "taxi", "van", "microbus"].includes(carType)) {
-      driverUpdate.carType = carType;
+    const normalizedCarType = normalizeCarType(carType);
+    if (normalizedCarType) {
+      driverUpdate.carType = normalizedCarType;
       // Server-authoritative capacity — never trust client input.
-      driverUpdate.carCapacity = carTypeToCapacity(carType as CarType);
+      driverUpdate.carCapacity = carTypeToCapacity(normalizedCarType);
     }
     const safeCarBrand = normalizePlainText(carBrand, {
       maxLength: 60,
@@ -231,7 +232,7 @@ export async function PATCH(req: NextRequest) {
       await notifyAdminsDriverUpdate(
         String(driver?._id),
         safeName,
-        false // Update, not first submit
+        false, // Update, not first submit
       );
     }
 

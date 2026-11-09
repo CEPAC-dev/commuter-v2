@@ -195,10 +195,11 @@ const PRIVATE_HEADER_LABELS: Record<string, string> = {
 };
 
 const CAR_TYPE_TO_VEHICLE_TYPE: Record<string, number> = {
-  private: 1,
+  passenger_car: 1,
   taxi: 2,
   van: 3,
   microbus: 4,
+  minibus: 5,
 };
 
 const DISTANCE_MATRIX_FACTOR = 1.081;

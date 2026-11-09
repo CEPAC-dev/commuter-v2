@@ -53,6 +53,7 @@ export async function PATCH(
   const eligibleDriverIds = await getEligibleDriverIds({
     _id: trip._id,
     date: trip.date,
+    regionCode: trip.regionCode,
     startTime: trip.pickupTime,
     endTime: trip.arrivalTime,
     vehicleType: trip.vehicleType,

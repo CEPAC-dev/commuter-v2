@@ -41,6 +41,8 @@ interface TripRow {
   pickup?: { address?: string; lat?: number; lng?: number } | null;
   dropoff?: { address?: string; lat?: number; lng?: number } | null;
   status: string;
+  paymentStatus?: string;
+  rideId?: { _id?: string } | string | null;
   requestId?: {
     _id?: string;
     amountEgp?: number;
@@ -60,6 +62,17 @@ interface TripRow {
     userNumber?: number;
   } | null;
   driverId?: { _id?: string; name?: string; phone?: string } | null;
+}
+
+function canAssignDriver(
+  trip: Pick<TripRow, "status" | "paymentStatus" | "rideId" | "driverId">,
+): boolean {
+  return (
+    trip.status === "submitted" &&
+    trip.paymentStatus === "paid" &&
+    !trip.rideId &&
+    !trip.driverId
+  );
 }
 
 type StationRef = {
@@ -1572,13 +1585,15 @@ export default function AdminTripsPage() {
                               flexWrap: "wrap",
                             }}
                           >
-                            <button
-                              type="button"
-                              onClick={() => void openAssignModal(trip._id)}
-                              className="action-btn assign"
-                            >
-                              <UserPlus size={14} /> Assign
-                            </button>
+                            {canAssignDriver(trip) ? (
+                              <button
+                                type="button"
+                                onClick={() => void openAssignModal(trip._id)}
+                                className="action-btn assign"
+                              >
+                                <UserPlus size={14} /> Assign
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               onClick={() =>
@@ -2051,18 +2066,18 @@ export default function AdminTripsPage() {
                 flexWrap: "wrap",
               }}
             >
-              <button
-                type="button"
-                className="action-btn assign"
-                disabled={!detail}
-                onClick={() => {
-                  if (!detail) return;
-                  closeDetail();
-                  void openAssignModal(detail._id);
-                }}
-              >
-                <UserPlus size={14} /> Assign driver
-              </button>
+              {detail && canAssignDriver(detail) ? (
+                <button
+                  type="button"
+                  className="action-btn assign"
+                  onClick={() => {
+                    closeDetail();
+                    void openAssignModal(detail._id);
+                  }}
+                >
+                  <UserPlus size={14} /> Assign driver
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="action-btn delete"

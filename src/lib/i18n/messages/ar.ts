@@ -2,7 +2,8 @@ import type { MessageKey } from "./en";
 
 export const ar: Record<MessageKey, string> = {
   "admin.chat_reports.title": "بلاغات محادثات الرحلات",
-  "admin.chat_reports.subtitle": "مراجعة بلاغات المشاركين وأدلة المحادثة المحفوظة.",
+  "admin.chat_reports.subtitle":
+    "مراجعة بلاغات المشاركين وأدلة المحادثة المحفوظة.",
   "admin.chat_reports.load_error": "تعذر تحميل بلاغات المحادثة.",
   "admin.chat_reports.review_error": "تعذر تحديث هذا البلاغ.",
   "admin.chat_reports.review_saved": "تم تحديث حالة البلاغ.",
@@ -35,7 +36,8 @@ export const ar: Record<MessageKey, string> = {
   "admin.chat_reports.role.driver": "سائق",
   "admin.chat_reports.reporter": "تم الإبلاغ بواسطة",
   "admin.chat_reports.snapshot": "نسخة المحادثة",
-  "admin.chat_reports.snapshot_empty": "لم تكن هناك رسائل متاحة عند تقديم البلاغ.",
+  "admin.chat_reports.snapshot_empty":
+    "لم تكن هناك رسائل متاحة عند تقديم البلاغ.",
   "admin.chat_reports.admin_note": "ملاحظة المسؤول",
   "admin.chat_reports.mark_reviewed": "تحديد كمراجع",
   "admin.chat_reports.dismiss": "رفض البلاغ",
@@ -165,7 +167,8 @@ export const ar: Record<MessageKey, string> = {
   "admin.station_suggestions.location_map_prompt":
     "انقر داخل إحدى مناطق الخدمة المحددة لنقل علامة المحطة.",
   "admin.station_suggestions.location_map_aria": "خريطة لتعديل موقع المحطة",
-  "admin.station_suggestions.location_map_loading": "جارٍ تحميل مناطق الخدمة النشطة…",
+  "admin.station_suggestions.location_map_loading":
+    "جارٍ تحميل مناطق الخدمة النشطة…",
   "admin.station_suggestions.location_map_error":
     "تعذر تحميل خريطة مناطق الخدمة. يرجى المحاولة مرة أخرى.",
   "admin.station_suggestions.location_outside_zones":
@@ -248,8 +251,7 @@ export const ar: Record<MessageKey, string> = {
     "أكد الوصول إلى نقطة الركوب لبدء انتظار عدم الحضور.",
   "driver.no_show_arrival_unavailable":
     "لم يعد هذا الراكب منتظرًا عند نقطة الركوب هذه.",
-  "driver.no_show_arrival_error":
-    "تعذر تأكيد الوصول. يرجى المحاولة مرة أخرى.",
+  "driver.no_show_arrival_error": "تعذر تأكيد الوصول. يرجى المحاولة مرة أخرى.",
   "driver.no_show_alighting_note":
     "{name} لن يصل هنا — لم يحضر، وتم استبعاده بالفعل من عدد النازلين.",
   "driver.will_alight_here": "سينزل هنا",
@@ -313,20 +315,26 @@ export const ar: Record<MessageKey, string> = {
   "history.results_count": "{count} طلب مطابق",
   "history.no_results": "ملقيناش نتائج",
   "history.any_trip_number": "أي رقم رحلة",
-  "history.no_results_for": "مفيش طلبات مطابقة لـ {query}، من {from} إلى {to}، الحالة: {status}.",
+  "history.no_results_for":
+    "مفيش طلبات مطابقة لـ {query}، من {from} إلى {to}، الحالة: {status}.",
   "history.matched_trip": "الرحلة المطابقة",
-  "history.error_invalid_trip_number": "اكتب رقم الرحلة بالأرقام، وممكن تبدأه بعلامة #.",
+  "history.error_invalid_trip_number":
+    "اكتب رقم الرحلة بالأرقام، وممكن تبدأه بعلامة #.",
   "history.error_invalid_date": "اختار تواريخ صحيحة في النطاق.",
-  "history.error_from_after_to": "تاريخ البداية لازم يكون قبل أو نفس تاريخ النهاية.",
+  "history.error_from_after_to":
+    "تاريخ البداية لازم يكون قبل أو نفس تاريخ النهاية.",
   "my_trips.request_alerts": "تنبيهات الطلبات",
   "my_trips.empty_tab_all_title": "مفيش رحلات نشطة لسه",
   "my_trips.empty_tab_all_description": "رحلاتك الجاية والجارية هتظهر هنا.",
   "my_trips.empty_tab_pending_title": "مفيش طلبات محتاجة متابعة",
-  "my_trips.empty_tab_pending_description": "الطلبات المستنية الدفع أو الموافقة هتظهر هنا.",
+  "my_trips.empty_tab_pending_description":
+    "الطلبات المستنية الدفع أو الموافقة هتظهر هنا.",
   "my_trips.empty_tab_upcoming_title": "مفيش رحلات جاية",
-  "my_trips.empty_tab_upcoming_description": "الرحلات اللي لسه معاد ركوبها جاي هتظهر هنا.",
+  "my_trips.empty_tab_upcoming_description":
+    "الرحلات اللي لسه معاد ركوبها جاي هتظهر هنا.",
   "my_trips.empty_tab_ongoing_title": "مفيش رحلات شغالة دلوقتي",
-  "my_trips.empty_tab_ongoing_description": "الرحلات النشطة هتظهر هنا وقت ما تكون في الطريق.",
+  "my_trips.empty_tab_ongoing_description":
+    "الرحلات النشطة هتظهر هنا وقت ما تكون في الطريق.",
   "my_trips.live_now": "رحلتك شغالة دلوقتي",
   "my_trips.next_trip": "رحلتك الجاية",
   "my_trips.pickup_reached": "حان موعد الانطلاق",
@@ -428,7 +436,8 @@ export const ar: Record<MessageKey, string> = {
   "live_viewer.last_updated": "آخر تحديث من {time}",
   "live_viewer.ended": "الرحلة انتهت",
   "live_viewer.unavailable": "رابط التتبع ده مبقاش متاح.",
-  "live_viewer.connection": "في مشكلة في الاتصال. محتفظين بآخر موقع وبنجرب تاني.",
+  "live_viewer.connection":
+    "في مشكلة في الاتصال. محتفظين بآخر موقع وبنجرب تاني.",
   "live_viewer.driver": "السائق",
   "live_viewer.vehicle": "العربية",
   "live_viewer.plate": "اللوحة",
@@ -484,7 +493,8 @@ export const ar: Record<MessageKey, string> = {
   "pickup_pin.driver_prompt": "رمز التحقق للركوب",
   "pickup_pin.required": "أدخل رمز التحقق المكوّن من ٤ أرقام.",
   "pickup_pin.invalid": "رمز التحقق غير صحيح. راجع الرمز وحاول مرة أخرى.",
-  "pickup_pin.locked": "تم إيقاف التحقق لمدة ١٠ دقائق بسبب تكرار الرموز غير الصحيحة.",
+  "pickup_pin.locked":
+    "تم إيقاف التحقق لمدة ١٠ دقائق بسبب تكرار الرموز غير الصحيحة.",
   "pickup_pin.network_error": "حدث خطأ في الشبكة أثناء التحقق. حاول مرة أخرى.",
   "my_trips.no_trips_filters": "لا توجد رحلات مطابقة لهذه المرشحات.",
   "my_trips.no_assigned_trips": "لا توجد رحلات مُسندة بعد.",
@@ -566,7 +576,8 @@ export const ar: Record<MessageKey, string> = {
   "ride.driver_destination": "وجهة السائق النهائية",
   "ride.station_fallback": "الخطوة {n}",
   "ride.confirm_station_error": "حدث خطأ أثناء تأكيد المحطة {stationIndex}",
-  "ride.seats_unavailable": "لا توجد مقاعد متاحة كافية لهذه المجموعة. لا يزال بإمكانك تسجيل عدم الحضور.",
+  "ride.seats_unavailable":
+    "لا توجد مقاعد متاحة كافية لهذه المجموعة. لا يزال بإمكانك تسجيل عدم الحضور.",
   "ride.start_error": "تعذّر بدء الرحلة. يُرجى المحاولة مرة أخرى.",
   "ride.end_error": "تعذّر إنهاء الرحلة. يُرجى المحاولة مرة أخرى.",
   "ride.action_network_error": "خطأ في الشبكة. تحقق من اتصالك وحاول مرة أخرى.",
@@ -577,8 +588,10 @@ export const ar: Record<MessageKey, string> = {
   "chat.type_placeholder": "اكتب رسالة…",
   "chat.load_error": "تعذّر تحميل الرسائل. حاول مرة أخرى.",
   "chat.send_error": "تعذّر إرسال الرسالة. حاول مرة أخرى.",
-  "chat.contact_info_blocked": "قد تحتوي الرسالة على معلومات اتصال. يُرجى إبقاء المحادثة داخل التطبيق.",
-  "chat.free_text_suspended": "تم تعليق الرسائل النصية لهذه الرحلة. لا تزال الرسائل الجاهزة متاحة.",
+  "chat.contact_info_blocked":
+    "قد تحتوي الرسالة على معلومات اتصال. يُرجى إبقاء المحادثة داخل التطبيق.",
+  "chat.free_text_suspended":
+    "تم تعليق الرسائل النصية لهذه الرحلة. لا تزال الرسائل الجاهزة متاحة.",
   "chat.mark_read_error": "تعذر تحديث حالة القراءة.",
   "chat.unread_aria": "{count} رسائل غير مقروءة",
   "chat.report": "الإبلاغ عن المحادثة",
@@ -697,15 +710,19 @@ export const ar: Record<MessageKey, string> = {
   "my_trips.booking_cancel_day": "إلغاء",
   "my_trips.booking_cancel_whole": "إلغاء الحجز بالكامل",
   "my_trips.booking_cancel_dialog_title": "إلغاء الحجز؟",
-  "my_trips.booking_cancel_day_confirmation": "إلغاء {day}؟ الإجمالي الجديد هيكون {amount}.",
-  "my_trips.booking_cancel_last_day_confirmation": "{day} هو اليوم الوحيد المتبقي. إلغاؤه هيلغي الحجز بالكامل، والإجمالي الجديد هيكون {amount}.",
-  "my_trips.booking_cancel_all_confirmation": "هيتم إلغاء كل الأيام وعددها {count}.",
+  "my_trips.booking_cancel_day_confirmation":
+    "إلغاء {day}؟ الإجمالي الجديد هيكون {amount}.",
+  "my_trips.booking_cancel_last_day_confirmation":
+    "{day} هو اليوم الوحيد المتبقي. إلغاؤه هيلغي الحجز بالكامل، والإجمالي الجديد هيكون {amount}.",
+  "my_trips.booking_cancel_all_confirmation":
+    "هيتم إلغاء كل الأيام وعددها {count}.",
   "my_trips.booking_cancel_close": "الاحتفاظ بالحجز",
   "my_trips.booking_cancel_confirm": "تأكيد الإلغاء",
   "my_trips.booking_cancel_updated_total": "إجمالي الحجز الجديد: {amount}",
   "my_trips.booking_cancel_error": "تعذّر إلغاء الحجز.",
   "my_trips.booking_cancel_network_error": "تعذّر إلغاء الحجز. حاول مرة تانية.",
-  "my_trips.booking_payment_in_progress": "فيه جلسة دفع مفتوحة للحجز ده. حاول تاني بعد كام دقيقة، في خلال 35 دقيقة بحد أقصى.",
+  "my_trips.booking_payment_in_progress":
+    "فيه جلسة دفع مفتوحة للحجز ده. حاول تاني بعد كام دقيقة، في خلال 35 دقيقة بحد أقصى.",
   "my_trips.other_dates_in_booking": "مواعيد تانية في نفس الحجز",
   "my_trips.no_phone": "لا يوجد رقم هاتف",
   "my_trips.call": "اتصال",
@@ -760,14 +777,11 @@ export const ar: Record<MessageKey, string> = {
     "فات موعد ركوب الرحلة دي. من فضلك احجز رحلة جديدة.",
   "errors.MULTIPLE_DATES_NOT_SUPPORTED":
     "يمكن أن يتضمن الحجز تاريخ رحلة واحدًا فقط.",
-  "errors.MULTIPLE_TRIPS_NOT_SUPPORTED":
-    "يمكن أن يتضمن الحجز رحلة واحدة فقط.",
+  "errors.MULTIPLE_TRIPS_NOT_SUPPORTED": "يمكن أن يتضمن الحجز رحلة واحدة فقط.",
   "errors.INVALID_TRIP_COUNT":
     "يجب أن يحتوي الحجز على رحلة واحدة فقط. احذف رحلة العودة أو اختر تاريخًا واحدًا.",
-  "errors.TOO_MANY_DATES":
-    "يمكن أن يتضمن الحجز 7 تواريخ رحلات كحد أقصى.",
-  "errors.DUPLICATE_DATES":
-    "لا يمكن اختيار تاريخ الرحلة نفسه أكثر من مرة.",
+  "errors.TOO_MANY_DATES": "يمكن أن يتضمن الحجز 7 تواريخ رحلات كحد أقصى.",
+  "errors.DUPLICATE_DATES": "لا يمكن اختيار تاريخ الرحلة نفسه أكثر من مرة.",
   "errors.MULTIPLE_CYCLES_NOT_SUPPORTED":
     "يمكن للحجز أن يتضمن تعريف رحلة واحدًا على التواريخ المختارة.",
   "errors.TOO_MANY_PENDING_TRIPS":
@@ -1014,7 +1028,7 @@ export const ar: Record<MessageKey, string> = {
   "documents.carImage": "صورة المركبة",
   "lang.switch_to_ar": "التبديل إلى العربية",
   "lang.switch_to_en": "التبديل إلى الإنجليزية",
-  "vehicles.private": "سيارة خاصة",
+  "vehicles.passenger_car": "سيارة ركاب",
   "vehicles.taxi": "تاكسي",
   "vehicles.van": "فان (تمناية)",
   "vehicles.microbus": "ميكروباص",
@@ -1025,6 +1039,7 @@ export const ar: Record<MessageKey, string> = {
   "vehicles.van_shared": "فان (تمناية)",
   "vehicles.microbus_shared": "ميكروباص",
   "vehicles.mini_bus": "ميني باص",
+  "vehicles.minibus": "ميني باص",
   "ride_type.shared": "مشتركة",
   "ride_type.private": "خاصة",
   pickup: "ركوب ",
@@ -1077,8 +1092,7 @@ export const ar: Record<MessageKey, string> = {
   "create.station_suggestion_pick_point_error":
     "يرجى تحديد موقع المحطة المقترح على الخريطة.",
   "create.station_suggestion_description": "وصف المحطة",
-  "create.station_suggestion_description_error":
-    "أدخل وصفًا لا يقل عن 3 أحرف.",
+  "create.station_suggestion_description_error": "أدخل وصفًا لا يقل عن 3 أحرف.",
   "create.station_suggestion_submit": "إرسال الطلب",
   "create.station_suggestion_submit_error":
     "تعذر إرسال الطلب. يرجى المحاولة مرة أخرى.",
@@ -1131,7 +1145,8 @@ export const ar: Record<MessageKey, string> = {
     "يجب أن يكون بعد {time} — وقت انتهاء الرحلة السابقة.",
   "create.trip_spacing_conflict":
     "فترة الوصول قريبة جدًا من رحلة أخرى بتاريخ {date} ({window}). اختر موعدًا آخر.",
-  "create.spacing_check_loading": "جارٍ التحقق من رحلاتك الأخرى في هذا التاريخ…",
+  "create.spacing_check_loading":
+    "جارٍ التحقق من رحلاتك الأخرى في هذا التاريخ…",
   "create.spacing_check_failed":
     "تعذر التحقق من رحلاتك الأخرى. حاول مرة أخرى قبل الحجز.",
   "create.route_drive_details": "{distance} كم · {duration} دقيقة قيادة",
@@ -1201,8 +1216,7 @@ export const ar: Record<MessageKey, string> = {
     "الرحلة {n}: جارٍ حساب المسار — يرجى الانتظار قليلاً.",
   "create.validate_passenger_count":
     "الرحلة {n}: يجب أن يكون عدد الركاب بين 1 و{max}.",
-  "create.vehicle_capacity_exceeded":
-    "تستوعب هذه المركبة حتى {max} ركاب.",
+  "create.vehicle_capacity_exceeded": "تستوعب هذه المركبة حتى {max} ركاب.",
   "create.validate_max_stops": "الرحلة {n}: غير مسموح بأكثر من 4 محطات.",
   "create.validate_stop_location_required":
     "الرحلة {n}، المحطة {stop}: الموقع مطلوب.",
@@ -1239,12 +1253,15 @@ export const ar: Record<MessageKey, string> = {
   "create.confirm_request": "إرسال الرحلة ←",
   "create.request_modal_aria": "إرسال رحلة مشتركة للموافقة",
   "create.request_modal_heading": "إرسال الرحلة للموافقة",
-  "create.request_modal_description": "الرحلات المشتركة محتاجة موافقة الإدارة قبل التأكيد.",
-  "create.request_modal_no_payment": "مش هيتخصم أي مبلغ دلوقتي. الدفع بيكون بعد موافقة الإدارة على الرحلة.",
+  "create.request_modal_description":
+    "الرحلات المشتركة محتاجة موافقة الإدارة قبل التأكيد.",
+  "create.request_modal_no_payment":
+    "مش هيتخصم أي مبلغ دلوقتي. الدفع بيكون بعد موافقة الإدارة على الرحلة.",
   "create.send_request": "إرسال الرحلة",
   "create.request_sent_aria": "الرحلة بانتظار الموافقة",
   "create.request_sent_heading": "تم إرسال الرحلة",
-  "create.request_sent_description": "رحلتك مستنية موافقة الإدارة. هنبلغك أول ما تتم الموافقة، وبعدها تقدر تدفع.",
+  "create.request_sent_description":
+    "رحلتك مستنية موافقة الإدارة. هنبلغك أول ما تتم الموافقة، وبعدها تقدر تدفع.",
   "create.trip_waitlist_confirmation":
     "رحلتك مستنية موافقة الإدارة. مش مطلوب دفع إلا بعد الموافقة.",
   "create.view_request": "عرض الرحلة",
@@ -1287,26 +1304,32 @@ export const ar: Record<MessageKey, string> = {
   "admin.promo.inactive": "غير نشط",
   "admin.promo.countdown_format": "{days}ي {hours}س {minutes}د {seconds}ث",
   "admin.waiting_list.title": "قائمة الانتظار",
-  "admin.waiting_list.description": "راجع طلبات الرحلات المشتركة قبل دفع الركاب.",
+  "admin.waiting_list.description":
+    "راجع طلبات الرحلات المشتركة قبل دفع الركاب.",
   "admin.waiting_list.settings_title": "قائمة انتظار الرحلات المشتركة",
-  "admin.waiting_list.settings_toggle_label": "تفعيل قائمة انتظار الرحلات المشتركة",
+  "admin.waiting_list.settings_toggle_label":
+    "تفعيل قائمة انتظار الرحلات المشتركة",
   "admin.waiting_list.settings_on": "شغالة",
   "admin.waiting_list.settings_off": "مقفولة",
   "admin.waiting_list.settings_enabled_description":
     "الطلبات المشتركة الجديدة هتستنى مراجعة الإدارة قبل الدفع.",
   "admin.waiting_list.settings_disabled_description":
     "الطلبات المشتركة الجديدة هتروح للدفع على طول من غير مراجعة الإدارة.",
-  "admin.waiting_list.settings_last_changed": "آخر تعديل بواسطة {name} · {date}",
-  "admin.waiting_list.settings_confirm_title": "هل تريد إيقاف قائمة انتظار الرحلات المشتركة؟",
+  "admin.waiting_list.settings_last_changed":
+    "آخر تعديل بواسطة {name} · {date}",
+  "admin.waiting_list.settings_confirm_title":
+    "هل تريد إيقاف قائمة انتظار الرحلات المشتركة؟",
   "admin.waiting_list.settings_confirm_description":
     "ستنتقل الحجوزات المشتركة الجديدة مباشرةً إلى الدفع دون مراجعة الإدارة. لن تتأثر الطلبات الموجودة في قائمة الانتظار.",
   "admin.waiting_list.settings_confirm_off": "إيقاف قائمة الانتظار",
   "admin.waiting_list.settings_enabled_success": "قائمة الانتظار اتفعّلت.",
   "admin.waiting_list.settings_disabled_success": "قائمة الانتظار اتقفلت.",
-  "admin.waiting_list.settings_load_error": "ماقدرناش نحمل إعداد قائمة الانتظار.",
+  "admin.waiting_list.settings_load_error":
+    "ماقدرناش نحمل إعداد قائمة الانتظار.",
   "admin.waiting_list.settings_save_error": "ماقدرناش نحفظ الإعداد. جرّب تاني.",
   "admin.waiting_list.empty_title": "لا توجد طلبات في الانتظار",
-  "admin.waiting_list.empty_description": "طلبات الرحلات المشتركة الجديدة هتظهر هنا.",
+  "admin.waiting_list.empty_description":
+    "طلبات الرحلات المشتركة الجديدة هتظهر هنا.",
   "admin.waiting_list.loading": "جارٍ تحميل طلبات الانتظار...",
   "admin.waiting_list.error_title": "تعذّر تحميل قائمة الانتظار",
   "admin.waiting_list.retry": "إعادة المحاولة",
@@ -1341,7 +1364,8 @@ export const ar: Record<MessageKey, string> = {
   "admin.transactions.any_description": "كل الأوصاف",
   "admin.transactions.referrer_bonus": "مكافأة المُحيل",
   "admin.transactions.welcome_referral_bonus": "مكافأة الترحيب بالإحالة",
-  "admin.transactions.admin_referral_welcome_bonus": "مكافأة ترحيب بالإحالة من الإدارة",
+  "admin.transactions.admin_referral_welcome_bonus":
+    "مكافأة ترحيب بالإحالة من الإدارة",
   "admin.transactions.description_contains": "الوصف يحتوي على",
   "admin.waiting_list.approve": "موافقة",
   "admin.waiting_list.reject": "رفض",
@@ -1349,34 +1373,43 @@ export const ar: Record<MessageKey, string> = {
   "admin.waiting_list.confirm_private_offer_title": "عرض رحلة خاصة بدلاً منها؟",
   "admin.waiting_list.confirm_private_offer_description":
     "سيتم إخطار الراكب بعدم توفر ركاب في منطقته، وسيُعرض عليه تحويل الرحلة إلى خاصة أو إلغاؤها.",
-  "admin.waiting_list.private_offer_success": "تم إرسال خيار الرحلة الخاصة إلى الراكب.",
+  "admin.waiting_list.private_offer_success":
+    "تم إرسال خيار الرحلة الخاصة إلى الراكب.",
   "admin.waiting_list.private_offer_pricing_error":
     "تسعير الرحلة الخاصة غير مضبوط لمنطقة هذه الرحلة.",
   "admin.waiting_list.private_offer_pending_error":
     "انتظر رد الراكب على عرض الرحلة الخاصة قبل مراجعة هذا الطلب.",
   "admin.waiting_list.confirm_approve_title": "توافق على الطلب؟",
-  "admin.waiting_list.confirm_approve_description": "الراكب هيتبلغ ويقدر يكمل الدفع.",
+  "admin.waiting_list.confirm_approve_description":
+    "الراكب هيتبلغ ويقدر يكمل الدفع.",
   "admin.waiting_list.confirm_reject_title": "ترفض الطلب؟",
-  "admin.waiting_list.confirm_reject_description": "الطلب والرحلات غير المدفوعة هيتلغوا.",
+  "admin.waiting_list.confirm_reject_description":
+    "الطلب والرحلات غير المدفوعة هيتلغوا.",
   "admin.waiting_list.reason_label": "السبب (مطلوب)",
   "admin.waiting_list.cancel": "إلغاء",
   "admin.waiting_list.confirm": "تأكيد",
   "admin.waiting_list.approved_success": "تمت الموافقة على الطلب.",
   "admin.waiting_list.rejected_success": "تم رفض الطلب.",
-  "admin.waiting_list.conflict": "أدمن تاني تعامل مع الطلب ده. جارٍ تحديث القائمة.",
+  "admin.waiting_list.conflict":
+    "أدمن تاني تعامل مع الطلب ده. جارٍ تحديث القائمة.",
   "admin.waiting_list.past_error": "الطلب فيه وقت ركوب عدى بالفعل.",
   "admin.waiting_list.trip_past_error": "موعد ركوب الرحلة دي عدى بالفعل.",
-  "admin.waiting_list.trip_past_description": "لا يمكن قبول الرحلة دي، يمكن رفضها فقط.",
-  "admin.waiting_list.trip_reject_description": "سيتم رفض الرحلة دون إنشاء أي دفعة.",
+  "admin.waiting_list.trip_past_description":
+    "لا يمكن قبول الرحلة دي، يمكن رفضها فقط.",
+  "admin.waiting_list.trip_reject_description":
+    "سيتم رفض الرحلة دون إنشاء أي دفعة.",
   "admin.waiting_list.trip_approved_success": "تمت الموافقة على الرحلة.",
   "admin.waiting_list.trip_rejected_success": "تم رفض الرحلة.",
-  "admin.waiting_list.trip_conflict": "راجع أدمن آخر الرحلة دي بالفعل. جارٍ تحديث القائمة.",
+  "admin.waiting_list.trip_conflict":
+    "راجع أدمن آخر الرحلة دي بالفعل. جارٍ تحديث القائمة.",
   "admin.waiting_list.error_bad_request": "راجع بيانات الطلب وحاول تاني.",
-  "admin.waiting_list.error_unauthorized": "انتهت الجلسة. سجّل الدخول مرة تانية.",
+  "admin.waiting_list.error_unauthorized":
+    "انتهت الجلسة. سجّل الدخول مرة تانية.",
   "admin.waiting_list.error_forbidden": "مش مسموح لك تراجع الطلب ده.",
   "admin.waiting_list.error_not_found": "الطلب ده مش موجود.",
   "admin.waiting_list.error_server": "السيرفر ماقدرش ينفذ العملية. حاول تاني.",
-  "admin.waiting_list.error_network": "حصلت مشكلة في الشبكة. راجع الاتصال وحاول تاني.",
+  "admin.waiting_list.error_network":
+    "حصلت مشكلة في الشبكة. راجع الاتصال وحاول تاني.",
   "admin.waiting_list.page": "صفحة {page} من {pages}",
   "admin.waiting_list.previous": "الصفحة السابقة",
   "admin.waiting_list.next": "الصفحة التالية",

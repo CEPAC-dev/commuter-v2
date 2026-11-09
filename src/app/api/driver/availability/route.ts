@@ -35,10 +35,16 @@ export async function DELETE(req: NextRequest) {
 
   const body = (await req.json().catch(() => null)) as { ids?: unknown } | null;
   const ids = Array.isArray(body?.ids)
-    ? body.ids.filter((id): id is string => typeof id === "string" && isValidAvailabilityId(id))
+    ? body.ids.filter(
+        (id): id is string =>
+          typeof id === "string" && isValidAvailabilityId(id),
+      )
     : [];
   if (ids.length === 0)
-    return NextResponse.json({ error: "Select at least one availability shift." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Select at least one availability shift." },
+      { status: 400 },
+    );
 
   await connectDB();
   const result = await Availability.deleteMany({
@@ -66,10 +72,22 @@ export async function PUT(req: NextRequest) {
 
     const payload = await req.json();
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      return NextResponse.json({ error: "Invalid availability payload." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid availability payload." },
+        { status: 400 },
+      );
     }
 
-    const { id, dayOfWeek, days, origin, destination, startTime, endTime, active } = payload as {
+    const {
+      id,
+      dayOfWeek,
+      days,
+      origin,
+      destination,
+      startTime,
+      endTime,
+      active,
+    } = payload as {
       id?: unknown;
       dayOfWeek?: unknown;
       days?: unknown;
@@ -81,25 +99,42 @@ export async function PUT(req: NextRequest) {
     };
 
     const targetDays: string[] = Array.isArray(days)
-      ? (days as string[]).filter((d) => DAYS_OF_WEEK.includes(d as (typeof DAYS_OF_WEEK)[number]))
-      : typeof dayOfWeek === "string" && DAYS_OF_WEEK.includes(dayOfWeek as (typeof DAYS_OF_WEEK)[number])
+      ? (days as string[]).filter((d) =>
+          DAYS_OF_WEEK.includes(d as (typeof DAYS_OF_WEEK)[number]),
+        )
+      : typeof dayOfWeek === "string" &&
+          DAYS_OF_WEEK.includes(dayOfWeek as (typeof DAYS_OF_WEEK)[number])
         ? [dayOfWeek]
         : [];
 
     if (targetDays.length === 0) {
-      return NextResponse.json({ error: "At least one valid day must be selected." }, { status: 400 });
+      return NextResponse.json(
+        { error: "At least one valid day must be selected." },
+        { status: 400 },
+      );
     }
 
     const normalizedOrigin = normalizeAvailabilityOrigin(origin);
     if (!normalizedOrigin)
-      return NextResponse.json({ error: "Origin is required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Origin is required." },
+        { status: 400 },
+      );
     const normalizedDestination =
-      destination == null ? null : normalizeAvailabilityDestination(destination);
+      destination == null
+        ? null
+        : normalizeAvailabilityDestination(destination);
     if (destination != null && !normalizedDestination)
-      return NextResponse.json({ error: "Destination must be a valid location." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Destination must be a valid location." },
+        { status: 400 },
+      );
 
     const region = await resolveActiveRegion({ userId: session.userId });
-    const stationDocs = await Station.find({ active: true, regionCode: region.code }).lean();
+    const stationDocs = await Station.find({
+      active: true,
+      regionCode: region.code,
+    }).lean();
     const nearestStation = findNearestStation(
       normalizedOrigin.lat,
       normalizedOrigin.lng,
@@ -172,13 +207,16 @@ export async function PUT(req: NextRequest) {
     for (const day of targetDays) {
       const sameDayShifts = await Availability.find({
         driverId: session.userId,
+        regionCode: region.code,
         dayOfWeek: day,
         ...(id && isValidAvailabilityId(id) ? { _id: { $ne: id } } : {}),
       })
         .select("startTime endTime")
         .lean<{ startTime: string; endTime: string }[]>();
 
-      if (shiftsOverlap(startTime as string, endTime as string, sameDayShifts)) {
+      if (
+        shiftsOverlap(startTime as string, endTime as string, sameDayShifts)
+      ) {
         return NextResponse.json(
           {
             error: `Shift overlaps with another shift on ${DAY_NAMES[day] ?? day} (${startTime}–${endTime}).`,
@@ -194,6 +232,7 @@ export async function PUT(req: NextRequest) {
         {
           $set: {
             dayOfWeek: targetDays[0],
+            regionCode: region.code,
             origin: normalizedOrigin,
             destination: normalizedDestination,
             startNearestStation,
@@ -206,8 +245,14 @@ export async function PUT(req: NextRequest) {
         { returnDocument: "after" },
       );
       if (!record)
-        return NextResponse.json({ error: "Shift not found." }, { status: 404 });
-      return NextResponse.json({ ok: true, record, records: [record] }, { status: 200 });
+        return NextResponse.json(
+          { error: "Shift not found." },
+          { status: 404 },
+        );
+      return NextResponse.json(
+        { ok: true, record, records: [record] },
+        { status: 200 },
+      );
     }
 
     // Create records for all selected target days
@@ -215,6 +260,7 @@ export async function PUT(req: NextRequest) {
       targetDays.map((day) =>
         Availability.create({
           driverId: session.userId,
+          regionCode: region.code,
           dayOfWeek: day,
           origin: normalizedOrigin,
           destination: normalizedDestination,
@@ -246,4 +292,3 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
-

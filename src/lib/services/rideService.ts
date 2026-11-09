@@ -17,7 +17,7 @@ import {
   getCancellationTier,
 } from "@/lib/cancellationPolicy";
 import { getDriverRideCancellationDecision } from "@/lib/rideCancellationAccess";
-import { isRegionCode } from "@/lib/config/regions";
+import { isRegionCode, type RegionCode } from "@/lib/config/regions";
 import { NO_SHOW_MIN_WAIT_MINUTES } from "@/lib/noShowRules";
 import { getAdminRideCancellationPlan } from "@/lib/rideIncidentAdminGuards";
 import { fetchDirections } from "@/app/api/directions/route";
@@ -51,6 +51,7 @@ import {
 type MatchResult = {
   availabilityId?: Types.ObjectId | string | null;
   driverId?: Types.ObjectId | string | null;
+  regionCode?: RegionCode | null;
   date: string;
   vehicleType: string;
   rideType: string;
@@ -197,11 +198,14 @@ async function createRide(matchResult: MatchResult) {
       }
     }
     const trips = await Trip.find({ _id: { $in: tripIds } })
-      .select("pickupStation dropoffStation numberOfPassengers extraPassengers")
+      .select(
+        "regionCode pickupStation dropoffStation numberOfPassengers extraPassengers",
+      )
       .session(session)
       .lean<
         {
           _id: unknown;
+          regionCode?: RegionCode | null;
           pickupStation?: StationSelection;
           dropoffStation?: StationSelection;
           numberOfPassengers?: number;
@@ -264,6 +268,7 @@ async function createRide(matchResult: MatchResult) {
       rideNumber,
       availabilityId: matchResult.availabilityId ?? null,
       driverId: matchResult.driverId,
+      regionCode: matchResult.regionCode ?? firstTrip?.regionCode ?? null,
       date: matchResult.date,
       vehicleType: matchResult.vehicleType,
       rideType: matchResult.rideType,

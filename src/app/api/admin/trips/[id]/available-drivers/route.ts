@@ -19,10 +19,11 @@ export async function GET(
 
   const trip = await Trip.findById(id)
     .select(
-      "date pickupTime arrivalTime vehicleType pickupStation dropoffStation status paymentStatus rideId",
+      "date regionCode pickupTime arrivalTime vehicleType pickupStation dropoffStation status paymentStatus rideId",
     )
     .lean<{
       date?: string;
+      regionCode?: string | null;
       pickupTime?: string;
       arrivalTime?: string;
       vehicleType?: string;
@@ -56,6 +57,7 @@ export async function GET(
   const eligibleDriverIds = await getEligibleDriverIds({
     _id: id,
     date: trip.date!,
+    regionCode: trip.regionCode,
     startTime: trip.pickupTime,
     endTime: trip.arrivalTime,
     vehicleType: trip.vehicleType,

@@ -14,6 +14,8 @@ import {
   FileText,
 } from "lucide-react";
 import { AdminCard, AdminEmptyState } from "@/components/admin/layout";
+import { useClientLocale } from "@/lib/locale.client";
+import { normalizeCarType } from "@/lib/config/driver";
 
 type VerificationStatus = "incomplete" | "pending" | "verified";
 
@@ -171,6 +173,11 @@ export default function DriverManagementClient({
   initialDrivers: DriverRow[];
   initialDriverId?: string;
 }) {
+  const { t } = useClientLocale();
+  const carTypeLabel = (value?: string) => {
+    const carType = normalizeCarType(value);
+    return carType ? t(`vehicles.${carType}`) : (value ?? "—");
+  };
   const [drivers, setDrivers] = useState(initialDrivers);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<VerificationStatus | "all">(
@@ -193,10 +200,9 @@ export default function DriverManagementClient({
   const statusRequestInFlight = useRef(false);
   const deepLinkAppliedRef = useRef(false);
   const cancelStatusButtonRef = useRef<HTMLButtonElement>(null);
-  const [feedback, setFeedback] = useState<Record<
-    string,
-    { type: "success" | "error"; message: string }
-  >>({});
+  const [feedback, setFeedback] = useState<
+    Record<string, { type: "success" | "error"; message: string }>
+  >({});
 
   const filtered = useMemo(() => {
     let result = drivers;
@@ -364,9 +370,8 @@ export default function DriverManagementClient({
     : [];
   const verifiedStatusBlocked = Boolean(
     statusConfirmation?.toStatus === "verified" &&
-      statusDialogDriver &&
-      (!statusDialogDriver.hasAllDocuments ||
-        !statusDialogDriver.hasVehicleInfo),
+    statusDialogDriver &&
+    (!statusDialogDriver.hasAllDocuments || !statusDialogDriver.hasVehicleInfo),
   );
 
   async function sendReminder(driverId: string, userId: string) {
@@ -403,7 +408,8 @@ export default function DriverManagementClient({
         ...prev,
         [driverId]: {
           type: "error",
-          message: err instanceof Error ? err.message : "Failed to send reminder",
+          message:
+            err instanceof Error ? err.message : "Failed to send reminder",
         },
       }));
     } finally {
@@ -443,9 +449,7 @@ export default function DriverManagementClient({
             <div style={{ fontSize: 13, color: "#64748B", marginBottom: 8 }}>
               {stat.label}
             </div>
-            <div
-              style={{ fontSize: 32, fontWeight: 800, color: stat.color }}
-            >
+            <div style={{ fontSize: 32, fontWeight: 800, color: stat.color }}>
               {stat.value}
             </div>
           </div>
@@ -529,8 +533,7 @@ export default function DriverManagementClient({
             const completionPercent = Math.round(
               ((docsCount + (driver.hasVehicleInfo ? 1 : 0)) / 9) * 100,
             );
-            const isComplete =
-              driver.hasAllDocuments && driver.hasVehicleInfo;
+            const isComplete = driver.hasAllDocuments && driver.hasVehicleInfo;
 
             return (
               <AdminCard
@@ -611,7 +614,8 @@ export default function DriverManagementClient({
                       {driver.carBrand && driver.carModel && (
                         <span style={{ display: "flex", gap: 6 }}>
                           <Car size={14} />
-                          {driver.carBrand} {driver.carModel} ({driver.modelYear})
+                          {driver.carBrand} {driver.carModel} (
+                          {driver.modelYear})
                         </span>
                       )}
                     </div>
@@ -667,11 +671,10 @@ export default function DriverManagementClient({
                       flexShrink: 0,
                     }}
                   >
-                    {(driver.verificationStatus === "incomplete" || !isComplete) && (
+                    {(driver.verificationStatus === "incomplete" ||
+                      !isComplete) && (
                       <button
-                        onClick={() =>
-                          sendReminder(driver._id, driver.userId)
-                        }
+                        onClick={() => sendReminder(driver._id, driver.userId)}
                         disabled={sendingReminder === driver._id}
                         title="Send a bilingual reminder to complete the profile"
                         style={{
@@ -733,7 +736,8 @@ export default function DriverManagementClient({
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(250px, 1fr))",
                         gap: 12,
                       }}
                     >
@@ -757,7 +761,9 @@ export default function DriverManagementClient({
                             marginTop: 8,
                             fontSize: 14,
                             fontWeight: 600,
-                            color: driver.hasVehicleInfo ? "#065F46" : "#991B1B",
+                            color: driver.hasVehicleInfo
+                              ? "#065F46"
+                              : "#991B1B",
                           }}
                         >
                           Vehicle Info:{" "}
@@ -785,10 +791,15 @@ export default function DriverManagementClient({
                             marginTop: 8,
                             fontSize: 14,
                             fontWeight: 600,
-                            color: driver.hasAllDocuments ? "#065F46" : "#991B1B",
+                            color: driver.hasAllDocuments
+                              ? "#065F46"
+                              : "#991B1B",
                           }}
                         >
-                          Documents: {driver.hasAllDocuments ? "Complete" : `${driver.missingDocuments.length} Missing`}
+                          Documents:{" "}
+                          {driver.hasAllDocuments
+                            ? "Complete"
+                            : `${driver.missingDocuments.length} Missing`}
                         </div>
                       </div>
                     </div>
@@ -806,25 +817,46 @@ export default function DriverManagementClient({
                           gap: 12,
                         }}
                       >
-                        <AlertTriangle size={20} color="#D97706" style={{ flexShrink: 0, marginTop: 2 }} />
+                        <AlertTriangle
+                          size={20}
+                          color="#D97706"
+                          style={{ flexShrink: 0, marginTop: 2 }}
+                        />
                         <div>
-                          <div style={{ fontWeight: 700, color: "#92400E", marginBottom: 6 }}>
+                          <div
+                            style={{
+                              fontWeight: 700,
+                              color: "#92400E",
+                              marginBottom: 6,
+                            }}
+                          >
                             Incomplete Profile
                           </div>
                           {!driver.hasVehicleInfo && (
-                            <div style={{ fontSize: 13, color: "#78350F", marginBottom: 4 }}>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                color: "#78350F",
+                                marginBottom: 4,
+                              }}
+                            >
                               • Vehicle information is missing
                             </div>
                           )}
                           {driver.missingDocuments.length > 0 && (
                             <div style={{ fontSize: 13, color: "#78350F" }}>
-                              • Missing documents: {driver.missingDocuments.map((doc) => DOC_LABELS[doc] || doc).join(", ")}
+                              • Missing documents:{" "}
+                              {driver.missingDocuments
+                                .map((doc) => DOC_LABELS[doc] || doc)
+                                .join(", ")}
                             </div>
                           )}
 
                           {/* Send Reminder Button */}
                           <button
-                            onClick={() => sendReminder(driver._id, driver.userId)}
+                            onClick={() =>
+                              sendReminder(driver._id, driver.userId)
+                            }
                             disabled={sendingReminder === driver._id}
                             style={{
                               marginTop: 12,
@@ -835,7 +867,10 @@ export default function DriverManagementClient({
                               color: "#fff",
                               fontSize: 13,
                               fontWeight: 600,
-                              cursor: sendingReminder === driver._id ? "not-allowed" : "pointer",
+                              cursor:
+                                sendingReminder === driver._id
+                                  ? "not-allowed"
+                                  : "pointer",
                               opacity: sendingReminder === driver._id ? 0.6 : 1,
                               display: "flex",
                               alignItems: "center",
@@ -867,13 +902,17 @@ export default function DriverManagementClient({
                         <div
                           style={{
                             display: "grid",
-                            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(200px, 1fr))",
                             gap: 12,
                             fontSize: 13,
                           }}
                         >
                           {[
-                            { label: "Type", value: driver.carType },
+                            {
+                              label: "Type",
+                              value: carTypeLabel(driver.carType),
+                            },
                             {
                               label: "Brand",
                               value: driver.carBrand,
@@ -891,18 +930,28 @@ export default function DriverManagementClient({
                             },
                             {
                               label: "Capacity",
-                              value: driver.carCapacity ? `${driver.carCapacity} seats` : undefined,
+                              value: driver.carCapacity
+                                ? `${driver.carCapacity} seats`
+                                : undefined,
                             },
                           ].map(
                             (field, idx) =>
                               field.value && (
                                 <div key={idx}>
                                   <div
-                                    style={{ color: "#64748B", marginBottom: 4 }}
+                                    style={{
+                                      color: "#64748B",
+                                      marginBottom: 4,
+                                    }}
                                   >
                                     {field.label}
                                   </div>
-                                  <div style={{ fontWeight: 600, color: "#0B1E3D" }}>
+                                  <div
+                                    style={{
+                                      fontWeight: 600,
+                                      color: "#0B1E3D",
+                                    }}
+                                  >
                                     {field.value}
                                   </div>
                                 </div>
@@ -927,7 +976,8 @@ export default function DriverManagementClient({
                       <div
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                          gridTemplateColumns:
+                            "repeat(auto-fill, minmax(200px, 1fr))",
                           gap: 12,
                         }}
                       >
@@ -958,7 +1008,9 @@ export default function DriverManagementClient({
                               {hasDoc ? (
                                 <DocumentPreview url={url} label={label} />
                               ) : (
-                                <span style={{ fontSize: 12, color: "#94A3B8" }}>
+                                <span
+                                  style={{ fontSize: 12, color: "#94A3B8" }}
+                                >
                                   Not uploaded
                                 </span>
                               )}
@@ -980,7 +1032,9 @@ export default function DriverManagementClient({
                       >
                         Verification Status
                       </h4>
-                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      <div
+                        style={{ display: "flex", gap: 12, flexWrap: "wrap" }}
+                      >
                         {(
                           [
                             "incomplete",
@@ -989,13 +1043,16 @@ export default function DriverManagementClient({
                           ] as VerificationStatus[]
                         ).map((status) => {
                           const config = STATUS_CONFIG[status];
-                          const isCurrent = driver.verificationStatus === status;
+                          const isCurrent =
+                            driver.verificationStatus === status;
                           const isSaving = savingStatusId === driver._id;
 
                           return (
                             <button
                               key={status}
-                              onClick={() => openStatusConfirmation(driver, status)}
+                              onClick={() =>
+                                openStatusConfirmation(driver, status)
+                              }
                               disabled={isCurrent || isSaving}
                               style={{
                                 padding: "10px 20px",
@@ -1006,7 +1063,9 @@ export default function DriverManagementClient({
                                 fontSize: 14,
                                 fontWeight: 600,
                                 cursor:
-                                  isCurrent || isSaving ? "not-allowed" : "pointer",
+                                  isCurrent || isSaving
+                                    ? "not-allowed"
+                                    : "pointer",
                                 opacity: isCurrent ? 1 : isSaving ? 0.5 : 0.7,
                               }}
                             >
@@ -1024,7 +1083,8 @@ export default function DriverManagementClient({
                         style={{
                           padding: 12,
                           borderRadius: 8,
-                          background: fb.type === "success" ? "#D1FAE5" : "#FEE2E2",
+                          background:
+                            fb.type === "success" ? "#D1FAE5" : "#FEE2E2",
                           border: `1px solid ${fb.type === "success" ? "#10B981" : "#EF4444"}`,
                           color: fb.type === "success" ? "#065F46" : "#991B1B",
                           fontSize: 13,
@@ -1120,7 +1180,9 @@ export default function DriverManagementClient({
                 {statusConfirmationError}
               </p>
             )}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <div
+              style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+            >
               <button
                 ref={cancelStatusButtonRef}
                 type="button"
