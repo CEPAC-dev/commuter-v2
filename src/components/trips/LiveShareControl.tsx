@@ -838,6 +838,7 @@ export default function LiveShareControl({
                   <li>{t("live_share.consent_bullet_location")}</li>
                   <li>{t("live_share.consent_bullet_points")}</li>
                   <li>{t("live_share.consent_bullet_driver")}</li>
+                  <li>{t("live_share.consent_bullet_driver_location")}</li>
                 </ul>
                 <p style={{ margin: 0 }}>{t("live_share.consent_body")}</p>
                 <label

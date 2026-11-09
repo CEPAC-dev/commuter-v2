@@ -3,9 +3,7 @@ import Link from "next/link";
 import {
   Car,
   MapPin,
-  Clock,
   Users,
-  Star,
   Armchair,
   CreditCard,
   Wallet,
@@ -33,6 +31,8 @@ import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import MatchedTripCountdown from "@/components/trips/MatchedTripCountdown";
 import LiveShareControl from "@/components/trips/LiveShareControl";
 import PickupPinCard from "@/components/trips/PickupPinCard";
+import DriverLocationTracker from "@/components/live/DriverLocationTracker";
+import TripLiveMap from "@/components/live/TripLiveMap";
 import { getOrCreateWallet } from "@/lib/wallet/wallet";
 import { getDisplayStatus, getRejectionDisplay } from "@/lib/statusDisplay.ts";
 import { getSharedRideStep } from "@/lib/sharedRideStepper.ts";
@@ -213,7 +213,18 @@ function DriverRideDetailView({
   ride: RideDetailView;
   email: string;
 }) {
-  return <DriverRideInteractiveClient ride={ride} email={email} />;
+  return (
+    <>
+      {ride.status === "active" && (
+        <DriverLocationTracker
+          resourceType="ride"
+          resourceId={ride.id}
+          active
+        />
+      )}
+      <DriverRideInteractiveClient ride={ride} email={email} />
+    </>
+  );
 }
 
 // ── page ─────────────────────────────────────────────────────────────────────
@@ -721,29 +732,60 @@ export default async function TripDetailPage({
           <div className="trip-detail-primary">
             {/* Route map */}
             <div className="trip-detail-map-card">
-              <RouteMap
-                pickup={
-                  isDriver && trip.rideType === "shared"
-                    ? (trip.pickupStation ?? trip.pickup)
-                    : trip.pickup
-                }
-                dropoff={
-                  isDriver && trip.rideType === "shared"
-                    ? (trip.dropoffStation ?? trip.dropoff)
-                    : trip.dropoff
-                }
-                stops={trip.stops?.map((s) => s.point)}
-                stations={
-                  trip.rideType === "shared" && !isDriver
-                    ? [trip.pickupStation, trip.dropoffStation].filter(
-                        (s): s is NonNullable<typeof s> => Boolean(s),
-                      )
-                    : undefined
-                }
-                routeCoordinates={slicedRouteCoordinates ?? undefined}
-                height={280}
-                interactive
-              />
+              {isDriver && status === "active" && (
+                <DriverLocationTracker
+                  resourceType="trip"
+                  resourceId={trip.id}
+                  active
+                  initialLocale={locale}
+                />
+              )}
+              {!isDriver && status === "active" ? (
+                <TripLiveMap
+                  key={trip.id}
+                  tripId={trip.id}
+                  pickup={trip.pickup}
+                  dropoff={trip.dropoff}
+                  stops={trip.stops?.map((stop) => stop.point)}
+                  stations={
+                    trip.rideType === "shared"
+                      ? [trip.pickupStation, trip.dropoffStation].filter(
+                          (station): station is NonNullable<typeof station> =>
+                            Boolean(station),
+                        )
+                      : undefined
+                  }
+                  routeCoordinates={
+                    slicedRouteCoordinates ??
+                    trip.rideDetails?.routeCoordinates ??
+                    null
+                  }
+                />
+              ) : (
+                <RouteMap
+                  pickup={
+                    isDriver && trip.rideType === "shared"
+                      ? (trip.pickupStation ?? trip.pickup)
+                      : trip.pickup
+                  }
+                  dropoff={
+                    isDriver && trip.rideType === "shared"
+                      ? (trip.dropoffStation ?? trip.dropoff)
+                      : trip.dropoff
+                  }
+                  stops={trip.stops?.map((s) => s.point)}
+                  stations={
+                    trip.rideType === "shared" && !isDriver
+                      ? [trip.pickupStation, trip.dropoffStation].filter(
+                          (s): s is NonNullable<typeof s> => Boolean(s),
+                        )
+                      : undefined
+                  }
+                  routeCoordinates={slicedRouteCoordinates ?? undefined}
+                  height={280}
+                  interactive
+                />
+              )}
             </div>
 
             {!isDriver && <PickupPinCard tripId={trip.id} />}

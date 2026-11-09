@@ -222,6 +222,25 @@ export const en = {
   "driver.window_prefix": "Window",
   "driver.route_details": "Route Details",
   "driver.route_details_desc": "Driver route and station breakdown",
+  "driver.live_location.title": "Live driver location",
+  "driver.live_location.privacy":
+    "While this trip is active, your location is shown to the passenger and anyone with their active tracking link. Keep this page open for updates.",
+  "driver.live_location.sharing": "Your live location is being shared.",
+  "driver.live_location.paused": "Location sharing is off.",
+  "driver.live_location.start": "Start location sharing",
+  "driver.live_location.stop": "Stop location sharing",
+  "driver.live_location.unavailable": "This browser cannot access your location.",
+  "driver.live_location.permission_error":
+    "Location permission was denied. Allow access in your browser settings and try again.",
+  "driver.live_location.timeout": "Location lookup timed out. Try again.",
+  "driver.live_location.update_error":
+    "The location update could not be sent. Please try again.",
+  "driver.live_location.network_error":
+    "Network problem. Location updates will resume when connected.",
+  "driver.live_location.stop_error":
+    "Could not stop sharing on the server. Please try again.",
+  "driver.live_location.trip_ended":
+    "Location sharing stopped because the trip is no longer active.",
   "driver.steps_count": "{count} Steps",
   "driver.origin_label": "Driver origin",
   "driver.destination_label": "Driver destination",
@@ -370,6 +389,8 @@ export const en = {
   "live_share.consent_bullet_points": "your pickup and drop-off points",
   "live_share.consent_bullet_driver":
     "your driver's first name, and the car's make, model, colour and plate number",
+  "live_share.consent_bullet_driver_location":
+    "your driver's live location while the trip is active, if they enable it",
   "live_share.consent_body":
     "The link works for up to 24 hours and stops showing your location when your trip ends or you tap Stop sharing. We keep only your latest location, not a history. It is removed when you stop sharing, and in any case within about 48 hours of creating the link. Share the link only with people you trust, because anyone who has it can open it. Keep your browser open so your phone can keep sending your location.",
   "live_share.consent_checkbox":
@@ -382,16 +403,16 @@ export const en = {
   "privacy.title": "Privacy notice: live location sharing",
   "privacy.collect_heading": "What we collect:",
   "privacy.collect_body":
-    "When you turn sharing on, your phone's browser sends your location every few seconds. We store only your latest position (coordinates, accuracy, direction and time), not a history of where you have been, plus how many times the link was opened and when it was last opened.",
+    "When you turn sharing on, your phone's browser sends your location every few seconds. If your driver enables live tracking for an active trip, their latest position is also relayed to viewers. We store only the latest positions (coordinates, accuracy, direction and time), not a travel history.",
   "privacy.visibility_heading": "Who can see it:",
   "privacy.visibility_body":
-    "Anyone who has your link, without logging in: your live location, your pickup and drop-off points, your driver's first name, and the car's make, model, colour and plate number. They cannot see your name, phone number or payment details.",
+    "Anyone who has your link, without logging in: your live location while you share it, and your driver's live location while the trip is active if the driver enables it, plus your pickup and drop-off points and the driver's vehicle details. They cannot see your name, phone number or payment details.",
   "privacy.retention_heading": "How long:",
   "privacy.retention_body":
-    "The link works for up to 24 hours and stops showing your location when the trip ends or you tap Stop sharing. Your latest location is removed when sharing stops, and the sharing record is deleted automatically about 48 hours after you create the link (automatic cleanup can lag slightly).",
+    "The link works for up to 24 hours and stops showing location when the trip ends or you tap Stop sharing. Driver location is retained only as the latest point and stops being shown five minutes after the last update; automatic cleanup may take longer. Your passenger share record is deleted automatically about 48 hours after link creation (automatic cleanup can lag slightly).",
   "privacy.providers_heading": "Service providers:",
   "privacy.providers_body":
-    "The map is loaded from {MAP_PROVIDER_NAME} by the browser of whoever opens the link, so that provider can see their IP address and the area they view. The route is calculated by {ROUTING_PROVIDER_NAME}, which receives the pickup and drop-off coordinates.",
+    "The map is loaded from {MAP_PROVIDER_NAME} by the browser of whoever opens the link, so that provider can see their IP address and the area they view. The route is calculated by {ROUTING_PROVIDER_NAME}, which receives the pickup and drop-off coordinates. Live location updates are relayed through Ably, which receives the coordinates needed to deliver them.",
   "privacy.choices_heading": "Your choices:",
   "privacy.choices_body":
     "Sharing is off unless you turn it on. We ask for your consent each time you create a link, and you can stop sharing at any time from the trip page.",
@@ -451,6 +472,17 @@ export const en = {
   "live_viewer.connection":
     "Connection problem. Keeping the last location and retrying.",
   "live_viewer.driver": "Driver",
+  "live_viewer.driver_location": "Driver location",
+  "live_viewer.driver_live": "Driver location is live",
+  "live_viewer.driver_stale": "Driver location is out of date",
+  "live_viewer.driver_reconnecting": "Reconnecting to driver location",
+  "live_viewer.driver_waiting": "Waiting for the driver to share location",
+  "live_viewer.driver_load_error":
+    "Couldn't load the driver's location. Retrying.",
+  "live_viewer.remaining_distance": "About {distance} km remaining",
+  "live_viewer.eta_minutes": "about {minutes} min",
+  "live_viewer.realtime_disconnected":
+    "Realtime is reconnecting; updates may arrive less often.",
   "live_viewer.vehicle": "Vehicle",
   "live_viewer.plate": "Plate",
   "live_viewer.recenter": "Recenter map",

@@ -1,5 +1,6 @@
 "use client";
 
+import Ably from "ably";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Map as LeafletMap } from "leaflet";
@@ -17,6 +18,8 @@ import {
 } from "@/lib/liveShare/viewer";
 import { resolveLiveTileUrl } from "@/lib/liveShare/tileUrl";
 import { getCarColorDisplay } from "@/lib/carColors";
+import { calculateTripProgress } from "@/lib/liveLocation/progress";
+import { parseDriverLocationUpdate } from "@/lib/liveLocation/types";
 
 interface LiveLocationViewerProps {
   token: string;
@@ -60,6 +63,7 @@ export default function LiveLocationViewer({
   const [state, setState] = useState<LiveViewerState>("loading");
   const [serverElapsedMs, setServerElapsedMs] = useState(0);
   const [connectionProblem, setConnectionProblem] = useState(false);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
@@ -69,6 +73,8 @@ export default function LiveLocationViewer({
   const mapRef = useRef<LeafletMap | null>(null);
   const baseLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
   const locationLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
+  const driverLocationLayerRef =
+    useRef<import("leaflet").LayerGroup | null>(null);
   const fitDoneRef = useRef(false);
   const userPannedRef = useRef(false);
   const routeRequestedRef = useRef(false);
@@ -78,6 +84,7 @@ export default function LiveLocationViewer({
   const failureCountRef = useRef(0);
   const responsePerfRef = useRef<number | null>(null);
   const latestDataRef = useRef<PublicLiveShare | null>(null);
+  const driverLocationStoppedAtRef = useRef<number | null>(null);
   const terminalRef = useRef(false);
   const generationRef = useRef(0);
   const tokenPath = `/api/live/${encodeURIComponent(token)}`;
@@ -88,8 +95,30 @@ export default function LiveLocationViewer({
   const locationLat = data?.location?.lat;
   const locationLng = data?.location?.lng;
   const locationAccuracy = data?.location?.accuracy;
+  const driverLocationLat = data?.driverLocation?.lat;
+  const driverLocationLng = data?.driverLocation?.lng;
+  const driverLocationAccuracy = data?.driverLocation?.accuracy;
 
   const applyPayload = useCallback((next: PublicLiveShare) => {
+    if (next.driverLocation && driverLocationStoppedAtRef.current !== null) {
+      if (
+        Date.parse(next.driverLocation.receivedAt) <=
+        driverLocationStoppedAtRef.current
+      ) {
+        next = { ...next, driverLocation: null };
+      } else {
+        driverLocationStoppedAtRef.current = null;
+      }
+    }
+    const previousDriverLocation = latestDataRef.current?.driverLocation;
+    if (
+      previousDriverLocation &&
+      next.driverLocation &&
+      Date.parse(previousDriverLocation.receivedAt) >
+        Date.parse(next.driverLocation.receivedAt)
+    ) {
+      next = { ...next, driverLocation: previousDriverLocation };
+    }
     const perfNow = performance.now();
     responsePerfRef.current = perfNow;
     latestDataRef.current = next;
@@ -101,6 +130,7 @@ export default function LiveLocationViewer({
       terminalRef.current = true;
       baseLayerRef.current?.clearLayers();
       locationLayerRef.current?.clearLayers();
+      driverLocationLayerRef.current?.clearLayers();
       setRoutePath(null);
       setFollowAvailable(false);
       setState("ended");
@@ -169,6 +199,7 @@ export default function LiveLocationViewer({
         setRoutePath(null);
         baseLayerRef.current?.clearLayers();
         locationLayerRef.current?.clearLayers();
+        driverLocationLayerRef.current?.clearLayers();
         setFollowAvailable(false);
         return;
       }
@@ -251,6 +282,74 @@ export default function LiveLocationViewer({
   }, [token]);
 
   useEffect(() => {
+    const tripId = data?.tripId;
+    if (!tripId) return;
+    let disposed = false;
+    const realtime = new Ably.Realtime({
+      authUrl: `/api/live/${encodeURIComponent(token)}/auth`,
+      authMethod: "GET",
+    });
+    const channel = realtime.channels.get(`trip:${tripId}`);
+    realtime.connection.on("connected", () => {
+      if (!disposed) setRealtimeConnected(true);
+    });
+    realtime.connection.on("disconnected", () => {
+      if (!disposed) setRealtimeConnected(false);
+    });
+    realtime.connection.on("failed", () => {
+      if (!disposed) setRealtimeConnected(false);
+    });
+    const onMessage = (message: Ably.Message) => {
+      if (message.name === "driver-location-stopped") {
+        const stoppedAt = (message.data as { stoppedAt?: unknown } | null)
+          ?.stoppedAt;
+        const parsedStoppedAt =
+          typeof stoppedAt === "string" ? Date.parse(stoppedAt) : Number.NaN;
+        driverLocationStoppedAtRef.current = Number.isFinite(parsedStoppedAt)
+          ? parsedStoppedAt
+          : Date.now();
+        const current = latestDataRef.current;
+        if (current) {
+          const next = { ...current, driverLocation: null };
+          latestDataRef.current = next;
+          setData(next);
+          setState(deriveLiveViewerState(next, 0));
+        }
+        return;
+      }
+      const location = parseDriverLocationUpdate(message.data);
+      if (!location || disposed) return;
+      if (
+        driverLocationStoppedAtRef.current !== null &&
+        Date.parse(location.receivedAt) <= driverLocationStoppedAtRef.current
+      ) {
+        return;
+      }
+      const driverLocation = {
+        ...location,
+        ageSeconds: 0,
+        stale: false,
+      };
+      driverLocationStoppedAtRef.current = null;
+      responsePerfRef.current = performance.now();
+      latestDataRef.current = latestDataRef.current
+        ? { ...latestDataRef.current, driverLocation }
+        : null;
+      setData((current) =>
+        current ? { ...current, driverLocation } : current,
+      );
+      setServerElapsedMs(0);
+      setState("live");
+    };
+    channel.subscribe(onMessage);
+    return () => {
+      disposed = true;
+      channel.unsubscribe(onMessage);
+      realtime.close();
+    };
+  }, [token, data?.tripId]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       if (document.visibilityState !== "visible" || !responsePerfRef.current) {
         return;
@@ -316,6 +415,7 @@ export default function LiveLocationViewer({
         mapRef.current = map;
         baseLayerRef.current = L.layerGroup().addTo(map);
         locationLayerRef.current = L.layerGroup().addTo(map);
+        driverLocationLayerRef.current = L.layerGroup().addTo(map);
         setMapReady(true);
       })
       .catch(() => {
@@ -325,9 +425,11 @@ export default function LiveLocationViewer({
       disposed = true;
       baseLayerRef.current?.clearLayers();
       locationLayerRef.current?.clearLayers();
+      driverLocationLayerRef.current?.clearLayers();
       mapRef.current?.remove();
       baseLayerRef.current = null;
       locationLayerRef.current = null;
+      driverLocationLayerRef.current = null;
       mapRef.current = null;
     };
   }, []);
@@ -447,11 +549,83 @@ export default function LiveLocationViewer({
     };
   }, [locationLat, locationLng, locationAccuracy, mapReady, state]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    const layers = driverLocationLayerRef.current;
+    if (!map || !layers || !mapReady) return;
+    let cancelled = false;
+    void loadLeaflet().then((L) => {
+      if (cancelled || !driverLocationLayerRef.current || !mapRef.current) {
+        return;
+      }
+      const activeLayers = driverLocationLayerRef.current;
+      const activeMap = mapRef.current;
+      activeLayers.clearLayers();
+      if (
+        driverLocationLat !== undefined &&
+        driverLocationLng !== undefined
+      ) {
+        const point: [number, number] = [
+          driverLocationLat,
+          driverLocationLng,
+        ];
+        const stale =
+          data?.driverLocation?.stale === true || state === "stale";
+        const heading =
+          typeof data?.driverLocation?.heading === "number" &&
+          Number.isFinite(data.driverLocation.heading)
+            ? data.driverLocation.heading
+            : 0;
+        const driverIcon = L.divIcon({
+          className: "",
+          html: `<span class="live-viewer-map-pin driver" style="transform:rotate(${heading}deg)">▲</span>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        });
+        if (
+          driverLocationAccuracy !== null &&
+          driverLocationAccuracy !== undefined
+        ) {
+          L.circle(point, {
+            radius: Math.min(driverLocationAccuracy, 1_000),
+            color: "#F5A623",
+            weight: 1,
+            opacity: stale ? 0.35 : 0.65,
+            fillColor: "#F5A623",
+            fillOpacity: stale ? 0.06 : 0.14,
+          }).addTo(activeLayers);
+        }
+        L.marker(point, {
+          icon: driverIcon,
+          keyboard: false,
+          title: t("live_viewer.driver_location"),
+          opacity: stale ? 0.55 : 1,
+          zIndexOffset: 1_000,
+        }).addTo(activeLayers);
+        if (!userPannedRef.current) {
+          activeMap.panTo(point, { animate: false });
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    driverLocationLat,
+    driverLocationLng,
+    driverLocationAccuracy,
+    data?.driverLocation?.stale,
+    data?.driverLocation?.heading,
+    mapReady,
+    state,
+    t,
+  ]);
+
   const recenter = () => {
     const map = mapRef.current;
     if (!map) return;
     userPannedRef.current = false;
-    const location = data?.location;
+    const location = data?.driverLocation ?? data?.location;
     if (location) {
       map.panTo([location.lat, location.lng]);
       return;
@@ -471,11 +645,12 @@ export default function LiveLocationViewer({
     setLocaleCookie(nextLocale);
   };
 
+  const displayedLocation = data?.driverLocation ?? data?.location;
   const elapsedSeconds =
-    data?.location && state !== "loading"
+    displayedLocation && state !== "loading"
       ? Math.max(
           0,
-          Math.floor(data.location.ageSeconds + serverElapsedMs / 1_000),
+          Math.floor(displayedLocation.ageSeconds + serverElapsedMs / 1_000),
         )
       : null;
   const elapsedLabel =
@@ -488,6 +663,19 @@ export default function LiveLocationViewer({
           })
         : t("live_viewer.seconds", { seconds: elapsedSeconds });
   const statusText = t(`live_viewer.${state}`);
+  const progress =
+    data?.driverLocation && data.dropoff
+      ? calculateTripProgress({
+          position: {
+            lat: data.driverLocation.lat,
+            lng: data.driverLocation.lng,
+            speed: data.driverLocation.speed,
+          },
+          destination: data.dropoff,
+          route:
+            routePath?.map(([lat, lng]) => ({ lat, lng })) ?? undefined,
+        })
+      : null;
 
   return (
     <main
@@ -506,6 +694,7 @@ export default function LiveLocationViewer({
         .live-viewer-map-pin { display:block; width:18px; height:18px; border:3px solid #fff; border-radius:50%; box-shadow:0 2px 8px rgba(11,30,61,.35); }
         .live-viewer-map-pin.pickup { background:#00A88F; }
         .live-viewer-map-pin.dropoff { background:#F5A623; }
+        .live-viewer-map-pin.driver { width:22px; height:22px; border-radius:50%; background:#F5A623; color:#0B1E3D; font-size:12px; line-height:22px; text-align:center; font-weight:900; }
         .live-viewer-map .leaflet-control-zoom { margin:12px !important; }
         .live-viewer-map .leaflet-control-attribution { font-size:10px; }
       `}</style>
@@ -723,6 +912,45 @@ export default function LiveLocationViewer({
             {state === "live" && (
               <p style={{ margin: "0 0 10px", fontSize: 13 }}>
                 {t("live_viewer.live")}
+              </p>
+            )}
+            {data?.driverLocation && progress && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  marginBottom: 12,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background: "#F5FAF9",
+                  color: "#0B1E3D",
+                  fontSize: 13,
+                }}
+              >
+                <strong>{t("live_viewer.driver_location")}</strong>
+                <span>
+                  {t("live_viewer.remaining_distance", {
+                    distance: progress.remainingDistanceKm.toFixed(1),
+                  })}
+                  {progress.etaMinutes !== null
+                    ? ` · ${t("live_viewer.eta_minutes", {
+                        minutes: progress.etaMinutes,
+                      })}`
+                    : ""}
+                </span>
+              </div>
+            )}
+            {data?.driverLocation && !realtimeConnected && (
+              <p
+                style={{
+                  margin: "0 0 10px",
+                  color: "#78490A",
+                  fontSize: 12,
+                }}
+              >
+                {t("live_viewer.realtime_disconnected")}
               </p>
             )}
             {data?.driver && (

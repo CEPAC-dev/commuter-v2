@@ -337,11 +337,13 @@ test("public trip projection exposes only allowlisted values and hides sensitive
   );
   assert.deepEqual(Object.keys(projection).sort(), [
     "driver",
+    "driverLocation",
     "dropoff",
     "location",
     "pickup",
     "serverTime",
     "state",
+    "tripId",
     "tripStatus",
   ]);
   assert.deepEqual(Object.keys(projection.location).sort(), [
@@ -375,6 +377,7 @@ test("public trip projection exposes only allowlisted values and hides sensitive
   assert.equal(JSON.stringify(projection).includes("+201000000000"), false);
   assert.equal(JSON.stringify(projection).includes("nationalId"), false);
   assert.equal(projection.state, "live");
+  assert.equal(projection.driverLocation, null);
 
   const waiting = projectPublicTrip(makeTrip(), null, NOW);
   assert.equal(waiting.state, "waiting");

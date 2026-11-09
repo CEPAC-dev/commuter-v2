@@ -18,6 +18,7 @@ export type LiveViewerState =
 export interface PublicLiveShare {
   state: "waiting" | "live" | "stale" | "ended";
   tripStatus?: string;
+  tripId?: string;
   pickup?: { lat: number; lng: number };
   dropoff?: { lat: number; lng: number };
   location?: {
@@ -27,6 +28,17 @@ export interface PublicLiveShare {
     heading: number | null;
     recordedAt: string;
     ageSeconds: number;
+  } | null;
+  driverLocation?: {
+    lat: number;
+    lng: number;
+    accuracy: number | null;
+    heading: number | null;
+    speed: number | null;
+    recordedAt: string;
+    receivedAt: string;
+    ageSeconds: number;
+    stale: boolean;
   } | null;
   driver?: {
     firstName: string | null;
@@ -49,12 +61,14 @@ export function deriveLiveViewerState(
   if (options.connection) return "connection";
   if (options.loading || !data) return "loading";
   if (data.state === "ended") return "ended";
-  if (data.state === "waiting" || !data.location) return "waiting";
+  const location = data.driverLocation ?? data.location;
+  if (!location) return "waiting";
 
   const serverAgeMs =
-    Math.max(0, data.location.ageSeconds) * 1_000 +
+    Math.max(0, location.ageSeconds) * 1_000 +
     Math.max(0, elapsedSinceServerMs);
-  return data.state === "stale" ||
+  return (data.driverLocation?.stale === true) ||
+    (location === data.location && data.state === "stale") ||
     serverAgeMs >= LIVE_VIEWER_STALE_AFTER_SECONDS * 1_000
     ? "stale"
     : "live";
@@ -122,6 +136,24 @@ export function isPublicLiveShare(value: unknown): value is PublicLiveShare {
   if (!validPoint(candidate.pickup) || !validPoint(candidate.dropoff)) {
     return false;
   }
+  if (candidate.driverLocation !== undefined && candidate.driverLocation !== null) {
+    const driverLocation = candidate.driverLocation;
+    if (
+      !validPoint(driverLocation) ||
+      typeof driverLocation.recordedAt !== "string" ||
+      !Number.isFinite(Date.parse(driverLocation.recordedAt)) ||
+      typeof driverLocation.receivedAt !== "string" ||
+      !Number.isFinite(Date.parse(driverLocation.receivedAt)) ||
+      typeof driverLocation.ageSeconds !== "number" ||
+      !Number.isFinite(driverLocation.ageSeconds) ||
+      typeof driverLocation.stale !== "boolean" ||
+      !nullableFiniteNumber(driverLocation.accuracy) ||
+      !nullableFiniteNumber(driverLocation.heading) ||
+      !nullableFiniteNumber(driverLocation.speed)
+    ) {
+      return false;
+    }
+  }
   if (candidate.state === "waiting") {
     return candidate.location === null;
   }
@@ -130,6 +162,10 @@ export function isPublicLiveShare(value: unknown): value is PublicLiveShare {
     typeof candidate.location?.ageSeconds === "number" &&
     Number.isFinite(candidate.location.ageSeconds)
   );
+}
+
+function nullableFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isFinite(value));
 }
 
 export function parsePublicLiveShare(value: unknown): PublicLiveShare | null {
@@ -148,6 +184,7 @@ export function parsePublicLiveShare(value: unknown): PublicLiveShare | null {
       : null;
   const publicData: PublicLiveShare = {
     state: value.state,
+    ...(typeof value.tripId === "string" ? { tripId: value.tripId } : {}),
     pickup: { lat: value.pickup.lat, lng: value.pickup.lng },
     dropoff: { lat: value.dropoff.lat, lng: value.dropoff.lng },
     location: value.location
@@ -158,6 +195,19 @@ export function parsePublicLiveShare(value: unknown): PublicLiveShare | null {
           heading: value.location.heading,
           recordedAt: value.location.recordedAt,
           ageSeconds: value.location.ageSeconds,
+        }
+      : null,
+    driverLocation: value.driverLocation
+      ? {
+          lat: value.driverLocation.lat,
+          lng: value.driverLocation.lng,
+          accuracy: value.driverLocation.accuracy,
+          heading: value.driverLocation.heading,
+          speed: value.driverLocation.speed,
+          recordedAt: value.driverLocation.recordedAt,
+          receivedAt: value.driverLocation.receivedAt,
+          ageSeconds: value.driverLocation.ageSeconds,
+          stale: value.driverLocation.stale,
         }
       : null,
     driver: value.driver

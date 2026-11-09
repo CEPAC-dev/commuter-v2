@@ -159,6 +159,7 @@ test("public response parser strips everything outside the explicit projection",
   assert.deepEqual(Object.keys(parsed).sort(), [
     "dropoff",
     "driver",
+    "driverLocation",
     "location",
     "pickup",
     "serverTime",
@@ -201,7 +202,7 @@ test("viewer page and component only read public projection fields", async () =>
   const topLevelReads = [...source.matchAll(/\bdata\??\.(\w+)/g)].map((match) => match[1]);
   assert.deepEqual(
     [...new Set(topLevelReads)].sort(),
-    ["driver", "dropoff", "location", "pickup", "state"].sort(),
+    ["driver", "driverLocation", "dropoff", "location", "pickup", "state", "tripId"].sort(),
   );
   assert.match(source, /serverTime/);
   assert.doesNotMatch(

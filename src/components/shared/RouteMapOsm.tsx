@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { MapPin } from "lucide-react";
 import OsmMapCanvas from "@/components/map/OsmMapCanvas";
@@ -20,6 +20,10 @@ interface Props {
   stops?: LatLng[];
   stations?: LatLng[];
   routeCoordinates?: LatLng[];
+  driverLocation?: LatLng & {
+    heading?: number | null;
+    stale?: boolean;
+  };
 }
 
 const PICKUP_ICON = svgIcon(
@@ -80,10 +84,20 @@ export default function RouteMapOsm({
   stops,
   stations,
   routeCoordinates,
+  driverLocation,
 }: Props) {
   const [map, setMap] = useState<L.Map | null>(null);
   const [path, setPath] = useState<LatLng[] | null>(null);
+  const driverMarkerRef = useRef<L.Marker | null>(null);
+  const driverLat = driverLocation?.lat;
+  const driverLng = driverLocation?.lng;
+  const driverHeading = driverLocation?.heading;
+  const driverStale = driverLocation?.stale;
   const ok = valid(pickup) && valid(dropoff);
+  const waypointQuery = [...(stops ?? []), ...(stations ?? [])]
+    .filter(valid)
+    .map((point) => `${point.lat},${point.lng}`)
+    .join("|");
 
   useEffect(() => {
     if (routeCoordinates && routeCoordinates.length > 1) {
@@ -91,15 +105,10 @@ export default function RouteMapOsm({
     }
     if (!ok) return;
     let cancelled = false;
-    const points = [...(stops ?? []), ...(stations ?? [])].filter(valid);
     const url = new URL("/api/directions", window.location.origin);
     url.searchParams.set("origin", `${pickup.lat},${pickup.lng}`);
     url.searchParams.set("dest", `${dropoff.lat},${dropoff.lng}`);
-    if (points.length)
-      url.searchParams.set(
-        "waypoints",
-        points.map((point) => `${point.lat},${point.lng}`).join("|"),
-      );
+    if (waypointQuery) url.searchParams.set("waypoints", waypointQuery);
     fetch(url)
       .then((response) => (response.ok ? response.json() : []))
       .then((data) => {
@@ -121,8 +130,7 @@ export default function RouteMapOsm({
     pickup?.lng,
     dropoff?.lat,
     dropoff?.lng,
-    JSON.stringify(stops ?? []),
-    JSON.stringify(stations ?? []),
+    waypointQuery,
     routeCoordinates,
   ]);
 
@@ -165,6 +173,60 @@ export default function RouteMapOsm({
       layers.remove();
     };
   }, [map, ok, pickup, dropoff, path, routeCoordinates, stops, stations]);
+
+  useEffect(() => {
+    if (!map) return;
+    if (
+      typeof driverLat !== "number" ||
+      typeof driverLng !== "number" ||
+      !Number.isFinite(driverLat) ||
+      !Number.isFinite(driverLng)
+    ) {
+      driverMarkerRef.current?.remove();
+      driverMarkerRef.current = null;
+      return;
+    }
+
+    const color = driverStale ? "#647575" : "#F5A623";
+    const heading =
+      typeof driverHeading === "number" && Number.isFinite(driverHeading)
+        ? driverHeading
+        : 0;
+    const icon = L.divIcon({
+      className: "",
+      html: `<span style="display:grid;place-items:center;width:30px;height:30px;border:3px solid #fff;border-radius:50%;background:${color};color:#0B1E3D;font-size:15px;font-weight:900;box-shadow:0 2px 8px rgba(11,30,61,.35);transform:rotate(${heading}deg)">▲</span>`,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+    });
+    if (!driverMarkerRef.current) {
+      driverMarkerRef.current = L.marker(
+        [driverLat, driverLng],
+        {
+          icon,
+          keyboard: false,
+          zIndexOffset: 1_000,
+        },
+      ).addTo(map);
+    } else {
+      driverMarkerRef.current
+        .setLatLng([driverLat, driverLng])
+        .setIcon(icon);
+    }
+  }, [
+    map,
+    driverLat,
+    driverLng,
+    driverHeading,
+    driverStale,
+  ]);
+
+  useEffect(
+    () => () => {
+      driverMarkerRef.current?.remove();
+      driverMarkerRef.current = null;
+    },
+    [],
+  );
 
   if (!ok) return <Placeholder height={height} rounded={rounded} />;
   return (
