@@ -52,6 +52,7 @@ export default function TripLiveMap({
   const { t } = useClientLocale();
   const [location, setLocation] = useState<DriverLocationUpdate | null>(null);
   const [connected, setConnected] = useState(false);
+  const [realtimeUnsupported, setRealtimeUnsupported] = useState(false);
   const [snapshotError, setSnapshotError] = useState(false);
   const [tripActive, setTripActive] = useState(true);
   const [now, setNow] = useState(0);
@@ -122,8 +123,23 @@ export default function TripLiveMap({
       }
     };
 
-    void loadSnapshot();
     endedRef.current = false;
+    void loadSnapshot();
+    if (realtimeUnsupported) {
+      const fallbackPoll = window.setInterval(() => {
+        if (!endedRef.current) void loadSnapshot();
+      }, 5_000);
+      const freshnessClock = window.setInterval(
+        () => setNow(Date.now()),
+        1_000,
+      );
+      return () => {
+        active = false;
+        window.clearInterval(fallbackPoll);
+        window.clearInterval(freshnessClock);
+      };
+    }
+
     const realtime = new Ably.Realtime({
       authUrl: `/api/trips/${encodeURIComponent(tripId)}/live/auth`,
       authMethod: "GET",
@@ -162,8 +178,12 @@ export default function TripLiveMap({
     realtime.connection.on("disconnected", () => {
       if (active) setConnected(false);
     });
-    realtime.connection.on("failed", () => {
+    realtime.connection.on("failed", (change) => {
       if (active) setConnected(false);
+      if (change.reason?.code === 40168) {
+        setRealtimeUnsupported(true);
+        realtime.close();
+      }
     });
     const fallbackPoll = window.setInterval(() => {
       if (!endedRef.current) void loadSnapshot();
@@ -178,7 +198,7 @@ export default function TripLiveMap({
       realtime.close();
       if (realtimeRef.current === realtime) realtimeRef.current = null;
     };
-  }, [tripId]);
+  }, [realtimeUnsupported, tripId]);
 
   useEffect(() => {
     if (routeCoordinates && routeCoordinates.length > 1) return;
@@ -279,6 +299,8 @@ export default function TripLiveMap({
                 ? t("live_viewer.driver_stale")
                 : connected
                   ? t("live_viewer.driver_live")
+                  : realtimeUnsupported
+                    ? t("live_viewer.polling_fallback")
                   : t("live_viewer.driver_reconnecting")
               : t("live_viewer.driver_waiting")}
         </strong>

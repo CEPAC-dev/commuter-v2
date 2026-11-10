@@ -213,18 +213,7 @@ function DriverRideDetailView({
   ride: RideDetailView;
   email: string;
 }) {
-  return (
-    <>
-      {ride.status === "active" && (
-        <DriverLocationTracker
-          resourceType="ride"
-          resourceId={ride.id}
-          active
-        />
-      )}
-      <DriverRideInteractiveClient ride={ride} email={email} />
-    </>
-  );
+  return <DriverRideInteractiveClient ride={ride} email={email} />;
 }
 
 // ── page ─────────────────────────────────────────────────────────────────────
@@ -740,12 +729,20 @@ export default async function TripDetailPage({
                   initialLocale={locale}
                 />
               )}
-              {!isDriver && status === "active" ? (
+              {status === "active" ? (
                 <TripLiveMap
                   key={trip.id}
                   tripId={trip.id}
-                  pickup={trip.pickup}
-                  dropoff={trip.dropoff}
+                  pickup={
+                    isDriver && trip.rideType === "shared"
+                      ? (trip.pickupStation ?? trip.pickup)
+                      : trip.pickup
+                  }
+                  dropoff={
+                    isDriver && trip.rideType === "shared"
+                      ? (trip.dropoffStation ?? trip.dropoff)
+                      : trip.dropoff
+                  }
                   stops={trip.stops?.map((stop) => stop.point)}
                   stations={
                     trip.rideType === "shared"
@@ -756,9 +753,11 @@ export default async function TripDetailPage({
                       : undefined
                   }
                   routeCoordinates={
-                    slicedRouteCoordinates ??
-                    trip.rideDetails?.routeCoordinates ??
-                    null
+                    isDriver
+                      ? (trip.rideDetails?.routeCoordinates ?? null)
+                      : (slicedRouteCoordinates ??
+                        trip.rideDetails?.routeCoordinates ??
+                        null)
                   }
                 />
               ) : (

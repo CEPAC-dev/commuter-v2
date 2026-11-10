@@ -470,6 +470,8 @@ export const ar: Record<MessageKey, string> = {
   "live_viewer.eta_minutes": "حوالي {minutes} دقيقة",
   "live_viewer.realtime_disconnected":
     "جارٍ إعادة الاتصال؛ قد تصل التحديثات على فترات متباعدة.",
+  "live_viewer.polling_fallback":
+    "التحديث المباشر غير متاح؛ يتم تحديث الموقع كل بضع ثوانٍ.",
   "live_viewer.vehicle": "العربية",
   "live_viewer.plate": "اللوحة",
   "live_viewer.recenter": "رجّع الخريطة للموقع",

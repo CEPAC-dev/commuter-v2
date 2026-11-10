@@ -87,6 +87,13 @@ test("viewer polling uses ten seconds, honors retry hints and caps exponential b
     LIVE_VIEWER_POLL_INTERVAL_MS,
   );
   assert.equal(
+    getLiveViewerPollDelayMs({
+      failureCount: 0,
+      pollIntervalMs: 5_000,
+    }),
+    5_000,
+  );
+  assert.equal(
     getLiveViewerPollDelayMs({ failureCount: 0, nextAfterMs: 15_000 }),
     15_000,
   );

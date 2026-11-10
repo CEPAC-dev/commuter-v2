@@ -483,6 +483,8 @@ export const en = {
   "live_viewer.eta_minutes": "about {minutes} min",
   "live_viewer.realtime_disconnected":
     "Realtime is reconnecting; updates may arrive less often.",
+  "live_viewer.polling_fallback":
+    "Realtime is unavailable; location refreshes every few seconds.",
   "live_viewer.vehicle": "Vehicle",
   "live_viewer.plate": "Plate",
   "live_viewer.recenter": "Recenter map",

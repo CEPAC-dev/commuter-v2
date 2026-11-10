@@ -64,6 +64,7 @@ export default function LiveLocationViewer({
   const [serverElapsedMs, setServerElapsedMs] = useState(0);
   const [connectionProblem, setConnectionProblem] = useState(false);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [realtimeUnsupported, setRealtimeUnsupported] = useState(false);
   const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
@@ -212,6 +213,7 @@ export default function LiveLocationViewer({
       schedulePoll(
         getLiveViewerPollDelayMs({
           failureCount: 0,
+          pollIntervalMs: realtimeUnsupported ? 5_000 : undefined,
           nextAfterMs: null,
           retryAfterMs,
         }),
@@ -229,6 +231,7 @@ export default function LiveLocationViewer({
       schedulePoll(
         getLiveViewerPollDelayMs({
           failureCount: failureCountRef.current,
+          pollIntervalMs: realtimeUnsupported ? 5_000 : undefined,
           retryAfterMs,
         }),
       );
@@ -239,7 +242,7 @@ export default function LiveLocationViewer({
         inFlightRef.current = false;
       }
     }
-  }, [applyPayload, schedulePoll, tokenPath]);
+  }, [applyPayload, realtimeUnsupported, schedulePoll, tokenPath]);
 
   useEffect(() => {
     pollRef.current = poll;
@@ -283,7 +286,7 @@ export default function LiveLocationViewer({
 
   useEffect(() => {
     const tripId = data?.tripId;
-    if (!tripId) return;
+    if (!tripId || realtimeUnsupported) return;
     let disposed = false;
     const realtime = new Ably.Realtime({
       authUrl: `/api/live/${encodeURIComponent(token)}/auth`,
@@ -296,8 +299,12 @@ export default function LiveLocationViewer({
     realtime.connection.on("disconnected", () => {
       if (!disposed) setRealtimeConnected(false);
     });
-    realtime.connection.on("failed", () => {
+    realtime.connection.on("failed", (change) => {
       if (!disposed) setRealtimeConnected(false);
+      if (change.reason?.code === 40168) {
+        setRealtimeUnsupported(true);
+        realtime.close();
+      }
     });
     const onMessage = (message: Ably.Message) => {
       if (message.name === "driver-location-stopped") {
@@ -347,7 +354,7 @@ export default function LiveLocationViewer({
       channel.unsubscribe(onMessage);
       realtime.close();
     };
-  }, [token, data?.tripId]);
+  }, [token, data?.tripId, realtimeUnsupported]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -950,7 +957,11 @@ export default function LiveLocationViewer({
                   fontSize: 12,
                 }}
               >
-                {t("live_viewer.realtime_disconnected")}
+                {t(
+                  realtimeUnsupported
+                    ? "live_viewer.polling_fallback"
+                    : "live_viewer.realtime_disconnected",
+                )}
               </p>
             )}
             {data?.driver && (

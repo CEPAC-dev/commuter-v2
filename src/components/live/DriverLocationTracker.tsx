@@ -9,6 +9,14 @@ interface DriverLocationTrackerProps {
   resourceId: string;
   active: boolean;
   initialLocale?: Locale;
+  onLocation?: (
+    location: {
+      lat: number;
+      lng: number;
+      heading: number | null;
+      stale: boolean;
+    } | null,
+  ) => void;
 }
 
 type TrackerState = "idle" | "sharing" | "error";
@@ -43,6 +51,7 @@ export default function DriverLocationTracker({
   resourceId,
   active,
   initialLocale,
+  onLocation,
 }: DriverLocationTrackerProps) {
   const { t } = useClientLocale(initialLocale);
   const [state, setState] = useState<TrackerState>("idle");
@@ -64,6 +73,7 @@ export default function DriverLocationTracker({
 
   const clearWatch = useCallback(() => {
     sharingRequestedRef.current = false;
+    onLocation?.(null);
     if (watchIdRef.current !== null && "geolocation" in navigator) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -72,11 +82,20 @@ export default function DriverLocationTracker({
       window.clearInterval(heartbeatTimerRef.current);
       heartbeatTimerRef.current = null;
     }
-  }, []);
+  }, [onLocation]);
 
   const sendPosition = useCallback(
     (position: GeolocationPosition) => {
-      if (!sharingRequestedRef.current || requestRef.current) return;
+      if (!sharingRequestedRef.current) return;
+      if (position.coords.accuracy <= 1_000) {
+        onLocation?.({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          heading: position.coords.heading,
+          stale: false,
+        });
+      }
+      if (requestRef.current) return;
       const now = Date.now();
       const point = {
         lat: position.coords.latitude,
@@ -157,7 +176,7 @@ export default function DriverLocationTracker({
       })();
       requestCompleteRef.current = pending;
     },
-    [clearWatch, endpoint, t],
+    [clearWatch, endpoint, onLocation, t],
   );
 
   const handleLocationError = useCallback(

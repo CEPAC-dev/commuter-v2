@@ -16,7 +16,7 @@ export async function GET(
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.role !== "passenger") {
+  if (session.role !== "passenger" && session.role !== "driver") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -27,7 +27,11 @@ export async function GET(
 
   try {
     await connectDB();
-    const trip = await Trip.findOne({ _id: id, userId: session.userId })
+    const ownerFilter =
+      session.role === "driver"
+        ? { driverId: session.userId }
+        : { userId: session.userId };
+    const trip = await Trip.findOne({ _id: id, ...ownerFilter })
       .select("_id userId driverId status rideId pickup dropoff")
       .lean();
     if (!trip) {
@@ -38,7 +42,10 @@ export async function GET(
       ? await Ride.findById(trip.rideId).select("status driverId").lean()
       : null;
     const active = trip.status === "active" || ride?.status === "active";
-    if (!canShare(trip, session.userId, ride) || !active) {
+    const authorized =
+      session.role === "driver" ||
+      canShare(trip, session.userId, ride);
+    if (!authorized || !active) {
       return NextResponse.json(
         { active: false, driverLocation: null },
         { headers: { "Cache-Control": "private, no-store" } },

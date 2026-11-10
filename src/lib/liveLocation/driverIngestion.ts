@@ -135,9 +135,9 @@ export async function ingestDriverLocation(
       location,
       now,
     });
-    await publishTripDriverLocation(
-      tripIds,
-      {
+    let realtimeAvailable = true;
+    try {
+      await publishTripDriverLocation(tripIds, {
         lat: location.lat,
         lng: location.lng,
         accuracy: location.accuracy,
@@ -145,10 +145,17 @@ export async function ingestDriverLocation(
         speed: location.speed,
         recordedAt: location.recordedAt.toISOString(),
         receivedAt: now.toISOString(),
-      },
-    );
+      });
+    } catch (error) {
+      realtimeAvailable = false;
+      logLiveShareFailure("[driver location realtime publish]", error);
+    }
 
-    return NextResponse.json({ ok: true, receivedAt: now.toISOString() });
+    return NextResponse.json({
+      ok: true,
+      realtimeAvailable,
+      receivedAt: now.toISOString(),
+    });
   } catch (error) {
     logLiveShareFailure("[driver location ingestion]", error);
     return jsonError("Live location updates are temporarily unavailable.", 503);
@@ -241,8 +248,17 @@ export async function stopDriverLocation(
     if (limited) return limited;
 
     await DriverLocation.deleteOne({ subjectType, subjectId });
-    await publishTripDriverLocationStopped(tripIds, new Date().toISOString());
-    return NextResponse.json({ ok: true });
+    let realtimeAvailable = true;
+    try {
+      await publishTripDriverLocationStopped(
+        tripIds,
+        new Date().toISOString(),
+      );
+    } catch (error) {
+      realtimeAvailable = false;
+      logLiveShareFailure("[driver location stop realtime publish]", error);
+    }
+    return NextResponse.json({ ok: true, realtimeAvailable });
   } catch (error) {
     logLiveShareFailure("[driver location stop]", error);
     return jsonError("Unable to stop live location sharing.", 503);

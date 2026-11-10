@@ -16,7 +16,7 @@ export async function GET(
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.role !== "passenger") {
+  if (session.role !== "passenger" && session.role !== "driver") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -27,7 +27,11 @@ export async function GET(
 
   try {
     await connectDB();
-    const trip = await Trip.findOne({ _id: id, userId: session.userId })
+    const ownerFilter =
+      session.role === "driver"
+        ? { driverId: session.userId }
+        : { userId: session.userId };
+    const trip = await Trip.findOne({ _id: id, ...ownerFilter })
       .select("_id userId driverId status rideId")
       .lean();
     if (!trip) {
@@ -36,13 +40,17 @@ export async function GET(
     const ride = trip.rideId
       ? await Ride.findById(trip.rideId).select("status driverId").lean()
       : null;
-    if (!canShare(trip, session.userId, ride)) {
+    const authorized =
+      session.role === "driver"
+        ? trip.status === "active" || ride?.status === "active"
+        : canShare(trip, session.userId, ride);
+    if (!authorized) {
       return NextResponse.json({ error: "Trip is not live." }, { status: 404 });
     }
 
     const tokenRequest = await createTripLocationTokenRequest(
       String(trip._id),
-      `passenger:${session.userId}`,
+      `${session.role}:${session.userId}`,
     );
     return NextResponse.json(tokenRequest, {
       headers: { "Cache-Control": "private, no-store" },

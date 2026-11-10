@@ -76,6 +76,7 @@ export function deriveLiveViewerState(
 
 export function getLiveViewerPollDelayMs(input: {
   failureCount: number;
+  pollIntervalMs?: number;
   nextAfterMs?: number | null;
   retryAfterMs?: number | null;
   paused?: boolean;
@@ -85,11 +86,18 @@ export function getLiveViewerPollDelayMs(input: {
   const failures = Number.isFinite(input.failureCount)
     ? Math.max(0, Math.floor(input.failureCount))
     : 0;
+  const requestedPollInterval = input.pollIntervalMs;
+  const pollIntervalMs =
+    typeof requestedPollInterval === "number" &&
+    Number.isFinite(requestedPollInterval) &&
+    requestedPollInterval > 0
+      ? requestedPollInterval
+      : LIVE_VIEWER_POLL_INTERVAL_MS;
   const baseDelay =
     failures === 0
-      ? LIVE_VIEWER_POLL_INTERVAL_MS
+      ? pollIntervalMs
       : Math.min(
-          LIVE_VIEWER_POLL_INTERVAL_MS * 2 ** Math.min(failures, 30),
+          pollIntervalMs * 2 ** Math.min(failures, 30),
           LIVE_VIEWER_RETRY_MAX_MS,
         );
   return Math.min(
