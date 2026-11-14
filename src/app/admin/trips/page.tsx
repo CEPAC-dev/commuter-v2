@@ -299,6 +299,7 @@ const DETAIL_HIDDEN_KEYS = new Set([
   "_id",
   "pickup",
   "dropoff",
+  "routeCoordinates",
   "userId",
   "driverId",
   "requestId",
