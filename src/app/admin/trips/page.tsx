@@ -1773,31 +1773,12 @@ export default function AdminTripsPage() {
                         routePoints={mapRoutePoints}
                         routeGeometry={mapRouteGeometry}
                         walkingConnections={walkingConnections}
+                        liveLocationUrl={
+                          detail.status === "active"
+                            ? `/api/admin/trips/${detail._id}/live-location`
+                            : undefined
+                        }
                       />
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 14,
-                          flexWrap: "wrap",
-                          marginTop: 10,
-                          paddingInline: 4,
-                        }}
-                      >
-                        <span className="map-legend">
-                          <i style={{ background: "var(--color-secondary)" }} />{" "}
-                          Origin
-                        </span>
-                        <span className="map-legend">
-                          <i style={{ background: "var(--color-primary)" }} />{" "}
-                          Destination
-                        </span>
-                        {detail.pickupStation || detail.dropoffStation ? (
-                          <span className="map-legend">
-                            <i style={{ background: "var(--color-accent)" }} />{" "}
-                            Station
-                          </span>
-                        ) : null}
-                      </div>
                     </div>
                   ) : null}
 
