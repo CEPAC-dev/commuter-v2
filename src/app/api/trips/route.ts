@@ -210,31 +210,6 @@ export async function POST(req: NextRequest) {
   if (rawDates.some((date) => typeof date !== "string")) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
   }
-  const dateValidationError = getTripBatchDateValidationError(
-    rawDates as string[],
-    bookingWindow(),
-  );
-  if (dateValidationError?.code === "TOO_MANY_DATES") {
-    return NextResponse.json(
-      {
-        errorCode: dateValidationError.code,
-        error: dateValidationError.code,
-      },
-      { status: 400 },
-    );
-  }
-  if (dateValidationError?.code === "DUPLICATE_DATES") {
-    return NextResponse.json(
-      { errorCode: "DUPLICATE_DATES", error: "DUPLICATE_DATES" },
-      { status: 400 },
-    );
-  }
-  if (dateValidationError?.code === "INVALID_DATE") {
-    return NextResponse.json(
-      { error: `Invalid or out-of-window date: ${dateValidationError.date}` },
-      { status: 400 },
-    );
-  }
   const dates = [...(rawDates as string[])].sort();
   if (!Array.isArray(trips) || trips.length === 0) {
     return NextResponse.json({ error: "Invalid trips" }, { status: 400 });
@@ -267,6 +242,35 @@ export async function POST(req: NextRequest) {
   await connectDB();
 
   const activeRegion = await resolveActiveRegion({ userId });
+  const allowedBookingDates = bookingWindow(
+    new Date(),
+    activeRegion.config.timezone,
+  );
+  const dateValidationError = getTripBatchDateValidationError(
+    rawDates as string[],
+    allowedBookingDates,
+  );
+  if (dateValidationError?.code === "TOO_MANY_DATES") {
+    return NextResponse.json(
+      {
+        errorCode: dateValidationError.code,
+        error: dateValidationError.code,
+      },
+      { status: 400 },
+    );
+  }
+  if (dateValidationError?.code === "DUPLICATE_DATES") {
+    return NextResponse.json(
+      { errorCode: "DUPLICATE_DATES", error: "DUPLICATE_DATES" },
+      { status: 400 },
+    );
+  }
+  if (dateValidationError?.code === "INVALID_DATE") {
+    return NextResponse.json(
+      { error: `Invalid or out-of-window date: ${dateValidationError.date}` },
+      { status: 400 },
+    );
+  }
   const userRegion = activeRegion.code;
   const mapSettings = await getMapSettings(userRegion);
   const vehiclesMap = await getVehicles(userRegion);
@@ -871,6 +875,7 @@ export async function POST(req: NextRequest) {
       instance.trip.priceEgp,
       instance.date,
       dates,
+      allowedBookingDates,
     ),
     payload: instance,
   }));
@@ -1071,7 +1076,7 @@ export async function POST(req: NextRequest) {
           {
             userId,
             dates,
-            allowedDates: bookingWindow(),
+            allowedDates: allowedBookingDates,
             routeCount: serverTrips.length,
             cycleCount: trips.length,
             candidates: batchCandidates,

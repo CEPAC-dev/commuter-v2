@@ -38,7 +38,6 @@ const CreateMap = dynamic(() => import("./CreateMapOsm"), { ssr: false });
 const CreateMapGoogle = dynamic(() => import("./CreateMapGoogle"), {
   ssr: false,
 });
-import { earliestBookingDate } from "@/lib/time/bookingDates";
 import type { SavedAddress } from "@/types/shared";
 import { haversineKm } from "@/lib/geo/stations";
 import type { Station } from "@/lib/geo/stations";
@@ -128,9 +127,10 @@ export default function CreateClient({
   const mapConfig = getMapConfig(region);
   const { pickup, dropoff } = useTripStore();
   const [mounted, setMounted] = useState(false);
-  const [selectedDates, setSelectedDates] = useState<string[]>([
-    earliestBookingDate(),
-  ]);
+  const [bookingDates, setBookingDates] = useState<string[]>([]);
+  const [bookingDatesLoading, setBookingDatesLoading] = useState(true);
+  const [bookingDatesLoadError, setBookingDatesLoadError] = useState(false);
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [trips, setTrips] = useState<TripData[]>([]);
   const [existingTripsByDate, setExistingTripsByDate] = useState<
     Record<string, TripSpacingWindow[]>
@@ -205,6 +205,55 @@ export default function CreateClient({
   );
   const [genderSaving, setGenderSaving] = useState(false);
   const [genderSaveError, setGenderSaveError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadBookingDates() {
+      try {
+        const response = await fetch("/api/trips/booking-window", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Booking-window lookup failed with status ${response.status}`);
+        }
+
+        const payload: unknown = await response.json();
+        if (
+          !payload ||
+          typeof payload !== "object" ||
+          !("data" in payload) ||
+          !payload.data ||
+          typeof payload.data !== "object" ||
+          !("dates" in payload.data) ||
+          !Array.isArray(payload.data.dates) ||
+          payload.data.dates.length !== 7 ||
+          !payload.data.dates.every((date) => typeof date === "string")
+        ) {
+          throw new Error("Booking-window response was invalid");
+        }
+
+        const dates = payload.data.dates;
+        if (controller.signal.aborted) return;
+        setBookingDates(dates);
+        setSelectedDates((current) =>
+          current.length === 0
+            ? [dates[0]]
+            : current.filter((date) => dates.includes(date)),
+        );
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("Failed to load available booking dates:", error);
+        setBookingDatesLoadError(true);
+      } finally {
+        if (!controller.signal.aborted) setBookingDatesLoading(false);
+      }
+    }
+
+    void loadBookingDates();
+    return () => controller.abort();
+  }, []);
 
   async function saveUserGender(gender: "male" | "female") {
     setGenderSaving(true);
@@ -453,8 +502,8 @@ export default function CreateClient({
 
   const getTripPriceForSubmission = useCallback(
     (trip: TripData) =>
-      priceForSelectedDates(getSingleTripPrice(trip), selectedDates),
-    [getSingleTripPrice, selectedDates],
+      priceForSelectedDates(getSingleTripPrice(trip), selectedDates, bookingDates),
+    [bookingDates, getSingleTripPrice, selectedDates],
   );
 
   async function createBooking() {
@@ -1075,7 +1124,7 @@ export default function CreateClient({
   const baseInstancePrices = trips.flatMap((trip) => {
     const singleTripPrice = getSingleTripPrice(trip);
     return selectedDates.map((date) =>
-      priceForSelectedDate(singleTripPrice, date, selectedDates),
+      priceForSelectedDate(singleTripPrice, date, selectedDates, bookingDates),
     );
   });
   const baseGrandTotalEgp = baseInstancePrices.reduce(
@@ -1248,6 +1297,9 @@ export default function CreateClient({
                     <DatePicker
                       value={selectedDates}
                       onChange={setSelectedDates}
+                      days={bookingDates}
+                      loading={bookingDatesLoading}
+                      loadError={bookingDatesLoadError}
                       singleSelect={!multiDayRequestsEnabled}
                     />
                   </div>

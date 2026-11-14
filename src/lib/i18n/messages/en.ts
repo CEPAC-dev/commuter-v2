@@ -1260,6 +1260,8 @@ export const en = {
   "create.pick_days_note":
     "Pick one or more days — trips repeat on each selected date.",
   "create.pick_one_day_note": "Choose one date for this trip.",
+  "create.booking_dates_loading": "Loading available dates...",
+  "create.booking_dates_load_failed": "Could not load available dates. Refresh and try again.",
   "create.booking_create_failed": "Failed to create booking. Please try again.",
   "create.wallet_payment_failed": "Wallet payment failed. Please try again.",
   "create.payment_init_failed": "Failed to initiate payment. Please try again.",

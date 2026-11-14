@@ -1,21 +1,58 @@
-import { addDays, format, startOfDay } from "date-fns";
+export const BOOKING_WINDOW_DAYS = 7;
+export const BOOKING_CUTOFF_LOCAL_TIME = "19:00";
 
-/** Earliest selectable booking date: tomorrow, or day-after-tomorrow if now >= 20:00 local. */
-export function earliestBookingDate(now: Date = new Date()): string {
-  const offset = now.getHours() >= 20 ? 2 : 1;
-  return format(addDays(startOfDay(now), offset), "yyyy-MM-dd");
+const DEFAULT_TIME_ZONE = "Africa/Cairo";
+
+function getLocalDateTimeParts(now: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    hour: Number(values.hour),
+  };
 }
 
-/** 7 selectable dates starting from earliestBookingDate(now). */
-export function bookingWindow(now: Date = new Date()): string[] {
-  const earliest = earliestBookingDate(now);
-  const start = new Date(`${earliest}T00:00:00`);
-  return Array.from({ length: 7 }, (_, i) =>
-    format(addDays(start, i), "yyyy-MM-dd"),
+/** Earliest selectable date: tomorrow, or the day after at/after 19:00 in the region. */
+export function earliestBookingDate(
+  now: Date = new Date(),
+  timeZone: string = DEFAULT_TIME_ZONE,
+): string {
+  const { date, hour } = getLocalDateTimeParts(now, timeZone);
+  const [year, month, day] = date.split("-").map(Number);
+  const offset = hour >= 19 ? 2 : 1;
+  return new Date(Date.UTC(year, month - 1, day + offset))
+    .toISOString()
+    .slice(0, 10);
+}
+
+/** Seven selectable calendar dates beginning at earliestBookingDate. */
+export function bookingWindow(
+  now: Date = new Date(),
+  timeZone: string = DEFAULT_TIME_ZONE,
+): string[] {
+  const [year, month, day] = earliestBookingDate(now, timeZone)
+    .split("-")
+    .map(Number);
+  return Array.from({ length: BOOKING_WINDOW_DAYS }, (_, index) =>
+    new Date(Date.UTC(year, month - 1, day + index))
+      .toISOString()
+      .slice(0, 10),
   );
 }
 
-/** Whether `date` ("YYYY-MM-DD") falls inside the current 7-day booking window. */
-export function isDateInWindow(date: string, now: Date = new Date()): boolean {
-  return bookingWindow(now).includes(date);
+/** Whether `date` ("YYYY-MM-DD") falls inside the current regional booking window. */
+export function isDateInWindow(
+  date: string,
+  now: Date = new Date(),
+  timeZone: string = DEFAULT_TIME_ZONE,
+): boolean {
+  return bookingWindow(now, timeZone).includes(date);
 }

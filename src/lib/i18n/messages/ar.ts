@@ -1227,6 +1227,8 @@ export const ar: Record<MessageKey, string> = {
   "create.pick_days_note":
     "اختر يومًا واحدًا أو أكثر — ستتكرر الرحلة في كل تاريخ تختاره.",
   "create.pick_one_day_note": "اختر يومًا واحدًا لهذه الرحلة.",
+  "create.booking_dates_loading": "جارٍ تحميل التواريخ المتاحة...",
+  "create.booking_dates_load_failed": "تعذّر تحميل التواريخ المتاحة. حدّث الصفحة وحاول مرة أخرى.",
   "create.booking_create_failed": "تعذّر إتمام الحجز. حاول مرة أخرى.",
   "create.wallet_payment_failed": "فشل الدفع من المحفظة. حاول مرة أخرى.",
   "create.payment_init_failed": "تعذّر بدء عملية الدفع. حاول مرة أخرى.",

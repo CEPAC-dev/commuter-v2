@@ -2,22 +2,26 @@
 import { Calendar, Check } from "lucide-react";
 import { format } from "date-fns";
 import { ar, enUS } from "date-fns/locale";
-import { bookingWindow } from "@/lib/time/bookingDates";
 import { useClientLocale } from "@/lib/locale.client";
 import { toArabicDigits } from "@/lib/i18n";
 
 interface Props {
   value: string[]; // selected "YYYY-MM-DD" dates
   onChange: (dates: string[]) => void;
+  days: string[];
+  loading: boolean;
+  loadError: boolean;
   singleSelect?: boolean;
 }
 
 export default function DatePicker({
   value,
   onChange,
+  days,
+  loading,
+  loadError,
   singleSelect = false,
 }: Props) {
-  const days = bookingWindow();
   const { t, locale } = useClientLocale();
   const dateLocale = locale === "ar" ? ar : enUS;
 
@@ -45,6 +49,16 @@ export default function DatePicker({
       >
         {t(singleSelect ? "create.trip_date" : "create.request_dates")}
       </p>
+      {loading && (
+        <p role="status" style={{ fontSize: 12, color: "#5A6A7A" }}>
+          {t("create.booking_dates_loading")}
+        </p>
+      )}
+      {loadError && (
+        <p role="alert" style={{ fontSize: 12, color: "#b42318" }}>
+          {t("create.booking_dates_load_failed")}
+        </p>
+      )}
       <div
         role="group"
         aria-label={t(
