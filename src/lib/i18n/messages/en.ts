@@ -817,11 +817,11 @@ export const en = {
   "private_ride_offer.review": "Review private-ride offer",
   "private_ride_offer.title": "A private-ride option is available",
   "private_ride_offer.description":
-    "We couldn't find available passengers in your area for this shared trip. Changing to a {vehicleType} will update the fare from {oldPrice} to {newPrice}. Would you like to accept the new fare or cancel this trip?",
+    "We couldn't find available passengers in your area for this shared trip. Changing to a {vehicleType} will update the fare from {oldPrice} to {newPrice}. Accepting changes this trip to private; declining cancels the trip rather than keeping it shared.",
   "private_ride_offer.expiration_note":
     "If you don't respond by {deadline} (Cairo time), this trip will be canceled automatically.",
   "private_ride_offer.accept": "Accept new fare",
-  "private_ride_offer.cancel_trip": "Cancel this trip",
+  "private_ride_offer.cancel_trip": "Decline offer and cancel trip",
   "private_ride_offer.close": "Not now",
   "private_ride_offer.accept_success":
     "Your trip is now private. Continue to payment to confirm it.",

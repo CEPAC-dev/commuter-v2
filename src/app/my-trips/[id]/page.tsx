@@ -126,7 +126,7 @@ function TripActions({
       />
     );
   }
-  const showReport = trip.status === "completed" && !displayStatus.canRate;
+  const showReport = trip.status === "completed";
   if (trip.isStandalone) {
     return (
       <div style={{ display: "grid", gap: 8 }}>
@@ -187,18 +187,20 @@ function TripActions({
       />
     );
   }
-  if (displayStatus.canRate) {
+  if (displayStatus.canRate || showReport) {
     return (
-      <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />
-    );
-  }
-  if (showReport) {
-    return (
-      <ReportTripModal
-        tripId={trip.id}
-        locale={locale}
-        hasExistingReport={hasReport}
-      />
+      <div style={{ display: "grid", gap: 8 }}>
+        {displayStatus.canRate && (
+          <RateTripModal tripId={trip.id} initialRating={trip.rating ?? null} />
+        )}
+        {showReport && (
+          <ReportTripModal
+            tripId={trip.id}
+            locale={locale}
+            hasExistingReport={hasReport}
+          />
+        )}
+      </div>
     );
   }
   return null;
@@ -384,7 +386,7 @@ export default async function TripDetailPage({
       displayStatus.canPay ||
       displayStatus.canCancel ||
       displayStatus.canRate ||
-      (status === "completed" && !displayStatus.canRate));
+      status === "completed");
   const paymentBreakdown = trip.paymentBreakdown;
 
   return (
