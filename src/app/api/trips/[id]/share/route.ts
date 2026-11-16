@@ -15,7 +15,10 @@ import {
   SHARE_LINK_LIFETIME_MS,
   revokeShareLocation,
 } from "@/lib/liveShare/logic";
-import { validateLiveShareConsent } from "@/lib/liveShare/consent";
+import {
+  LIVE_SHARE_CONSENT_VERSION,
+  validateLiveShareConsent,
+} from "@/lib/liveShare/consent";
 import { recoverDuplicateShare } from "@/lib/liveShare/duplicateShare";
 import { logLiveShareFailure } from "@/lib/liveShare/errors";
 import { assertLiveShareSecret, createShareToken } from "@/lib/liveShare/token";
@@ -130,6 +133,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
               ? "Consent is required to create a live-share link."
               : "The live-share consent version is no longer current.",
           errorCode: consent.errorCode,
+          currentConsentVersion: LIVE_SHARE_CONSENT_VERSION,
         },
         { status: 400 },
       );
@@ -217,11 +221,14 @@ export async function GET(_request: Request, { params }: RouteContext) {
       return NextResponse.json({
         state: "none",
         active: false,
+        consentVersion: LIVE_SHARE_CONSENT_VERSION,
         url: null,
         expiresAt: null,
         viewCount: 0,
         lastViewedAt: null,
         lastLocationAt: null,
+      }, {
+        headers: { "Cache-Control": "no-store" },
       });
     }
 
@@ -249,6 +256,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     return NextResponse.json({
       state,
       active: usable && !ended,
+      consentVersion: LIVE_SHARE_CONSENT_VERSION,
       url: usable
         ? shareUrl(share._id, baseUrl, secret)
         : null,
@@ -260,6 +268,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
       lastLocationAt: !ended && share.lastLocation?.receivedAt
         ? new Date(share.lastLocation.receivedAt).toISOString()
         : null,
+    }, {
+      headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
     logLiveShareFailure("[GET /api/trips/[id]/share]", error);

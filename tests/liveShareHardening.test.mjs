@@ -73,6 +73,12 @@ test("new shares require current explicit consent and return fields for storage"
   );
   assert.match(route, /consentAt:\s*consent\.consentAt/);
   assert.match(route, /consentVersion:\s*consent\.consentVersion/);
+  assert.match(route, /currentConsentVersion:\s*LIVE_SHARE_CONSENT_VERSION/);
+  assert.equal(
+    (route.match(/consentVersion:\s*LIVE_SHARE_CONSENT_VERSION/g) ?? []).length,
+    2,
+    "GET share state should expose the current version whether a share exists or not",
+  );
   assert.match(model, /consentAt:\s*\{\s*type:\s*Date,\s*required:\s*true\s*\}/);
   assert.match(model, /consentVersion:\s*\{\s*type:\s*String,\s*required:\s*true\s*\}/);
   assert.doesNotMatch(control, /localStorage|commuter-live-share-consent/);
