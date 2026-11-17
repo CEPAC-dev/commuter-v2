@@ -1496,6 +1496,8 @@ export const ar: Record<MessageKey, string> = {
   "wallet.status.pending": "قيد الانتظار",
   "wallet.status.completed": "مكتملة",
   "wallet.status.failed": "فاشلة",
+  "wallet.continue_topup": "متابعة الدفع",
+  "wallet.resuming_topup": "جارٍ تجهيز الدفع…",
   "wallet.earning_description": "أرباح الرحلة رقم {tripNumber}",
   "wallet.earning_description_no_number": "أرباح الرحلة",
   "wallet.topup_confirming": "جارٍ تأكيد شحن المحفظة…",

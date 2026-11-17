@@ -1539,6 +1539,8 @@ export const en = {
   "wallet.status.pending": "Pending",
   "wallet.status.completed": "Completed",
   "wallet.status.failed": "Failed",
+  "wallet.continue_topup": "Continue payment",
+  "wallet.resuming_topup": "Preparing payment…",
   "wallet.topup_confirming": "Confirming your top-up…",
   "wallet.topup_added": "Top-up added to your wallet.",
   "wallet.topup_failed": "Top-up failed. No charge was made.",

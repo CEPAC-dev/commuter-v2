@@ -74,6 +74,8 @@ const WalletTransactionSchema = new Schema(
 
     // ── Kashier (topup + withdrawal) ──
     kashierSessionId: { type: String },
+    kashierSessionUrl: { type: String, select: false },
+    kashierSessionExpiresAt: { type: Date, select: false },
     kashierOrderId: { type: String },
     kashierTransactionIds: { type: [String], default: [] },
     kashierRefundId: { type: String },
@@ -157,6 +159,22 @@ if (
 ) {
   existingWalletTransactionModel.schema.add({
     refundOperationId: { type: String, trim: true },
+  });
+}
+if (
+  existingWalletTransactionModel &&
+  !existingWalletTransactionModel.schema.path("kashierSessionUrl")
+) {
+  existingWalletTransactionModel.schema.add({
+    kashierSessionUrl: { type: String, select: false },
+  });
+}
+if (
+  existingWalletTransactionModel &&
+  !existingWalletTransactionModel.schema.path("kashierSessionExpiresAt")
+) {
+  existingWalletTransactionModel.schema.add({
+    kashierSessionExpiresAt: { type: Date, select: false },
   });
 }
 export const WalletTransaction =
