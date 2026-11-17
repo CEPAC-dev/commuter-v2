@@ -10,6 +10,7 @@ import { logLiveShareFailure } from "@/lib/liveShare/errors";
 import { Ride } from "@/models/Ride";
 import { Trip } from "@/models/Trip";
 import { TripShare } from "@/models/TripShare";
+import { readDriverLocation } from "@/lib/liveLocation/store";
 
 interface RouteContext {
   params: Promise<{ token: string }>;
@@ -62,6 +63,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
                 .select("status updatedAt")
                 .lean()
             : null;
+          const trackingActive =
+            trip.status === "active" || ride?.status === "active";
+          const driverLocation = trackingActive
+            ? await readDriverLocation(
+                trip.rideId ? "ride" : "trip",
+                String(trip.rideId ?? trip._id),
+              )
+            : null;
           return {
             share: {
               id: String(share._id),
@@ -73,7 +82,12 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
               viewCount: share.viewCount,
               lastViewedAt: share.lastViewedAt,
             },
-            trip,
+            trip: {
+              ...trip,
+              tripId: String(trip._id),
+              trackingActive,
+              driverLocation,
+            },
             ride,
           };
         },

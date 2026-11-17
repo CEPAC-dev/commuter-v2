@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
+import { User } from "@/models/User";
 import { DAYS_OF_WEEK } from "@/lib/services/availability";
+import { isRegionCode, normalizeRegion } from "@/lib/config/regions";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -45,6 +47,33 @@ export async function POST(req: NextRequest) {
 
   await connectDB();
 
+  const driverIds = [
+    ...new Set(
+      raw.flatMap((item) =>
+        isPlainObject(item) && typeof item.driverId === "string"
+          ? [item.driverId]
+          : [],
+      ),
+    ),
+  ];
+  const drivers = await User.find({ _id: { $in: driverIds } })
+    .select("region defaultRegionCode")
+    .lean<
+      {
+        _id: unknown;
+        region?: unknown;
+        defaultRegionCode?: unknown;
+      }[]
+    >();
+  const driverRegionById = new Map(
+    drivers.map((driver) => [
+      String(driver._id),
+      isRegionCode(driver.defaultRegionCode)
+        ? driver.defaultRegionCode
+        : normalizeRegion(driver.region),
+    ]),
+  );
+
   let createdCount = 0;
   let updatedCount = 0;
 
@@ -66,6 +95,9 @@ export async function POST(req: NextRequest) {
       : null;
     const origin = record.origin ?? record.startLocation;
     const destination = record.destination ?? record.endLocation;
+    const regionCode = isRegionCode(record.regionCode)
+      ? record.regionCode
+      : driverRegionById.get(driverId ?? "");
 
     if (
       !Number.isFinite(availabilityNumber) ||
@@ -74,6 +106,7 @@ export async function POST(req: NextRequest) {
       !dayOfWeek ||
       !startTime ||
       !endTime ||
+      !regionCode ||
       !isPlainObject(origin) ||
       !isPlainObject(destination)
     ) {
@@ -82,11 +115,15 @@ export async function POST(req: NextRequest) {
 
     const payload = {
       driverId,
+      regionCode,
       dayOfWeek,
       origin,
       destination,
       startNearestStation: record.startNearestStation ?? undefined,
-      destinationNearestStation: record.destinationNearestStation ?? record.endNearestStation ?? undefined,
+      destinationNearestStation:
+        record.destinationNearestStation ??
+        record.endNearestStation ??
+        undefined,
       startTime,
       endTime,
       active: record.active !== false,

@@ -6,6 +6,7 @@ export interface DirectionsResult {
   coordinates: [number, number][];
   distance_km: number;
   duration_minutes: number;
+  legs?: { distanceKm: number; durationMinutes: number }[];
 }
 
 export interface DirectionsTableResult {
@@ -263,7 +264,9 @@ export async function fetchGraphHopperMatrix(
         cache: "no-store",
       });
       if (!res.ok) {
-        console.error("[api/directions] provider=graphhopper outcome=http_error");
+        console.error(
+          "[api/directions] provider=graphhopper outcome=http_error",
+        );
         continue;
       }
 
@@ -276,12 +279,10 @@ export async function fetchGraphHopperMatrix(
         data.times?.length === combinedPoints.length &&
         data.distances.every((row) => row.length === combinedPoints.length) &&
         data.times.every((row) => row.length === combinedPoints.length);
-      if (
-        !data.distances ||
-        !data.times ||
-        !isCombinedResponse
-      ) {
-        console.error("[api/directions] provider=graphhopper outcome=invalid_response");
+      if (!data.distances || !data.times || !isCombinedResponse) {
+        console.error(
+          "[api/directions] provider=graphhopper outcome=invalid_response",
+        );
         continue;
       }
 
@@ -383,7 +384,9 @@ export async function fetchTravelTimeMatrix(
     data.distances.length !== points.length ||
     data.times.length !== points.length
   ) {
-    console.error("[api/directions] provider=traveltime outcome=invalid_response");
+    console.error(
+      "[api/directions] provider=traveltime outcome=invalid_response",
+    );
     return null;
   }
 
@@ -475,6 +478,7 @@ export async function fetchDirections(
       distance: number;
       duration: number;
       geometry?: { coordinates: [number, number][] };
+      legs?: Array<{ distance?: number; duration?: number }>;
     }>;
   };
 
@@ -494,6 +498,16 @@ export async function fetchDirections(
       coordinates: coords,
       distance_km: Math.round(((route.distance ?? 0) / 1000) * 10) / 10,
       duration_minutes: Math.round((route.duration ?? 0) / 60),
+      legs: route.legs?.map((leg) => ({
+        distanceKm:
+          typeof leg.distance === "number" && Number.isFinite(leg.distance)
+            ? Math.round((leg.distance / 1000) * 10) / 10
+            : Number.NaN,
+        durationMinutes:
+          typeof leg.duration === "number" && Number.isFinite(leg.duration)
+            ? Math.round(leg.duration / 60)
+            : Number.NaN,
+      })),
     },
   ];
 }

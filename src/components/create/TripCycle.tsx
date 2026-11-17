@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Loader2,
   X,
@@ -47,7 +47,10 @@ import type { SpacingConflict } from "@/lib/validation/tripSpacing";
 import { fetchRoadRoutes } from "@/lib/osrm";
 import type { TripPoint } from "@/lib/store/useTripStore";
 import type { RegionCode } from "@/lib/config/regions";
-import type { MapSettings } from "@/lib/config/mapSettings";
+import {
+  defaultMapSettings,
+  type MapSettings,
+} from "@/lib/config/mapSettings";
 import type { SavedAddress } from "@/types/shared";
 import {
   isSharedVehicle,
@@ -528,17 +531,39 @@ export default function TripCycle({
   const { t, locale } = useClientLocale();
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
-  const stationZoneIdsSignature = JSON.stringify(mapSettings?.stationZoneIds);
+  const fallbackMapSettings = useMemo(
+    () => mapSettings ?? defaultMapSettings(regionCode),
+    [mapSettings, regionCode],
+  );
   const previousStopErrorRef = useRef<string | null>(null);
   const [zoneState, setZoneState] = useState<{
     regionCode: RegionCode;
     features: ZoneFeature[];
+    stationAssignment: Pick<
+      MapSettings,
+      | "stationAssignmentMode"
+      | "directPointZoneIds"
+      | "stationZoneIds"
+      | "showZones"
+    >;
     failed: boolean;
   } | null>(null);
   const zoneFeatures =
     zoneState?.regionCode === regionCode ? zoneState.features : [];
   const zoneLoadError =
     zoneState?.regionCode === regionCode && zoneState.failed;
+  const stationAssignment =
+    zoneState?.regionCode === regionCode
+      ? zoneState.stationAssignment
+      : {
+          stationAssignmentMode: fallbackMapSettings.stationAssignmentMode,
+          directPointZoneIds: fallbackMapSettings.directPointZoneIds,
+          stationZoneIds: fallbackMapSettings.stationZoneIds,
+          showZones: fallbackMapSettings.showZones,
+        };
+  const stationZoneIdsSignature = JSON.stringify(
+    stationAssignment.stationZoneIds,
+  );
   const [stationSuggestionTarget, setStationSuggestionTarget] = useState<{
     locationType: "pickup" | "dropoff";
     point: TripPoint;
@@ -555,42 +580,87 @@ export default function TripCycle({
 
   useEffect(() => {
     const needsZones =
-      mapSettings?.showZones || mapSettings?.stationAssignmentMode === "zones";
+      fallbackMapSettings.showZones ||
+      fallbackMapSettings.stationAssignmentMode === "zones";
     if (!needsZones) return;
 
     let cancelled = false;
-    fetch(`/api/zones?region=${encodeURIComponent(regionCode)}`)
+    fetch(`/api/zones?region=${encodeURIComponent(regionCode)}`, {
+      cache: "no-store",
+    })
       .then((response) => {
         if (!response.ok) throw new Error("Unable to load zone data.");
         return response.json();
       })
-      .then((geojson: { features?: ZoneFeature[] }) => {
+      .then((configuration: {
+        features?: ZoneFeature[];
+        stationAssignment?: {
+          mode?: MapSettings["stationAssignmentMode"];
+          directPointZoneIds?: string[];
+          stationZoneIds?: string[];
+          showZones?: boolean;
+        };
+      }) => {
         if (cancelled) return;
+        const assignment = configuration.stationAssignment;
+        if (
+          !assignment ||
+          (assignment.mode !== "shared-vehicles" &&
+            assignment.mode !== "zones") ||
+          !Array.isArray(assignment.directPointZoneIds) ||
+          !Array.isArray(assignment.stationZoneIds) ||
+          typeof assignment.showZones !== "boolean"
+        ) {
+          throw new Error("Invalid station assignment configuration.");
+        }
         setZoneState({
           regionCode,
-          features: (geojson.features ?? []).filter(
+          features: (configuration.features ?? []).filter(
             (feature): feature is ZoneFeature =>
               feature.geometry?.type === "Polygon" ||
               feature.geometry?.type === "MultiPolygon",
           ),
+          stationAssignment: {
+            stationAssignmentMode: assignment.mode,
+            directPointZoneIds: assignment.directPointZoneIds,
+            stationZoneIds: assignment.stationZoneIds,
+            showZones: assignment.showZones,
+          },
           failed: false,
         });
       })
       .catch(() => {
         if (!cancelled) {
-          setZoneState({ regionCode, features: [], failed: true });
+          setZoneState({
+            regionCode,
+            features: [],
+            stationAssignment: {
+              stationAssignmentMode:
+                fallbackMapSettings.stationAssignmentMode,
+              directPointZoneIds: fallbackMapSettings.directPointZoneIds,
+              stationZoneIds: fallbackMapSettings.stationZoneIds,
+              showZones: fallbackMapSettings.showZones,
+            },
+            failed: true,
+          });
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [mapSettings?.showZones, mapSettings?.stationAssignmentMode, regionCode]);
+  }, [
+    fallbackMapSettings.showZones,
+    fallbackMapSettings.stationAssignmentMode,
+    fallbackMapSettings.directPointZoneIds,
+    fallbackMapSettings.stationZoneIds,
+    regionCode,
+  ]);
 
   function validateLocationPoint(point: TripPoint | null) {
     if (!point) return true;
     if (
-      mapSettings?.stationAssignmentMode === "zones" &&
+      stationAssignment.stationAssignmentMode === "zones" &&
       !zoneFeatures.length
     ) {
       window.alert(
@@ -600,7 +670,7 @@ export default function TripCycle({
       );
       return false;
     }
-    if (!mapSettings?.showZones) return true;
+    if (!stationAssignment.showZones) return true;
     if (!zoneFeatures.length) {
       window.alert(
         "The service zones are still loading. Please try again in a moment.",
@@ -619,7 +689,7 @@ export default function TripCycle({
 
   function usesStationForPoint(point: TripPoint | null, vehicleType: string) {
     if (!point) return false;
-    if (mapSettings?.stationAssignmentMode !== "zones") {
+    if (stationAssignment.stationAssignmentMode !== "zones") {
       return isSharedVehicle(vehicleType);
     }
     const pointInZoneList = (zoneIds: string[]) =>
@@ -629,8 +699,8 @@ export default function TripCycle({
           zoneIds.includes(String(feature.id)) &&
           isPointInZone([point.lng, point.lat], feature),
       );
-    if (pointInZoneList(mapSettings.directPointZoneIds)) return false;
-    return pointInZoneList(mapSettings.stationZoneIds);
+    if (pointInZoneList(stationAssignment.directPointZoneIds)) return false;
+    return pointInZoneList(stationAssignment.stationZoneIds);
   }
 
   useEffect(() => {
@@ -890,7 +960,7 @@ export default function TripCycle({
     stations.length,
     data.pickupStation?.id,
     data.dropoffStation?.id,
-    mapSettings?.stationAssignmentMode,
+    stationAssignment.stationAssignmentMode,
     stationZoneIdsSignature,
     zoneFeatures.length,
   ]);
@@ -1094,7 +1164,7 @@ export default function TripCycle({
     stations.length,
     data.pickupStation?.id,
     data.dropoffStation?.id,
-    mapSettings?.stationAssignmentMode,
+    stationAssignment.stationAssignmentMode,
     stationZoneIdsSignature,
     zoneFeatures.length,
   ]);

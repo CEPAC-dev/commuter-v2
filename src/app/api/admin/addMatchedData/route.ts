@@ -248,7 +248,8 @@ function parseTripNumber(value: string): number | null {
 
 function normalizeRideType(value: string): "private" | "shared" {
   const normalized = normalizeLookupKey(value);
-  if (["private", "privatecar", "1"].includes(normalized)) return "private";
+  if (["private", "privatecar", "passengercar", "1"].includes(normalized))
+    return "private";
   return "shared";
 }
 
@@ -395,6 +396,7 @@ function buildStopLookup(sheet: ExcelJS.Worksheet) {
 
 type AvailabilityRecord = {
   _id: unknown;
+  regionCode?: string | null;
   date?: string;
   startTime?: string;
   endTime?: string;
@@ -464,6 +466,8 @@ function mapCarTypeToVehicle(carType: number | null): string {
       return "van_shared";
     case 4:
       return "microbus_shared";
+    case 5:
+      return "mini_bus";
     default:
       return "taxi_shared";
   }
@@ -545,7 +549,10 @@ function rowMatchKey(row: ExcelJS.Row, indexes: Map<string, number>): string {
   return value ? String(parseTripNumber(value) ?? value).trim() : "";
 }
 
-function rowTripNumbers(row: ExcelJS.Row, indexes: Map<string, number>): number[] {
+function rowTripNumbers(
+  row: ExcelJS.Row,
+  indexes: Map<string, number>,
+): number[] {
   const values: number[] = [];
   for (const [header, column] of indexes) {
     const normalized = normalizeLookupKey(header);
@@ -570,24 +577,61 @@ function importedSummary(
   indexes: Map<string, number>,
 ): ImportedMatchSummary {
   const carType = parseNumber(
-    pickValue(row, indexes, ["Car_Type", "CarType", "Vehicle_Type", "VehicleType"]),
+    pickValue(row, indexes, [
+      "Car_Type",
+      "CarType",
+      "Vehicle_Type",
+      "VehicleType",
+    ]),
   );
-  const vehicleValue = pickValue(row, indexes, ["Vehicle", "VehicleType", "Vehicle_Type"]);
-  const vehicleType = vehicleValue && !/^\d+$/.test(vehicleValue.trim())
-    ? vehicleValue.trim()
-    : mapCarTypeToVehicle(carType);
-  const rideTypeValue = pickValue(row, indexes, ["Ride_Type", "RideType", "Type"]);
+  const vehicleValue = pickValue(row, indexes, [
+    "Vehicle",
+    "VehicleType",
+    "Vehicle_Type",
+  ]);
+  const vehicleType =
+    vehicleValue && !/^\d+$/.test(vehicleValue.trim())
+      ? vehicleValue.trim()
+      : mapCarTypeToVehicle(carType);
+  const rideTypeValue = pickValue(row, indexes, [
+    "Ride_Type",
+    "RideType",
+    "Type",
+  ]);
   const rideType = normalizeRideType(rideTypeValue || vehicleType);
-  const totalFees = parseNumber(
-    pickValue(row, indexes, ["Trip_Fees", "TripFees", "Total_Fees", "TotalFees", "Amount", "Price"]),
-  ) ?? 0;
-  const additionalFees = parseNumber(
-    pickValue(row, indexes, ["Additional_Fees", "AdditionalFees", "ExtraFees"]),
-  ) ?? 0;
+  const totalFees =
+    parseNumber(
+      pickValue(row, indexes, [
+        "Trip_Fees",
+        "TripFees",
+        "Total_Fees",
+        "TotalFees",
+        "Amount",
+        "Price",
+      ]),
+    ) ?? 0;
+  const additionalFees =
+    parseNumber(
+      pickValue(row, indexes, [
+        "Additional_Fees",
+        "AdditionalFees",
+        "ExtraFees",
+      ]),
+    ) ?? 0;
   return {
-    date: pickValue(row, indexes, ["Date", "Trip_Date", "Ride_Date", "Match_Date"]),
+    date: pickValue(row, indexes, [
+      "Date",
+      "Trip_Date",
+      "Ride_Date",
+      "Match_Date",
+    ]),
     startTime: normalizeTimeValue(
-      pickValue(row, indexes, ["Departure", "Depart", "StartTime", "PickupTime"]),
+      pickValue(row, indexes, [
+        "Departure",
+        "Depart",
+        "StartTime",
+        "PickupTime",
+      ]),
     ),
     endTime: normalizeTimeValue(
       pickValue(row, indexes, ["Arrival", "Arrive", "EndTime", "DropoffTime"]),
@@ -596,33 +640,66 @@ function importedSummary(
     rideType,
     totalCost: totalFees + additionalFees,
     additionalFees,
-    kmRate: parseNumber(pickValue(row, indexes, ["KmRate", "KMRate", "DistanceRate"])) ?? 0,
-    hrRate: parseNumber(pickValue(row, indexes, ["HrRate", "HRRate", "HourlyRate"])) ?? 0,
+    kmRate:
+      parseNumber(
+        pickValue(row, indexes, ["KmRate", "KMRate", "DistanceRate"]),
+      ) ?? 0,
+    hrRate:
+      parseNumber(
+        pickValue(row, indexes, ["HrRate", "HRRate", "HourlyRate"]),
+      ) ?? 0,
   };
 }
 
 async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
-  const acceptSheet = getWorksheetByName(workbook, ["Match_Accept", "Match Accept"]);
-  const summarySheet = getWorksheetByName(workbook, ["Match_Summary", "Match Summary"]);
-  const detailsSheet = getWorksheetByName(workbook, ["Match_Details", "Match Details"]);
+  const acceptSheet = getWorksheetByName(workbook, [
+    "Match_Accept",
+    "Match Accept",
+  ]);
+  const summarySheet = getWorksheetByName(workbook, [
+    "Match_Summary",
+    "Match Summary",
+  ]);
+  const detailsSheet = getWorksheetByName(workbook, [
+    "Match_Details",
+    "Match Details",
+  ]);
   if (!acceptSheet || !summarySheet || !detailsSheet) return null;
 
-  const summaryHeader = findHeaderRow(summarySheet, ["Ride_ID", "Match_ID", "Ride_Number"]);
-  const detailsHeader = findHeaderRow(detailsSheet, ["Ride_ID", "Match_ID", "Stop"]);
+  const summaryHeader = findHeaderRow(summarySheet, [
+    "Ride_ID",
+    "Match_ID",
+    "Ride_Number",
+  ]);
+  const detailsHeader = findHeaderRow(detailsSheet, [
+    "Ride_ID",
+    "Match_ID",
+    "Stop",
+  ]);
   if (!summaryHeader || !detailsHeader) {
-    throw new Error("Match_Accept, Match_Summary, and Match_Details must contain match and stop headers.");
+    throw new Error(
+      "Match_Accept, Match_Summary, and Match_Details must contain match and stop headers.",
+    );
   }
 
   const summaries = new Map<string, ImportedMatchSummary>();
-  for (const row of getSheetRows(summarySheet).filter((item) => item.number > summaryHeader.row.number)) {
+  for (const row of getSheetRows(summarySheet).filter(
+    (item) => item.number > summaryHeader.row.number,
+  )) {
     const key = rowMatchKey(row, summaryHeader.indexes);
     if (key) summaries.set(key, importedSummary(row, summaryHeader.indexes));
   }
 
-  const acceptHeader = findHeaderRow(acceptSheet, ["Ride_ID", "Match_ID", "Trip_Number"]);
+  const acceptHeader = findHeaderRow(acceptSheet, [
+    "Ride_ID",
+    "Match_ID",
+    "Trip_Number",
+  ]);
   const acceptedTripsByKey = new Map<string, number[]>();
   if (acceptHeader) {
-    for (const row of getSheetRows(acceptSheet).filter((item) => item.number > acceptHeader.row.number)) {
+    for (const row of getSheetRows(acceptSheet).filter(
+      (item) => item.number > acceptHeader.row.number,
+    )) {
       const key = rowMatchKey(row, acceptHeader.indexes);
       if (!key) continue;
       acceptedTripsByKey.set(key, [
@@ -634,7 +711,9 @@ async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
     }
   }
 
-  const detailRows = getSheetRows(detailsSheet).filter((item) => item.number > detailsHeader.row.number);
+  const detailRows = getSheetRows(detailsSheet).filter(
+    (item) => item.number > detailsHeader.row.number,
+  );
   const detailsByKey = new Map<string, ExcelJS.Row[]>();
   for (const row of detailRows) {
     const key = rowMatchKey(row, detailsHeader.indexes);
@@ -648,7 +727,8 @@ async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
   detailsHeader.row.eachCell((cell, column) => {
     if (normalizeHeader(cell.value) === "stop") stopColumns.push(column);
   });
-  if (stopColumns.length === 0) throw new Error("Match_Details does not contain Stop columns.");
+  if (stopColumns.length === 0)
+    throw new Error("Match_Details does not contain Stop columns.");
 
   const stopLookup = buildStopLookup(
     getWorksheetByName(workbook, ["Stops", "Stop"]) ?? detailsSheet,
@@ -685,19 +765,32 @@ async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
       for (const stopColumn of stopColumns) {
         const stopRaw = getCellText(row.getCell(stopColumn));
         if (!stopRaw || isNullValue(stopRaw)) continue;
-        const stopEntry = stopLookup.get(String(parseNumber(stopRaw) ?? stopRaw)) ??
+        const stopEntry =
+          stopLookup.get(String(parseNumber(stopRaw) ?? stopRaw)) ??
           stopLookup.get(normalizeLookupKey(stopRaw));
-        const boarding = splitCommaRefs(getCellText(row.getCell(stopColumn + 3)));
-        const alighting = splitCommaRefs(getCellText(row.getCell(stopColumn + 2)));
+        const boarding = splitCommaRefs(
+          getCellText(row.getCell(stopColumn + 3)),
+        );
+        const alighting = splitCommaRefs(
+          getCellText(row.getCell(stopColumn + 2)),
+        );
         boardingRefs.push(...boarding);
         alightingRefs.push(...alighting);
         route.push({
           point: stopEntry
-            ? { address: stopEntry.address || stopEntry.name || stopRaw, lat: stopEntry.lat, lng: stopEntry.lng }
+            ? {
+                address: stopEntry.address || stopEntry.name || stopRaw,
+                lat: stopEntry.lat,
+                lng: stopEntry.lng,
+              }
             : { address: stopRaw, lat: 0, lng: 0 },
           arrival: normalizeTimeValue(getCellText(row.getCell(stopColumn + 1))),
-          departure: normalizeTimeValue(getCellText(row.getCell(stopColumn + 5))),
-          waitingMinutes: parseWaitingMinutes(getCellText(row.getCell(stopColumn + 4))),
+          departure: normalizeTimeValue(
+            getCellText(row.getCell(stopColumn + 5)),
+          ),
+          waitingMinutes: parseWaitingMinutes(
+            getCellText(row.getCell(stopColumn + 4)),
+          ),
           boardingNumber: boarding.length,
           alightingNumber: alighting.length,
           boarding: [],
@@ -714,12 +807,19 @@ async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
       ]),
     ];
     if (tripNumbers.length === 0) {
-      throw new Error(`Match ${matchKey} has no passenger trip references in Match_Details.`);
+      throw new Error(
+        `Match ${matchKey} has no passenger trip references in Match_Details.`,
+      );
     }
     const trips = await Trip.find({ tripNumber: { $in: tripNumbers } }).lean();
-    const tripByNumber = new Map(trips.map((trip) => [Number(trip.tripNumber), trip]));
+    const tripByNumber = new Map(
+      trips.map((trip) => [Number(trip.tripNumber), trip]),
+    );
     const missingTrip = tripNumbers.find((number) => !tripByNumber.has(number));
-    if (missingTrip != null) throw new Error(`Match ${matchKey} references unknown trip ${missingTrip}.`);
+    if (missingTrip != null)
+      throw new Error(
+        `Match ${matchKey} references unknown trip ${missingTrip}.`,
+      );
 
     const firstTrip = trips[0];
     const date = summary.date || firstTrip?.date;
@@ -780,7 +880,14 @@ async function importNewMatchWorkbook(workbook: ExcelJS.Workbook) {
     }
     await Ride.updateOne(
       { _id: ride._id },
-      { $set: { totalCost: summary.totalCost || ride.totalCost, additionalFees: summary.additionalFees, kmRate: summary.kmRate, hrRate: summary.hrRate } },
+      {
+        $set: {
+          totalCost: summary.totalCost || ride.totalCost,
+          additionalFees: summary.additionalFees,
+          kmRate: summary.kmRate,
+          hrRate: summary.hrRate,
+        },
+      },
     );
     imported.push(String(ride._id));
   }
@@ -816,7 +923,8 @@ export async function POST(req: NextRequest) {
           updatedCount: newMatchImport.imported.length,
           skippedGroups: newMatchImport.skippedGroups,
           rideIds: newMatchImport.imported,
-          message: "Matched rides were imported; ineligible groups were skipped.",
+          message:
+            "Matched rides were imported; ineligible groups were skipped.",
         },
         {
           status:
@@ -1323,10 +1431,7 @@ export async function POST(req: NextRequest) {
             dropoffOrder: dropoffOrderByTrip.get(tripNumber) ?? 0,
             numberOfPassengers: getTripPassengerCount(
               String(summary.vehicleType ?? vehicleType),
-              Math.max(
-                1,
-                Number(tripRecord.numberOfPassengers ?? 1) || 1,
-              ),
+              Math.max(1, Number(tripRecord.numberOfPassengers ?? 1) || 1),
               Number(tripRecord.extraPassengers ?? 0) || 0,
             ),
             tripCost: Number(summary.totalFees ?? 0) || 0,
@@ -1420,6 +1525,7 @@ export async function POST(req: NextRequest) {
           _id: new Types.ObjectId(),
           rideNumber,
           availabilityId: availability._id,
+          regionCode: availability.regionCode ?? null,
           driverId: driverIdRaw,
           assignedDriver: driverSummary
             ? {
@@ -1520,7 +1626,9 @@ export async function POST(req: NextRequest) {
 
         if (matchedTripIds.length > 0) {
           const tripDocs = await Trip.find({ _id: { $in: matchedTripIds } })
-            .select("_id tripNumber summary details numberOfPassengers extraPassengers vehicleType")
+            .select(
+              "_id tripNumber summary details numberOfPassengers extraPassengers vehicleType",
+            )
             .lean<
               {
                 _id: unknown;
@@ -1612,7 +1720,6 @@ export async function POST(req: NextRequest) {
         );
 
         updatedTripIds.push(String(availabilityNumber));
-
       }
     }
 
@@ -1624,8 +1731,7 @@ export async function POST(req: NextRequest) {
         tripIds: updatedTripIds,
       },
       {
-        status:
-          updatedTripIds.length === 0 && skippedGroups > 0 ? 409 : 200,
+        status: updatedTripIds.length === 0 && skippedGroups > 0 ? 409 : 200,
       },
     );
   } catch (error: unknown) {

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { getDisplayStatus, getRejectionDisplay } = await import(
+const { getDisplayStatus, getRejectionDisplay, getTripDetailViewState } = await import(
   "../src/lib/statusDisplay.ts"
 );
 const now = new Date("2026-10-03T09:00:00.000Z");
@@ -133,6 +133,45 @@ test("trip display preserves current cancellation and rating eligibility", () =>
   });
   assert.equal(cancellable.canCancel, true);
   assert.equal(rateable.canRate, true);
+});
+
+test("completed trip keeps reporting available after rating and hides it after submission", () => {
+  const input = {
+    trip: {
+      isStandalone: true,
+      status: "completed",
+      paymentStatus: "paid",
+    },
+    now,
+  };
+  const unreported = getTripDetailViewState(input);
+  assert.equal(unreported.displayStatus.canRate, true);
+  assert.equal(unreported.availableActions.rateTrip, true);
+  assert.equal(unreported.availableActions.reportTrip, true);
+
+  const reported = getTripDetailViewState({ ...input, hasReport: true });
+  assert.equal(reported.availableActions.reportTrip, false);
+});
+
+test("trip detail view state uses the parent request payment state for checkout", () => {
+  const state = getTripDetailViewState({
+    request: {
+      status: "pending_payment",
+      paymentStatus: "failed",
+      hasPastTrip: false,
+    },
+    trip: {
+      isStandalone: false,
+      status: "pending_payment",
+      paymentStatus: "failed",
+      date: "2026-10-05",
+      pickupTime: "09:00",
+    },
+    now,
+  });
+
+  assert.equal(state.displayStatus.key, "status.pending_payment");
+  assert.equal(state.availableActions.continueCheckout, true);
 });
 
 test("standalone waitlist and payment statuses show only their eligible actions", () => {

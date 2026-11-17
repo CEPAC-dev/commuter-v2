@@ -20,6 +20,8 @@ type TripLike = {
     refundStatus?: string | null;
     reason?: string | null;
   } | null;
+  privateRideOffer?: unknown;
+  noShowReviewRequestedAt?: string | Date | null;
 };
 
 type RequestLike = {
@@ -42,6 +44,61 @@ export type DisplayStatus = {
   canRate: boolean;
   showRefundBadge: boolean;
 };
+
+export type TripDetailAvailableActions = {
+  continueCheckout: boolean;
+  cancelTrip: boolean;
+  respondToPrivateRideOffer: boolean;
+  rateTrip: boolean;
+  reportTrip: boolean;
+  requestNoShowReview: boolean;
+  getPickupPin: boolean;
+  viewLiveLocation: boolean;
+  openChat: boolean;
+  manageLiveShare: boolean;
+};
+
+export function getTripDetailViewState({
+  request,
+  trip,
+  hasReport = false,
+  liveShareEligible = false,
+  hasActiveLiveShare = false,
+  now,
+}: {
+  request?: RequestLike | null;
+  trip?: TripLike | null;
+  hasReport?: boolean;
+  liveShareEligible?: boolean;
+  hasActiveLiveShare?: boolean;
+  now?: Date;
+}): {
+  displayStatus: DisplayStatus;
+  availableActions: TripDetailAvailableActions;
+} {
+  const displayStatus = getDisplayStatus({ request, trip, now });
+  const status = trip?.status ?? "";
+
+  return {
+    displayStatus,
+    availableActions: {
+      continueCheckout: displayStatus.canPay,
+      cancelTrip: displayStatus.canCancel,
+      respondToPrivateRideOffer:
+        status === "private_ride_offered" && Boolean(trip?.privateRideOffer),
+      rateTrip: displayStatus.canRate,
+      reportTrip: status === "completed" && !hasReport,
+      requestNoShowReview:
+        status === "no_show" &&
+        trip?.paymentStatus === "paid" &&
+        !trip.noShowReviewRequestedAt,
+      getPickupPin: status === "confirmed" || status === "active",
+      viewLiveLocation: status === "active",
+      openChat: true,
+      manageLiveShare: liveShareEligible || hasActiveLiveShare,
+    },
+  };
+}
 
 function hasPastTrip(request: RequestLike, trip: TripLike | undefined, now: Date): boolean {
   if (request.hasPastTrip === true) return true;

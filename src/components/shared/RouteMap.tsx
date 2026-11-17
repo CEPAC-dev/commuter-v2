@@ -21,6 +21,10 @@ interface Props {
   stations?: LatLng[];
   stationIconsOnly?: boolean;
   routeCoordinates?: LatLng[]; // Pre-computed route (skips directions API)
+  driverLocation?: LatLng & {
+    heading?: number | null;
+    stale?: boolean;
+  };
 }
 
 const ROUTE_COLOR = MAP_COLORS.route;
@@ -104,9 +108,11 @@ export default function RouteMap({
   stations,
   stationIconsOnly = false,
   routeCoordinates,
+  driverLocation,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
+  const driverMarkerRef = useRef<import("leaflet").Marker | null>(null);
   const layersRef = useRef<LayerGroup | null>(null);
   const leafletModuleRef = useRef<typeof import("leaflet") | null>(null);
   const boundsRef = useRef<import("leaflet").LatLngBounds | null>(null);
@@ -177,6 +183,8 @@ export default function RouteMap({
       disposed = true;
       layersRef.current?.clearLayers();
       layersRef.current = null;
+      driverMarkerRef.current?.remove();
+      driverMarkerRef.current = null;
       boundsRef.current = null;
       leafletModuleRef.current = null;
       mapRef.current?.remove();
@@ -327,6 +335,40 @@ export default function RouteMap({
       disposed = true;
     };
   }, [dropoff, normalizedStations, normalizedStops, ok, pathCoords, pickup, stationIconsOnly]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!leafletReady || !map || !valid(driverLocation)) {
+      driverMarkerRef.current?.remove();
+      driverMarkerRef.current = null;
+      return;
+    }
+
+    const L = leafletModuleRef.current;
+    if (!L) return;
+    const heading =
+      typeof driverLocation.heading === "number" &&
+      Number.isFinite(driverLocation.heading)
+        ? driverLocation.heading
+        : 0;
+    const icon = L.divIcon({
+      className: "",
+      html: `<span style="display:grid;place-items:center;width:30px;height:30px;border:3px solid #fff;border-radius:50%;background:${driverLocation.stale ? "#647575" : "#F5A623"};color:#0B1E3D;font-size:15px;font-weight:900;box-shadow:0 2px 8px rgba(11,30,61,.35);transform:rotate(${heading}deg)">▲</span>`,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+    });
+
+    if (!driverMarkerRef.current) {
+      driverMarkerRef.current = L.marker(
+        [driverLocation.lat, driverLocation.lng],
+        { icon, keyboard: false, zIndexOffset: 1_000 },
+      ).addTo(map);
+    } else {
+      driverMarkerRef.current
+        .setLatLng([driverLocation.lat, driverLocation.lng])
+        .setIcon(icon);
+    }
+  }, [driverLocation, leafletReady]);
 
   if (!ok) {
     return <Placeholder height={height} rounded={rounded} />;

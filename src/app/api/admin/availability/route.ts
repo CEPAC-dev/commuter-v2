@@ -105,6 +105,7 @@ export async function POST(req: NextRequest) {
 
     const sameDayShifts = await Availability.find({
       driverId,
+      regionCode,
       dayOfWeek,
       ...(id ? { _id: { $ne: id } } : {}),
     })

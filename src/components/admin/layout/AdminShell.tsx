@@ -23,13 +23,20 @@ import {
   SlidersHorizontal,
   TicketPercent,
   Users,
+  UserRound,
   X,
   AlertCircle,
 } from "lucide-react";
-import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 import AdminActivityBell from "@/components/admin/layout/AdminActivityBell";
+import AdminAccountMenu from "@/components/admin/layout/AdminAccountMenu";
 import type { RegionSlug } from "@/lib/config/regions";
 import { useClientLocale } from "@/lib/i18n/client";
+
+interface AdminIdentity {
+  name: string;
+  email: string;
+  profilePic: string | null;
+}
 
 interface AdminRegionOption {
   code: string;
@@ -41,6 +48,7 @@ interface AdminShellProps {
   children: ReactNode;
   activeRegionSlug?: RegionSlug;
   allowedRegions?: AdminRegionOption[];
+  adminIdentity?: AdminIdentity | null;
 }
 
 const sections = [
@@ -135,6 +143,7 @@ const sections = [
     statKey: null,
   },
   { href: "/admin/settings", label: "Settings", icon: Settings, statKey: null },
+  { href: "/admin/profile", label: "Profile", icon: UserRound, statKey: null },
   {
     href: "/admin/referral-settings",
     label: "Referral settings",
@@ -189,6 +198,7 @@ export default function AdminShell({
   children,
   activeRegionSlug,
   allowedRegions = [],
+  adminIdentity,
 }: AdminShellProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -353,6 +363,9 @@ export default function AdminShell({
   }
 
   function sidebarHref(href: string) {
+    if (activeRegionSlug && href === "/admin/profile") {
+      return `/${activeRegionSlug}${href}`;
+    }
     if (
       activeRegionSlug &&
       (href === "/admin/operation" || href === "/admin/stations")
@@ -361,6 +374,8 @@ export default function AdminShell({
     }
     return href;
   }
+
+  const currentRegion = pathname.match(/^\/(eg|sa|ae)(?=\/admin)/)?.[1];
 
   if (isAuthPage) return <div className="admin-shell">{children}</div>;
 
@@ -492,7 +507,14 @@ export default function AdminShell({
               className="admin-topbar-actions admin-page-action-slot"
             />
             <AdminActivityBell />
-            <AdminLogoutButton />
+            <AdminAccountMenu
+              admin={adminIdentity ?? { name: "Admin", email: "", profilePic: null }}
+              profileHref={
+                currentRegion
+                  ? `/${currentRegion}/admin/profile`
+                  : "/admin/profile"
+              }
+            />
           </div>
         </header>
         {children}

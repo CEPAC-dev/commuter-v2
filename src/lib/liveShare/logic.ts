@@ -14,8 +14,6 @@ export const SHARE_VIEW_COUNT_INTERVAL_MS = 60 * 1000;
 export const SHARE_CREATION_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const MAX_SHARE_CREATIONS_PER_TRIP_PER_WINDOW = 5;
 export const MAX_LOCATION_ACCURACY_METERS = 1_000;
-export const MAX_RECORDED_LOCATION_AGE_MS = 2 * 60 * 1000;
-export const MAX_RECORDED_LOCATION_FUTURE_MS = 30 * 1000;
 
 export interface LocationInput {
   lat: number;
@@ -36,7 +34,6 @@ function nullableFiniteNumber(value: unknown): value is number | null | undefine
 
 export function validateLocationInput(
   input: unknown,
-  now = new Date(),
 ): LocationValidation {
   if (!input || typeof input !== "object") {
     return { valid: false, reason: "Invalid location body." };
@@ -84,12 +81,8 @@ export function validateLocationInput(
         ? new Date(body.recordedAt)
         : new Date(Number.NaN);
   const timestamp = recordedAt.getTime();
-  if (
-    !Number.isFinite(timestamp) ||
-    timestamp < now.getTime() - MAX_RECORDED_LOCATION_AGE_MS ||
-    timestamp > now.getTime() + MAX_RECORDED_LOCATION_FUTURE_MS
-  ) {
-    return { valid: false, reason: "Location timestamp is outside the allowed range." };
+  if (!Number.isFinite(timestamp)) {
+    return { valid: false, reason: "Invalid location timestamp." };
   }
 
   return {
@@ -225,9 +218,20 @@ export async function updateShareLocation(
 }
 
 export interface PublicTripSnapshot {
+  tripId?: string;
+  trackingActive?: boolean;
   status: string;
   pickup: { lat: number; lng: number };
   dropoff: { lat: number; lng: number };
+  driverLocation?: {
+    lat: number;
+    lng: number;
+    accuracy: number | null;
+    heading: number | null;
+    speed: number | null;
+    recordedAt: Date;
+    receivedAt: Date;
+  } | null;
   assignedDriver?: {
     name?: string | null;
     carBrand?: string | null;
@@ -278,6 +282,28 @@ export function projectPublicTrip(
         ageSeconds: ageSeconds ?? 0,
       }
     : null;
+  const driverLocation = trip.driverLocation;
+  const driverAgeSeconds = driverLocation
+    ? Math.max(
+        0,
+        Math.floor((now.getTime() - driverLocation.receivedAt.getTime()) / 1_000),
+      )
+    : null;
+  const publicDriverLocation =
+    trip.trackingActive && driverLocation
+      ? {
+          lat: driverLocation.lat,
+          lng: driverLocation.lng,
+          accuracy: driverLocation.accuracy,
+          heading: driverLocation.heading,
+          speed: driverLocation.speed,
+          recordedAt: driverLocation.recordedAt.toISOString(),
+          receivedAt: driverLocation.receivedAt.toISOString(),
+          ageSeconds: driverAgeSeconds ?? 0,
+          stale:
+            (driverAgeSeconds ?? 0) * 1_000 >= SHARE_LOCATION_STALE_MS,
+        }
+      : null;
 
   return {
     state: !location ? "waiting" : stale ? "stale" : "live",
@@ -291,6 +317,8 @@ export function projectPublicTrip(
       lng: trip.dropoff.lng,
     },
     location: publicLocation,
+    tripId: trip.tripId,
+    driverLocation: publicDriverLocation,
     driver: {
       firstName: snapshot?.name?.trim().split(/\s+/)[0] ?? null,
       vehicle: {

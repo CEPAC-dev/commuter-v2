@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/mongoose";
 import { Payment } from "@/models/Payment";
-import { Request } from "@/models/Request";
 import { Trip } from "@/models/Trip";
 import { WalletTransaction } from "@/models/WalletTransaction";
-import { creditWallet } from "@/lib/wallet/wallet";
+import { creditWallet as creditWalletForCompensation } from "@/lib/wallet/wallet";
 import { createNotification } from "@/lib/notifications/createNotification";
-import {
-  refundKashierPayment,
-  resolveKashierRefundOrderId,
-} from "@/lib/payments/kashier";
+import { resolveKashierRefundOrderId } from "@/lib/payments/kashier";
+import { disburseTripRefund } from "@/lib/payments/refundDisbursement";
+import { reconcileRequestSummary } from "@/lib/payments/requestReconciliation";
 import { resolvePayableBooking } from "@/lib/payments/resolveBooking";
 import { fullyRefundedTripUpdate } from "@/lib/payments/tripSettlement";
 import { adminAuth } from "@/lib/middleware/adminAuth";
@@ -232,6 +230,15 @@ export async function POST(req: NextRequest) {
       }
     | null
     | undefined;
+  const retryRefundBaseEgp =
+    previousAdminRefund?.status === "failed"
+      ? (previousAdminRefund.refundAmountEgp ?? 0)
+      : 0;
+  const previousCompensationEgp =
+    previousAdminRefund?.status === "failed"
+      ? (previousAdminRefund.compensationAmountEgp ?? 0)
+      : 0;
+  const refundOperationId = `${payment._id}:${tripId}:${retryRefundBaseEgp}`;
   const trip = await Trip.findOneAndUpdate(
     tripRefundFilter,
     {
@@ -239,6 +246,7 @@ export async function POST(req: NextRequest) {
         adminRefund: {
           status: "processing",
           paymentId: payment._id,
+          refundOperationId,
           refundedBy: new Types.ObjectId(auth.userId),
           refundAmountEgp: 0,
           compensationPercent,
@@ -268,16 +276,8 @@ export async function POST(req: NextRequest) {
   const isBaseRefundEligible = ["submitted", "matched", "nomatch"].includes(
     trip.status,
   );
-  const previousRefundEgp =
-    previousAdminRefund?.status === "failed"
-      ? (previousAdminRefund.refundAmountEgp ?? 0)
-      : 0;
-  const previousCompensationEgp =
-    previousAdminRefund?.status === "failed"
-      ? (previousAdminRefund.compensationAmountEgp ?? 0)
-      : 0;
   const amountEgp = isBaseRefundEligible
-    ? Math.max(0, Number(trip.priceEgp) - previousRefundEgp)
+    ? Math.max(0, Number(trip.priceEgp) - retryRefundBaseEgp)
     : 0;
   const targetCompensationAmountEgp = Math.round(
     (Number(trip.priceEgp) * compensationPercent) / 100,
@@ -312,148 +312,62 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Split refund: wallet portion first, then Kashier.
-  const walletCaptured =
-    payment.walletStatus === "captured" ? payment.walletAmountEgp : 0;
-  const walletRefundTotals = await WalletTransaction.aggregate<{
+  const disbursement = await disburseTripRefund({
+    operationId: refundOperationId,
+    payment,
+    tripId: String(trip._id),
+    amountEgp,
+    reason,
+  });
+  const {
+    walletCapturedEgp: walletCaptured,
+    walletRefundEgp,
+    gatewayRefundEgp,
+    confirmedGatewayRefundEgp,
+    walletRefundTxId,
+    kashierRefundId,
+    attemptedKashierRefundId,
+    gatewayRefundFailed,
+    gatewayRefundPending,
+    gatewayRefundDuplicate,
+    gatewayRefundRetrySafe,
+    timelineEvents,
+  } = disbursement;
+  await Trip.updateOne(
+    { _id: trip._id, "adminRefund.status": "processing" },
+    {
+      $set: {
+        "adminRefund.refundOperationId": refundOperationId,
+        "adminRefund.gatewayRefundAmountEgp": gatewayRefundEgp,
+      },
+    },
+  );
+
+  const confirmedRefundEgp = walletRefundEgp + confirmedGatewayRefundEgp;
+  const confirmedRefundLedger = await WalletTransaction.aggregate<{
+    _id: string;
     amountEgp: number;
   }>([
     {
       $match: {
         paymentId: payment._id,
-        type: "refund",
         status: "completed",
+        type: { $in: ["refund", "payment_refund_partial"] },
       },
     },
-    { $group: { _id: null, amountEgp: { $sum: "$amountEgp" } } },
+    { $group: { _id: "$type", amountEgp: { $sum: "$amountEgp" } } },
   ]);
-  const walletAlreadyRefunded = Math.min(
-    walletCaptured,
-    walletRefundTotals[0]?.amountEgp ?? 0,
+  const walletRefundedTotal =
+    confirmedRefundLedger.find((entry) => entry._id === "refund")?.amountEgp ??
+    0;
+  const gatewayRefundedTotal =
+    confirmedRefundLedger.find(
+      (entry) => entry._id === "payment_refund_partial",
+    )?.amountEgp ?? 0;
+  const newRefundedTotal = Math.min(
+    payment.totalEgp,
+    walletRefundedTotal + gatewayRefundedTotal || alreadyRefunded,
   );
-  const gatewayAlreadyRefunded = completedGatewayRefunds.reduce(
-    (total, entry) => total + entry.amountEgp,
-    0,
-  );
-  const walletRemaining = Math.max(0, walletCaptured - walletAlreadyRefunded);
-  const walletRefundEgp = Math.min(amountEgp, walletRemaining);
-  const gatewayRefundEgp = amountEgp - walletRefundEgp;
-  const previouslyRecordedRefundIds = new Set(payment.kashierRefundIds ?? []);
-  await Trip.updateOne(
-    { _id: trip._id, "adminRefund.status": "processing" },
-    { $set: { "adminRefund.gatewayRefundAmountEgp": gatewayRefundEgp } },
-  );
-
-  const timelineEvents: { event: string; detail?: string }[] = [
-    {
-      event: "refund_requested",
-      detail: `${amountEgp} EGP (reason: ${reason ?? "n/a"})`,
-    },
-  ];
-
-  // ── 1. Wallet portion ──
-  let walletRefundTxId: Types.ObjectId | null = null;
-  if (walletRefundEgp > 0) {
-    await creditWallet(String(payment.userId), walletRefundEgp, {
-      description: `Refund for booking ${payment.bookingId}${reason ? ` — ${reason}` : ""}`,
-      type: "refund",
-      paymentId: String(payment._id),
-      bookingId: String(payment.bookingId),
-      tripId: String(trip._id),
-    });
-    // Find the newly created ledger row for reference.
-    const created = await WalletTransaction.findOne({
-      userId: payment.userId,
-      paymentId: payment._id,
-      type: "refund",
-    })
-      .sort({ createdAt: -1 })
-      .select("_id");
-    if (created) walletRefundTxId = created._id as Types.ObjectId;
-    timelineEvents.push({
-      event: "wallet_refunded",
-      detail: `${walletRefundEgp} EGP`,
-    });
-  }
-
-  // ── 2. Kashier portion ──
-  let kashierRefundId: string | null = null;
-  let attemptedKashierRefundId: string | null = null;
-  let gatewayRefundFailed = false;
-  let gatewayRefundPending = false;
-  let gatewayRefundDuplicate = false;
-  let gatewayRefundRetrySafe = false;
-  if (gatewayRefundEgp > 0) {
-    const kashierOrderId = await resolveKashierRefundOrderId(
-      payment.kashierSessionId,
-      payment.kashierOrderId,
-    );
-    if (!kashierOrderId) {
-      gatewayRefundFailed = true;
-      timelineEvents.push({ event: "kashier_refund_skipped_no_order" });
-    } else {
-      const result = await refundKashierPayment(
-        kashierOrderId,
-        gatewayRefundEgp,
-        reason,
-      );
-      if (result.status === "succeeded") {
-        attemptedKashierRefundId = result.refundId;
-      }
-      if (
-        result.status === "succeeded" &&
-        (!result.refundId || previouslyRecordedRefundIds.has(result.refundId))
-      ) {
-        gatewayRefundPending = true;
-        gatewayRefundDuplicate = Boolean(result.refundId);
-        timelineEvents.push({
-          event: result.refundId
-            ? "kashier_refund_duplicate_reference"
-            : "kashier_refund_unconfirmed",
-          detail: result.refundId
-            ? `${gatewayRefundEgp} EGP — Kashier returned already-recorded ref ${result.refundId}; verify before retrying`
-            : `${gatewayRefundEgp} EGP — Kashier did not provide a refund reference; verify before retrying`,
-        });
-      } else if (result.status === "succeeded") {
-        kashierRefundId = result.refundId;
-        await WalletTransaction.create({
-          userId: payment.userId,
-          type: "payment_refund_partial",
-          amountEgp: gatewayRefundEgp,
-          status: "completed",
-          description: `Kashier refund for booking ${payment.bookingId}${reason ? ` — ${reason}` : ""}`,
-          paymentId: payment._id,
-          bookingId: payment.bookingId,
-          tripId: trip._id,
-          kashierOrderId,
-          ...(result.refundId ? { kashierRefundId: result.refundId } : {}),
-          kashierTransactionIds: result.refundId ? [result.refundId] : [],
-        });
-        timelineEvents.push({
-          event: "kashier_refunded",
-          detail: `${gatewayRefundEgp} EGP${result.refundId ? ` ref ${result.refundId}` : ""}`,
-        });
-      } else if (result.status === "failed") {
-        gatewayRefundFailed = true;
-        gatewayRefundRetrySafe = true;
-        timelineEvents.push({
-          event: "kashier_refund_failed",
-          detail: `${gatewayRefundEgp} EGP — verify the final status before retrying`,
-        });
-      } else {
-        gatewayRefundPending = true;
-        timelineEvents.push({
-          event: "kashier_refund_unconfirmed",
-          detail: `${gatewayRefundEgp} EGP — verify with Kashier before retrying`,
-        });
-      }
-    }
-  }
-
-  const confirmedGatewayRefundEgp =
-    gatewayRefundFailed || gatewayRefundPending ? 0 : gatewayRefundEgp;
-  const confirmedRefundEgp = walletRefundEgp + confirmedGatewayRefundEgp;
-  const newRefundedTotal = alreadyRefunded + confirmedRefundEgp;
   const fullyRefunded = amountEgp > 0 && newRefundedTotal >= payment.totalEgp;
   const fullTripUpdate =
     payableBooking.kind === "trip" && amountEgp > 0
@@ -468,15 +382,11 @@ export async function POST(req: NextRequest) {
           overallStatus: fullyRefunded ? "refunded" : "partially_refunded",
         }
       : {};
-  if (
-    walletCaptured > 0 &&
-    walletAlreadyRefunded + walletRefundEgp >= walletCaptured
-  )
+  if (walletCaptured > 0 && walletRefundedTotal >= walletCaptured)
     update.walletStatus = "refunded";
   if (
     payment.gatewayAmountEgp > 0 &&
-    gatewayAlreadyRefunded + confirmedGatewayRefundEgp >=
-      payment.gatewayAmountEgp
+    gatewayRefundedTotal >= payment.gatewayAmountEgp
   )
     update.gatewayStatus = "refunded";
   if (payment.kashierSessionId && gatewayRefundEgp > 0) {
@@ -491,13 +401,17 @@ export async function POST(req: NextRequest) {
     !gatewayRefundPending &&
     compensationAmountEgp > 0
   ) {
-    await creditWallet(String(payment.userId), compensationAmountEgp, {
-      description: `Compensation (${compensationPercent}%) for trip ${trip._id}${reason ? ` — ${reason}` : ""}`,
-      type: "compensation",
-      paymentId: String(payment._id),
-      bookingId: String(payment.bookingId),
-      tripId: String(trip._id),
-    });
+    await creditWalletForCompensation(
+      String(payment.userId),
+      compensationAmountEgp,
+      {
+        description: `Compensation (${compensationPercent}%) for trip ${trip._id}${reason ? ` — ${reason}` : ""}`,
+        type: "compensation",
+        paymentId: String(payment._id),
+        bookingId: String(payment.bookingId),
+        tripId: String(trip._id),
+      },
+    );
     update.compensatedAmountEgp =
       (payment.compensatedAmountEgp ?? 0) + compensationAmountEgp;
     timelineEvents.push({
@@ -521,13 +435,6 @@ export async function POST(req: NextRequest) {
       $push: { timeline: { $each: timelineEvents } },
     },
   );
-  if (fullyRefunded && payableBooking.kind === "request") {
-    await Request.updateOne(
-      { _id: payment.bookingId },
-      { $set: { paymentStatus: "refunded" } },
-    );
-  }
-
   await Trip.updateOne(
     { _id: trip._id, "adminRefund.status": "processing" },
     {
@@ -545,11 +452,11 @@ export async function POST(req: NextRequest) {
         ...(!gatewayRefundPending
           ? { "adminRefund.refundedAt": new Date() }
           : {}),
-        "adminRefund.refundAmountEgp": previousRefundEgp + confirmedRefundEgp,
+        "adminRefund.refundAmountEgp": retryRefundBaseEgp + confirmedRefundEgp,
         "adminRefund.compensationAmountEgp":
           previousCompensationEgp + creditedCompensationEgp,
         "adminRefund.totalReturnEgp":
-          previousRefundEgp +
+          retryRefundBaseEgp +
           confirmedRefundEgp +
           previousCompensationEgp +
           creditedCompensationEgp,
@@ -577,7 +484,11 @@ export async function POST(req: NextRequest) {
     },
   );
 
-  const refundTotalEgp = previousRefundEgp + confirmedRefundEgp;
+  if (payableBooking.kind === "request") {
+    await reconcileRequestSummary(String(payment.bookingId));
+  }
+
+  const refundTotalEgp = retryRefundBaseEgp + confirmedRefundEgp;
   const compensationTotalEgp =
     previousCompensationEgp + creditedCompensationEgp;
   const totalReturnEgp = refundTotalEgp + compensationTotalEgp;
@@ -592,20 +503,20 @@ export async function POST(req: NextRequest) {
       ? "Trip refund needs review"
       : "Trip refund completed";
   const outcomeBody = gatewayRefundPending
-    ? `${tripLabel} on ${trip.date}, ${pickupAddress} to ${dropoffAddress}. Trip status remains ${trip.status}. Confirmed refund: ${refundTotalEgp} EGP (wallet ${previousRefundEgp + walletRefundEgp}, Kashier ${confirmedGatewayRefundEgp}); compensation: ${compensationTotalEgp} EGP. ${gatewayRefundDuplicate ? "Kashier returned a refund reference already recorded; verify with Kashier before retrying." : "Kashier is still confirming the remaining amount."} ${reason ? `Reason: ${reason}` : ""}`
+    ? `${tripLabel} on ${trip.date}, ${pickupAddress} to ${dropoffAddress}. Trip status remains ${trip.status}. Confirmed refund: ${refundTotalEgp} EGP (wallet ${retryRefundBaseEgp + walletRefundEgp}, Kashier ${confirmedGatewayRefundEgp}); compensation: ${compensationTotalEgp} EGP. ${gatewayRefundDuplicate ? "Kashier returned a refund reference already recorded; verify with Kashier before retrying." : "Kashier is still confirming the remaining amount."} ${reason ? `Reason: ${reason}` : ""}`
     : gatewayRefundFailed
-      ? `${tripLabel} on ${trip.date}, ${pickupAddress} to ${dropoffAddress}. Trip status remains ${trip.status}. Confirmed refund: ${refundTotalEgp} EGP (wallet ${previousRefundEgp + walletRefundEgp}, Kashier ${confirmedGatewayRefundEgp}); compensation: ${compensationTotalEgp} EGP. The Kashier portion needs review. ${reason ? `Reason: ${reason}` : ""}`
-      : `${tripLabel} on ${trip.date}, ${pickupAddress} to ${dropoffAddress} is now refunded. Refund: ${refundTotalEgp} EGP (wallet ${previousRefundEgp + walletRefundEgp}, Kashier ${confirmedGatewayRefundEgp}); compensation: ${compensationTotalEgp} EGP; total returned: ${totalReturnEgp} EGP. ${reason ? `Reason: ${reason}` : ""}`;
+      ? `${tripLabel} on ${trip.date}, ${pickupAddress} to ${dropoffAddress}. Trip status remains ${trip.status}. Confirmed refund: ${refundTotalEgp} EGP (wallet ${retryRefundBaseEgp + walletRefundEgp}, Kashier ${confirmedGatewayRefundEgp}); compensation: ${compensationTotalEgp} EGP. The Kashier portion needs review. ${reason ? `Reason: ${reason}` : ""}`
+      : `${tripLabel} on ${trip.date}, ${pickupAddress} to ${dropoffAddress} is now refunded. Refund: ${refundTotalEgp} EGP (wallet ${retryRefundBaseEgp + walletRefundEgp}, Kashier ${confirmedGatewayRefundEgp}); compensation: ${compensationTotalEgp} EGP; total returned: ${totalReturnEgp} EGP. ${reason ? `Reason: ${reason}` : ""}`;
   const outcomeTitleAr = gatewayRefundPending
     ? "تأكيد استرداد الرحلة قيد الانتظار"
     : gatewayRefundFailed
       ? "استرداد الرحلة يحتاج إلى مراجعة"
       : "تم استرداد قيمة الرحلة";
   const outcomeBodyAr = gatewayRefundPending
-    ? `${tripLabel} بتاريخ ${trip.date} من ${pickupAddress} إلى ${dropoffAddress}. المبلغ المؤكد استرداده: ${refundTotalEgp} ج.م (المحفظة ${previousRefundEgp + walletRefundEgp}، كاشير ${confirmedGatewayRefundEgp})؛ التعويض: ${compensationTotalEgp} ج.م. ${gatewayRefundDuplicate ? "أعادت كاشير رقم استرداد مسجلاً من قبل؛ يرجى التحقق من كاشير قبل إعادة المحاولة." : "ما زلنا نتحقق من الجزء المتبقي عبر كاشير."}`
+    ? `${tripLabel} بتاريخ ${trip.date} من ${pickupAddress} إلى ${dropoffAddress}. المبلغ المؤكد استرداده: ${refundTotalEgp} ج.م (المحفظة ${retryRefundBaseEgp + walletRefundEgp}، كاشير ${confirmedGatewayRefundEgp})؛ التعويض: ${compensationTotalEgp} ج.م. ${gatewayRefundDuplicate ? "أعادت كاشير رقم استرداد مسجلاً من قبل؛ يرجى التحقق من كاشير قبل إعادة المحاولة." : "ما زلنا نتحقق من الجزء المتبقي عبر كاشير."}`
     : gatewayRefundFailed
-      ? `${tripLabel} بتاريخ ${trip.date} من ${pickupAddress} إلى ${dropoffAddress}. المبلغ المؤكد استرداده: ${refundTotalEgp} ج.م (المحفظة ${previousRefundEgp + walletRefundEgp}، كاشير ${confirmedGatewayRefundEgp})؛ التعويض: ${compensationTotalEgp} ج.م. الجزء الخاص بكاشير يحتاج إلى مراجعة.`
-      : `تم استرداد قيمة ${tripLabel} بتاريخ ${trip.date} من ${pickupAddress} إلى ${dropoffAddress}. المبلغ المسترد: ${refundTotalEgp} ج.م (المحفظة ${previousRefundEgp + walletRefundEgp}، كاشير ${confirmedGatewayRefundEgp})؛ التعويض: ${compensationTotalEgp} ج.م؛ إجمالي المبلغ المعاد: ${totalReturnEgp} ج.م.`;
+      ? `${tripLabel} بتاريخ ${trip.date} من ${pickupAddress} إلى ${dropoffAddress}. المبلغ المؤكد استرداده: ${refundTotalEgp} ج.م (المحفظة ${retryRefundBaseEgp + walletRefundEgp}، كاشير ${confirmedGatewayRefundEgp})؛ التعويض: ${compensationTotalEgp} ج.م. الجزء الخاص بكاشير يحتاج إلى مراجعة.`
+      : `تم استرداد قيمة ${tripLabel} بتاريخ ${trip.date} من ${pickupAddress} إلى ${dropoffAddress}. المبلغ المسترد: ${refundTotalEgp} ج.م (المحفظة ${retryRefundBaseEgp + walletRefundEgp}، كاشير ${confirmedGatewayRefundEgp})؛ التعويض: ${compensationTotalEgp} ج.م؛ إجمالي المبلغ المعاد: ${totalReturnEgp} ج.م.`;
   try {
     await createNotification({
       userId: String(trip.userId),
@@ -631,7 +542,7 @@ export async function POST(req: NextRequest) {
         refundedAmountEgp: refundTotalEgp,
         compensationAmountEgp: compensationTotalEgp,
         totalReturnEgp,
-        walletRefundEgp: previousRefundEgp + walletRefundEgp,
+        walletRefundEgp: retryRefundBaseEgp + walletRefundEgp,
         gatewayRefundEgp: confirmedGatewayRefundEgp,
         reason: reason ?? "",
       },

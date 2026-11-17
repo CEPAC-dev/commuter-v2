@@ -42,10 +42,11 @@ const COLUMNS: (keyof Row)[] = [
 ];
 
 const VEHICLE_TYPE_BY_CAR_TYPE: Record<string, number> = {
-  private: 1,
+  passenger_car: 1,
   taxi: 2,
   van: 3,
   microbus: 4,
+  minibus: 5,
 };
 
 function getTomorrowDate() {

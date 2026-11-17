@@ -77,6 +77,7 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
   const [amount, setAmount] = useState<number>(100);
   const [withdrawAmount, setWithdrawAmount] = useState<number>(200);
   const [busy, setBusy] = useState(false);
+  const [resumingTopupId, setResumingTopupId] = useState<string | null>(null);
   const [withdrawBusy, setWithdrawBusy] = useState(false);
   const [payoutBusy, setPayoutBusy] = useState(false);
   const [error, setError] = useState("");
@@ -263,10 +264,41 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
         setBusy(false);
         return;
       }
-      window.location.href = json.sessionUrl;
+      window.location.assign(json.sessionUrl);
     } catch {
       setError(t("wallet.network_error"));
       setBusy(false);
+    }
+  }
+
+  async function handleResumeTopup(topupId: string) {
+    setError("");
+    setResumingTopupId(topupId);
+    try {
+      const res = await fetch("/api/wallet/topup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topupId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? t("wallet.topup_error"));
+        return;
+      }
+      if (json.status === "paid") {
+        setNotice(t("wallet.topup_added"));
+        await load();
+        return;
+      }
+      if (typeof json.sessionUrl !== "string") {
+        setError(t("wallet.topup_error"));
+        return;
+      }
+      window.location.assign(json.sessionUrl);
+    } catch {
+      setError(t("wallet.network_error"));
+    } finally {
+      setResumingTopupId(null);
     }
   }
 
@@ -1109,6 +1141,29 @@ export default function WalletClient({ role: initialRole }: { role?: string }) {
                       ? ` · ${t(`wallet.status.${transaction.status}`)}`
                       : ""}
                   </div>
+                  {transaction.type === "topup" &&
+                    transaction.status === "pending" && (
+                      <button
+                        type="button"
+                        onClick={() => handleResumeTopup(transaction.id)}
+                        disabled={resumingTopupId !== null}
+                        style={{
+                          marginTop: 6,
+                          padding: 0,
+                          border: 0,
+                          background: "transparent",
+                          color: "#00A88F",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor:
+                            resumingTopupId !== null ? "wait" : "pointer",
+                        }}
+                      >
+                        {resumingTopupId === transaction.id
+                          ? t("wallet.resuming_topup")
+                          : t("wallet.continue_topup")}
+                      </button>
+                    )}
                 </div>
                 <span
                   style={{

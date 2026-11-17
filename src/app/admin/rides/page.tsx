@@ -5,8 +5,6 @@ import Link from "next/link";
 import {
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
-  MapPin,
   RotateCcw,
   Route,
   Trash2,
@@ -80,6 +78,7 @@ interface RideRow {
   } | null;
   passengers?: RidePassenger[];
   route?: RideRouteStop[];
+  routeCoordinates?: { lat: number; lng: number }[];
   pickupStation?: { name?: string };
   dropoffStation?: { name?: string };
   availability?: {
@@ -241,27 +240,6 @@ function rideMapPoints(
   return stationPoints;
 }
 
-function googleMapsUrl(points: TripMapPoint[]) {
-  if (points.length < 2) return null;
-  const [origin, ...remaining] = points;
-  const destination = remaining.pop();
-  if (!origin || !destination) return null;
-
-  const params = new URLSearchParams({
-    api: "1",
-    origin: `${origin.lat},${origin.lng}`,
-    destination: `${destination.lat},${destination.lng}`,
-    travelmode: "driving",
-  });
-  if (remaining.length) {
-    params.set(
-      "waypoints",
-      remaining.map((point) => `${point.lat},${point.lng}`).join("|"),
-    );
-  }
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
-}
-
 export default function AdminRidesPage() {
   const [rides, setRides] = useState<RideRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -312,10 +290,17 @@ export default function AdminRidesPage() {
     () => (detail ? rideMapPoints(detail) : []),
     [detail],
   );
-  const detailGoogleMapsUrl = useMemo(
-    () => googleMapsUrl(detailMapPoints),
-    [detailMapPoints],
-  );
+  const detailRouteGeometry = useMemo<[number, number][] | undefined>(() => {
+    const coordinates = detail?.routeCoordinates;
+    if (!coordinates) return undefined;
+    const valid = coordinates
+      .filter(
+        (point) =>
+          Number.isFinite(point.lat) && Number.isFinite(point.lng),
+      )
+      .map((point) => [point.lat, point.lng] as [number, number]);
+    return valid.length > 1 ? valid : undefined;
+  }, [detail?.routeCoordinates]);
 
   function refresh() {
     setLoading(true);
@@ -1468,18 +1453,17 @@ export default function AdminRidesPage() {
                 <>
                   {detailMapPoints.length ? (
                     <section className="detail-section" style={{ padding: 12 }}>
-                      <AdminTripMap key={detail._id} points={detailMapPoints} />
-                      {detailGoogleMapsUrl ? (
-                        <a
-                          href={detailGoogleMapsUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="action-btn ghost"
-                          style={{ marginTop: 10, textDecoration: "none" }}
-                        >
-                          <ExternalLink size={14} /> View in Google Maps
-                        </a>
-                      ) : null}
+                      <AdminTripMap
+                        key={detail._id}
+                        points={detailMapPoints}
+                        routePoints={detailMapPoints}
+                        routeGeometry={detailRouteGeometry}
+                        liveLocationUrl={
+                          detail.status === "active"
+                            ? `/api/admin/rides/${detail._id}/live-location`
+                            : undefined
+                        }
+                      />
                     </section>
                   ) : (
                     <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}>

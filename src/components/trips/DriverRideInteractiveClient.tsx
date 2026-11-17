@@ -18,6 +18,7 @@ import { formatDate, formatTime, formatEgp } from "@/lib/i18n";
 import AppHeader from "@/components/layout/AppHeader";
 import TripChat from "@/components/shared/TripChat";
 import RouteMap from "@/components/shared/RouteMap";
+import DriverLocationTracker from "@/components/live/DriverLocationTracker";
 import VehicleSeatMap from "@/components/trips/VehicleSeatMap";
 import { VEHICLES, type VehicleKey } from "@/lib/config/vehicles";
 import type { GeoPoint } from "@/types/geo";
@@ -158,6 +159,12 @@ export default function DriverRideInteractiveClient({
   const [driverDestination, setDriverDestination] = useState<GeoPoint | null>(
     ride.driverDestination ?? null,
   );
+  const [driverLocation, setDriverLocation] = useState<{
+    lat: number;
+    lng: number;
+    heading: number | null;
+    stale: boolean;
+  } | null>(null);
   const { t, locale, dir } = useClientLocale();
   const to12h = (hhmm: string) => formatTime(locale, hhmm);
   const prettyDate = (date: string) => formatDate(locale, date);
@@ -1057,12 +1064,22 @@ export default function DriverRideInteractiveClient({
           <div className="trip-detail-primary">
             {/* Route map */}
             <div className="trip-detail-map-card">
+              {rideStarted && !isCompleted && (
+                <DriverLocationTracker
+                  resourceType="ride"
+                  resourceId={ride.id}
+                  active
+                  initialLocale={locale}
+                  onLocation={setDriverLocation}
+                />
+              )}
               <RouteMap
                 pickup={stationPoints[0] ?? null}
                 dropoff={stationPoints[stationPoints.length - 1] ?? null}
                 stations={stationPoints.length > 2 ? stationPoints.slice(1, -1) : []}
                 stationIconsOnly
                 routeCoordinates={ride.routeCoordinates}
+                driverLocation={driverLocation ?? undefined}
                 height={280}
                 interactive
               />

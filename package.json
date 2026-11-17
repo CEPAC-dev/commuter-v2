@@ -14,6 +14,7 @@
     "audit:station-regions": "node scripts/audit-station-region-migration.cjs"
   },
   "dependencies": {
+    "ably": "^2.30.0",
     "bcryptjs": "^3.0.3",
     "browser-image-compression": "^2.0.2",
     "date-fns": "^4.4.0",

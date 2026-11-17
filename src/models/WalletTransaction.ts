@@ -59,6 +59,7 @@ const WalletTransactionSchema = new Schema(
       index: true,
       sparse: true,
     },
+    refundOperationId: { type: String, trim: true },
     tripId: { type: Types.ObjectId, ref: "Trip" },
     referralUsageId: {
       type: Types.ObjectId,
@@ -73,6 +74,8 @@ const WalletTransactionSchema = new Schema(
 
     // ── Kashier (topup + withdrawal) ──
     kashierSessionId: { type: String },
+    kashierSessionUrl: { type: String, select: false },
+    kashierSessionExpiresAt: { type: Date, select: false },
     kashierOrderId: { type: String },
     kashierTransactionIds: { type: [String], default: [] },
     kashierRefundId: { type: String },
@@ -109,6 +112,13 @@ WalletTransactionSchema.index({ type: 1, status: 1, createdAt: -1 });
 WalletTransactionSchema.index({ userId: 1, createdAt: -1 });
 WalletTransactionSchema.index({ kashierOrderId: 1 });
 WalletTransactionSchema.index(
+  { refundOperationId: 1, type: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { refundOperationId: { $type: "string" } },
+  },
+);
+WalletTransactionSchema.index(
   { kashierRefundId: 1 },
   {
     unique: true,
@@ -141,6 +151,30 @@ if (
 ) {
   existingWalletTransactionModel.schema.add({
     kashierRefundId: { type: String },
+  });
+}
+if (
+  existingWalletTransactionModel &&
+  !existingWalletTransactionModel.schema.path("refundOperationId")
+) {
+  existingWalletTransactionModel.schema.add({
+    refundOperationId: { type: String, trim: true },
+  });
+}
+if (
+  existingWalletTransactionModel &&
+  !existingWalletTransactionModel.schema.path("kashierSessionUrl")
+) {
+  existingWalletTransactionModel.schema.add({
+    kashierSessionUrl: { type: String, select: false },
+  });
+}
+if (
+  existingWalletTransactionModel &&
+  !existingWalletTransactionModel.schema.path("kashierSessionExpiresAt")
+) {
+  existingWalletTransactionModel.schema.add({
+    kashierSessionExpiresAt: { type: Date, select: false },
   });
 }
 export const WalletTransaction =

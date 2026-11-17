@@ -7,6 +7,7 @@ const NOTIFICATION_TYPES = [
   "request_created",
   "trip_submitted",
   "driver_assigned",
+  "ride_assigned",
   "trip_completed",
   "trip_chat_message",
   "trip_refund_update",

@@ -3,22 +3,12 @@ import { Availability } from "@/models/Availability";
 import { Driver } from "@/models/Driver";
 import { Ride } from "@/models/Ride";
 import { getAdminSettings } from "@/lib/cancellationPolicy";
-
-const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-
-function minutes(value: string): number {
-  const [hours, mins] = value.split(":").map(Number);
-  return hours * 60 + mins;
-}
-
-function vehicleCompatible(carType: string | undefined, vehicleType: string): boolean {
-  if (!carType) return false;
-  if (vehicleType === "private_car") return carType === "private";
-  if (vehicleType === "taxi_private") return carType === "taxi";
-  if (vehicleType === "van_shared") return carType === "van";
-  if (vehicleType === "microbus_shared") return carType === "microbus";
-  return true;
-}
+import { isCarTypeCompatible } from "@/lib/config/driver";
+import { isRegionCode } from "@/lib/config/regions";
+import {
+  availabilityCoversTimeWindow,
+  availabilityDayOfWeek,
+} from "@/lib/time/availabilityWindow";
 
 type StationPoint = { lat: number; lng: number };
 
@@ -38,44 +28,76 @@ function haversineKm(first: StationPoint, second: StationPoint): number {
 export async function getEligibleDriverIds(ride: {
   _id: unknown;
   date: string;
+  regionCode?: string | null;
   startTime: string;
   endTime: string;
   vehicleType: string;
   rejectedByDriverIds?: unknown[];
   pickupStation?: StationPoint;
   dropoffStation?: StationPoint;
-  passengers?: { pickupStation?: StationPoint; dropoffStation?: StationPoint }[];
+  passengers?: {
+    pickupStation?: StationPoint;
+    dropoffStation?: StationPoint;
+  }[];
 }): Promise<Types.ObjectId[]> {
   const settings = await getAdminSettings();
-  const dayOfWeek = DAY_KEYS[new Date(`${ride.date}T00:00:00Z`).getUTCDay()];
-  const availability = await Availability.find({ dayOfWeek, active: true })
-    .select("driverId origin startNearestStation destinationNearestStation startTime endTime")
-    .lean<{
-      driverId: Types.ObjectId;
-      origin: { lat: number; lng: number };
-      startNearestStation?: StationPoint | null;
-      destinationNearestStation?: StationPoint | null;
-      startTime: string;
-      endTime: string;
-    }[]>();
+  if (!isRegionCode(ride.regionCode)) return [];
+  const dayOfWeek = availabilityDayOfWeek(ride.date);
+  if (!dayOfWeek) return [];
+  const availability = await Availability.find({
+    dayOfWeek,
+    active: true,
+    regionCode: ride.regionCode,
+  })
+    .select(
+      "driverId origin startNearestStation destinationNearestStation startTime endTime",
+    )
+    .lean<
+      {
+        driverId: Types.ObjectId;
+        origin: { lat: number; lng: number };
+        startNearestStation?: StationPoint | null;
+        destinationNearestStation?: StationPoint | null;
+        startTime: string;
+        endTime: string;
+      }[]
+    >();
   const rejected = new Set((ride.rejectedByDriverIds ?? []).map(String));
-  const driverIds = availability.map((item) => item.driverId).filter((id) => !rejected.has(String(id)));
-  const drivers = await Driver.find({ userId: { $in: driverIds }, verificationStatus: "verified" })
+  const driverIds = availability
+    .map((item) => item.driverId)
+    .filter((id) => !rejected.has(String(id)));
+  const drivers = await Driver.find({
+    userId: { $in: driverIds },
+    verificationStatus: "verified",
+  })
     .select("userId carType")
     .lean<{ userId: Types.ObjectId; carType?: string }[]>();
-  const driverMap = new Map(drivers.map((driver) => [String(driver.userId), driver]));
+  const driverMap = new Map(
+    drivers.map((driver) => [String(driver.userId), driver]),
+  );
   const candidates: { id: Types.ObjectId; distance: number }[] = [];
-  const start = minutes(ride.startTime);
-  const end = minutes(ride.endTime);
   const ridePickupStation =
-    ride.pickupStation ?? ride.passengers?.find((passenger) => passenger.pickupStation)?.pickupStation;
+    ride.pickupStation ??
+    ride.passengers?.find((passenger) => passenger.pickupStation)
+      ?.pickupStation;
   const rideDropoffStation =
-    ride.dropoffStation ?? ride.passengers?.find((passenger) => passenger.dropoffStation)?.dropoffStation;
+    ride.dropoffStation ??
+    ride.passengers?.find((passenger) => passenger.dropoffStation)
+      ?.dropoffStation;
 
   for (const item of availability) {
     const driver = driverMap.get(String(item.driverId));
-    if (!driver || !vehicleCompatible(driver.carType, ride.vehicleType)) continue;
-    if (minutes(item.startTime) > start || minutes(item.endTime) < end) continue;
+    if (!driver || !isCarTypeCompatible(driver.carType, ride.vehicleType))
+      continue;
+    if (
+      !availabilityCoversTimeWindow(
+        item.startTime,
+        item.endTime,
+        ride.startTime,
+        ride.endTime,
+      )
+    )
+      continue;
     if (
       settings.broadcastOriginFilter.enabled &&
       ridePickupStation &&
@@ -107,5 +129,7 @@ export async function getEligibleDriverIds(ride: {
     });
   }
 
-  return candidates.sort((a, b) => a.distance - b.distance).map((candidate) => candidate.id);
+  return candidates
+    .sort((a, b) => a.distance - b.distance)
+    .map((candidate) => candidate.id);
 }

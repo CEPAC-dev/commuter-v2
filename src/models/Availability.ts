@@ -53,14 +53,18 @@ const AvailabilitySchema = new Schema(
 );
 
 // Not unique — a driver can have multiple shifts (records) on the same day.
-AvailabilitySchema.index({ driverId: 1, dayOfWeek: 1 });
+AvailabilitySchema.index({ driverId: 1, regionCode: 1, dayOfWeek: 1 });
 
 const existingAvailabilityModel = models.Availability;
-if (existingAvailabilityModel && !existingAvailabilityModel.schema.path("regionCode")) {
-  existingAvailabilityModel.schema.add({ regionCode: AvailabilitySchema.obj.regionCode });
+if (
+  existingAvailabilityModel &&
+  !existingAvailabilityModel.schema.path("regionCode")
+) {
+  existingAvailabilityModel.schema.add({
+    regionCode: AvailabilitySchema.obj.regionCode,
+  });
 }
 
 export type AvailabilityDoc = InferSchemaType<typeof AvailabilitySchema>;
 export const Availability =
   existingAvailabilityModel || model("Availability", AvailabilitySchema);
-

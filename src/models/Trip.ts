@@ -90,11 +90,12 @@ const PrivateRideOfferSchema = new Schema(
     priceEgp: { type: Number, required: true, min: 0 },
     offeredBy: { type: Types.ObjectId, ref: "User", required: true },
     offeredAt: { type: Date, required: true },
+    expiresAt: { type: Date, required: true },
     respondedAt: { type: Date, required: false, default: null },
     decision: {
       type: String,
       required: false,
-      enum: ["accepted", "cancelled"],
+      enum: ["accepted", "cancelled", "expired"],
     },
   },
   { _id: false },
@@ -327,6 +328,7 @@ const TripSchema = new Schema(
             enum: ["processing", "completed", "failed"],
           },
           paymentId: { type: Types.ObjectId, ref: "Payment", required: true },
+          refundOperationId: { type: String, required: true },
           refundedAt: { type: Date },
           refundedBy: { type: Types.ObjectId, ref: "User", required: true },
           refundAmountEgp: { type: Number, required: true, min: 0 },
@@ -376,6 +378,28 @@ if (existingTripModel && !existingTripModel.schema.path("privateRideOffer")) {
   existingTripModel.schema.add({
     privateRideOffer: TripSchema.obj.privateRideOffer,
   });
+}
+if (existingTripModel) {
+  const privateRideOfferPath =
+    existingTripModel.schema.path("privateRideOffer");
+  if (
+    privateRideOfferPath &&
+    "schema" in privateRideOfferPath &&
+    !privateRideOfferPath.schema.path("expiresAt")
+  ) {
+    privateRideOfferPath.schema.add({
+      expiresAt: PrivateRideOfferSchema.obj.expiresAt,
+    });
+  }
+  if (privateRideOfferPath && "schema" in privateRideOfferPath) {
+    const decisionPath = privateRideOfferPath.schema.path("decision");
+    if (decisionPath) {
+      decisionPath.validators = decisionPath.validators.filter(
+        (validator: { type?: string }) => validator.type !== "enum",
+      );
+      decisionPath.enum("accepted", "cancelled", "expired");
+    }
+  }
 }
 if (existingTripModel) {
   const statusPath = existingTripModel.schema.path("status");

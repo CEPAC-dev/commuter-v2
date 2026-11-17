@@ -1,6 +1,7 @@
 export const en = {
   "admin.chat_reports.title": "Trip chat reports",
-  "admin.chat_reports.subtitle": "Review participant reports and preserved chat evidence.",
+  "admin.chat_reports.subtitle":
+    "Review participant reports and preserved chat evidence.",
   "admin.chat_reports.load_error": "Could not load chat reports.",
   "admin.chat_reports.review_error": "Could not update this report.",
   "admin.chat_reports.review_saved": "Report status updated.",
@@ -24,7 +25,8 @@ export const en = {
   "admin.chat_reports.email": "Email",
   "admin.chat_reports.phone": "Phone",
   "admin.chat_reports.user_number": "User number",
-  "admin.chat_reports.identity_unavailable": "Identity information is unavailable.",
+  "admin.chat_reports.identity_unavailable":
+    "Identity information is unavailable.",
   "admin.chat_reports.passenger": "Passenger",
   "admin.chat_reports.driver": "Driver",
   "admin.chat_reports.report_details": "Report details",
@@ -33,7 +35,8 @@ export const en = {
   "admin.chat_reports.role.driver": "Driver",
   "admin.chat_reports.reporter": "Reported by",
   "admin.chat_reports.snapshot": "Chat snapshot",
-  "admin.chat_reports.snapshot_empty": "No messages were available at report time.",
+  "admin.chat_reports.snapshot_empty":
+    "No messages were available at report time.",
   "admin.chat_reports.admin_note": "Admin note",
   "admin.chat_reports.mark_reviewed": "Mark reviewed",
   "admin.chat_reports.dismiss": "Dismiss report",
@@ -125,7 +128,8 @@ export const en = {
   "admin.station_suggestions.loading": "Loading requests…",
   "admin.station_suggestions.load_error": "Could not load station suggestions.",
   "admin.station_suggestions.review_error": "Could not review this request.",
-  "admin.station_suggestions.empty": "No station suggestions match this filter.",
+  "admin.station_suggestions.empty":
+    "No station suggestions match this filter.",
   "admin.station_suggestions.result_count": "{count} requests",
   "admin.station_suggestions.page_of": "Page {page} of {pages}",
   "admin.station_suggestions.previous": "Previous",
@@ -162,8 +166,10 @@ export const en = {
   "admin.station_suggestions.station_map_legend": "Station point",
   "admin.station_suggestions.location_map_prompt":
     "Click inside a highlighted service zone to move the station pin.",
-  "admin.station_suggestions.location_map_aria": "Map to adjust the station location",
-  "admin.station_suggestions.location_map_loading": "Loading active service zones…",
+  "admin.station_suggestions.location_map_aria":
+    "Map to adjust the station location",
+  "admin.station_suggestions.location_map_loading":
+    "Loading active service zones…",
   "admin.station_suggestions.location_map_error":
     "The service-zone map could not be loaded. Please try again.",
   "admin.station_suggestions.location_outside_zones":
@@ -174,7 +180,8 @@ export const en = {
   "admin.station_suggestions.cancel": "Cancel",
   "admin.station_suggestions.close": "Close",
   "admin.station_suggestions.approved": "Station added and request approved.",
-  "admin.station_suggestions.rejected": "Request rejected and requester notified.",
+  "admin.station_suggestions.rejected":
+    "Request rejected and requester notified.",
   "driver.completed": "Completed",
   "driver.ongoing": "Ongoing",
   "driver.upcoming": "Upcoming",
@@ -199,7 +206,8 @@ export const en = {
   "driver.incident.reported": "Reported, the team will contact you.",
   "driver.incident.paused":
     "This ride is paused until the team resolves the report. You can still drop off passengers, mark no-shows, and finish the ride.",
-  "driver.incident.report_error": "Could not send the report. Please try again.",
+  "driver.incident.report_error":
+    "Could not send the report. Please try again.",
   "driver.incident.withdraw": "Withdraw report",
   "driver.incident.withdrawing": "Withdrawing...",
   "driver.incident.withdraw_confirm":
@@ -214,6 +222,25 @@ export const en = {
   "driver.window_prefix": "Window",
   "driver.route_details": "Route Details",
   "driver.route_details_desc": "Driver route and station breakdown",
+  "driver.live_location.title": "Live driver location",
+  "driver.live_location.privacy":
+    "While this trip is active, your location is shown to the passenger and anyone with their active tracking link. Keep this page open for updates.",
+  "driver.live_location.sharing": "Your live location is being shared.",
+  "driver.live_location.paused": "Location sharing is off.",
+  "driver.live_location.start": "Start location sharing",
+  "driver.live_location.stop": "Stop location sharing",
+  "driver.live_location.unavailable": "This browser cannot access your location.",
+  "driver.live_location.permission_error":
+    "Location permission was denied. Allow access in your browser settings and try again.",
+  "driver.live_location.timeout": "Location lookup timed out. Try again.",
+  "driver.live_location.update_error":
+    "The location update could not be sent. Please try again.",
+  "driver.live_location.network_error":
+    "Network problem. Location updates will resume when connected.",
+  "driver.live_location.stop_error":
+    "Could not stop sharing on the server. Please try again.",
+  "driver.live_location.trip_ended":
+    "Location sharing stopped because the trip is no longer active.",
   "driver.steps_count": "{count} Steps",
   "driver.origin_label": "Driver origin",
   "driver.destination_label": "Driver destination",
@@ -313,20 +340,27 @@ export const en = {
   "history.results_count": "{count} matching requests",
   "history.no_results": "No results found",
   "history.any_trip_number": "any trip number",
-  "history.no_results_for": "No requests match {query}, {from} to {to}, status: {status}.",
+  "history.no_results_for":
+    "No requests match {query}, {from} to {to}, status: {status}.",
   "history.matched_trip": "Matched trip",
-  "history.error_invalid_trip_number": "Enter a trip number using digits, optionally prefixed with #.",
+  "history.error_invalid_trip_number":
+    "Enter a trip number using digits, optionally prefixed with #.",
   "history.error_invalid_date": "Enter valid dates in the selected range.",
-  "history.error_from_after_to": "The start date must be on or before the end date.",
+  "history.error_from_after_to":
+    "The start date must be on or before the end date.",
   "my_trips.request_alerts": "Request alerts",
   "my_trips.empty_tab_all_title": "No active trips yet",
-  "my_trips.empty_tab_all_description": "Your upcoming and ongoing trips will appear here.",
+  "my_trips.empty_tab_all_description":
+    "Your upcoming and ongoing trips will appear here.",
   "my_trips.empty_tab_pending_title": "No requests need attention",
-  "my_trips.empty_tab_pending_description": "Requests waiting for payment or approval will appear here.",
+  "my_trips.empty_tab_pending_description":
+    "Requests waiting for payment or approval will appear here.",
   "my_trips.empty_tab_upcoming_title": "No upcoming trips",
-  "my_trips.empty_tab_upcoming_description": "Trips with a future pickup time will appear here.",
+  "my_trips.empty_tab_upcoming_description":
+    "Trips with a future pickup time will appear here.",
   "my_trips.empty_tab_ongoing_title": "No trips in progress",
-  "my_trips.empty_tab_ongoing_description": "Active trips will appear here while you travel.",
+  "my_trips.empty_tab_ongoing_description":
+    "Active trips will appear here while you travel.",
   "my_trips.live_now": "Live now",
   "my_trips.next_trip": "Your next trip",
   "my_trips.pickup_reached": "Pickup time reached",
@@ -339,7 +373,8 @@ export const en = {
   "my_trips.tomorrow_at": "Tomorrow {time}",
   "my_trips.in_days_at": "In {days} days · {time}",
   "my_trips.next_empty_title": "Nothing coming up",
-  "my_trips.next_empty_description": "Your next trip will show here once it’s booked.",
+  "my_trips.next_empty_description":
+    "Your next trip will show here once it’s booked.",
   "my_trips.book_trip": "Book a trip",
   "my_trips.view_trip": "View trip",
   "my_trips.track_trip": "Track trip",
@@ -347,33 +382,37 @@ export const en = {
   "live_share.title": "Live location sharing",
   "live_share.share_button": "Share live location",
   "live_share.consent_title": "Share your live location",
-  "live_share.consent_intro": "Anyone with the link can see, without logging in:",
+  "live_share.consent_intro":
+    "Anyone with the link can see, without logging in:",
   "live_share.consent_bullet_location":
     "your live location on a map while sharing is on",
   "live_share.consent_bullet_points": "your pickup and drop-off points",
   "live_share.consent_bullet_driver":
     "your driver's first name, and the car's make, model, colour and plate number",
+  "live_share.consent_bullet_driver_location":
+    "your driver's live location while the trip is active, if they enable it",
   "live_share.consent_body":
     "The link works for up to 24 hours and stops showing your location when your trip ends or you tap Stop sharing. We keep only your latest location, not a history. It is removed when you stop sharing, and in any case within about 48 hours of creating the link. Share the link only with people you trust, because anyone who has it can open it. Keep your browser open so your phone can keep sending your location.",
   "live_share.consent_checkbox":
     "I understand and agree to share my live location through this link.",
-  "live_share.share_message": "I'm sharing my live trip location with you: {url}",
+  "live_share.share_message":
+    "I'm sharing my live trip location with you: {url}",
   "live_share.confirm": "Start sharing",
   "live_share.cancel": "Cancel",
   "privacy.notice": "Privacy notice",
   "privacy.title": "Privacy notice: live location sharing",
   "privacy.collect_heading": "What we collect:",
   "privacy.collect_body":
-    "When you turn sharing on, your phone's browser sends your location every few seconds. We store only your latest position (coordinates, accuracy, direction and time), not a history of where you have been, plus how many times the link was opened and when it was last opened.",
+    "When you turn sharing on, your phone's browser sends your location every few seconds. If your driver enables live tracking for an active trip, their latest position is also relayed to viewers. We store only the latest positions (coordinates, accuracy, direction and time), not a travel history.",
   "privacy.visibility_heading": "Who can see it:",
   "privacy.visibility_body":
-    "Anyone who has your link, without logging in: your live location, your pickup and drop-off points, your driver's first name, and the car's make, model, colour and plate number. They cannot see your name, phone number or payment details.",
+    "Anyone who has your link, without logging in: your live location while you share it, and your driver's live location while the trip is active if the driver enables it, plus your pickup and drop-off points and the driver's vehicle details. They cannot see your name, phone number or payment details.",
   "privacy.retention_heading": "How long:",
   "privacy.retention_body":
-    "The link works for up to 24 hours and stops showing your location when the trip ends or you tap Stop sharing. Your latest location is removed when sharing stops, and the sharing record is deleted automatically about 48 hours after you create the link (automatic cleanup can lag slightly).",
+    "The link works for up to 24 hours and stops showing location when the trip ends or you tap Stop sharing. Driver location is retained only as the latest point and stops being shown five minutes after the last update; automatic cleanup may take longer. Your passenger share record is deleted automatically about 48 hours after link creation (automatic cleanup can lag slightly).",
   "privacy.providers_heading": "Service providers:",
   "privacy.providers_body":
-    "The map is loaded from {MAP_PROVIDER_NAME} by the browser of whoever opens the link, so that provider can see their IP address and the area they view. The route is calculated by {ROUTING_PROVIDER_NAME}, which receives the pickup and drop-off coordinates.",
+    "The map is loaded from {MAP_PROVIDER_NAME} by the browser of whoever opens the link, so that provider can see their IP address and the area they view. The route is calculated by {ROUTING_PROVIDER_NAME}, which receives the pickup and drop-off coordinates. Live location updates are relayed through Ably, which receives the coordinates needed to deliver them.",
   "privacy.choices_heading": "Your choices:",
   "privacy.choices_body":
     "Sharing is off unless you turn it on. We ask for your consent each time you create a link, and you can stop sharing at any time from the trip page.",
@@ -386,7 +425,8 @@ export const en = {
   "live_share.link_label": "Private tracking link",
   "live_share.copy_link": "Copy link",
   "live_share.copied": "Link copied",
-  "live_share.copy_error": "Couldn't copy the link. You can select and copy it.",
+  "live_share.copy_error":
+    "Couldn't copy the link. You can select and copy it.",
   "live_share.whatsapp": "WhatsApp",
   "live_share.sms": "SMS",
   "live_share.share_native": "Share link",
@@ -429,8 +469,22 @@ export const en = {
   "live_viewer.last_updated": "Last updated {time} ago",
   "live_viewer.ended": "This trip has ended",
   "live_viewer.unavailable": "This tracking link is no longer available.",
-  "live_viewer.connection": "Connection problem. Keeping the last location and retrying.",
+  "live_viewer.connection":
+    "Connection problem. Keeping the last location and retrying.",
   "live_viewer.driver": "Driver",
+  "live_viewer.driver_location": "Driver location",
+  "live_viewer.driver_live": "Driver location is live",
+  "live_viewer.driver_stale": "Driver location is out of date",
+  "live_viewer.driver_reconnecting": "Reconnecting to driver location",
+  "live_viewer.driver_waiting": "Waiting for the driver to share location",
+  "live_viewer.driver_load_error":
+    "Couldn't load the driver's location. Retrying.",
+  "live_viewer.remaining_distance": "About {distance} km remaining",
+  "live_viewer.eta_minutes": "about {minutes} min",
+  "live_viewer.realtime_disconnected":
+    "Realtime is reconnecting; updates may arrive less often.",
+  "live_viewer.polling_fallback":
+    "Realtime is unavailable; location refreshes every few seconds.",
   "live_viewer.vehicle": "Vehicle",
   "live_viewer.plate": "Plate",
   "live_viewer.recenter": "Recenter map",
@@ -481,12 +535,16 @@ export const en = {
   "trip_detail.private_details": "Private ride details",
   "trip_detail.shared_details": "Shared ride details",
   "pickup_pin.title": "Pickup code · Passenger {n}",
-  "pickup_pin.share_instruction": "Share this code with the driver only when you board",
+  "pickup_pin.share_instruction":
+    "Share this code with the driver only when you board",
   "pickup_pin.driver_prompt": "Pickup PIN",
   "pickup_pin.required": "Enter the passenger's 4-digit pickup PIN.",
-  "pickup_pin.invalid": "That pickup PIN is incorrect. Check the code and try again.",
-  "pickup_pin.locked": "PIN verification is locked for 10 minutes after too many incorrect attempts.",
-  "pickup_pin.network_error": "Network error while verifying the pickup PIN. Please try again.",
+  "pickup_pin.invalid":
+    "That pickup PIN is incorrect. Check the code and try again.",
+  "pickup_pin.locked":
+    "PIN verification is locked for 10 minutes after too many incorrect attempts.",
+  "pickup_pin.network_error":
+    "Network error while verifying the pickup PIN. Please try again.",
   "my_trips.no_trips_filters": "No trips match these filters.",
   "my_trips.no_assigned_trips": "No assigned trips yet.",
   "my_trips.no_trips": "No trips yet.",
@@ -570,10 +628,12 @@ export const en = {
   "ride.driver_destination": "Driver final destination",
   "ride.station_fallback": "Step {n}",
   "ride.confirm_station_error": "Failed to confirm station {stationIndex}",
-  "ride.seats_unavailable": "There are not enough available seats for this group. You can still mark no-show.",
+  "ride.seats_unavailable":
+    "There are not enough available seats for this group. You can still mark no-show.",
   "ride.start_error": "Could not start the ride. Please try again.",
   "ride.end_error": "Could not close the ride. Please try again.",
-  "ride.action_network_error": "Network error. Please check your connection and try again.",
+  "ride.action_network_error":
+    "Network error. Please check your connection and try again.",
   "chat.with_driver": "Chat with driver",
   "chat.with_passenger": "Chat with passenger",
   "chat.no_messages": "No messages yet. Say hello!",
@@ -581,8 +641,10 @@ export const en = {
   "chat.type_placeholder": "Type a message…",
   "chat.load_error": "Couldn't load messages. Try again.",
   "chat.send_error": "Couldn't send that message. Try again.",
-  "chat.contact_info_blocked": "This message may contain contact information. Please keep chat in the app.",
-  "chat.free_text_suspended": "Free-text messages are suspended for this trip. Preset messages are still available.",
+  "chat.contact_info_blocked":
+    "This message may contain contact information. Please keep chat in the app.",
+  "chat.free_text_suspended":
+    "Free-text messages are suspended for this trip. Preset messages are still available.",
   "chat.mark_read_error": "Couldn't update the read status.",
   "chat.unread_aria": "{count} unread messages",
   "chat.report": "Report chat",
@@ -599,7 +661,8 @@ export const en = {
   "chat.report_cancel": "Cancel",
   "chat.report_sending": "Submitting…",
   "chat.report_submitted": "Your report was submitted for review.",
-  "chat.report_already_submitted": "You already have an open report for this trip.",
+  "chat.report_already_submitted":
+    "You already have an open report for this trip.",
   "chat.report_rate_limited": "Too many reports. Please try again later.",
   "chat.report_error": "Couldn't submit the report. Try again.",
   "chat.closed": "This chat is now read-only.",
@@ -699,19 +762,25 @@ export const en = {
   "my_trips.booking_waiting_approval": "Waiting for approval",
   "my_trips.booking_ready_to_pay": "Ready to pay",
   "my_trips.booking_continue_checkout": "Continue to checkout",
-  "my_trips.booking_waiting_note": "We’ll let you know when this booking is ready to pay.",
+  "my_trips.booking_waiting_note":
+    "We’ll let you know when this booking is ready to pay.",
   "my_trips.booking_cancel_day": "Cancel",
   "my_trips.booking_cancel_whole": "Cancel whole booking",
   "my_trips.booking_cancel_dialog_title": "Cancel booking?",
-  "my_trips.booking_cancel_day_confirmation": "Cancel {day}? The new total will be {amount}.",
-  "my_trips.booking_cancel_last_day_confirmation": "{day} is the only day left. Cancelling it will cancel the whole booking; the new total will be {amount}.",
-  "my_trips.booking_cancel_all_confirmation": "All {count} days will be cancelled.",
+  "my_trips.booking_cancel_day_confirmation":
+    "Cancel {day}? The new total will be {amount}.",
+  "my_trips.booking_cancel_last_day_confirmation":
+    "{day} is the only day left. Cancelling it will cancel the whole booking; the new total will be {amount}.",
+  "my_trips.booking_cancel_all_confirmation":
+    "All {count} days will be cancelled.",
   "my_trips.booking_cancel_close": "Keep booking",
   "my_trips.booking_cancel_confirm": "Confirm cancellation",
   "my_trips.booking_cancel_updated_total": "Updated booking total: {amount}",
   "my_trips.booking_cancel_error": "Unable to cancel this booking.",
-  "my_trips.booking_cancel_network_error": "Unable to cancel this booking. Please try again.",
-  "my_trips.booking_payment_in_progress": "A payment session is open for this booking. Please try again in a few minutes, up to 35 minutes.",
+  "my_trips.booking_cancel_network_error":
+    "Unable to cancel this booking. Please try again.",
+  "my_trips.booking_payment_in_progress":
+    "A payment session is open for this booking. Please try again in a few minutes, up to 35 minutes.",
   "my_trips.other_dates_in_booking": "Other dates in this booking",
   "my_trips.no_phone": "No phone on file",
   "my_trips.call": "Call",
@@ -724,7 +793,8 @@ export const en = {
   "status.ongoing": "Ongoing",
   "status.nomatch": "No match found",
   "status.waiting_list": "Waiting list",
-  "status.private_ride_offer_pending": "Private-ride option awaiting your response",
+  "status.private_ride_offer_pending":
+    "Private-ride option awaiting your response",
   "status.approved_by_admin": "Approved by admin",
   "status.searching_for_ride": "Searching for a ride",
   "status.matched": "Matched",
@@ -747,11 +817,14 @@ export const en = {
   "private_ride_offer.review": "Review private-ride offer",
   "private_ride_offer.title": "A private-ride option is available",
   "private_ride_offer.description":
-    "We couldn't find available passengers in your area for this shared trip. Changing to a {vehicleType} will update the fare from {oldPrice} to {newPrice}. Would you like to accept the new fare or cancel this trip?",
+    "We couldn't find available passengers in your area for this shared trip. Changing to a {vehicleType} will update the fare from {oldPrice} to {newPrice}. Accepting changes this trip to private; declining cancels the trip rather than keeping it shared.",
+  "private_ride_offer.expiration_note":
+    "If you don't respond by {deadline} (Cairo time), this trip will be canceled automatically.",
   "private_ride_offer.accept": "Accept new fare",
-  "private_ride_offer.cancel_trip": "Cancel this trip",
+  "private_ride_offer.cancel_trip": "Decline offer and cancel trip",
   "private_ride_offer.close": "Not now",
-  "private_ride_offer.accept_success": "Your trip is now private. Continue to payment to confirm it.",
+  "private_ride_offer.accept_success":
+    "Your trip is now private. Continue to payment to confirm it.",
   "private_ride_offer.cancel_success": "The trip has been cancelled.",
   "private_ride_offer.error": "Could not update the trip. Please try again.",
   "request_status.waiting_payment_explanation":
@@ -764,12 +837,10 @@ export const en = {
     "This trip's pickup time has passed. Please book again.",
   "errors.MULTIPLE_DATES_NOT_SUPPORTED":
     "A booking can only include one trip date.",
-  "errors.MULTIPLE_TRIPS_NOT_SUPPORTED":
-    "A booking can only include one trip.",
+  "errors.MULTIPLE_TRIPS_NOT_SUPPORTED": "A booking can only include one trip.",
   "errors.INVALID_TRIP_COUNT":
     "A booking must contain exactly one trip. Remove the return trip or choose one date.",
-  "errors.TOO_MANY_DATES":
-    "A booking can include up to 7 trip dates.",
+  "errors.TOO_MANY_DATES": "A booking can include up to 7 trip dates.",
   "errors.DUPLICATE_DATES":
     "A booking cannot include the same trip date more than once.",
   "errors.MULTIPLE_CYCLES_NOT_SUPPORTED":
@@ -1019,7 +1090,7 @@ export const en = {
   "documents.carImage": "Car image",
   "lang.switch_to_ar": "Switch to Arabic",
   "lang.switch_to_en": "Switch to English",
-  "vehicles.private": "Private",
+  "vehicles.passenger_car": "Passenger car",
   "vehicles.taxi": "Taxi",
   "vehicles.van": "Van",
   "vehicles.microbus": "Microbus",
@@ -1030,6 +1101,7 @@ export const en = {
   "vehicles.van_shared": "Van",
   "vehicles.microbus_shared": "Microbus",
   "vehicles.mini_bus": "Mini Bus",
+  "vehicles.minibus": "Minibus",
   "ride_type.shared": "Shared",
   "ride_type.private": "Private",
   pickup: "Pickup",
@@ -1188,6 +1260,8 @@ export const en = {
   "create.pick_days_note":
     "Pick one or more days — trips repeat on each selected date.",
   "create.pick_one_day_note": "Choose one date for this trip.",
+  "create.booking_dates_loading": "Loading available dates...",
+  "create.booking_dates_load_failed": "Could not load available dates. Refresh and try again.",
   "create.booking_create_failed": "Failed to create booking. Please try again.",
   "create.wallet_payment_failed": "Wallet payment failed. Please try again.",
   "create.payment_init_failed": "Failed to initiate payment. Please try again.",
@@ -1249,12 +1323,15 @@ export const en = {
   "create.confirm_request": "Submit this trip →",
   "create.request_modal_aria": "Submit shared-ride trip",
   "create.request_modal_heading": "Submit trip for approval",
-  "create.request_modal_description": "Shared rides need admin approval before they can be confirmed.",
-  "create.request_modal_no_payment": "No payment is taken now. You will pay only after your trip is approved.",
+  "create.request_modal_description":
+    "Shared rides need admin approval before they can be confirmed.",
+  "create.request_modal_no_payment":
+    "No payment is taken now. You will pay only after your trip is approved.",
   "create.send_request": "Submit trip",
   "create.request_sent_aria": "Trip awaiting approval",
   "create.request_sent_heading": "Trip submitted",
-  "create.request_sent_description": "Your trip is waiting for admin approval. We’ll let you know when it is approved, then you can pay.",
+  "create.request_sent_description":
+    "Your trip is waiting for admin approval. We’ll let you know when it is approved, then you can pay.",
   "create.trip_waitlist_confirmation":
     "Your trip is waiting for admin approval. No payment is due unless it is approved.",
   "create.view_request": "View trip",
@@ -1298,7 +1375,8 @@ export const en = {
   "admin.promo.inactive": "Inactive",
   "admin.promo.countdown_format": "{days}d {hours}h {minutes}m {seconds}s",
   "admin.waiting_list.title": "Waiting list",
-  "admin.waiting_list.description": "Review shared-ride requests before passengers pay.",
+  "admin.waiting_list.description":
+    "Review shared-ride requests before passengers pay.",
   "admin.waiting_list.settings_title": "Shared-ride waiting list",
   "admin.waiting_list.settings_toggle_label": "Enable shared-ride waiting list",
   "admin.waiting_list.settings_on": "On",
@@ -1308,16 +1386,20 @@ export const en = {
   "admin.waiting_list.settings_disabled_description":
     "New shared-ride bookings go straight to payment without admin review.",
   "admin.waiting_list.settings_last_changed": "Last changed by {name} · {date}",
-  "admin.waiting_list.settings_confirm_title": "Turn off the shared-ride waiting list?",
+  "admin.waiting_list.settings_confirm_title":
+    "Turn off the shared-ride waiting list?",
   "admin.waiting_list.settings_confirm_description":
     "New shared bookings will go straight to payment without admin review. Requests already waiting will not be affected.",
   "admin.waiting_list.settings_confirm_off": "Turn off",
   "admin.waiting_list.settings_enabled_success": "Waiting list is on.",
   "admin.waiting_list.settings_disabled_success": "Waiting list is off.",
-  "admin.waiting_list.settings_load_error": "Could not load the waiting-list setting.",
-  "admin.waiting_list.settings_save_error": "Could not save the setting. Please try again.",
+  "admin.waiting_list.settings_load_error":
+    "Could not load the waiting-list setting.",
+  "admin.waiting_list.settings_save_error":
+    "Could not save the setting. Please try again.",
   "admin.waiting_list.empty_title": "No requests waiting",
-  "admin.waiting_list.empty_description": "New shared-ride requests will appear here.",
+  "admin.waiting_list.empty_description":
+    "New shared-ride requests will appear here.",
   "admin.waiting_list.loading": "Loading waiting-list requests...",
   "admin.waiting_list.error_title": "Could not load waiting list",
   "admin.waiting_list.retry": "Retry",
@@ -1352,42 +1434,57 @@ export const en = {
   "admin.transactions.any_description": "Any description",
   "admin.transactions.referrer_bonus": "Referrer bonus",
   "admin.transactions.welcome_referral_bonus": "Welcome referral bonus",
-  "admin.transactions.admin_referral_welcome_bonus": "Admin referral welcome bonus",
+  "admin.transactions.admin_referral_welcome_bonus":
+    "Admin referral welcome bonus",
   "admin.transactions.description_contains": "Description contains",
   "admin.waiting_list.approve": "Approve",
   "admin.waiting_list.reject": "Reject",
   "admin.waiting_list.change_to_private": "Change to private ride",
-  "admin.waiting_list.confirm_private_offer_title": "Offer a private ride instead?",
+  "admin.waiting_list.confirm_private_offer_title":
+    "Offer a private ride instead?",
   "admin.waiting_list.confirm_private_offer_description":
     "The passenger will be notified that no passengers are currently available in their area and offered the option to switch this trip to a private ride or cancel it.",
-  "admin.waiting_list.private_offer_success": "The private-ride option was sent to the passenger.",
+  "admin.waiting_list.private_offer_success":
+    "The private-ride option was sent to the passenger.",
   "admin.waiting_list.private_offer_pricing_error":
     "Private-ride pricing is not configured for this trip's region.",
   "admin.waiting_list.private_offer_pending_error":
     "Wait for the passenger to respond to the private-ride offer before reviewing this request.",
   "admin.waiting_list.confirm_approve_title": "Approve this request?",
-  "admin.waiting_list.confirm_approve_description": "The passenger will be notified and can continue to payment.",
+  "admin.waiting_list.confirm_approve_description":
+    "The passenger will be notified and can continue to payment.",
   "admin.waiting_list.confirm_reject_title": "Reject this request?",
-  "admin.waiting_list.confirm_reject_description": "The request and its unpaid trips will be cancelled.",
+  "admin.waiting_list.confirm_reject_description":
+    "The request and its unpaid trips will be cancelled.",
   "admin.waiting_list.reason_label": "Reason (required)",
   "admin.waiting_list.cancel": "Cancel",
   "admin.waiting_list.confirm": "Confirm",
   "admin.waiting_list.approved_success": "Request approved.",
   "admin.waiting_list.rejected_success": "Request rejected.",
-  "admin.waiting_list.conflict": "Another admin already handled this request. Refreshing the list.",
-  "admin.waiting_list.past_error": "This request includes a pickup time that has already passed.",
-  "admin.waiting_list.trip_past_error": "This trip's pickup time has already passed.",
+  "admin.waiting_list.conflict":
+    "Another admin already handled this request. Refreshing the list.",
+  "admin.waiting_list.past_error":
+    "This request includes a pickup time that has already passed.",
+  "admin.waiting_list.trip_past_error":
+    "This trip's pickup time has already passed.",
   "admin.waiting_list.trip_past_description": "This trip can only be rejected.",
-  "admin.waiting_list.trip_reject_description": "This trip will be rejected and no payment will be created.",
+  "admin.waiting_list.trip_reject_description":
+    "This trip will be rejected and no payment will be created.",
   "admin.waiting_list.trip_approved_success": "Trip approved.",
   "admin.waiting_list.trip_rejected_success": "Trip rejected.",
-  "admin.waiting_list.trip_conflict": "Another admin already reviewed this trip. Refreshing the list.",
-  "admin.waiting_list.error_bad_request": "Please check the request details and try again.",
-  "admin.waiting_list.error_unauthorized": "Your session has expired. Please sign in again.",
-  "admin.waiting_list.error_forbidden": "You do not have permission to review this request.",
+  "admin.waiting_list.trip_conflict":
+    "Another admin already reviewed this trip. Refreshing the list.",
+  "admin.waiting_list.error_bad_request":
+    "Please check the request details and try again.",
+  "admin.waiting_list.error_unauthorized":
+    "Your session has expired. Please sign in again.",
+  "admin.waiting_list.error_forbidden":
+    "You do not have permission to review this request.",
   "admin.waiting_list.error_not_found": "This request could not be found.",
-  "admin.waiting_list.error_server": "The server could not complete the action. Try again.",
-  "admin.waiting_list.error_network": "Network error. Check your connection and try again.",
+  "admin.waiting_list.error_server":
+    "The server could not complete the action. Try again.",
+  "admin.waiting_list.error_network":
+    "Network error. Check your connection and try again.",
   "admin.waiting_list.page": "Page {page} of {pages}",
   "admin.waiting_list.previous": "Previous page",
   "admin.waiting_list.next": "Next page",
@@ -1442,6 +1539,8 @@ export const en = {
   "wallet.status.pending": "Pending",
   "wallet.status.completed": "Completed",
   "wallet.status.failed": "Failed",
+  "wallet.continue_topup": "Continue payment",
+  "wallet.resuming_topup": "Preparing payment…",
   "wallet.topup_confirming": "Confirming your top-up…",
   "wallet.topup_added": "Top-up added to your wallet.",
   "wallet.topup_failed": "Top-up failed. No charge was made.",
@@ -1461,7 +1560,8 @@ export const en = {
   "wallet.reserve_floor": "Reserve (Floor)",
   "wallet.pending_withdrawal": "Pending Withdrawal",
   "wallet.withdrawable": "Withdrawable",
-  "wallet.outstanding_amount": "Outstanding amount, deducted from your future earnings",
+  "wallet.outstanding_amount":
+    "Outstanding amount, deducted from your future earnings",
   "wallet.debt_repayment_description": "Earnings applied to outstanding debt",
   "wallet.max_withdrawal_limit_prefix": "Max withdrawal limit per request:",
   "wallet.withdrawal_requests_title": "Withdrawal Requests",
@@ -1840,7 +1940,8 @@ export const en = {
   "report.category.vehicle_condition": "Vehicle was in poor condition",
   "report.category.driver_behavior": "Driver was rude or unprofessional",
   "report.category.route_issue": "Wrong or inefficient route taken",
-  "report.category.safety_concern": "Safety concern (speeding, reckless driving)",
+  "report.category.safety_concern":
+    "Safety concern (speeding, reckless driving)",
   "report.category.pricing_issue": "Pricing or billing issue",
   "report.category.cleanliness": "Vehicle was not clean",
   "report.category.other": "Other issue",

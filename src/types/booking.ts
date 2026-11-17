@@ -5,6 +5,7 @@ import type { GeoPoint, LatLng, StationSelection } from "./geo";
 export type PaymentStatus =
   | "pending"
   | "paid"
+  | "partially_refunded"
   | "failed"
   | "refunded"
   | "expired";
@@ -104,8 +105,10 @@ export interface RideRouteStopDetail extends RideRouteStopRow {
 }
 
 /** Full ride detail for driver /my-trips/[id] when viewing a matched ride. */
-export interface RideDetailView
-  extends Omit<RideListRow, "passengers" | "route"> {
+export interface RideDetailView extends Omit<
+  RideListRow,
+  "passengers" | "route"
+> {
   passengers: RidePassengerDetail[];
   route: RideRouteStopDetail[];
   routeCoordinates?: LatLng[];
@@ -128,6 +131,7 @@ export interface TripListRow {
   privateRideOffer?: {
     vehicleType: "private_car" | "taxi_private";
     priceEgp: number;
+    expiresAt: string | null;
   } | null;
   vehicleType: string;
   pickupAddress: string;

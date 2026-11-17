@@ -4,6 +4,7 @@ import type { UserRole } from "@/lib/auth/session";
 import { Driver } from "@/models/Driver";
 import { User } from "@/models/User";
 import type { SavedAddress } from "@/types/shared";
+import { normalizeCarType, type CarType } from "@/lib/config/driver";
 import {
   isRegionKey,
   normalizeRegion,
@@ -30,7 +31,7 @@ export interface PassengerProfile extends ProfileUser {
 export interface DriverProfile extends ProfileUser {
   role: "driver";
   gender: "male" | "female";
-  carType: "private" | "taxi" | "van" | "microbus" | "";
+  carType: CarType | "";
   carBrand: string;
   carModel: string;
   modelYear: number | null;
@@ -99,7 +100,7 @@ export async function getProfile(
 
   const driver = await Driver.findOne({ userId }).lean<{
     gender: "male" | "female";
-    carType?: "private" | "taxi" | "van" | "microbus";
+    carType?: string;
     carBrand?: string;
     carModel?: string;
     modelYear?: number;
@@ -120,7 +121,7 @@ export async function getProfile(
     ...profileUser,
     role: "driver",
     gender: driver.gender,
-    carType: driver.carType ?? "",
+    carType: normalizeCarType(driver.carType),
     carBrand: driver.carBrand ?? "",
     carModel: driver.carModel ?? "",
     modelYear: driver.modelYear ?? null,
