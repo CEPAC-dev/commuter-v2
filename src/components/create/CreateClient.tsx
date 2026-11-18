@@ -988,7 +988,9 @@ export default function CreateClient({
       if (!trip.dropoff) return t("create.validate_dropoff_required", { n });
       const vehicle =
         vehiclesMap?.[trip.vehicleType] ?? VEHICLES[trip.vehicleType];
-      const vehicleCapacity = getVehiclePassengerCapacity(trip.vehicleType);
+      const vehicleCapacity =
+        vehiclesMap?.[trip.vehicleType]?.capacity ??
+        getVehiclePassengerCapacity(trip.vehicleType);
       const isPrivate = vehicle.ride === "private";
       if (
         !Number.isInteger(trip.numberOfPassengers) ||
@@ -999,7 +1001,9 @@ export default function CreateClient({
             trip.vehicleType,
             trip.numberOfPassengers,
             trip.extraPassengers,
+            vehicle.ride,
           ),
+          vehicleCapacity,
         )
       ) {
         return t("create.validate_passenger_count", {

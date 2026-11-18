@@ -1863,7 +1863,8 @@ export default function TripCycle({
                       numberOfPassengers: isPrivate
                         ? Math.min(
                             Math.max(1, data.numberOfPassengers),
-                            getVehiclePassengerCapacity(newVehicle),
+                            vMap[newVehicle]?.capacity ??
+                              getVehiclePassengerCapacity(newVehicle),
                           )
                         : 1,
                       stops: isPrivate ? data.stops : [],
@@ -2848,7 +2849,8 @@ export default function TripCycle({
                         const maxAlighting = Math.max(0, onboardBefore - 1);
                         const maxBoarding = Math.max(
                           0,
-                          getVehiclePassengerCapacity(data.vehicleType) -
+                          (vMap[data.vehicleType]?.capacity ??
+                            getVehiclePassengerCapacity(data.vehicleType)) -
                             (onboardBefore - stop.alighting),
                         );
                         return (
@@ -3258,19 +3260,22 @@ export default function TripCycle({
                           onClick={() =>
                             updateNumberOfPassengers(
                               Math.min(
-                                getVehiclePassengerCapacity(data.vehicleType),
+                                vMap[data.vehicleType]?.capacity ??
+                                  getVehiclePassengerCapacity(data.vehicleType),
                                 data.numberOfPassengers + 1,
                               ),
                             )
                           }
                           disabled={
                             data.numberOfPassengers >=
-                            getVehiclePassengerCapacity(data.vehicleType)
+                            (vMap[data.vehicleType]?.capacity ??
+                              getVehiclePassengerCapacity(data.vehicleType))
                           }
                           aria-label={t("create.increase_passengers_aria")}
                           style={counterButtonStyle(
                             data.numberOfPassengers >=
-                              getVehiclePassengerCapacity(data.vehicleType),
+                              (vMap[data.vehicleType]?.capacity ??
+                                getVehiclePassengerCapacity(data.vehicleType)),
                           )}
                         >
                           +
@@ -3279,7 +3284,8 @@ export default function TripCycle({
                           {t("create.up_to_including_you").replace(
                             "{max}",
                             String(
-                              getVehiclePassengerCapacity(data.vehicleType),
+                              vMap[data.vehicleType]?.capacity ??
+                                getVehiclePassengerCapacity(data.vehicleType),
                             ),
                           )}
                         </span>
