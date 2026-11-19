@@ -61,6 +61,23 @@ test("Trip creation rejects groups above configured vehicle capacity", () => {
   );
 });
 
+test("trip capacity checks accept region-scoped capacity and ride type", () => {
+  assert.equal(isVehiclePassengerCountAllowed("private_car", 3, 3), true);
+  assert.equal(isVehiclePassengerCountAllowed("private_car", 4, 3), false);
+  assert.equal(
+    getTripPassengerCount("private_car", 1, 2, "shared"),
+    3,
+  );
+  assert.equal(
+    isVehiclePassengerCountAllowed(
+      "private_car",
+      getTripPassengerCount("private_car", 1, 3, "shared"),
+      3,
+    ),
+    false,
+  );
+});
+
 test("shared cars have three seats while private cars remain at four", () => {
   for (const vehicleType of ["shared_car", "taxi_shared"]) {
     assert.equal(getVehiclePassengerCapacity(vehicleType), 3);

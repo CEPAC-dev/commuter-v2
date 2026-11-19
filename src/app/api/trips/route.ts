@@ -18,7 +18,6 @@ import {
   VEHICLES,
   computePrivateTripPriceEgp,
   computeTripPriceEgp,
-  getVehiclePassengerCapacity,
   priceForSelectedDate,
 } from "@/lib/config/vehicles";
 import {
@@ -415,17 +414,28 @@ export async function POST(req: NextRequest) {
     const vKey = t.vehicleType;
     const vehicle = vehiclesMap[vKey];
     const tripRideType = vehicle.ride;
-    const vehicleCapacity = getVehiclePassengerCapacity(vKey);
+    const vehicleCapacity = vehicle.capacity;
+    if (!Number.isInteger(vehicleCapacity) || vehicleCapacity < 1) {
+      return NextResponse.json(
+        { error: "Vehicle capacity is not configured for this region." },
+        { status: 503 },
+      );
+    }
     const requestedPassengerCount = Number(t.numberOfPassengers ?? 1);
     const numberOfPassengers = getTripPassengerCount(
       vKey,
       requestedPassengerCount,
       Number(t.extraPassengers ?? 0),
+      tripRideType,
     );
     if (
       !Number.isInteger(requestedPassengerCount) ||
       requestedPassengerCount < 1 ||
-      !isVehiclePassengerCountAllowed(vKey, numberOfPassengers)
+      !isVehiclePassengerCountAllowed(
+        vKey,
+        numberOfPassengers,
+        vehicleCapacity,
+      )
     ) {
       return NextResponse.json(
         {
