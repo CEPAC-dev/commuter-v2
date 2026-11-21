@@ -25,11 +25,45 @@ export async function PATCH(
   const update: Record<string, unknown> = {};
   for (const field of ["name", "nameAr", "timezone"] as const) {
     if (value[field] !== undefined) {
-      if (typeof value[field] !== "string" || !value[field].trim()) {
+      if (
+        typeof value[field] !== "string" ||
+        !value[field].trim() ||
+        value[field].trim().length > (field === "timezone" ? 80 : 100)
+      ) {
         return NextResponse.json({ error: `Invalid ${field}.` }, { status: 400 });
       }
       update[field] = value[field].trim();
     }
+  }
+  if (typeof value.timezone === "string") {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: value.timezone.trim() });
+    } catch {
+      return NextResponse.json({ error: "Invalid timezone." }, { status: 400 });
+    }
+  }
+  if (value.mapCenter !== undefined) {
+    if (
+      !value.mapCenter ||
+      typeof value.mapCenter !== "object" ||
+      Array.isArray(value.mapCenter)
+    ) {
+      return NextResponse.json({ error: "Invalid map center." }, { status: 400 });
+    }
+    const mapCenter = value.mapCenter as Record<string, unknown>;
+    if (
+      typeof mapCenter.lat !== "number" ||
+      !Number.isFinite(mapCenter.lat) ||
+      mapCenter.lat < -90 ||
+      mapCenter.lat > 90 ||
+      typeof mapCenter.lng !== "number" ||
+      !Number.isFinite(mapCenter.lng) ||
+      mapCenter.lng < -180 ||
+      mapCenter.lng > 180
+    ) {
+      return NextResponse.json({ error: "Invalid map center." }, { status: 400 });
+    }
+    update.mapCenter = { lat: mapCenter.lat, lng: mapCenter.lng };
   }
   if (value.active !== undefined) {
     if (typeof value.active !== "boolean") {

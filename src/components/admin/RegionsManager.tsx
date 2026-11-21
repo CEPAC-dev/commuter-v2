@@ -10,6 +10,7 @@ import {
   Globe2,
   LoaderCircle,
   MapPinned,
+  Pencil,
   Plus,
   ShieldCheck,
   X,
@@ -36,6 +37,14 @@ interface City {
   zoneFeatures: unknown[];
 }
 
+interface CityEditDraft {
+  name: string;
+  nameAr: string;
+  timezone: string;
+  lat: string;
+  lng: string;
+}
+
 export default function RegionsManager({
   regionCode,
   regionLabel,
@@ -48,6 +57,7 @@ export default function RegionsManager({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingZones, setSavingZones] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [updatingCityCode, setUpdatingCityCode] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -59,6 +69,8 @@ export default function RegionsManager({
   const [lng, setLng] = useState("");
   const [zoneCityCode, setZoneCityCode] = useState("");
   const [zoneJson, setZoneJson] = useState("");
+  const [editingCity, setEditingCity] = useState<City | null>(null);
+  const [editDraft, setEditDraft] = useState<CityEditDraft | null>(null);
 
   const latitude = lat.trim() ? Number(lat) : Number.NaN;
   const longitude = lng.trim() ? Number(lng) : Number.NaN;
@@ -70,6 +82,21 @@ export default function RegionsManager({
     longitude >= -180 &&
     longitude <= 180
       ? { lat: latitude, lng: longitude }
+      : null;
+  const editLatitude = editDraft?.lat.trim()
+    ? Number(editDraft.lat)
+    : Number.NaN;
+  const editLongitude = editDraft?.lng.trim()
+    ? Number(editDraft.lng)
+    : Number.NaN;
+  const editMapPoint =
+    Number.isFinite(editLatitude) &&
+    editLatitude >= -90 &&
+    editLatitude <= 90 &&
+    Number.isFinite(editLongitude) &&
+    editLongitude >= -180 &&
+    editLongitude <= 180
+      ? { lat: editLatitude, lng: editLongitude }
       : null;
 
   const loadCities = useCallback(async () => {
@@ -193,6 +220,64 @@ export default function RegionsManager({
       );
     } finally {
       setUpdatingCityCode("");
+    }
+  }
+
+  function startEditing(city: City) {
+    setError("");
+    setSuccess("");
+    setZoneCityCode("");
+    setEditingCity(city);
+    setEditDraft({
+      name: city.name,
+      nameAr: city.nameAr,
+      timezone: city.timezone,
+      lat: String(city.mapCenter.lat),
+      lng: String(city.mapCenter.lng),
+    });
+  }
+
+  async function saveCityEdits(
+    event: React.FormEvent<HTMLFormElement>,
+    city: City,
+  ) {
+    event.preventDefault();
+    if (!editDraft || !editMapPoint) {
+      setError("Enter valid map center coordinates before saving.");
+      return;
+    }
+    setSavingEdit(true);
+    setError("");
+    setSuccess("");
+    try {
+      const response = await fetch(
+        `/api/admin/cities/${encodeURIComponent(city.cityCode)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            regionCode,
+            name: editDraft.name,
+            nameAr: editDraft.nameAr,
+            timezone: editDraft.timezone,
+            mapCenter: editMapPoint,
+          }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Could not update City/State.");
+      setSuccess(`${city.name} was updated.`);
+      setEditingCity(null);
+      setEditDraft(null);
+      await loadCities();
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Could not update City/State.",
+      );
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -348,6 +433,16 @@ export default function RegionsManager({
               <div className="flex flex-wrap gap-2 sm:shrink-0">
                 <button
                   type="button"
+                  onClick={() => startEditing(city)}
+                  aria-expanded={editingCity?.cityCode === city.cityCode}
+                  aria-controls={`edit-city-${city.cityCode}`}
+                  className={secondaryButtonClassName}
+                >
+                  <Pencil size={16} aria-hidden="true" />
+                  Edit
+                </button>
+                <button
+                  type="button"
                   onClick={() => void toggleCity(city)}
                   disabled={updatingCityCode === city.cityCode}
                   className={secondaryButtonClassName}
@@ -371,6 +466,173 @@ export default function RegionsManager({
                   Configure zones
                 </button>
               </div>
+              {editingCity?.cityCode === city.cityCode && editDraft && (
+                <form
+                  id={`edit-city-${city.cityCode}`}
+                  onSubmit={(event) => saveCityEdits(event, city)}
+                  className="mt-5 grid min-w-0 gap-4 border-t border-[var(--color-border)] pt-5"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 className="m-0 text-base font-bold text-[var(--color-primary)]">
+                        Edit {city.name}
+                      </h4>
+                      <p className="mb-0 mt-1 text-xs leading-5 text-[var(--color-muted)]">
+                        City code is kept fixed because existing trips and operational records refer to it.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCity(null);
+                        setEditDraft(null);
+                      }}
+                      className={secondaryButtonClassName}
+                    >
+                      <X size={16} aria-hidden="true" />
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+                    <div className="grid content-start gap-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className={labelClassName}>
+                          City/State name
+                          <input
+                            required
+                            maxLength={100}
+                            value={editDraft.name}
+                            onChange={(event) =>
+                              setEditDraft({
+                                ...editDraft,
+                                name: event.target.value,
+                              })
+                            }
+                            className={fieldClassName}
+                          />
+                        </label>
+                        <label className={labelClassName}>
+                          Arabic name
+                          <input
+                            required
+                            maxLength={100}
+                            dir="rtl"
+                            lang="ar"
+                            value={editDraft.nameAr}
+                            onChange={(event) =>
+                              setEditDraft({
+                                ...editDraft,
+                                nameAr: event.target.value,
+                              })
+                            }
+                            className={fieldClassName}
+                          />
+                        </label>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className={labelClassName}>
+                          Code
+                          <input
+                            readOnly
+                            value={city.cityCode}
+                            className={`${fieldClassName} bg-slate-50 font-mono`}
+                          />
+                        </label>
+                        <label className={labelClassName}>
+                          Timezone (IANA)
+                          <input
+                            required
+                            maxLength={80}
+                            value={editDraft.timezone}
+                            onChange={(event) =>
+                              setEditDraft({
+                                ...editDraft,
+                                timezone: event.target.value,
+                              })
+                            }
+                            className={fieldClassName}
+                          />
+                        </label>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className={labelClassName}>
+                          Map center latitude
+                          <input
+                            required
+                            type="number"
+                            step="any"
+                            min="-90"
+                            max="90"
+                            inputMode="decimal"
+                            value={editDraft.lat}
+                            onChange={(event) =>
+                              setEditDraft({
+                                ...editDraft,
+                                lat: event.target.value,
+                              })
+                            }
+                            className={fieldClassName}
+                          />
+                        </label>
+                        <label className={labelClassName}>
+                          Map center longitude
+                          <input
+                            required
+                            type="number"
+                            step="any"
+                            min="-180"
+                            max="180"
+                            inputMode="decimal"
+                            value={editDraft.lng}
+                            onChange={(event) =>
+                              setEditDraft({
+                                ...editDraft,
+                                lng: event.target.value,
+                              })
+                            }
+                            className={fieldClassName}
+                          />
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <button
+                          type="submit"
+                          disabled={
+                            savingEdit ||
+                            !editDraft.name.trim() ||
+                            !editDraft.nameAr.trim() ||
+                            !editDraft.timezone.trim() ||
+                            !editMapPoint
+                          }
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--color-primary)] px-5 text-sm font-bold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-teal-500/25 disabled:cursor-wait disabled:opacity-60"
+                        >
+                          {savingEdit && (
+                            <LoaderCircle
+                              size={16}
+                              className="animate-spin"
+                              aria-hidden="true"
+                            />
+                          )}
+                          {savingEdit ? "Saving changes…" : "Save changes"}
+                        </button>
+                      </div>
+                    </div>
+                    <RegionCityCenterMap
+                      center={REGIONS[regionCode].map.defaultCenter}
+                      zoom={REGIONS[regionCode].map.defaultZoom}
+                      point={editMapPoint}
+                      onPointChange={(point) =>
+                        setEditDraft({
+                          ...editDraft,
+                          lat: point.lat.toFixed(6),
+                          lng: point.lng.toFixed(6),
+                          timezone: regionTimezone,
+                        })
+                      }
+                    />
+                  </div>
+                </form>
+              )}
             </li>
           ))}
         </ul>
