@@ -12,6 +12,7 @@ import { Payment } from "@/models/Payment";
 import { Trip } from "@/models/Trip";
 import { releaseReservation } from "@/lib/wallet/wallet";
 import { releasePromoCodeUsageForTrip } from "@/lib/promoCode";
+import { getCairoNowParts } from "@/lib/time/cairoTime";
 
 const UNPAID_STATUSES = ["pending", "failed"] as const;
 const ACTIVE_PAYMENT_STATUSES = [
@@ -141,6 +142,7 @@ const mongoExpiryStore: StandaloneTripExpiryStore = {
   async findWaitingListTripCandidates(now, userId) {
     const trips = await Trip.find(buildUnlinkedTripExpiryFilter("waiting_list", {
       requestId: null,
+      paymentStatus: { $in: UNPAID_STATUSES },
       $or: [
         { date: { $lt: now.dateStr } },
         { date: now.dateStr, pickupTime: { $lt: now.timeStr } },
@@ -227,6 +229,7 @@ const mongoExpiryStore: StandaloneTripExpiryStore = {
             filter: buildUnlinkedTripExpiryFilter("waiting_list", {
               _id: new Types.ObjectId(id),
               requestId: null,
+              paymentStatus: { $in: UNPAID_STATUSES },
               $or: [
                 { date: { $lt: now.dateStr } },
                 { date: now.dateStr, pickupTime: { $lt: now.timeStr } },
@@ -355,6 +358,29 @@ export async function expireStandaloneTrips(
     now,
     userId,
   });
+}
+
+export async function expireDueTripDates(
+  userId?: string,
+  now: Date = new Date(),
+): Promise<number> {
+  await connectDB();
+  const nowCairo = getCairoNowParts(now);
+  const result = await Trip.updateMany(
+    {
+      ...(userId ? { userId: new Types.ObjectId(userId) } : {}),
+      status: {
+        $in: ["pending_payment", "waiting_list", "private_ride_offered"],
+      },
+      paymentStatus: { $in: ["pending", "failed"] },
+      $or: [
+        { date: { $lt: nowCairo.dateStr } },
+        { date: nowCairo.dateStr, pickupTime: { $lt: nowCairo.timeStr } },
+      ],
+    },
+    { $set: { status: "time_out", paymentStatus: "expired" } },
+  );
+  return result.modifiedCount;
 }
 
 export async function cancelStandaloneTripPayments(

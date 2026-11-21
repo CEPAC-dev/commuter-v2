@@ -15,7 +15,10 @@ import {
   buildPendingRequestExpiryFilter,
   buildPendingTripExpiryFilter,
 } from "@/lib/pendingRequestHardening";
-import { expireStandaloneTrips } from "@/lib/services/standaloneTripExpiry";
+import {
+  expireDueTripDates,
+  expireStandaloneTrips,
+} from "@/lib/services/standaloneTripExpiry";
 import { releasePromoForRequest } from "@/lib/promoCode";
 import { getCairoNowParts } from "@/lib/cancellationPolicy";
 import { hasPastTrip as hasPastPickupTime } from "@/lib/admin/waitingList";
@@ -53,6 +56,7 @@ export async function expireStaleForUser(userId: string): Promise<void> {
     }
   }
   await expireStandaloneTrips(userId);
+  await expireDueTripDates(userId);
 }
 
 export async function expireStaleRequest(
@@ -61,6 +65,7 @@ export async function expireStaleRequest(
 ): Promise<void> {
   await connectDB();
   await expireStandaloneTrips(userId);
+  await expireDueTripDates(userId);
 
   const cutoff = new Date(Date.now() - EXPIRY_MS);
   const expireFilter = buildPendingRequestExpiryFilter(cutoff, userId);
