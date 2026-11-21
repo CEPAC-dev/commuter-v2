@@ -20,7 +20,7 @@ try {
 const fs = require("fs");
 const path = require("path");
 const { MongoClient } = require("mongodb");
-const REGION_CODE = "EG-CAIRO";
+const REGION_CODE = "EGY";
 const CITY_CODE = "cairo";
 
 async function main() {

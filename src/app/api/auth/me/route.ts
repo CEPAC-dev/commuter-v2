@@ -89,8 +89,8 @@ export async function PATCH(req: NextRequest) {
             : null
           : region !== undefined && isRegionKey(region)
             ? normalizeRegion(region)
-            : isRegionCode(currentLocation?.defaultRegionCode)
-              ? currentLocation.defaultRegionCode
+            : isRegionKey(currentLocation?.defaultRegionCode)
+              ? normalizeRegion(currentLocation.defaultRegionCode)
               : currentLocation?.region && isRegionKey(currentLocation.region)
                 ? normalizeRegion(currentLocation.region)
                 : null;
@@ -100,7 +100,9 @@ export async function PATCH(req: NextRequest) {
       const selectedCity =
         typeof cityCode === "string" && cityCode.trim()
           ? cityCode.trim().toLowerCase()
-          : selectedRegion === currentLocation?.defaultRegionCode
+          : isRegionKey(currentLocation?.defaultRegionCode) &&
+              selectedRegion ===
+                normalizeRegion(currentLocation.defaultRegionCode)
             ? currentLocation.defaultCityCode ?? capitalCityCode(selectedRegion)
             : capitalCityCode(selectedRegion);
       if (!(await isOperatingCityInRegion(selectedRegion, selectedCity))) {

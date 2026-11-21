@@ -10,7 +10,7 @@ const RequestSchema = new Schema(
     userId: { type: Types.ObjectId, ref: "User", required: true, index: true },
     regionCode: {
       type: String,
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      enum: ["EGY", "KSA", "UAE"],
       default: null,
       index: true,
     },

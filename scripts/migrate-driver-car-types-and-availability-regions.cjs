@@ -1,8 +1,14 @@
 const fs = require("fs");
 const { MongoClient } = require("mongodb");
 
-const REGION_CODES = ["EG-CAIRO", "SA", "AE-ABU-DHABI"];
-const REGION_ALIASES = { EG: "EG-CAIRO", KSA: "SA" };
+const REGION_CODES = ["EGY", "KSA", "UAE"];
+const REGION_ALIASES = {
+    "EG-CAIRO": "EGY",
+    EG: "EGY",
+    SA: "KSA",
+    "AE-ABU-DHABI": "UAE",
+    AE: "UAE",
+};
 const apply = process.argv.includes("--apply");
 
 function loadEnv() {
@@ -16,11 +22,8 @@ function loadEnv() {
 }
 
 function canonicalRegion(user) {
-    if (REGION_CODES.includes(user?.defaultRegionCode)) {
-        return user.defaultRegionCode;
-    }
-    return REGION_ALIASES[user?.region] ??
-        (REGION_CODES.includes(user?.region) ? user.region : "EG-CAIRO");
+    const region = user?.defaultRegionCode ?? user?.region;
+    return REGION_CODES.includes(region) ? region : REGION_ALIASES[region] ?? "EGY";
 }
 
 async function main() {

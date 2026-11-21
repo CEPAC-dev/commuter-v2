@@ -6,8 +6,7 @@ export function formatMoney(
   region: RegionCode,
 ): string {
   const currency = getCurrencyConfig(region);
-  const country =
-    region === "SA" ? "SA" : region === "AE-ABU-DHABI" ? "AE" : "EG";
+  const country = region === "KSA" ? "SA" : region === "UAE" ? "AE" : "EG";
   return new Intl.NumberFormat(
     locale === "ar" ? `ar-${country}` : currency.locale,
     {

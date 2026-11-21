@@ -3,7 +3,9 @@ import test from "node:test";
 import {
     getCurrencyConfig,
     getRegionBySlug,
+    isRegionCode,
     normalizeRegion,
+    REGION_CODES,
 } from "../src/lib/config/regions.ts";
 import { formatMoney } from "../src/lib/money.ts";
 import { validateStationGeoJson } from "../src/lib/stations/validateGeoJson.ts";
@@ -11,16 +13,27 @@ import { diffStationDataset } from "../src/lib/stations/diffDataset.ts";
 import { diffStationDatasetDetailed } from "../src/lib/stations/diffDataset.ts";
 import { vehicleForRegion } from "../src/lib/vehicles/regionConfig.ts";
 
-test("normalizes legacy region aliases", () => {
-    assert.equal(normalizeRegion("EG"), "EG-CAIRO");
-    assert.equal(normalizeRegion("KSA"), "SA");
-    assert.equal(getRegionBySlug("ae")?.code, "AE-ABU-DHABI");
+test("normalizes legacy region codes to the current Region codes", () => {
+    assert.deepEqual(REGION_CODES, ["EGY", "KSA", "UAE"]);
+    assert.equal(isRegionCode("SA"), false);
+    assert.equal(isRegionCode("EG"), false);
+    assert.equal(isRegionCode("AE"), false);
+    assert.equal(isRegionCode("EGY"), true);
+    assert.equal(isRegionCode("UAE"), true);
+    assert.equal(isRegionCode("KSA"), true);
+    assert.equal(normalizeRegion("EG"), "EGY");
+    assert.equal(normalizeRegion("EG-CAIRO"), "EGY");
+    assert.equal(normalizeRegion("SA"), "KSA");
+    assert.equal(normalizeRegion("AE"), "UAE");
+    assert.equal(normalizeRegion("AE-ABU-DHABI"), "UAE");
+    assert.equal(getRegionBySlug("sa")?.code, "KSA");
+    assert.equal(getRegionBySlug("ae")?.code, "UAE");
 });
 
 test("resolves regional currencies", () => {
-    assert.equal(getCurrencyConfig("EG-CAIRO").code, "EGP");
-    assert.equal(getCurrencyConfig("SA").code, "SAR");
-    assert.equal(getCurrencyConfig("AE-ABU-DHABI").code, "AED");
+    assert.equal(getCurrencyConfig("EGY").code, "EGP");
+    assert.equal(getCurrencyConfig("KSA").code, "SAR");
+    assert.equal(getCurrencyConfig("UAE").code, "AED");
 });
 
 test("resolves city-specific vehicle settings without changing Region currency", () => {
@@ -38,10 +51,10 @@ test("resolves city-specific vehicle settings without changing Region currency",
         occupancy: 4,
         min_occupancy: 1,
         minimum_charge: 75,
-        regionCodes: ["EG-CAIRO"],
+        regionCodes: ["EGY"],
         regionConfigs: [
             {
-                regionCode: "EG-CAIRO",
+                regionCode: "EGY",
                 cityCode: "cairo",
                 currencyCode: "EGP",
                 pricingConfigured: true,
@@ -59,7 +72,7 @@ test("resolves city-specific vehicle settings without changing Region currency",
                 sortOrder: 0,
             },
             {
-                regionCode: "EG-CAIRO",
+                regionCode: "EGY",
                 cityCode: "alexandria",
                 currencyCode: "EGP",
                 pricingConfigured: true,
@@ -80,11 +93,11 @@ test("resolves city-specific vehicle settings without changing Region currency",
     };
 
     assert.equal(
-        vehicleForRegion(vehicle, "EG-CAIRO", "alexandria")?.rate,
+        vehicleForRegion(vehicle, "EGY", "alexandria")?.rate,
         8,
     );
     assert.equal(
-        vehicleForRegion(vehicle, "EG-CAIRO", "alexandria")?.currencyCode,
+        vehicleForRegion(vehicle, "EGY", "alexandria")?.currencyCode,
         "EGP",
     );
 });
@@ -101,7 +114,7 @@ test("validates supported station GeoJSON", () => {
                 },
             ],
         },
-        "EG-CAIRO",
+        "EGY",
     );
     assert.equal(result.validCount, 1);
     assert.equal(result.invalidCount, 0);
@@ -124,7 +137,7 @@ test("rejects duplicate source ids and invalid coordinates", () => {
                 },
             ],
         },
-        "EG-CAIRO",
+        "EGY",
     );
     assert.equal(result.validCount, 1);
     assert.equal(result.invalidCount, 1);
@@ -161,9 +174,9 @@ test("computes actual station dataset changes", () => {
 });
 
 test("formats money using the regional currency", () => {
-    assert.match(formatMoney("en", 125, "EG-CAIRO"), /EGP/);
-    assert.match(formatMoney("en", 125, "SA"), /SAR/);
-    assert.match(formatMoney("en", 125, "AE-ABU-DHABI"), /AED/);
+    assert.match(formatMoney("en", 125, "EGY"), /EGP/);
+    assert.match(formatMoney("en", 125, "KSA"), /SAR/);
+    assert.match(formatMoney("en", 125, "UAE"), /AED/);
 });
 
 test("includes changed source fields in station dataset previews", () => {

@@ -55,3 +55,4 @@ backup
 /docs/*
 
 /scripts/*
+!/scripts/migrate-region-codes.cjs

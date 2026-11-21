@@ -1,12 +1,18 @@
 import type { VehicleConfig, VehicleKey } from "@/lib/config/vehicles";
 
-export const REGION_CODES = ["EG-CAIRO", "SA", "AE-ABU-DHABI"] as const;
+export const REGION_CODES = ["EGY", "KSA", "UAE"] as const;
 export type RegionCode = (typeof REGION_CODES)[number];
 
 export const REGION_SLUGS = ["eg", "sa", "ae"] as const;
 export type RegionSlug = (typeof REGION_SLUGS)[number];
 
-export const LEGACY_REGION_CODES = ["EG", "KSA"] as const;
+export const LEGACY_REGION_CODES = [
+  "EG-CAIRO",
+  "EG",
+  "SA",
+  "AE-ABU-DHABI",
+  "AE",
+] as const;
 export type LegacyRegionCode = (typeof LEGACY_REGION_CODES)[number];
 
 /** Temporary compatibility type for persisted pre-migration User.region values. */
@@ -43,8 +49,8 @@ export interface RegionConfig {
 }
 
 export const REGIONS: Record<RegionCode, RegionConfig> = {
-  "EG-CAIRO": {
-    code: "EG-CAIRO",
+  EGY: {
+    code: "EGY",
     urlSlug: "eg",
     label: "Egypt",
     labelAr: "مصر",
@@ -61,8 +67,8 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
     timezone: "Africa/Cairo",
     isActive: true,
   },
-  SA: {
-    code: "SA",
+  KSA: {
+    code: "KSA",
     urlSlug: "sa",
     label: "Saudi Arabia",
     labelAr: "السعودية",
@@ -78,8 +84,8 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
     timezone: "Asia/Riyadh",
     isActive: true,
   },
-  "AE-ABU-DHABI": {
-    code: "AE-ABU-DHABI",
+  UAE: {
+    code: "UAE",
     urlSlug: "ae",
     label: "United Arab Emirates",
     labelAr: "الإمارات العربية المتحدة",
@@ -97,30 +103,33 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
 };
 
 export const LEGACY_REGION_ALIASES: Record<LegacyRegionCode, RegionCode> = {
-  EG: "EG-CAIRO",
-  KSA: "SA",
+  "EG-CAIRO": "EGY",
+  EG: "EGY",
+  SA: "KSA",
+  "AE-ABU-DHABI": "UAE",
+  AE: "UAE",
 };
 
 export const REGION_LIST = Object.values(REGIONS);
-export const DEFAULT_REGION: RegionCode = "EG-CAIRO";
+export const DEFAULT_REGION: RegionCode = "EGY";
 
 export const CAPITAL_CITY_CODES: Record<RegionCode, string> = {
-  "EG-CAIRO": "cairo",
-  SA: "riyadh",
-  "AE-ABU-DHABI": "abu-dhabi",
+  EGY: "cairo",
+  KSA: "riyadh",
+  UAE: "abu-dhabi",
 };
 
 /** Which regions each vehicle type is offered in ("all" = every region). */
 export const VEHICLE_REGIONS: Partial<
   Record<VehicleKey, RegionCode[] | "all">
 > = {
-  private_car: ["EG-CAIRO", "SA"],
+  private_car: ["EGY", "KSA"],
   taxi_private: "all",
   taxi_shared: "all",
-  shared_car: ["EG-CAIRO", "SA"],
-  van_shared: ["SA"],
-  microbus_shared: ["SA", "AE-ABU-DHABI"],
-  mini_bus: ["AE-ABU-DHABI"],
+  shared_car: ["EGY", "KSA"],
+  van_shared: ["KSA"],
+  microbus_shared: ["KSA", "UAE"],
+  mini_bus: ["UAE"],
 };
 
 export function isRegionCode(value: unknown): value is RegionCode {
@@ -139,15 +148,18 @@ export function isRegionKey(value: unknown): value is RegionKey {
 
 export function normalizeRegion(value: unknown): RegionCode {
   if (isRegionCode(value)) return value;
-  if (typeof value === "string" && value in LEGACY_REGION_ALIASES) {
+  if (
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(LEGACY_REGION_ALIASES, value)
+  ) {
     return LEGACY_REGION_ALIASES[value as LegacyRegionCode];
   }
   return DEFAULT_REGION;
 }
 
 export function getRegionConfig(value: unknown): RegionConfig | null {
-  if (!isRegionCode(value)) return null;
-  return REGIONS[value];
+  if (!isRegionKey(value)) return null;
+  return REGIONS[normalizeRegion(value)];
 }
 
 export function getRegionBySlug(value: unknown): RegionConfig | null {

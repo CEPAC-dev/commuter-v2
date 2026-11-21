@@ -5,7 +5,7 @@
 const fs = require("fs");
 const { MongoClient } = require("mongodb");
 
-const REGIONS = ["EG-CAIRO", "SA", "AE-ABU-DHABI"];
+const REGIONS = ["EGY", "KSA", "UAE"];
 
 function loadEnv() {
     if (!fs.existsSync(".env.local")) return;
@@ -39,8 +39,9 @@ async function countResolvableByUser(collection, userField) {
                     $ifNull: [
                         "$user.defaultRegionCode",
                         { $switch: { branches: [
-                            { case: { $eq: ["$user.region", "EG"] }, then: "EG-CAIRO" },
-                            { case: { $eq: ["$user.region", "KSA"] }, then: "SA" },
+                            { case: { $in: ["$user.region", ["EG-CAIRO", "EG"]] }, then: "EGY" },
+                            { case: { $eq: ["$user.region", "SA"] }, then: "KSA" },
+                            { case: { $in: ["$user.region", ["AE-ABU-DHABI", "AE"]] }, then: "UAE" },
                             { case: { $in: ["$user.region", REGIONS] }, then: "$user.region" },
                         ], default: null } },
                     ],

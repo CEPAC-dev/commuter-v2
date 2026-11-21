@@ -237,7 +237,7 @@ export default function UserManagementClient({
 
   async function saveChanges(user: UserRow) {
     const userId = user._id;
-    const defaultRegionCode = user.defaultRegionCode ?? "EG-CAIRO";
+    const defaultRegionCode = user.defaultRegionCode ?? "EGY";
     const allowedRegionCodes = Array.from(
       new Set([...(user.allowedRegionCodes ?? []), defaultRegionCode]),
     ) as RegionCode[];
@@ -599,7 +599,7 @@ export default function UserManagementClient({
                       <InfoCard title="Admin controls">
                         <FieldSelect
                           label="Default region"
-                          value={user.defaultRegionCode ?? "EG-CAIRO"}
+                          value={user.defaultRegionCode ?? "EGY"}
                           onChange={(value) =>
                             updateRow(user._id, {
                               defaultRegionCode: value as RegionCode,

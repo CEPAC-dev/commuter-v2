@@ -109,15 +109,12 @@ export function formatEgp(
   regionCode?: string,
 ): string {
   const fallbackRegion =
-    regionCode && regionCode !== "EGP" ? regionCode : "EG-CAIRO";
-  const region =
-    regionCode && ["EG-CAIRO", "SA", "AE-ABU-DHABI"].includes(regionCode)
-      ? regionCode
-      : fallbackRegion;
+    regionCode && regionCode !== "EGP" ? regionCode : "EGY";
+  const region = fallbackRegion;
   const currency =
-    region === "SA"
+    region === "KSA" || region === "SA"
       ? { code: "SAR", locale: locale === "ar" ? "ar-SA" : "en-SA" }
-      : region === "AE-ABU-DHABI"
+      : region === "UAE" || region === "AE" || region === "AE-ABU-DHABI"
         ? { code: "AED", locale: locale === "ar" ? "ar-AE" : "en-AE" }
         : { code: "EGP", locale: locale === "ar" ? "ar-EG" : "en-EG" };
   const intl = currency.locale;

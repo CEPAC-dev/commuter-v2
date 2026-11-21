@@ -3,7 +3,7 @@ import { Schema, model, models, Types } from "mongoose";
 /** One document per City/State; also provides a durable compare-and-set publish lock. */
 const StationRegionStateSchema = new Schema(
   {
-    regionCode: { type: String, required: true, enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"] },
+    regionCode: { type: String, required: true, enum: ["EGY", "KSA", "UAE"] },
     cityCode: { type: String, required: true, trim: true, lowercase: true },
     activeDatasetVersionId: { type: Types.ObjectId, ref: "StationDataset", default: null },
     publishingDatasetVersionId: { type: Types.ObjectId, ref: "StationDataset", default: null },

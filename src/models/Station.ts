@@ -16,7 +16,7 @@ const StationSchema = new Schema(
     regionCode: {
       type: String,
       required: false,
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      enum: ["EGY", "KSA", "UAE"],
     },
     cityCode: { type: String, required: true, trim: true, lowercase: true },
     datasetVersionId: {
@@ -44,7 +44,7 @@ if (existingStationModel && !existingStationModel.schema.path("regionCode")) {
     regionCode: {
       type: String,
       required: false,
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      enum: ["EGY", "KSA", "UAE"],
     },
     datasetVersionId: {
       type: Types.ObjectId,

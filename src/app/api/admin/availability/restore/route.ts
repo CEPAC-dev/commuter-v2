@@ -7,6 +7,7 @@ import { DAYS_OF_WEEK } from "@/lib/services/availability";
 import {
   CAPITAL_CITY_CODES,
   isRegionCode,
+  isRegionKey,
   normalizeRegion,
 } from "@/lib/config/regions";
 
@@ -76,8 +77,8 @@ export async function POST(req: NextRequest) {
   const driverRegionById = new Map(
     drivers.map((driver) => [
       String(driver._id),
-      isRegionCode(driver.defaultRegionCode)
-        ? driver.defaultRegionCode
+      isRegionKey(driver.defaultRegionCode)
+        ? normalizeRegion(driver.defaultRegionCode)
         : normalizeRegion(driver.region),
     ]),
   );

@@ -172,12 +172,7 @@ export async function POST(req: NextRequest) {
       passwordHash,
       email: normalizedEmail,
       role: "driver",
-      region:
-        selectedRegion === "SA"
-          ? "KSA"
-          : selectedRegion === "EG-CAIRO"
-            ? "EG"
-            : selectedRegion,
+      region: selectedRegion,
       defaultRegionCode: selectedRegion,
       defaultCityCode: String(cityCode).trim().toLowerCase(),
       allowedRegionCodes: [selectedRegion],

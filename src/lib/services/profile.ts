@@ -6,7 +6,6 @@ import { User } from "@/models/User";
 import type { SavedAddress } from "@/types/shared";
 import { normalizeCarType, type CarType } from "@/lib/config/driver";
 import {
-  isRegionCode,
   isRegionKey,
   normalizeRegion,
   type RegionCode,
@@ -81,8 +80,8 @@ export async function getProfile(
     }>();
   if (!user) return null;
 
-  const region = isRegionCode(user.defaultRegionCode)
-    ? user.defaultRegionCode
+  const region = isRegionKey(user.defaultRegionCode)
+    ? normalizeRegion(user.defaultRegionCode)
     : isRegionKey(user.region)
       ? normalizeRegion(user.region)
       : null;

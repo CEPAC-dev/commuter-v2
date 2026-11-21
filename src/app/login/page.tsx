@@ -112,16 +112,16 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
-  const [region, setRegion] = useState<RegionCode>("EG-CAIRO");
+  const [region, setRegion] = useState<RegionCode>("EGY");
   const [cityCode, setCityCode] = useState("cairo");
   const [cities, setCities] = useState<
     Array<{ regionCode: RegionCode; cityCode: string; name: string; nameAr: string }>
   >([]);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const regionLabel = (code: RegionCode) =>
-    code === "EG-CAIRO"
+    code === "EGY"
       ? "Egypt"
-      : code === "SA"
+      : code === "KSA"
         ? "Saudi Arabia"
         : "United Arab Emirates";
   const selectedCity = cities.find(

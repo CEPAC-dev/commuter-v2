@@ -108,7 +108,7 @@ export async function PATCH(
         return NextResponse.json({ error: "User not found" }, { status: 404 });
       }
       const requestedDefault =
-        body.defaultRegionCode ?? currentUser.defaultRegionCode ?? "EG-CAIRO";
+        body.defaultRegionCode ?? currentUser.defaultRegionCode ?? "EGY";
       if (
         !isRegionCode(requestedDefault) ||
         !allowedRegionCodes.includes(requestedDefault)

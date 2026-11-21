@@ -11,6 +11,7 @@
     "seed:stations": "node scripts/seed-stations.cjs",
     "seed:prod-data": "node scripts/seed-prod-data.cjs",
     "migrate:public-numbers": "node scripts/backfill-public-numbers.cjs",
+    "migrate:region-codes": "node scripts/migrate-region-codes.cjs",
     "migrate:region-cities": "node scripts/backfill-region-cities.cjs",
     "audit:station-regions": "node scripts/audit-station-region-migration.cjs"
   },

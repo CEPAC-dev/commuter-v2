@@ -83,7 +83,7 @@ export default function DriverRegisterForm({
   gender,
   setGender,
   referralCode,
-  region = "EG-CAIRO",
+  region = "EGY",
   setRegion,
   cityCode,
   setCityCode,
@@ -187,9 +187,9 @@ export default function DriverRegisterForm({
             }}
             style={selectStyle}
           >
-            <option value="EG-CAIRO">Egypt</option>
-            <option value="SA">Saudi Arabia</option>
-            <option value="AE-ABU-DHABI">United Arab Emirates</option>
+            <option value="EGY">Egypt</option>
+            <option value="KSA">Saudi Arabia</option>
+            <option value="UAE">United Arab Emirates</option>
           </select>
         </div>
         <div>

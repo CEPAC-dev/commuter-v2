@@ -25,7 +25,7 @@ const StationAuditLogSchema = new Schema(
     regionCode: {
       type: String,
       required: true,
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      enum: ["EGY", "KSA", "UAE"],
       index: true,
     },
     cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },

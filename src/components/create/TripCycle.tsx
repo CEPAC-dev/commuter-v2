@@ -495,7 +495,7 @@ export default function TripCycle({
   data,
   index,
   canRemove,
-  regionCode = "EG-CAIRO",
+  regionCode = "EGY",
   cityCode,
   mapSettings,
   onChange,

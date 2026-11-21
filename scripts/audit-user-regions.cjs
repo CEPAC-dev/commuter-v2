@@ -43,11 +43,11 @@ async function main() {
             ])
             .toArray();
         const invalidLegacyRegions = await users
-            .find({ region: { $nin: ["EG", "KSA", "EG-CAIRO", "SA", "AE-ABU-DHABI", null] } })
+            .find({ region: { $nin: ["EGY", "KSA", "UAE", null] } })
             .project({ _id: 1, role: 1, region: 1 })
             .toArray();
         const invalidAllowedRegions = await users
-            .find({ allowedRegionCodes: { $elemMatch: { $nin: ["EG-CAIRO", "SA", "AE-ABU-DHABI"] } } })
+            .find({ allowedRegionCodes: { $elemMatch: { $nin: ["EGY", "KSA", "UAE"] } } })
             .project({ _id: 1, role: 1, allowedRegionCodes: 1 })
             .toArray();
 

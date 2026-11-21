@@ -7,7 +7,11 @@ import { connectDB } from "@/lib/db/mongoose";
 import UserManagementClient from "@/components/admin/UserManagementClient";
 import UnlimitedReferralCards from "@/components/admin/UnlimitedReferralCards";
 import { AdminPageContainer, AdminPageHeader } from "@/components/admin/layout";
-import { isRegionCode, REGION_CODES } from "@/lib/config/regions";
+import {
+  isRegionKey,
+  normalizeRegion,
+  REGION_CODES,
+} from "@/lib/config/regions";
 
 function toPlainValue(value: unknown): unknown {
   if (value === null || value === undefined) return value;
@@ -107,15 +111,15 @@ export default async function AdminUsersPage() {
           ? plainUser.userNumber
           : undefined,
       role: typeof plainUser.role === "string" ? plainUser.role : "passenger",
-      defaultRegionCode: isRegionCode(plainUser.defaultRegionCode)
-        ? plainUser.defaultRegionCode
+      defaultRegionCode: isRegionKey(plainUser.defaultRegionCode)
+        ? normalizeRegion(plainUser.defaultRegionCode)
         : undefined,
       allowedRegionCodes: Array.isArray(plainUser.allowedRegionCodes)
         ? plainUser.allowedRegionCodes.filter(
             (code): code is (typeof REGION_CODES)[number] =>
-              typeof code === "string" &&
-              (REGION_CODES as readonly string[]).includes(code),
+              isRegionKey(code),
           )
+          .map((code) => normalizeRegion(code))
         : [],
       referralCode:
         typeof plainUser.referralCode === "string"

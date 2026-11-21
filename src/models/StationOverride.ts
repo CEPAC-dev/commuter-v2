@@ -3,7 +3,7 @@ import { Schema, model, models, Types } from "mongoose";
 /** Manual changes layered over the immutable dataset source projection. */
 const StationOverrideSchema = new Schema(
   {
-    regionCode: { type: String, required: true, enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"], index: true },
+    regionCode: { type: String, required: true, enum: ["EGY", "KSA", "UAE"], index: true },
     cityCode: { type: String, required: true, trim: true, lowercase: true },
     stationId: { type: Types.ObjectId, ref: "Station", required: true },
     objectId: { type: Number, required: true },

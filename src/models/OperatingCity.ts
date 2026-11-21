@@ -9,7 +9,7 @@ const OperatingCitySchema = new Schema(
       lowercase: true,
       match: /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
     },
-    regionCode: { type: String, required: true, index: true },
+    regionCode: { type: String, required: true, enum: ["EGY", "KSA", "UAE"], index: true },
     name: { type: String, required: true, trim: true, maxlength: 100 },
     nameAr: { type: String, required: true, trim: true, maxlength: 100 },
     isCapital: { type: Boolean, required: true, default: false },

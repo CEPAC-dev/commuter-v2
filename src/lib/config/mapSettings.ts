@@ -79,9 +79,9 @@ export function defaultMapSettings(
     directPointZoneIds: [],
     stationZoneIds: [],
     // Only Greater Cairo currently has a committed service-zone dataset.
-    showZones: isCapital && regionCode === "EG-CAIRO",
+    showZones: isCapital && regionCode === "EGY",
     // Keep zone labels hidden for now while the service-area boundary remains visible.
     showZoneLabels: false,
-    maskOutsideZones: isCapital && regionCode === "EG-CAIRO",
+    maskOutsideZones: isCapital && regionCode === "EGY",
   };
 }

@@ -74,7 +74,7 @@ export async function getServiceZoneConfig(
     };
   }
 
-  if (regionCode === "EG-CAIRO") {
+  if (regionCode === "EGY") {
     try {
       const file = await readFile(
         path.join(process.cwd(), "public", "geo", "zone_polygon.geojson"),

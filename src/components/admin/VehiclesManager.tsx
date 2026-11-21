@@ -61,8 +61,8 @@ const blank: Vehicle = {
 };
 
 function getCurrencyCodeForRegion(regionCode: RegionCode): CurrencyCode {
-  if (regionCode === "SA") return "SAR";
-  if (regionCode === "AE-ABU-DHABI") return "AED";
+  if (regionCode === "KSA") return "SAR";
+  if (regionCode === "UAE") return "AED";
   return "EGP";
 }
 

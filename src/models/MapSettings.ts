@@ -5,7 +5,7 @@ const MapSettingsSchema = new Schema(
     regionCode: {
       type: String,
       required: true,
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      enum: ["EGY", "KSA", "UAE"],
     },
     cityCode: { type: String, required: true, trim: true, lowercase: true },
     provider: { type: String, required: true, enum: ["google", "osm"] },

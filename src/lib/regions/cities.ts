@@ -15,9 +15,9 @@ export const CAPITAL_CITIES: Record<
     nameAr: string;
   }
 > = {
-  "EG-CAIRO": { cityCode: "cairo", name: "Cairo", nameAr: "القاهرة" },
-  SA: { cityCode: "riyadh", name: "Riyadh", nameAr: "الرياض" },
-  "AE-ABU-DHABI": {
+  EGY: { cityCode: "cairo", name: "Cairo", nameAr: "القاهرة" },
+  KSA: { cityCode: "riyadh", name: "Riyadh", nameAr: "الرياض" },
+  UAE: {
     cityCode: "abu-dhabi",
     name: "Abu Dhabi",
     nameAr: "أبوظبي",

@@ -6,7 +6,7 @@ const ZoneDatasetSchema = new Schema(
       type: String,
       required: true,
       unique: true,
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      enum: ["EGY", "KSA", "UAE"],
     },
     sourceName: { type: String, required: true, maxlength: 160 },
     features: { type: [Schema.Types.Mixed], required: true, default: [] },

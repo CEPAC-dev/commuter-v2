@@ -3,7 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import {
   DEFAULT_REGION,
   getRegionBySlug,
-  isRegionCode,
+  isRegionKey,
   normalizeRegion,
   REGION_CODES,
   REGIONS,
@@ -43,7 +43,7 @@ export interface ActiveRegion {
 
 function requestedRegion(value: string | null | undefined): RegionCode | null {
   if (!value) return null;
-  if (isRegionCode(value)) return value;
+  if (isRegionKey(value)) return normalizeRegion(value);
   return getRegionBySlug(value)?.code ?? null;
 }
 
@@ -76,11 +76,15 @@ export async function resolveActiveRegion({
   if (!user) throw new RegionAccessError(403, "Region access denied.");
 
   const configuredAllowed = Array.isArray(user.allowedRegionCodes)
-    ? user.allowedRegionCodes.filter(isRegionCode)
+    ? [...new Set(
+        user.allowedRegionCodes
+          .filter(isRegionKey)
+          .map((code) => normalizeRegion(code)),
+      )]
     : [];
-  const defaultRegionCode = isRegionCode(user.defaultRegionCode)
-    ? user.defaultRegionCode
-    : user.region
+  const defaultRegionCode = isRegionKey(user.defaultRegionCode)
+    ? normalizeRegion(user.defaultRegionCode)
+    : isRegionKey(user.region)
       ? normalizeRegion(user.region)
       : DEFAULT_REGION;
   // Initial rollout policy: admins without explicit assignments access all

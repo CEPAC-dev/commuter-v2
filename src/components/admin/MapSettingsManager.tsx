@@ -94,7 +94,7 @@ type GoogleMapsApi = {
 };
 
 export default function MapSettingsManager() {
-  const [regionCode, setRegionCode] = useState<RegionCode>("EG-CAIRO");
+  const [regionCode, setRegionCode] = useState<RegionCode>("EGY");
   const [cityCode, setCityCode] = useState("cairo");
   const [cities, setCities] = useState<CityOption[]>([]);
   const [settings, setSettings] = useState<MapSettings | null>(null);
