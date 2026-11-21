@@ -34,6 +34,18 @@ test('rejects mismatched external origins', () => {
         contentType: 'application/json',
     });
 
+    test('allows any of the two configured APP_URL origins', () => {
+        process.env.APP_URL = 'https://example.com,https://second.example';
+        const req = makeRequest('https://second.example/api/auth/otp/request', {
+            origin: 'https://second.example',
+            host: 'second.example',
+            contentType: 'application/json',
+        });
+
+        const response = validateMutationRequest(req, { requireJson: true });
+        assert.equal(response, null);
+    });
+
     const response = validateMutationRequest(req, { requireJson: true });
 
     assert.ok(response);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parseAppUrls } from "../appUrl.ts";
 
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -63,11 +64,13 @@ function getConfiguredOrigins(): string[] {
   ].filter((value): value is string => Boolean(value));
 
   const origins = new Set<string>();
-  for (const value of raw) {
-    try {
-      origins.add(new URL(value).origin);
-    } catch {
-      // Ignore invalid env values; the request will still be checked against the request origin.
+  for (const entry of raw) {
+    for (const value of parseAppUrls(entry)) {
+      try {
+        origins.add(new URL(value).origin);
+      } catch {
+        // Ignore invalid env values; the request will still be checked against the request origin.
+      }
     }
   }
 

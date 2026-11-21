@@ -345,6 +345,20 @@ test("APP_URL validation permits loopback only in non-production test mode", () 
       .valid,
     false,
   );
+  assert.equal(
+    validatePaymentAppUrl(
+      "https://commuter.example,https://second.example",
+      productionTest,
+    ).baseUrl,
+    "https://commuter.example",
+  );
+  assert.equal(
+    validatePaymentAppUrl(
+      "https://commuter.example,https://second.example",
+      { ...productionTest, preferredOrigin: "https://second.example" },
+    ).baseUrl,
+    "https://second.example",
+  );
 });
 
 test("all Kashier checkout session paths validate APP_URL", async () => {

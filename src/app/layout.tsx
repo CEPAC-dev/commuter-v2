@@ -3,9 +3,10 @@ import "./globals.css";
 import { getServerLocale } from "@/lib/i18n/server";
 import { localeDirection } from "@/lib/i18n/config";
 import SupportChatWidget from "@/components/support/SupportChatWidget";
+import { getPrimaryAppUrl } from "@/lib/appUrl";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(getPrimaryAppUrl(process.env.APP_URL)),
   title: {
     default: "Commuter | Book rides across Greater Cairo",
     template: "%s | Commuter",
