@@ -86,6 +86,7 @@ import {
   spacingLockUpsertFields,
 } from "@/lib/phase8bGuards";
 import { ensureTripSpacingLockTtlIndex } from "@/lib/tripSpacingLockIndex";
+import { expireStaleForUser } from "@/lib/services/requests";
 import {
   notifyAdminsOfWaitingListRequest,
   notifyAdminsOfWaitingListTripBatch,
@@ -174,6 +175,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const userId = session.userId;
+  await expireStaleForUser(userId);
   let requestGroupEnabledForRequest = false;
   let requestGroupIdForLog: string | null = null;
   let requestGroupDateCount = 0;
@@ -975,10 +977,19 @@ export async function POST(req: NextRequest) {
         return Trip.countDocuments({
           userId: new Types.ObjectId(pendingUserId),
           $or: [
-            { status: { $in: ["pending_payment", "waiting_list"] } },
+            {
+              status: {
+                $in: [
+                  "pending_payment",
+                  "waiting_list",
+                  "private_ride_offered",
+                ],
+              },
+              paymentStatus: { $in: ["pending", "failed"] },
+            },
             {
               status: "approved",
-              paymentStatus: { $nin: ["paid", "refunded"] },
+              paymentStatus: { $nin: ["paid", "refunded", "expired"] },
             },
           ],
         }).session(dbSession);
