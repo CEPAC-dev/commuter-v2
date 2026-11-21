@@ -4,102 +4,28 @@ import { isRegionCode } from "@/lib/config/regions";
 import { ensureOperatingCitySeed } from "@/lib/regions/cities";
 import { OperatingCity } from "@/models/OperatingCity";
 import { Vehicle } from "@/models/Vehicle";
-import { CAPITAL_CITY_CODES, type RegionCode } from "@/lib/config/regions";
+import { CAPITAL_CITY_CODES } from "@/lib/config/regions";
 import { invalidateVehiclesCache } from "@/lib/db/getVehicles";
 import type { VehicleRegionConfig } from "@/lib/config/vehicles";
 import { ensureVehicleSeed } from "@/lib/db/seedVehicles";
 import { validateMutationRequest } from "@/lib/security/request";
 import { MapSettingsModel } from "@/models/MapSettings";
 import { defaultMapSettings } from "@/lib/config/mapSettings";
-import { Counter } from "@/models/Counter";
-import {
-  formatOperatingCityCode,
-  getNextOperatingCityCode,
-  getOperatingCityCounterId,
-  getOperatingCitySequence,
-} from "@/lib/regions/cityCodes";
-
-async function allocateCityCode(regionCode: RegionCode) {
-  const counterId = getOperatingCityCounterId(regionCode);
-  const [cities, counter] = await Promise.all([
-    OperatingCity.find({ regionCode }).select("cityCode").lean<{ cityCode: string }[]>(),
-    Counter.findById(counterId).select("value").lean<{ value: number } | null>(),
-  ]);
-  const nextCode = getNextOperatingCityCode(
-    regionCode,
-    cities.map((city) => city.cityCode),
-    counter?.value ?? 0,
-  );
-  const currentMaximum = getOperatingCitySequence(nextCode, regionCode) - 1;
-
-  try {
-    await Counter.updateOne(
-      { _id: counterId },
-      { $max: { value: currentMaximum } },
-      { upsert: true },
-    );
-  } catch (error) {
-    if (
-      typeof error !== "object" ||
-      error === null ||
-      !("code" in error) ||
-      error.code !== 11000
-    ) {
-      throw error;
-    }
-    await Counter.updateOne(
-      { _id: counterId },
-      { $max: { value: currentMaximum } },
-    );
-  }
-
-  const counterAfterIncrement = await Counter.findByIdAndUpdate(
-    counterId,
-    { $inc: { value: 1 } },
-    {
-      returnDocument: "after",
-      upsert: true,
-      setDefaultsOnInsert: true,
-    },
-  ).lean<{ value: number } | null>();
-  if (!counterAfterIncrement) {
-    throw new Error(`Could not allocate a City/State code for ${regionCode}.`);
-  }
-  return formatOperatingCityCode(regionCode, counterAfterIncrement.value).toLowerCase();
-}
 
 export async function GET(request: NextRequest) {
   const regionCode = request.nextUrl.searchParams.get("regionCode");
   if (regionCode && !isRegionCode(regionCode)) {
     return NextResponse.json({ error: "Choose a valid Region." }, { status: 400 });
   }
-  const selectedRegionCode =
-    regionCode && isRegionCode(regionCode) ? regionCode : null;
   const auth = regionCode
     ? await adminAuth(undefined, regionCode)
     : await adminAuth();
   if (!auth.authorized) return auth.response;
   await ensureOperatingCitySeed();
-  const [cities, counter] = await Promise.all([
-    OperatingCity.find(
-      selectedRegionCode ? { regionCode: selectedRegionCode } : {},
-    )
-      .sort({ isCapital: -1, name: 1 })
-      .lean(),
-    selectedRegionCode
-      ? Counter.findById(getOperatingCityCounterId(selectedRegionCode))
-          .select("value")
-          .lean<{ value: number } | null>()
-      : Promise.resolve(null),
-  ]);
-  const nextCityCode = selectedRegionCode
-    ? getNextOperatingCityCode(
-        selectedRegionCode,
-        cities.map((city) => city.cityCode),
-        counter?.value ?? 0,
-      )
-    : null;
-  return NextResponse.json({ cities, nextCityCode });
+  const cities = await OperatingCity.find(regionCode ? { regionCode } : {})
+    .sort({ isCapital: -1, name: 1 })
+    .lean();
+  return NextResponse.json({ cities });
 }
 
 export async function POST(request: NextRequest) {
@@ -111,6 +37,8 @@ export async function POST(request: NextRequest) {
   }
   const value = body as Record<string, unknown>;
   const regionCode = value.regionCode;
+  const cityCode =
+    typeof value.cityCode === "string" ? value.cityCode.trim().toLowerCase() : "";
   const name = typeof value.name === "string" ? value.name.trim() : "";
   const nameAr = typeof value.nameAr === "string" ? value.nameAr.trim() : "";
   const timezone = typeof value.timezone === "string" ? value.timezone.trim() : "";
@@ -130,6 +58,7 @@ export async function POST(request: NextRequest) {
     validTimezone = false;
   }
   if (
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cityCode) ||
     !name ||
     name.length > 100 ||
     !nameAr ||
@@ -153,7 +82,6 @@ export async function POST(request: NextRequest) {
   await ensureOperatingCitySeed();
   await ensureVehicleSeed();
   try {
-    const cityCode = await allocateCityCode(regionCode);
     const city = await OperatingCity.create({
       regionCode,
       cityCode,

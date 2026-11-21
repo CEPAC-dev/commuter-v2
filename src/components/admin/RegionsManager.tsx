@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { REGIONS, type RegionCode } from "@/lib/config/regions";
 import RegionCityCenterMap from "@/components/admin/RegionCityCenterMap";
-import { getNextOperatingCityCode } from "@/lib/regions/cityCodes";
 
 const fieldClassName =
   "h-11 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] px-3 text-sm text-[var(--color-primary)] shadow-sm transition placeholder:text-slate-400 focus:border-[var(--color-secondary)] focus:outline-none focus:ring-4 focus:ring-teal-500/15";
@@ -46,7 +45,6 @@ export default function RegionsManager({
 }) {
   const regionTimezone = REGIONS[regionCode].timezone;
   const [cities, setCities] = useState<City[]>([]);
-  const [nextCityCode, setNextCityCode] = useState(`${regionCode}-1`);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingZones, setSavingZones] = useState(false);
@@ -55,6 +53,7 @@ export default function RegionsManager({
   const [success, setSuccess] = useState("");
   const [name, setName] = useState("");
   const [nameAr, setNameAr] = useState("");
+  const [cityCode, setCityCode] = useState("");
   const [timezone, setTimezone] = useState(regionTimezone);
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
@@ -84,14 +83,6 @@ export default function RegionsManager({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Could not load cities.");
       setCities(data.cities);
-      setNextCityCode(
-        typeof data.nextCityCode === "string"
-          ? data.nextCityCode
-          : getNextOperatingCityCode(
-              regionCode,
-              data.cities.map((city: City) => city.cityCode),
-            ),
-      );
       if (zoneCityCode) {
         const selected = data.cities.find(
           (city: City) => city.cityCode === zoneCityCode,
@@ -117,14 +108,6 @@ export default function RegionsManager({
         if (!response.ok) throw new Error(data.error ?? "Could not load cities.");
         if (cancelled) return;
         setCities(data.cities);
-        setNextCityCode(
-          typeof data.nextCityCode === "string"
-            ? data.nextCityCode
-            : getNextOperatingCityCode(
-                regionCode,
-                data.cities.map((city: City) => city.cityCode),
-              ),
-        );
       })
       .catch((loadError: unknown) => {
         if (!cancelled) {
@@ -156,6 +139,7 @@ export default function RegionsManager({
           regionCode,
           name,
           nameAr,
+          cityCode,
           timezone,
           lat: Number(lat),
           lng: Number(lng),
@@ -165,11 +149,12 @@ export default function RegionsManager({
       if (!response.ok) throw new Error(data.error ?? "Could not add city.");
       const createdCode =
         typeof data.city?.cityCode === "string"
-          ? data.city.cityCode.toUpperCase()
-          : nextCityCode;
+          ? data.city.cityCode
+          : cityCode;
       setSuccess(`${name} was added with code ${createdCode}.`);
       setName("");
       setNameAr("");
+      setCityCode("");
       setTimezone(regionTimezone);
       setLat("");
       setLng("");
@@ -348,8 +333,8 @@ export default function RegionsManager({
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--color-muted)]">
-                  <span className="font-mono font-semibold uppercase tracking-wide">
-                    {city.cityCode.toUpperCase()}
+                  <span className="font-mono font-semibold tracking-wide">
+                    {city.cityCode}
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <Clock3 size={14} aria-hidden="true" />
@@ -360,34 +345,32 @@ export default function RegionsManager({
                   </span>
                 </div>
               </div>
-              {!city.isCapital && (
-                <div className="flex flex-wrap gap-2 sm:shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => void toggleCity(city)}
-                    disabled={updatingCityCode === city.cityCode}
-                    className={secondaryButtonClassName}
-                  >
-                    {updatingCityCode === city.cityCode ? (
-                      <LoaderCircle size={16} className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <ShieldCheck size={16} aria-hidden="true" />
-                    )}
-                    {city.active ? "Deactivate" : "Activate"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setZoneCityCode(city.cityCode);
-                      setZoneJson(JSON.stringify(city.zoneFeatures ?? [], null, 2));
-                    }}
-                    className={secondaryButtonClassName}
-                  >
-                    <MapPinned size={16} aria-hidden="true" />
-                    Configure zones
-                  </button>
-                </div>
-              )}
+              <div className="flex flex-wrap gap-2 sm:shrink-0">
+                <button
+                  type="button"
+                  onClick={() => void toggleCity(city)}
+                  disabled={updatingCityCode === city.cityCode}
+                  className={secondaryButtonClassName}
+                >
+                  {updatingCityCode === city.cityCode ? (
+                    <LoaderCircle size={16} className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <ShieldCheck size={16} aria-hidden="true" />
+                  )}
+                  {city.active ? "Deactivate" : "Activate"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZoneCityCode(city.cityCode);
+                    setZoneJson(JSON.stringify(city.zoneFeatures ?? [], null, 2));
+                  }}
+                  className={secondaryButtonClassName}
+                >
+                  <MapPinned size={16} aria-hidden="true" />
+                  Configure zones
+                </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -467,7 +450,7 @@ export default function RegionsManager({
               Add City/State
             </h2>
             <p className="mb-0 mt-1 text-sm text-[var(--color-muted)]">
-              Set the city details and choose its center on the map.
+              Enter a unique City/State code and choose its center on the map.
             </p>
           </div>
         </div>
@@ -509,10 +492,19 @@ export default function RegionsManager({
             <label className={labelClassName}>
               Code
               <input
-                readOnly
-                aria-describedby="city-code-help"
-                value={nextCityCode}
-                className={`${fieldClassName} bg-slate-50 font-mono font-bold uppercase tracking-wide`}
+                required
+                maxLength={80}
+                autoComplete="off"
+                value={cityCode}
+                onChange={(event) =>
+                  setCityCode(
+                    event.target.value
+                      .toLowerCase()
+                      .replace(/[^a-z0-9-]/g, ""),
+                  )
+                }
+                className={`${fieldClassName} font-mono`}
+                placeholder="e.g. alexandria"
               />
             </label>
             <label className={labelClassName}>
@@ -527,8 +519,8 @@ export default function RegionsManager({
               />
             </label>
           </div>
-          <p id="city-code-help" className="-mt-3 mb-0 text-xs leading-5 text-[var(--color-muted)]">
-            Assigned by the server and incremented within this Region. Map selection defaults the timezone to {regionTimezone}.
+          <p className="-mt-3 mb-0 text-xs leading-5 text-[var(--color-muted)]">
+            Use lowercase letters, numbers, and hyphens; codes must be unique within this Region. Map selection defaults the timezone to {regionTimezone}.
           </p>
 
           <div className="grid gap-4 sm:grid-cols-2">
