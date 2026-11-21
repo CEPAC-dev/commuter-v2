@@ -138,6 +138,7 @@ interface Props {
   index: number;
   canRemove: boolean;
   regionCode?: RegionCode;
+  cityCode: string;
   mapSettings?: MapSettings;
   onChange: (updated: TripData) => void;
   onRemove: () => void;
@@ -495,6 +496,7 @@ export default function TripCycle({
   index,
   canRemove,
   regionCode = "EG-CAIRO",
+  cityCode,
   mapSettings,
   onChange,
   onRemove,
@@ -532,12 +534,13 @@ export default function TripCycle({
   const vMap = vehiclesMap ?? VEHICLES;
   const vList = vehicleList ?? VEHICLE_LIST;
   const fallbackMapSettings = useMemo(
-    () => mapSettings ?? defaultMapSettings(regionCode),
-    [mapSettings, regionCode],
+    () => mapSettings ?? defaultMapSettings(regionCode, cityCode),
+    [mapSettings, regionCode, cityCode],
   );
   const previousStopErrorRef = useRef<string | null>(null);
   const [zoneState, setZoneState] = useState<{
     regionCode: RegionCode;
+    cityCode: string;
     features: ZoneFeature[];
     stationAssignment: Pick<
       MapSettings,
@@ -549,11 +552,15 @@ export default function TripCycle({
     failed: boolean;
   } | null>(null);
   const zoneFeatures =
-    zoneState?.regionCode === regionCode ? zoneState.features : [];
+    zoneState?.regionCode === regionCode && zoneState.cityCode === cityCode
+      ? zoneState.features
+      : [];
   const zoneLoadError =
-    zoneState?.regionCode === regionCode && zoneState.failed;
+    zoneState?.regionCode === regionCode &&
+    zoneState.cityCode === cityCode &&
+    zoneState.failed;
   const stationAssignment =
-    zoneState?.regionCode === regionCode
+    zoneState?.regionCode === regionCode && zoneState.cityCode === cityCode
       ? zoneState.stationAssignment
       : {
           stationAssignmentMode: fallbackMapSettings.stationAssignmentMode,
@@ -585,9 +592,10 @@ export default function TripCycle({
     if (!needsZones) return;
 
     let cancelled = false;
-    fetch(`/api/zones?region=${encodeURIComponent(regionCode)}`, {
-      cache: "no-store",
-    })
+    fetch(
+      `/api/zones?region=${encodeURIComponent(regionCode)}&cityCode=${encodeURIComponent(cityCode)}`,
+      { cache: "no-store" },
+    )
       .then((response) => {
         if (!response.ok) throw new Error("Unable to load zone data.");
         return response.json();
@@ -615,6 +623,7 @@ export default function TripCycle({
         }
         setZoneState({
           regionCode,
+          cityCode,
           features: (configuration.features ?? []).filter(
             (feature): feature is ZoneFeature =>
               feature.geometry?.type === "Polygon" ||
@@ -633,6 +642,7 @@ export default function TripCycle({
         if (!cancelled) {
           setZoneState({
             regionCode,
+            cityCode,
             features: [],
             stationAssignment: {
               stationAssignmentMode:
@@ -655,6 +665,7 @@ export default function TripCycle({
     fallbackMapSettings.directPointZoneIds,
     fallbackMapSettings.stationZoneIds,
     regionCode,
+    cityCode,
   ]);
 
   function validateLocationPoint(point: TripPoint | null) {

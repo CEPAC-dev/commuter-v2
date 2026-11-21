@@ -25,6 +25,7 @@ import {
 import { isValidSecurityQuestionId } from "@/lib/config/verification";
 import { isRegionCode, type RegionCode } from "@/lib/config/regions";
 import { createWelcomeNotification } from "@/lib/notifications/welcomeNotification";
+import { isOperatingCityInRegion } from "@/lib/regions/cities";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
       securityQuestionId,
       securityAnswer,
       regionCode,
+      cityCode,
       gender,
     } = await req.json();
     const safeName = normalizePlainText(name, { maxLength: 100 });
@@ -51,6 +53,12 @@ export async function POST(req: NextRequest) {
     if (!isRegionCode(regionCode)) {
       return NextResponse.json(
         { error: "Choose a valid city before creating your account." },
+        { status: 400 },
+      );
+    }
+    if (!(await isOperatingCityInRegion(regionCode, cityCode))) {
+      return NextResponse.json(
+        { error: "Choose an active City/State within the selected Region." },
         { status: 400 },
       );
     }
@@ -147,6 +155,7 @@ export async function POST(req: NextRequest) {
             ? "EG"
             : regionCode,
       defaultRegionCode: regionCode as RegionCode,
+      defaultCityCode: String(cityCode).trim().toLowerCase(),
       allowedRegionCodes: [regionCode as RegionCode],
       referralCode,
       gender,

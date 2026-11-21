@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
 import {
   defaultMapSettings,
@@ -41,26 +41,22 @@ function isZoneIdList(value: unknown): value is string[] {
   );
 }
 
-async function requireAdmin() {
-  const session = await getSession();
-  return session?.role === "admin" ? session : null;
-}
-
 export async function GET(request: NextRequest) {
-  if (!(await requireAdmin())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
   const regionCode = request.nextUrl.searchParams.get("regionCode");
-  if (!isRegionCode(regionCode)) {
-    return NextResponse.json({ error: "Invalid region." }, { status: 400 });
+  const cityCode = request.nextUrl.searchParams.get("cityCode")?.trim().toLowerCase();
+  if (!isRegionCode(regionCode) || !cityCode) {
+    return NextResponse.json({ error: "Choose a valid Region and City/State." }, { status: 400 });
   }
+  const auth = await adminAuth(undefined, regionCode, cityCode);
+  if (!auth.authorized) return auth.response;
   await connectDB();
-  const stored = await MapSettingsModel.findOne({ regionCode }).lean();
-  const fallback = defaultMapSettings(regionCode);
+  const stored = await MapSettingsModel.findOne({ regionCode, cityCode }).lean();
+  const fallback = defaultMapSettings(regionCode, cityCode);
   return NextResponse.json({
     data: stored
       ? {
           regionCode,
+          cityCode,
           provider: stored.provider ?? fallback.provider,
           canvasStyle: stored.canvasStyle ?? fallback.canvasStyle,
           osmTheme: stored.osmTheme ?? fallback.osmTheme,
@@ -83,14 +79,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  if (!(await requireAdmin())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
   try {
     const body = await request.json();
     const regionCode = body.regionCode as RegionCode;
+    const cityCode =
+      typeof body.cityCode === "string" ? body.cityCode.trim().toLowerCase() : "";
     if (
       !isRegionCode(regionCode) ||
+      !cityCode ||
       !isProvider(body.provider) ||
       !isCanvasStyle(body.canvasStyle) ||
       !isOsmTheme(body.osmTheme) ||
@@ -106,6 +102,8 @@ export async function PUT(request: NextRequest) {
         { status: 400 },
       );
     }
+    const auth = await adminAuth(undefined, regionCode, cityCode);
+    if (!auth.authorized) return auth.response;
     const flags = [
       "showStations",
       "showZones",
@@ -120,10 +118,11 @@ export async function PUT(request: NextRequest) {
     }
     await connectDB();
     const data = await MapSettingsModel.findOneAndUpdate(
-      { regionCode },
+      { regionCode, cityCode },
       {
         $set: {
           regionCode,
+          cityCode,
           provider: body.provider,
           canvasStyle: body.canvasStyle,
           osmTheme: body.osmTheme,
@@ -138,11 +137,12 @@ export async function PUT(request: NextRequest) {
       },
       { upsert: true, returnDocument: "after", runValidators: true },
     ).lean();
-    const fallback = defaultMapSettings(regionCode);
+    const fallback = defaultMapSettings(regionCode, cityCode);
     return NextResponse.json({
       data: data
         ? {
             regionCode,
+            cityCode,
             provider: data.provider ?? fallback.provider,
             canvasStyle: data.canvasStyle ?? fallback.canvasStyle,
             osmTheme: data.osmTheme ?? fallback.osmTheme,

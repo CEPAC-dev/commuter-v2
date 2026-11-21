@@ -9,6 +9,7 @@ import { formatMoney } from "../src/lib/money.ts";
 import { validateStationGeoJson } from "../src/lib/stations/validateGeoJson.ts";
 import { diffStationDataset } from "../src/lib/stations/diffDataset.ts";
 import { diffStationDatasetDetailed } from "../src/lib/stations/diffDataset.ts";
+import { vehicleForRegion } from "../src/lib/vehicles/regionConfig.ts";
 
 test("normalizes legacy region aliases", () => {
     assert.equal(normalizeRegion("EG"), "EG-CAIRO");
@@ -20,6 +21,72 @@ test("resolves regional currencies", () => {
     assert.equal(getCurrencyConfig("EG-CAIRO").code, "EGP");
     assert.equal(getCurrencyConfig("SA").code, "SAR");
     assert.equal(getCurrencyConfig("AE-ABU-DHABI").code, "AED");
+});
+
+test("resolves city-specific vehicle settings without changing Region currency", () => {
+    const vehicle = {
+        key: "private_car",
+        label: "Private Car",
+        rate: 6,
+        additional_rate: 0,
+        ride: "private",
+        vehicle_type: 1,
+        trip_type: 1,
+        buffer: 20,
+        window: 10,
+        capacity: 4,
+        occupancy: 4,
+        min_occupancy: 1,
+        minimum_charge: 75,
+        regionCodes: ["EG-CAIRO"],
+        regionConfigs: [
+            {
+                regionCode: "EG-CAIRO",
+                cityCode: "cairo",
+                currencyCode: "EGP",
+                pricingConfigured: true,
+                active: true,
+                rate: 6,
+                additional_rate: 0,
+                buffer: 20,
+                window: 10,
+                capacity: 4,
+                occupancy: 4,
+                min_occupancy: 1,
+                minimum_charge: 75,
+                vehicle_type: 1,
+                trip_type: 1,
+                sortOrder: 0,
+            },
+            {
+                regionCode: "EG-CAIRO",
+                cityCode: "alexandria",
+                currencyCode: "EGP",
+                pricingConfigured: true,
+                active: true,
+                rate: 8,
+                additional_rate: 0,
+                buffer: 20,
+                window: 10,
+                capacity: 4,
+                occupancy: 4,
+                min_occupancy: 1,
+                minimum_charge: 90,
+                vehicle_type: 1,
+                trip_type: 1,
+                sortOrder: 0,
+            },
+        ],
+    };
+
+    assert.equal(
+        vehicleForRegion(vehicle, "EG-CAIRO", "alexandria")?.rate,
+        8,
+    );
+    assert.equal(
+        vehicleForRegion(vehicle, "EG-CAIRO", "alexandria")?.currencyCode,
+        "EGP",
+    );
 });
 
 test("validates supported station GeoJSON", () => {

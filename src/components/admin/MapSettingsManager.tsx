@@ -10,7 +10,11 @@ import {
 } from "lucide-react";
 import { MapSearchProvider } from "@/lib/MapSearchContext";
 import { OSM_THEMES, type MapSettings } from "@/lib/config/mapSettings";
-import { REGION_LIST, type RegionCode } from "@/lib/config/regions";
+import {
+  CAPITAL_CITY_CODES,
+  REGION_LIST,
+  type RegionCode,
+} from "@/lib/config/regions";
 import type { ZoneFeature } from "@/lib/geo/zones";
 import AddressInput from "@/components/landing/AddressInput";
 import OsmMapCanvas from "@/components/map/OsmMapCanvas";
@@ -30,6 +34,7 @@ const field: React.CSSProperties = {
 
 type ZoneConfiguration = {
   regionCode: RegionCode;
+  cityCode: string;
   features: ZoneFeature[];
   sourceName: string | null;
   source: "database" | "legacy-file" | "none" | "draft";
@@ -46,6 +51,12 @@ type ActiveDataset = {
   version: number;
   stationCount: number;
   file?: { originalName?: string };
+};
+type CityOption = {
+  cityCode: string;
+  name: string;
+  mapCenter: { lat: number; lng: number };
+  mapZoom: number;
 };
 type GoogleMapLike = object;
 type GoogleMarkerLike = {
@@ -84,6 +95,8 @@ type GoogleMapsApi = {
 
 export default function MapSettingsManager() {
   const [regionCode, setRegionCode] = useState<RegionCode>("EG-CAIRO");
+  const [cityCode, setCityCode] = useState("cairo");
+  const [cities, setCities] = useState<CityOption[]>([]);
   const [settings, setSettings] = useState<MapSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingZones, setSavingZones] = useState(false);
@@ -91,7 +104,10 @@ export default function MapSettingsManager() {
   const [zoneConfiguration, setZoneConfiguration] =
     useState<ZoneConfiguration | null>(null);
   const currentZoneConfiguration =
-    zoneConfiguration?.regionCode === regionCode ? zoneConfiguration : null;
+    zoneConfiguration?.regionCode === regionCode &&
+    zoneConfiguration.cityCode === cityCode
+      ? zoneConfiguration
+      : null;
   const zoneFeatures = currentZoneConfiguration?.features ?? [];
   const zoneOptions = zoneFeatures.flatMap((feature) =>
     feature.id == null
@@ -105,21 +121,61 @@ export default function MapSettingsManager() {
   );
   const [stationPreview, setStationPreview] = useState<{
     regionCode: RegionCode;
+    cityCode: string;
     stations: PreviewStation[];
     activeDataset: ActiveDataset | null;
   } | null>(null);
   const previewStations =
-    stationPreview?.regionCode === regionCode ? stationPreview.stations : [];
+    stationPreview?.regionCode === regionCode &&
+    stationPreview.cityCode === cityCode
+      ? stationPreview.stations
+      : [];
   const activeDataset =
-    stationPreview?.regionCode === regionCode
+    stationPreview?.regionCode === regionCode &&
+    stationPreview.cityCode === cityCode
       ? stationPreview.activeDataset
       : null;
 
   useEffect(() => {
     let cancelled = false;
+    setCityCode(CAPITAL_CITY_CODES[regionCode]);
+    fetch(`/api/admin/cities?regionCode=${encodeURIComponent(regionCode)}`)
+      .then(async (response) => {
+        const json = await response.json();
+        if (!response.ok) {
+          throw new Error(json.error ?? "Could not load cities.");
+        }
+        return json.cities as CityOption[];
+      })
+      .then((items) => {
+        if (cancelled) return;
+        setCities(items);
+        if (!items.some((city) => city.cityCode === CAPITAL_CITY_CODES[regionCode])) {
+          setCityCode(items[0]?.cityCode ?? "");
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCities([]);
+          setMessage(
+            error instanceof Error ? error.message : "Could not load cities.",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [regionCode]);
+
+  useEffect(() => {
+    let cancelled = false;
     Promise.all([
-      fetch(`/api/admin/stations?region=${regionCode}&active=true&limit=all`),
-      fetch(`/api/admin/station-operations/summary?region=${regionCode}`),
+      fetch(
+        `/api/admin/stations?region=${regionCode}&cityCode=${encodeURIComponent(cityCode)}&active=true&limit=all`,
+      ),
+      fetch(
+        `/api/admin/station-operations/summary?region=${regionCode}&cityCode=${encodeURIComponent(cityCode)}`,
+      ),
     ])
       .then(async ([stationsResponse, summaryResponse]) => {
         const [stationsJson, summaryJson] = await Promise.all([
@@ -138,6 +194,7 @@ export default function MapSettingsManager() {
         if (cancelled) return;
         setStationPreview({
           regionCode,
+          cityCode,
           stations: stationsJson.stations ?? [],
           activeDataset: summaryJson.activeDataset ?? null,
         });
@@ -152,11 +209,13 @@ export default function MapSettingsManager() {
     return () => {
       cancelled = true;
     };
-  }, [regionCode]);
+  }, [regionCode, cityCode]);
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/admin/maps/zones?regionCode=${encodeURIComponent(regionCode)}`)
+    fetch(
+      `/api/admin/maps/zones?regionCode=${encodeURIComponent(regionCode)}&cityCode=${encodeURIComponent(cityCode)}`,
+    )
       .then(async (response) => {
         const json = await response.json();
         if (!response.ok)
@@ -167,6 +226,7 @@ export default function MapSettingsManager() {
         if (cancelled) return;
         setZoneConfiguration({
           regionCode,
+          cityCode,
           features: configuration.features ?? [],
           sourceName: configuration.sourceName ?? null,
           source: configuration.source ?? "none",
@@ -177,6 +237,7 @@ export default function MapSettingsManager() {
         if (!cancelled) {
           setZoneConfiguration({
             regionCode,
+            cityCode,
             features: [],
             sourceName: null,
             source: "none",
@@ -188,7 +249,7 @@ export default function MapSettingsManager() {
     return () => {
       cancelled = true;
     };
-  }, [regionCode]);
+  }, [regionCode, cityCode]);
 
   async function stageZoneFile(file: File | null) {
     if (!file) return;
@@ -224,13 +285,14 @@ export default function MapSettingsManager() {
       }
       setZoneConfiguration({
         regionCode,
+        cityCode,
         features,
         sourceName: file.name,
         source: "draft",
         dirty: true,
       });
       setSettings((current) =>
-        current?.regionCode === regionCode
+        current?.regionCode === regionCode && current.cityCode === cityCode
           ? { ...current, showZones: true }
           : current,
       );
@@ -254,6 +316,7 @@ export default function MapSettingsManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           regionCode,
+          cityCode,
           sourceName: currentZoneConfiguration.sourceName,
           geojson: {
             type: "FeatureCollection",
@@ -265,13 +328,14 @@ export default function MapSettingsManager() {
       if (!response.ok) throw new Error(json.error ?? "Could not save zones.");
       setZoneConfiguration({
         regionCode,
+        cityCode,
         features: json.data.features,
         sourceName: json.data.sourceName,
         source: "database",
         dirty: false,
       });
       setMessage(
-        `Zone configuration saved for ${REGION_LIST.find((item) => item.code === regionCode)?.label}. Save map configuration to enable it for riders.`,
+        `Zone configuration saved for ${selectedCityName}. Save map configuration to enable it for riders.`,
       );
     } catch (error) {
       setMessage(
@@ -284,7 +348,9 @@ export default function MapSettingsManager() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/admin/maps?regionCode=${regionCode}`)
+    fetch(
+      `/api/admin/maps?regionCode=${encodeURIComponent(regionCode)}&cityCode=${encodeURIComponent(cityCode)}`,
+    )
       .then((r) => r.json())
       .then((json) => {
         if (!cancelled) setSettings(json.data ?? null);
@@ -295,7 +361,7 @@ export default function MapSettingsManager() {
     return () => {
       cancelled = true;
     };
-  }, [regionCode]);
+  }, [regionCode, cityCode]);
   async function save() {
     if (!settings) return;
     setSaving(true);
@@ -331,7 +397,7 @@ export default function MapSettingsManager() {
     );
     if (!previous) return;
     setStationPreview((current) =>
-      current?.regionCode === regionCode
+      current?.regionCode === regionCode && current.cityCode === cityCode
         ? {
             ...current,
             stations: current.stations.map((station) =>
@@ -344,7 +410,7 @@ export default function MapSettingsManager() {
     );
     try {
       const response = await fetch(
-        `/api/stations/${objectId}?region=${encodeURIComponent(regionCode)}`,
+        `/api/stations/${objectId}?region=${encodeURIComponent(regionCode)}&cityCode=${encodeURIComponent(cityCode)}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -354,10 +420,10 @@ export default function MapSettingsManager() {
       const json = await response.json();
       if (!response.ok)
         throw new Error(json.error ?? "Could not move station.");
-      setMessage(`Station #${objectId} location saved for this region.`);
+      setMessage(`Station #${objectId} location saved for this City/State.`);
     } catch (error) {
       setStationPreview((current) =>
-        current?.regionCode === regionCode
+        current?.regionCode === regionCode && current.cityCode === cityCode
           ? {
               ...current,
               stations: current.stations.map((station) =>
@@ -373,15 +439,17 @@ export default function MapSettingsManager() {
       );
     }
   }
+  const selectedCity = cities.find((city) => city.cityCode === cityCode);
+  const selectedCityName = selectedCity?.name ?? cityCode;
   return (
     <div style={{ display: "grid", gap: 20 }}>
       <section className="map-settings-card">
         <div>
-          <p className="map-settings-kicker">Region configuration</p>
+          <p className="map-settings-kicker">City/State configuration</p>
           <h2>Map provider and presentation</h2>
           <p>
-            One provider is active per region. Stations and service-zone
-            controls are applied to the rider map.
+            Map presentation and station assignment are configured per
+            City/State.
           </p>
         </div>
         <label>
@@ -400,8 +468,23 @@ export default function MapSettingsManager() {
             ))}
           </select>
         </label>
+        <label>
+          <span>City/State</span>
+          <select
+            value={cityCode}
+            onChange={(event) => setCityCode(event.target.value)}
+            style={field}
+          >
+            {cities.map((city) => (
+              <option key={city.cityCode} value={city.cityCode}>
+                {city.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </section>
-      {settings?.regionCode === regionCode ? (
+      {settings?.regionCode === regionCode &&
+      settings.cityCode === cityCode ? (
         <>
           <section className="map-settings-grid">
             <ProviderOption
@@ -496,8 +579,7 @@ export default function MapSettingsManager() {
                   }}
                 >
                   <strong style={{ color: "var(--color-primary)" }}>
-                    {REGION_LIST.find((item) => item.code === regionCode)
-                      ?.label ?? regionCode}
+                    {selectedCityName}
                   </strong>
                   <span
                     style={{
@@ -524,7 +606,7 @@ export default function MapSettingsManager() {
 
                 <div style={{ display: "grid", gap: 8 }}>
                   <label>
-                    <span>Zone polygon GeoJSON for this region</span>
+                    <span>Zone polygon GeoJSON for this City/State</span>
                     <input
                       type="file"
                       accept=".json,.geojson,application/geo+json,application/json"
@@ -538,7 +620,7 @@ export default function MapSettingsManager() {
                   <span className="map-settings-note">
                     {currentZoneConfiguration?.sourceName
                       ? `Source: ${currentZoneConfiguration.sourceName}${currentZoneConfiguration.source === "legacy-file" ? " (legacy Cairo fallback)" : ""}`
-                      : "No saved polygon source for this region yet."}
+                      : "No saved polygon source for this City/State yet."}
                   </span>
                   <button
                     type="button"
@@ -548,7 +630,7 @@ export default function MapSettingsManager() {
                   >
                     {savingZones
                       ? "Saving zone polygons…"
-                      : "Save zone polygons for this region"}
+                      : "Save zone polygons for this City/State"}
                   </button>
                 </div>
 
@@ -724,7 +806,7 @@ export default function MapSettingsManager() {
             {!zoneFeatures.length &&
               settings.stationAssignmentMode === "zones" && (
                 <p className="map-settings-note">
-                  Upload and save a polygon dataset for this region before
+                  Upload and save a polygon dataset for this City/State before
                   configuring zone-based station assignment.
                 </p>
               )}
@@ -742,12 +824,12 @@ export default function MapSettingsManager() {
               </p>
               <p className="map-settings-note">
                 {previewStations.length
-                  ? `${previewStations.length} active station markers loaded for ${REGION_LIST.find((item) => item.code === regionCode)?.label}${activeDataset ? ` · dataset v${activeDataset.version}${activeDataset.file?.originalName ? ` (${activeDataset.file.originalName})` : ""}` : ""}. Drag a marker to move it; the location is saved as a station override.`
-                  : `No active station markers are loaded for this region${activeDataset ? `, although dataset v${activeDataset.version} is published` : " and no station dataset is published"}.`}{" "}
+                  ? `${previewStations.length} active station markers loaded for ${selectedCityName}${activeDataset ? ` · dataset v${activeDataset.version}${activeDataset.file?.originalName ? ` (${activeDataset.file.originalName})` : ""}` : ""}. Drag a marker to move it; the location is saved as a station override.`
+                  : `No active station markers are loaded for ${selectedCityName}${activeDataset ? `, although dataset v${activeDataset.version} is published` : " and no station dataset is published"}.`}{" "}
                 <a
                   href={`/${REGION_LIST.find((item) => item.code === regionCode)?.urlSlug}/admin/operation`}
                 >
-                  Manage this region’s station dataset
+                  Manage this City/State’s station dataset
                 </a>
               </p>
               <MapSearchProvider provider={settings.provider}>
@@ -755,11 +837,21 @@ export default function MapSettingsManager() {
               </MapSearchProvider>
             </div>
             <MapCanvas
-              key={`${settings.provider}-${settings.canvasStyle}-${settings.osmTheme}-${settings.showZones}-${settings.showZoneLabels}-${settings.maskOutsideZones}-${settings.showStations}-${regionCode}`}
+              key={`${settings.provider}-${settings.canvasStyle}-${settings.osmTheme}-${settings.showZones}-${settings.showZoneLabels}-${settings.maskOutsideZones}-${settings.showStations}-${regionCode}-${cityCode}`}
               provider={settings.provider}
               style={settings.canvasStyle}
               osmTheme={settings.osmTheme}
               regionCode={regionCode}
+              center={
+                selectedCity?.mapCenter ??
+                REGION_LIST.find((item) => item.code === regionCode)!
+                  .map.defaultCenter
+              }
+              zoom={
+                selectedCity?.mapZoom ??
+                REGION_LIST.find((item) => item.code === regionCode)!
+                  .map.defaultZoom
+              }
               settings={settings}
               zones={zoneFeatures}
               stations={settings.showStations ? previewStations : []}
@@ -1027,6 +1119,8 @@ function MapCanvas({
   provider,
   style,
   regionCode,
+  center,
+  zoom,
   osmTheme,
   settings,
   zones,
@@ -1036,6 +1130,8 @@ function MapCanvas({
   provider: MapSettings["provider"];
   style: MapSettings["canvasStyle"];
   regionCode: RegionCode;
+  center: { lat: number; lng: number };
+  zoom: number;
   osmTheme: MapSettings["osmTheme"];
   settings: MapSettings;
   zones: ZoneFeature[];
@@ -1141,13 +1237,12 @@ function MapCanvas({
     zones,
   ]);
 
-  const region = REGION_LIST.find((item) => item.code === regionCode)!;
   if (provider === "osm")
     return (
       <div className="map-demo-canvas">
         <OsmMapCanvas
-          center={region.map.defaultCenter}
-          zoom={region.map.defaultZoom}
+          center={center}
+          zoom={zoom}
           theme={osmTheme}
           zoneSettings={{
             showZones: settings.showZones,
@@ -1170,8 +1265,8 @@ function MapCanvas({
   return (
     <div className="map-demo-canvas">
       <GoogleMapCanvas
-        center={region.map.defaultCenter}
-        zoom={region.map.defaultZoom}
+        center={center}
+        zoom={zoom}
         options={{
           disableDefaultUI: true,
           zoomControl: true,

@@ -103,7 +103,11 @@ function getTomorrowDate() {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth();
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
+  );
   if (!auth.authorized) return auth.response;
 
   await connectDB();
@@ -112,6 +116,8 @@ export async function GET(req: NextRequest) {
 
   const trips = await Trip.find({
     date: tomorrow,
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
     status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["private_car", "taxi_private"] },
@@ -191,7 +197,11 @@ export async function GET(req: NextRequest) {
     ),
   );
 
-  const stations = await Station.find({ objectId: { $in: stationIds } })
+  const stations = await Station.find({
+    objectId: { $in: stationIds },
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  })
     .select("objectId name lat lng")
     .lean<{ objectId: number; name: string; lat: number; lng: number }[]>();
 

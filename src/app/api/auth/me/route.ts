@@ -4,7 +4,15 @@ import { User } from "@/models/User";
 import { Driver } from "@/models/Driver";
 import { getSession } from "@/lib/auth/session";
 import { carTypeToCapacity, normalizeCarType } from "@/lib/config/driver";
-import { isRegionKey, normalizeRegion } from "@/lib/config/regions";
+import {
+  isRegionCode,
+  isRegionKey,
+  normalizeRegion,
+} from "@/lib/config/regions";
+import {
+  capitalCityCode,
+  isOperatingCityInRegion,
+} from "@/lib/regions/cities";
 import { getProfile } from "@/lib/services/profile";
 import {
   normalizePlainText,
@@ -35,7 +43,15 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { name, phone, profilePic, region, gender: passengerGender } = body;
+    const {
+      name,
+      phone,
+      profilePic,
+      region,
+      regionCode,
+      cityCode,
+      gender: passengerGender,
+    } = body;
     const safeName = normalizePlainText(name, { maxLength: 100 });
     if (!safeName)
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
@@ -52,6 +68,50 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "Invalid region." }, { status: 400 });
       }
       userUpdate.region = normalizeRegion(region);
+    }
+    if (
+      regionCode !== undefined ||
+      cityCode !== undefined ||
+      region !== undefined
+    ) {
+      await connectDB();
+      const currentLocation = await User.findById(session.userId)
+        .select("defaultRegionCode region defaultCityCode")
+        .lean<{
+          defaultRegionCode?: string | null;
+          region?: string | null;
+          defaultCityCode?: string | null;
+        }>();
+      const selectedRegion =
+        regionCode !== undefined
+          ? isRegionCode(regionCode)
+            ? regionCode
+            : null
+          : region !== undefined && isRegionKey(region)
+            ? normalizeRegion(region)
+            : isRegionCode(currentLocation?.defaultRegionCode)
+              ? currentLocation.defaultRegionCode
+              : currentLocation?.region && isRegionKey(currentLocation.region)
+                ? normalizeRegion(currentLocation.region)
+                : null;
+      if (!selectedRegion) {
+        return NextResponse.json({ error: "Choose a valid Region." }, { status: 400 });
+      }
+      const selectedCity =
+        typeof cityCode === "string" && cityCode.trim()
+          ? cityCode.trim().toLowerCase()
+          : selectedRegion === currentLocation?.defaultRegionCode
+            ? currentLocation.defaultCityCode ?? capitalCityCode(selectedRegion)
+            : capitalCityCode(selectedRegion);
+      if (!(await isOperatingCityInRegion(selectedRegion, selectedCity))) {
+        return NextResponse.json(
+          { error: "Choose an active City/State within the selected Region." },
+          { status: 400 },
+        );
+      }
+      userUpdate.defaultRegionCode = selectedRegion;
+      userUpdate.defaultCityCode = selectedCity;
+      userUpdate.region = selectedRegion;
     }
     if (phone !== undefined) {
       const trimmed = typeof phone === "string" ? phone.trim() : "";
@@ -93,7 +153,7 @@ export async function PATCH(req: NextRequest) {
 
     const user = await User.findByIdAndUpdate(session.userId, userUpdate, {
       returnDocument: "after",
-      select: "name email phone role profilePic region",
+      select: "name email phone role profilePic region defaultRegionCode defaultCityCode",
     }).lean();
 
     if (!user)

@@ -1,5 +1,5 @@
 "use client";
-import { useState, Suspense, useTransition } from "react";
+import { useEffect, useState, Suspense, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -113,19 +113,46 @@ function LoginForm() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [region, setRegion] = useState<RegionCode>("EG-CAIRO");
+  const [cityCode, setCityCode] = useState("cairo");
+  const [cities, setCities] = useState<
+    Array<{ regionCode: RegionCode; cityCode: string; name: string; nameAr: string }>
+  >([]);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
-  const regionCityName = (code: RegionCode) =>
-    code === "EG-CAIRO"
-      ? t("regions.cairo")
-      : code === "SA"
-        ? t("regions.saudi_arabia")
-        : t("regions.abu_dhabi");
   const regionLabel = (code: RegionCode) =>
     code === "EG-CAIRO"
-      ? t("regions.egypt_greater_cairo")
+      ? "Egypt"
       : code === "SA"
-        ? t("regions.saudi_arabia")
-        : t("regions.uae_abu_dhabi");
+        ? "Saudi Arabia"
+        : "United Arab Emirates";
+  const selectedCity = cities.find(
+    (city) => city.regionCode === region && city.cityCode === cityCode,
+  );
+  const citiesForRegion = cities.filter((city) => city.regionCode === region);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/regions", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load operating cities.");
+        return (await response.json()) as {
+          cities: Array<{
+            regionCode: RegionCode;
+            cityCode: string;
+            name: string;
+            nameAr: string;
+          }>;
+        };
+      })
+      .then((data) => {
+        if (!cancelled) setCities(data.cities);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Unable to load available cities. Please try again.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Language toggle
   function toggleLanguage() {
@@ -191,6 +218,7 @@ function LoginForm() {
               email: email.trim(),
               referralCodeUsed: referralCode.trim() || undefined,
               regionCode: region,
+              cityCode,
               gender,
               ...(verificationMethod === "security_question" && {
                 securityQuestionId,
@@ -740,6 +768,10 @@ function LoginForm() {
                 setGender={setGender}
                 referralCode={referralCode}
                 region={region}
+                setRegion={setRegion}
+                cityCode={cityCode}
+                setCityCode={setCityCode}
+                cities={cities}
                 onSuccess={() => router.replace("/profile")}
               />
             ) : (
@@ -903,7 +935,7 @@ function LoginForm() {
                         </span>
                         <span style={{ flex: 1 }}>
                           <strong style={{ display: "block" }}>
-                            {regionCityName(region)}
+                            {selectedCity?.name ?? "Select a City/State"}
                           </strong>
                           <span style={{ color: "#5A6A7A", fontSize: 12 }}>
                             {regionLabel(region)}
@@ -1504,8 +1536,10 @@ function LoginForm() {
               </button>
             </div>
             <div style={{ display: "grid", gap: 10 }}>
+              <p style={{ margin: "0 0 2px", fontWeight: 700, color: "#0B1E3D" }}>
+                Region
+              </p>
               {REGION_LIST.map((option) => {
-                const city = regionCityName(option.code);
                 const selected = option.code === region;
                 return (
                   <button
@@ -1513,7 +1547,7 @@ function LoginForm() {
                     type="button"
                     onClick={() => {
                       setRegion(option.code);
-                      setCityPickerOpen(false);
+                      setCityCode("");
                     }}
                     style={{
                       display: "flex",
@@ -1539,7 +1573,7 @@ function LoginForm() {
                     </span>
                     <span style={{ flex: 1 }}>
                       <strong style={{ display: "block", fontSize: 16 }}>
-                        {city}
+                        {regionLabel(option.code)}
                       </strong>
                       <span
                         style={{
@@ -1549,7 +1583,7 @@ function LoginForm() {
                           fontSize: 12,
                         }}
                       >
-                        {regionLabel(option.code)}
+                        Country service area
                       </span>
                     </span>
                     {selected && (
@@ -1560,6 +1594,47 @@ function LoginForm() {
                   </button>
                 );
               })}
+              <p style={{ margin: "14px 0 2px", fontWeight: 700, color: "#0B1E3D" }}>
+                City/State
+              </p>
+              {citiesForRegion.length ? (
+                citiesForRegion.map((city) => {
+                  const selected = city.cityCode === cityCode;
+                  return (
+                    <button
+                      key={city.cityCode}
+                      type="button"
+                      onClick={() => {
+                        setCityCode(city.cityCode);
+                        setCityPickerOpen(false);
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 14,
+                        width: "100%",
+                        padding: "14px 16px",
+                        borderRadius: 12,
+                        border: `1.5px solid ${selected ? "#00C2A8" : "#e8edf0"}`,
+                        background: selected ? "rgba(0,194,168,0.08)" : "#ffffff",
+                        color: "#0B1E3D",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      <strong style={{ flex: 1 }}>
+                        {locale === "ar" ? city.nameAr : city.name}
+                      </strong>
+                      {selected && <span style={{ color: "#00C2A8", fontWeight: 800 }}>✓</span>}
+                    </button>
+                  );
+                })
+              ) : (
+                <p style={{ margin: 0, color: "#5A6A7A" }}>
+                  Choose a Region to see its available City/State options.
+                </p>
+              )}
             </div>
           </div>
         </div>

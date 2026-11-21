@@ -10,7 +10,11 @@ import { getStationDatasetSource } from "@/lib/storage/stationDatasetStorage";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const auth = await adminAuth(undefined, req.nextUrl.searchParams.get("region"));
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
+  );
   if (!auth.authorized) return auth.response;
 
   let storageKey = "";
@@ -25,10 +29,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "The selected GeoJSON file is empty." }, { status: 400 });
     }
     await connectDB();
-    const version = await nextSequence(`station-dataset:${auth.region.code}`);
+    const version = await nextSequence(`station-dataset:${auth.region.code}:${auth.region.cityCode}`);
     const originalName = storageKey.split("/").at(-1) ?? "source.geojson";
     const dataset = await StationDataset.create({
       regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
       version,
       status: "UPLOADED",
       file: {
@@ -43,6 +48,7 @@ export async function POST(req: NextRequest) {
     await StationAuditLog.create({
       action: "upload",
       regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
       datasetVersionId: dataset._id,
       actorId: auth.userId,
       metadata: { version, storageKey, reusedExistingFile: true },

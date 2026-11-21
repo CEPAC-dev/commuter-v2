@@ -199,13 +199,14 @@ async function createRide(matchResult: MatchResult) {
     }
     const trips = await Trip.find({ _id: { $in: tripIds } })
       .select(
-        "regionCode pickupStation dropoffStation numberOfPassengers extraPassengers",
+        "regionCode cityCode pickupStation dropoffStation numberOfPassengers extraPassengers",
       )
       .session(session)
       .lean<
         {
           _id: unknown;
           regionCode?: RegionCode | null;
+          cityCode?: string;
           pickupStation?: StationSelection;
           dropoffStation?: StationSelection;
           numberOfPassengers?: number;
@@ -269,6 +270,7 @@ async function createRide(matchResult: MatchResult) {
       availabilityId: matchResult.availabilityId ?? null,
       driverId: matchResult.driverId,
       regionCode: matchResult.regionCode ?? firstTrip?.regionCode ?? null,
+      cityCode: firstTrip?.cityCode ?? undefined,
       date: matchResult.date,
       vehicleType: matchResult.vehicleType,
       rideType: matchResult.rideType,

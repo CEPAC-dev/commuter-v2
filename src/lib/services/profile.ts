@@ -6,10 +6,12 @@ import { User } from "@/models/User";
 import type { SavedAddress } from "@/types/shared";
 import { normalizeCarType, type CarType } from "@/lib/config/driver";
 import {
+  isRegionCode,
   isRegionKey,
   normalizeRegion,
   type RegionCode,
 } from "@/lib/config/regions";
+import { capitalCityCode } from "@/lib/regions/cities";
 
 interface ProfileUser {
   userNumber: number;
@@ -19,6 +21,7 @@ interface ProfileUser {
   phoneVerifiedAt: string | null;
   hasSecurityQuestion: boolean;
   region: RegionCode | null;
+  cityCode: string | null;
   savedAddresses: SavedAddress[];
   gender: "male" | "female" | null;
 }
@@ -59,7 +62,7 @@ export async function getProfile(
 
   const user = await User.findById(userId)
     .select(
-      "userNumber name email phone phoneVerifiedAt securityQuestionId +securityAnswerHash profilePic region gender savedAddresses",
+      "userNumber name email phone phoneVerifiedAt securityQuestionId +securityAnswerHash profilePic region defaultRegionCode defaultCityCode gender savedAddresses",
     )
     .lean<{
       userNumber: number;
@@ -71,11 +74,18 @@ export async function getProfile(
       securityAnswerHash?: string | null;
       profilePic?: string | null;
       region?: string;
+      defaultRegionCode?: string | null;
+      defaultCityCode?: string | null;
       savedAddresses?: SavedAddress[];
       gender?: "male" | "female" | null;
     }>();
   if (!user) return null;
 
+  const region = isRegionCode(user.defaultRegionCode)
+    ? user.defaultRegionCode
+    : isRegionKey(user.region)
+      ? normalizeRegion(user.region)
+      : null;
   const profileUser: ProfileUser = {
     userNumber: user.userNumber,
     name: user.name,
@@ -87,7 +97,10 @@ export async function getProfile(
     hasSecurityQuestion: Boolean(
       user.securityQuestionId && user.securityAnswerHash,
     ),
-    region: isRegionKey(user.region) ? normalizeRegion(user.region) : null,
+    region,
+    cityCode: region
+      ? user.defaultCityCode ?? capitalCityCode(region)
+      : null,
     savedAddresses: serializeAddresses(user.savedAddresses),
     gender: user.gender ?? null,
   };

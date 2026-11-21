@@ -11,6 +11,12 @@ import {
 import { shiftsOverlap } from "@/lib/time/availabilityWindow";
 import { findNearestStation } from "@/lib/geo/stations";
 import { regionFromCoordinates } from "@/lib/config/regions";
+import {
+  RegionAccessError,
+  resolveActiveRegion,
+} from "@/lib/regions/resolveActiveRegion";
+import { loadServiceZones } from "@/lib/geo/zones.server";
+import { isPointInAnyZone } from "@/lib/geo/zones";
 import type { GeoPoint } from "@/types/geo";
 
 function validPoint(value: unknown): value is GeoPoint {
@@ -25,12 +31,19 @@ function validPoint(value: unknown): value is GeoPoint {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth();
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
+  );
   if (!auth.authorized) return auth.response;
   await connectDB();
   const driverId = req.nextUrl.searchParams.get("driverId") ?? undefined;
   const dayOfWeek = req.nextUrl.searchParams.get("dayOfWeek") ?? undefined;
-  const query: Record<string, unknown> = {};
+  const query: Record<string, unknown> = {
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  };
   if (driverId) query.driverId = driverId;
   if (
     dayOfWeek &&
@@ -61,6 +74,7 @@ export async function POST(req: NextRequest) {
       startTime,
       endTime,
       active,
+      cityCode,
     } = await req.json();
     if (typeof driverId !== "string" || !driverId.trim())
       return NextResponse.json(
@@ -96,6 +110,37 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    if (cityCode !== undefined && typeof cityCode !== "string") {
+      return NextResponse.json({ error: "Invalid City/State." }, { status: 400 });
+    }
+    let activeRegion;
+    try {
+      activeRegion = await resolveActiveRegion({
+        userId: auth.userId,
+        requested: regionCode,
+        requestedCity: cityCode,
+      });
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "City/State access denied." },
+        { status: error instanceof RegionAccessError ? error.status : 403 },
+      );
+    }
+    const zones = await loadServiceZones(
+      activeRegion.code,
+      activeRegion.cityCode,
+    );
+    if (
+      !zones.length ||
+      !isPointInAnyZone([origin.lng, origin.lat], zones) ||
+      (destination &&
+        !isPointInAnyZone([destination.lng, destination.lat], zones))
+    ) {
+      return NextResponse.json(
+        { error: "Availability locations must be inside the selected City/State service area." },
+        { status: 400 },
+      );
+    }
     const windowError = validateAvailabilityWindow(startTime, endTime);
     if (windowError)
       return NextResponse.json({ error: windowError }, { status: 400 });
@@ -106,6 +151,7 @@ export async function POST(req: NextRequest) {
     const sameDayShifts = await Availability.find({
       driverId,
       regionCode,
+      cityCode: activeRegion.cityCode,
       dayOfWeek,
       ...(id ? { _id: { $ne: id } } : {}),
     })
@@ -118,7 +164,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const stationDocs = await Station.find({ active: true, regionCode })
+    const stationDocs = await Station.find({
+      active: true,
+      regionCode,
+      cityCode: activeRegion.cityCode,
+    })
       .select("objectId name lat lng stationType")
       .lean();
     const stations = stationDocs.map((station) => ({
@@ -152,6 +202,7 @@ export async function POST(req: NextRequest) {
     const fields = {
       driverId,
       regionCode,
+      cityCode: activeRegion.cityCode,
       dayOfWeek,
       origin,
       destination,
@@ -166,7 +217,12 @@ export async function POST(req: NextRequest) {
 
     const record = id
       ? await Availability.findOneAndUpdate(
-          { _id: id, driverId },
+          {
+            _id: id,
+            driverId,
+            regionCode,
+            cityCode: activeRegion.cityCode,
+          },
           { $set: fields },
           { returnDocument: "after" },
         )

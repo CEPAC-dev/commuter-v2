@@ -18,6 +18,7 @@ const StationSchema = new Schema(
       required: false,
       enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
     },
+    cityCode: { type: String, required: true, trim: true, lowercase: true },
     datasetVersionId: {
       type: Types.ObjectId,
       ref: "StationDataset",
@@ -30,7 +31,10 @@ const StationSchema = new Schema(
   { timestamps: true },
 );
 
-StationSchema.index({ objectId: 1 }, { unique: true });
+StationSchema.index(
+  { regionCode: 1, cityCode: 1, objectId: 1 },
+  { unique: true },
+);
 StationSchema.index({ lat: 1, lng: 1 });
 
 export type StationDoc = InferSchemaType<typeof StationSchema>;
@@ -49,6 +53,11 @@ if (existingStationModel && !existingStationModel.schema.path("regionCode")) {
       default: null,
     },
     sourceObjectId: { type: Number, required: false, default: null },
+  });
+}
+if (existingStationModel && !existingStationModel.schema.path("cityCode")) {
+  existingStationModel.schema.add({
+    cityCode: { type: String, required: true, trim: true, lowercase: true },
   });
 }
 export const Station = existingStationModel || model("Station", StationSchema);

@@ -1,4 +1,7 @@
-import type { RegionCode } from "@/lib/config/regions";
+import {
+  CAPITAL_CITY_CODES,
+  type RegionCode,
+} from "@/lib/config/regions";
 
 export type MapProviderName = "google" | "osm";
 export type MapCanvasStyle = "roadmap" | "satellite" | "light";
@@ -47,6 +50,7 @@ export const OSM_THEMES: Record<
 
 export interface MapSettings {
   regionCode: RegionCode;
+  cityCode: string;
   provider: MapProviderName;
   canvasStyle: MapCanvasStyle;
   osmTheme: OsmMapThemeName;
@@ -59,9 +63,14 @@ export interface MapSettings {
   maskOutsideZones: boolean;
 }
 
-export function defaultMapSettings(regionCode: RegionCode): MapSettings {
+export function defaultMapSettings(
+  regionCode: RegionCode,
+  cityCode: string,
+): MapSettings {
+  const isCapital = CAPITAL_CITY_CODES[regionCode] === cityCode;
   return {
     regionCode,
+    cityCode,
     provider: "google",
     canvasStyle: "roadmap",
     osmTheme: "app",
@@ -70,9 +79,9 @@ export function defaultMapSettings(regionCode: RegionCode): MapSettings {
     directPointZoneIds: [],
     stationZoneIds: [],
     // Only Greater Cairo currently has a committed service-zone dataset.
-    showZones: regionCode === "EG-CAIRO",
+    showZones: isCapital && regionCode === "EG-CAIRO",
     // Keep zone labels hidden for now while the service-area boundary remains visible.
     showZoneLabels: false,
-    maskOutsideZones: regionCode === "EG-CAIRO",
+    maskOutsideZones: isCapital && regionCode === "EG-CAIRO",
   };
 }

@@ -336,7 +336,11 @@ function getExcelValueForColumn<T extends PrivateRow | SharedRow>(
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth();
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
+  );
   if (!auth.authorized) return auth.response;
 
   await connectDB();
@@ -386,6 +390,8 @@ export async function GET(req: NextRequest) {
 
   const privateTrips = await Trip.find({
     date: targetDate,
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
     status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["private_car", "taxi_private"] },
@@ -413,6 +419,8 @@ export async function GET(req: NextRequest) {
 
   const sharedTrips = await Trip.find({
     date: targetDate,
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
     status: "submitted",
     paymentStatus: "paid",
     vehicleType: { $in: ["taxi_shared", "van_shared", "microbus_shared"] },
@@ -430,16 +438,10 @@ export async function GET(req: NextRequest) {
     }[]
   >();
 
-  const targetRegionCodes = Array.from(
-    new Set(
-      [...privateTrips, ...sharedTrips]
-        .map((trip) => trip.regionCode)
-        .filter((regionCode): regionCode is string => Boolean(regionCode)),
-    ),
-  );
-
   const availabilities = targetAvailabilityWeekday
     ? await Availability.find({
+      regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
         dayOfWeek: targetAvailabilityWeekday,
         active: true,
       }).lean<
@@ -645,9 +647,8 @@ export async function GET(req: NextRequest) {
 
   const existingStations = await Station.find({
     objectId: { $in: existingStationIds },
-    ...(targetRegionCodes.length > 0
-      ? { regionCode: { $in: targetRegionCodes } }
-      : {}),
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
   })
     .select("objectId name lat lng regionCode zones direction description")
     .lean<StationInfo[]>();
@@ -713,9 +714,8 @@ export async function GET(req: NextRequest) {
 
   const stations = await Station.find({
     objectId: { $in: stationIds },
-    ...(targetRegionCodes.length > 0
-      ? { regionCode: { $in: targetRegionCodes } }
-      : {}),
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
   })
     .select("objectId name lat lng regionCode zones direction description")
     .lean<StationInfo[]>();

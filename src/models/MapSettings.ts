@@ -5,9 +5,9 @@ const MapSettingsSchema = new Schema(
     regionCode: {
       type: String,
       required: true,
-      unique: true,
       enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
     },
+    cityCode: { type: String, required: true, trim: true, lowercase: true },
     provider: { type: String, required: true, enum: ["google", "osm"] },
     canvasStyle: {
       type: String,
@@ -36,6 +36,8 @@ const MapSettingsSchema = new Schema(
   },
   { timestamps: true, collection: "map_settings" },
 );
+
+MapSettingsSchema.index({ regionCode: 1, cityCode: 1 }, { unique: true });
 
 export type MapSettingsDoc = InferSchemaType<typeof MapSettingsSchema>;
 export const MapSettingsModel =

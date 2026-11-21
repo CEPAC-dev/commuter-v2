@@ -28,6 +28,7 @@ const AvailabilitySchema = new Schema(
       default: null,
       index: true,
     },
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
     dayOfWeek: {
       type: String,
       required: true,
@@ -53,7 +54,7 @@ const AvailabilitySchema = new Schema(
 );
 
 // Not unique — a driver can have multiple shifts (records) on the same day.
-AvailabilitySchema.index({ driverId: 1, regionCode: 1, dayOfWeek: 1 });
+AvailabilitySchema.index({ driverId: 1, regionCode: 1, cityCode: 1, dayOfWeek: 1 });
 
 const existingAvailabilityModel = models.Availability;
 if (
@@ -62,6 +63,11 @@ if (
 ) {
   existingAvailabilityModel.schema.add({
     regionCode: AvailabilitySchema.obj.regionCode,
+  });
+}
+if (existingAvailabilityModel && !existingAvailabilityModel.schema.path("cityCode")) {
+  existingAvailabilityModel.schema.add({
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
   });
 }
 

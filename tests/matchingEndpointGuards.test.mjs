@@ -35,7 +35,10 @@ test("matching options expose only paid submitted Trips without a Ride", async (
     "utf8",
   );
   assert.match(dashboard, /Trip\.find\(buildEligibleMatchTripFilter\(\)\)/);
-  assert.match(matchRide, /Trip\.find\(buildEligibleMatchTripFilter\(\)\)/);
+  assert.match(
+    matchRide,
+    /Trip\.find\(\{\s*\.\.\.buildEligibleMatchTripFilter\(\),[\s\S]*cityCode: auth\.region\.cityCode/,
+  );
 });
 
 test("matching authorization accepts admins and configured scheduler secrets only", () => {

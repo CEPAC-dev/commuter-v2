@@ -28,6 +28,7 @@ const StationAuditLogSchema = new Schema(
       enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
       index: true,
     },
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
     datasetVersionId: {
       type: Types.ObjectId,
       ref: "StationDataset",
@@ -40,7 +41,7 @@ const StationAuditLogSchema = new Schema(
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 
-StationAuditLogSchema.index({ regionCode: 1, createdAt: -1 });
+StationAuditLogSchema.index({ regionCode: 1, cityCode: 1, createdAt: -1 });
 
 export type StationAuditLogDoc = InferSchemaType<typeof StationAuditLogSchema>;
 export const StationAuditLog =

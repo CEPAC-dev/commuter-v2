@@ -26,6 +26,7 @@ interface Props {
   initialPhoneVerified: boolean;
   initialHasSecurityQuestion: boolean;
   initialRegion: RegionCode | null;
+  initialCityCode: string | null;
   initialGender: "male" | "female" | null;
   initialProfilePic?: string | null;
   initialSavedAddresses: SavedAddress[];
@@ -39,6 +40,7 @@ export default function ProfileClient({
   initialPhoneVerified,
   initialHasSecurityQuestion,
   initialRegion,
+  initialCityCode,
   initialGender,
   initialProfilePic,
   initialSavedAddresses,
@@ -50,6 +52,10 @@ export default function ProfileClient({
   const [region, setRegion] = useState<RegionCode>(
     initialRegion ?? DEFAULT_REGION,
   );
+  const [cityCode, setCityCode] = useState(initialCityCode ?? "");
+  const [cities, setCities] = useState<
+    Array<{ regionCode: RegionCode; cityCode: string; name: string; nameAr: string }>
+  >([]);
   const [gender, setGender] = useState<"male" | "female" | "">(
     initialGender ?? "",
   );
@@ -60,6 +66,31 @@ export default function ProfileClient({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/regions", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load operating cities.");
+        return (await response.json()) as {
+          cities: Array<{
+            regionCode: RegionCode;
+            cityCode: string;
+            name: string;
+            nameAr: string;
+          }>;
+        };
+      })
+      .then((data) => {
+        if (!cancelled) setCities(data.cities);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Unable to load available cities.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // No region stored yet → derive it once from the browser's location fix.
   useEffect(() => {
@@ -74,6 +105,7 @@ export default function ProfileClient({
         );
         if (detected) {
           setRegion(detected);
+          setCityCode("");
           try {
             await fetch("/api/auth/me", {
               method: "PATCH",
@@ -152,7 +184,8 @@ export default function ProfileClient({
         body: JSON.stringify({
           name: name.trim(),
           phone: phone.trim(),
-          region,
+          regionCode: region,
+          cityCode,
           gender: gender || undefined,
         }),
       });
@@ -593,7 +626,7 @@ export default function ProfileClient({
                 </select>
               </div>
 
-              {/* Region */}
+              {/* Region and City/State */}
               <div>
                 <label
                   htmlFor="p-region"
@@ -605,7 +638,7 @@ export default function ProfileClient({
                     marginBottom: 6,
                   }}
                 >
-                  {t("profile.region")}
+                  Region
                 </label>
                 <div style={{ position: "relative" }}>
                   <Globe
@@ -624,7 +657,10 @@ export default function ProfileClient({
                   <select
                     id="p-region"
                     value={region}
-                    onChange={(e) => setRegion(e.target.value as RegionCode)}
+                    onChange={(e) => {
+                      setRegion(e.target.value as RegionCode);
+                      setCityCode("");
+                    }}
                     style={{
                       width: "100%",
                       minWidth: 0,
@@ -644,11 +680,55 @@ export default function ProfileClient({
                   >
                     {REGION_LIST.map((r) => (
                       <option key={r.code} value={r.code}>
-                        {locale === "ar" ? r.labelAr : r.label}
+                        {r.countryCode === "EG"
+                          ? "Egypt"
+                          : r.countryCode === "SA"
+                            ? "Saudi Arabia"
+                            : "United Arab Emirates"}
                       </option>
                     ))}
                   </select>
                 </div>
+                <label
+                  htmlFor="p-city"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#0B1E3D",
+                    display: "block",
+                    margin: "12px 0 6px",
+                  }}
+                >
+                  City/State
+                </label>
+                <select
+                  id="p-city"
+                  required
+                  value={cityCode}
+                  onChange={(e) => setCityCode(e.target.value)}
+                  style={{
+                    width: "100%",
+                    height: 48,
+                    padding: "0 14px",
+                    border: "1.5px solid #d0d8e0",
+                    borderRadius: 10,
+                    fontSize: 15,
+                    color: "#0B1E3D",
+                    fontFamily: "inherit",
+                    background: "#fff",
+                  }}
+                >
+                  <option value="" disabled>
+                    Select a City/State
+                  </option>
+                  {cities
+                    .filter((city) => city.regionCode === region)
+                    .map((city) => (
+                      <option key={city.cityCode} value={city.cityCode}>
+                        {locale === "ar" ? city.nameAr : city.name}
+                      </option>
+                    ))}
+                </select>
                 <p
                   style={{
                     fontSize: 12,

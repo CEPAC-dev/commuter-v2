@@ -24,7 +24,11 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const region = await resolveActiveRegion({ userId: session.userId });
-  const records = await listDriverAvailability(session.userId, region.code);
+  const records = await listDriverAvailability(
+    session.userId,
+    region.code,
+    region.cityCode,
+  );
   return NextResponse.json({ data: records });
 }
 
@@ -47,9 +51,12 @@ export async function DELETE(req: NextRequest) {
     );
 
   await connectDB();
+  const region = await resolveActiveRegion({ userId: session.userId });
   const result = await Availability.deleteMany({
     _id: { $in: ids },
     driverId: session.userId,
+    regionCode: region.code,
+    cityCode: region.cityCode,
   });
   return NextResponse.json({ ok: true, deletedCount: result.deletedCount });
 }
@@ -134,6 +141,7 @@ export async function PUT(req: NextRequest) {
     const stationDocs = await Station.find({
       active: true,
       regionCode: region.code,
+      cityCode: region.cityCode,
     }).lean();
     const nearestStation = findNearestStation(
       normalizedOrigin.lat,
@@ -208,6 +216,7 @@ export async function PUT(req: NextRequest) {
       const sameDayShifts = await Availability.find({
         driverId: session.userId,
         regionCode: region.code,
+        cityCode: region.cityCode,
         dayOfWeek: day,
         ...(id && isValidAvailabilityId(id) ? { _id: { $ne: id } } : {}),
       })
@@ -233,6 +242,7 @@ export async function PUT(req: NextRequest) {
           $set: {
             dayOfWeek: targetDays[0],
             regionCode: region.code,
+            cityCode: region.cityCode,
             origin: normalizedOrigin,
             destination: normalizedDestination,
             startNearestStation,
@@ -261,6 +271,7 @@ export async function PUT(req: NextRequest) {
         Availability.create({
           driverId: session.userId,
           regionCode: region.code,
+          cityCode: region.cityCode,
           dayOfWeek: day,
           origin: normalizedOrigin,
           destination: normalizedDestination,

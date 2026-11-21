@@ -38,6 +38,7 @@ const StationSuggestionSchema = new Schema(
       enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
       index: true,
     },
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
     locationType: {
       type: String,
       required: true,

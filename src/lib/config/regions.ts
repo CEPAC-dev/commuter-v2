@@ -46,7 +46,7 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
   "EG-CAIRO": {
     code: "EG-CAIRO",
     urlSlug: "eg",
-    label: "Egypt - Greater Cairo",
+    label: "Egypt",
     labelAr: "مصر",
     countryCode: "EG",
     currency: { code: "EGP", locale: "en-EG", decimalDigits: 2 },
@@ -81,8 +81,8 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
   "AE-ABU-DHABI": {
     code: "AE-ABU-DHABI",
     urlSlug: "ae",
-    label: "UAE - Abu Dhabi",
-    labelAr: "الإمارات - أبوظبي",
+    label: "United Arab Emirates",
+    labelAr: "الإمارات العربية المتحدة",
     countryCode: "AE",
     currency: { code: "AED", locale: "en-AE", decimalDigits: 2 },
     phonePrefix: "+971",
@@ -103,6 +103,12 @@ export const LEGACY_REGION_ALIASES: Record<LegacyRegionCode, RegionCode> = {
 
 export const REGION_LIST = Object.values(REGIONS);
 export const DEFAULT_REGION: RegionCode = "EG-CAIRO";
+
+export const CAPITAL_CITY_CODES: Record<RegionCode, string> = {
+  "EG-CAIRO": "cairo",
+  SA: "riyadh",
+  "AE-ABU-DHABI": "abu-dhabi",
+};
 
 /** Which regions each vehicle type is offered in ("all" = every region). */
 export const VEHICLE_REGIONS: Partial<

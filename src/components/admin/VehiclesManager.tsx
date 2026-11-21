@@ -3,11 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import {
+  CAPITAL_CITY_CODES,
   REGION_LIST,
   type CurrencyCode,
   type RegionCode,
 } from "@/lib/config/regions";
 import type { VehicleRegionConfig } from "@/lib/config/vehicles";
+
+type CityOption = {
+  regionCode: RegionCode;
+  cityCode: string;
+  name: string;
+};
 
 type Vehicle = {
   key: string;
@@ -61,10 +68,12 @@ function getCurrencyCodeForRegion(regionCode: RegionCode): CurrencyCode {
 
 function defaultConfig(
   regionCode: RegionCode,
+  cityCode: string,
   sortOrder: number,
 ): VehicleRegionConfig {
   return {
     regionCode,
+    cityCode,
     currencyCode: getCurrencyCodeForRegion(regionCode),
     pricingConfigured: false,
     active: true,
@@ -84,9 +93,10 @@ function defaultConfig(
 
 function newConfig(
   regionCode: RegionCode,
+  cityCode: string,
   sortOrder: number,
 ): VehicleRegionConfig {
-  return defaultConfig(regionCode, sortOrder);
+  return defaultConfig(regionCode, cityCode, sortOrder);
 }
 function normalizeVehicle(vehicle: VehicleResponse): Vehicle {
   const regionConfigs = Array.isArray(vehicle.regionConfigs)
@@ -95,6 +105,7 @@ function normalizeVehicle(vehicle: VehicleResponse): Vehicle {
         const normalizedRegionCode = regionCode as RegionCode;
         return {
           regionCode: normalizedRegionCode,
+          cityCode: CAPITAL_CITY_CODES[normalizedRegionCode],
           currencyCode: getCurrencyCodeForRegion(normalizedRegionCode),
           pricingConfigured: false,
           active: vehicle.active !== false,
@@ -130,6 +141,7 @@ export default function VehiclesManager() {
   const [busy, setBusy] = useState(false);
   const [deleteKey, setDeleteKey] = useState<string | null>(null);
   const [password, setPassword] = useState("");
+  const [cities, setCities] = useState<CityOption[]>([]);
 
   const editing = Boolean(
     draft?.key && vehicles.some((vehicle) => vehicle.key === draft.key),
@@ -145,6 +157,21 @@ export default function VehiclesManager() {
     setVehicles(data.vehicles.map(normalizeVehicle));
   }
   useEffect(() => {
+    fetch("/api/admin/cities", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load operating areas.");
+        const data = await response.json();
+        setCities(
+          data.cities.map(
+            (city: { regionCode: RegionCode; cityCode: string; name: string }) => ({
+              regionCode: city.regionCode,
+              cityCode: city.cityCode,
+              name: city.name,
+            }),
+          ),
+        );
+      })
+      .catch((reason: Error) => setError(reason.message));
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
       .catch((reason: Error) => setError(reason.message))
@@ -153,27 +180,30 @@ export default function VehiclesManager() {
   function setDraftValue<K extends keyof Vehicle>(key: K, value: Vehicle[K]) {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
   }
-  function toggleRegion(regionCode: RegionCode) {
+  function toggleCity(regionCode: RegionCode, cityCode: string) {
     setDraft((current) => {
       if (!current) return current;
       const exists = current.regionConfigs.some(
-        (config) => config.regionCode === regionCode,
+        (config) =>
+          config.regionCode === regionCode && config.cityCode === cityCode,
       );
       return {
         ...current,
         regionConfigs: exists
           ? current.regionConfigs.filter(
-              (config) => config.regionCode !== regionCode,
+              (config) =>
+                config.regionCode !== regionCode || config.cityCode !== cityCode,
             )
           : [
               ...current.regionConfigs,
-              newConfig(regionCode, current.regionConfigs.length),
+              newConfig(regionCode, cityCode, current.regionConfigs.length),
             ],
       };
     });
   }
   function updateConfig(
     regionCode: string,
+    cityCode: string,
     field: (typeof numeric)[number],
     value: number,
   ) {
@@ -182,20 +212,22 @@ export default function VehiclesManager() {
       return {
         ...current,
         regionConfigs: current.regionConfigs.map((config) =>
-          config.regionCode === regionCode
+          config.regionCode === regionCode && config.cityCode === cityCode
             ? { ...config, [field]: value }
             : config,
         ),
       };
     });
   }
-  function setRegionActive(regionCode: string, active: boolean) {
+  function setCityActive(regionCode: string, cityCode: string, active: boolean) {
     setDraft((current) =>
       current
         ? {
             ...current,
             regionConfigs: current.regionConfigs.map((config) =>
-              config.regionCode === regionCode ? { ...config, active } : config,
+              config.regionCode === regionCode && config.cityCode === cityCode
+                ? { ...config, active }
+                : config,
             ),
           }
         : current,
@@ -203,6 +235,7 @@ export default function VehiclesManager() {
   }
   function setRegionPricingConfigured(
     regionCode: string,
+    cityCode: string,
     pricingConfigured: boolean,
   ) {
     setDraft((current) =>
@@ -210,7 +243,7 @@ export default function VehiclesManager() {
         ? {
             ...current,
             regionConfigs: current.regionConfigs.map((config) =>
-              config.regionCode === regionCode
+              config.regionCode === regionCode && config.cityCode === cityCode
                 ? { ...config, pricingConfigured }
                 : config,
             ),
@@ -343,16 +376,16 @@ export default function VehiclesManager() {
                         return (
                           <span
                             className={`vehicles-rate ${config.active ? "" : "is-inactive"}`}
-                            key={config.regionCode}
+                            key={`${config.regionCode}:${config.cityCode}`}
                           >
-                            {region?.currency.code} {config.rate}/km ·{" "}
-                            {region?.label}
+                            {region?.currency.code} {config.rate}/km · {region?.label} /{" "}
+                            {cities.find((city) => city.cityCode === config.cityCode)?.name ?? config.cityCode}
                           </span>
                         );
                       })}
                     </td>
                     <td>
-                      {vehicle.regionConfigs.length} region
+                      {vehicle.regionConfigs.length} City/State
                       {vehicle.regionConfigs.length === 1 ? "" : "s"}
                     </td>
                     <td>
@@ -403,10 +436,7 @@ export default function VehiclesManager() {
             <div>
               <p className="vehicles-kicker">Vehicle configuration</p>
               <h2 id="vehicle-editor-title">{title}</h2>
-              <p>
-                Selected regions define where this vehicle exists. Each region
-                can be enabled independently.
-              </p>
+              <p>Each City/State has independent settings initialized from its Region capital.</p>
             </div>
           </header>
           <div className="vehicles-core">
@@ -439,19 +469,22 @@ export default function VehiclesManager() {
           </div>
           <div className="vehicles-region-picker">
             <div>
-              <h3>Available regions</h3>
-              <p>Select every market where this vehicle can be booked.</p>
+              <h3>Available City/State areas</h3>
+              <p>Select each operating area where this vehicle can be booked.</p>
             </div>
             <div className="vehicles-region-options">
-              {REGION_LIST.map((region) => {
+              {cities.map((city) => {
+                const region = REGION_LIST.find((item) => item.code === city.regionCode)!;
                 const selected = draft.regionConfigs.some(
-                  (config) => config.regionCode === region.code,
+                  (config) =>
+                    config.regionCode === city.regionCode &&
+                    config.cityCode === city.cityCode,
                 );
                 return (
                   <button
                     type="button"
-                    key={region.code}
-                    onClick={() => toggleRegion(region.code)}
+                    key={`${city.regionCode}:${city.cityCode}`}
+                    onClick={() => toggleCity(city.regionCode, city.cityCode)}
                     className={`vehicles-region-option ${selected ? "selected" : ""}`}
                     aria-pressed={selected}
                   >
@@ -459,7 +492,7 @@ export default function VehiclesManager() {
                       {selected ? <Check size={14} /> : null}
                     </span>
                     <span>
-                      <strong>{region.label}</strong>
+                      <strong>{region.label} / {city.name}</strong>
                       <small>{region.currency.code}</small>
                     </span>
                   </button>
@@ -470,22 +503,26 @@ export default function VehiclesManager() {
           <div className="vehicles-region-configs">
             {draft.regionConfigs.length === 0 ? (
               <p className="vehicles-empty">
-                Select one or more regions to configure availability.
+                Select one or more City/State areas to configure availability.
               </p>
             ) : (
               draft.regionConfigs.map((config) => {
                 const region = REGION_LIST.find(
                   (item) => item.code === config.regionCode,
                 )!;
+                const cityName =
+                  cities.find((item) => item.cityCode === config.cityCode)?.name ??
+                  config.cityCode ??
+                  "";
                 return (
                   <details
-                    key={config.regionCode}
+                    key={`${config.regionCode}:${config.cityCode}`}
                     open
                     className={`vehicles-region-card ${config.active ? "" : "is-inactive"}`}
                   >
                     <summary>
                       <span>
-                        <strong>{region.label}</strong>
+                        <strong>{region.label} / {cityName}</strong>
                         <small>
                           {region.currency.code} · {region.currency.locale}
                         </small>
@@ -499,8 +536,9 @@ export default function VehiclesManager() {
                             type="checkbox"
                             checked={config.active}
                             onChange={(event) =>
-                              setRegionActive(
+                              setCityActive(
                                 config.regionCode,
+                                config.cityCode ?? CAPITAL_CITY_CODES[config.regionCode as RegionCode],
                                 event.target.checked,
                               )
                             }
@@ -514,6 +552,7 @@ export default function VehiclesManager() {
                             onChange={(event) =>
                               setRegionPricingConfigured(
                                 config.regionCode,
+                                config.cityCode ?? CAPITAL_CITY_CODES[config.regionCode as RegionCode],
                                 event.target.checked,
                               )
                             }
@@ -544,6 +583,7 @@ export default function VehiclesManager() {
                             onChange={(event) =>
                               updateConfig(
                                 config.regionCode,
+                                config.cityCode ?? CAPITAL_CITY_CODES[config.regionCode as RegionCode],
                                 field,
                                 Number(event.target.value),
                               )

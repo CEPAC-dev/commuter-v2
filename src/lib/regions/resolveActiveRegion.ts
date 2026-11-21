@@ -11,6 +11,11 @@ import {
   type RegionConfig,
 } from "@/lib/config/regions";
 import { User } from "@/models/User";
+import { OperatingCity } from "@/models/OperatingCity";
+import {
+  capitalCityCode,
+  ensureOperatingCitySeed,
+} from "@/lib/regions/cities";
 
 export class RegionAccessError extends Error {
   constructor(
@@ -25,6 +30,15 @@ export interface ActiveRegion {
   code: RegionCode;
   config: RegionConfig;
   allowedRegionCodes: RegionCode[];
+  cityCode: string;
+  city: {
+    name: string;
+    nameAr: string;
+    timezone: string;
+    mapCenter: { lat: number; lng: number };
+    mapZoom: number;
+    active: boolean;
+  };
 }
 
 function requestedRegion(value: string | null | undefined): RegionCode | null {
@@ -36,9 +50,13 @@ function requestedRegion(value: string | null | undefined): RegionCode | null {
 export async function resolveActiveRegion({
   userId,
   requested,
+  requestedCity,
+  allowInactiveCity = false,
 }: {
   userId: string;
   requested?: string | null;
+  requestedCity?: string | null;
+  allowInactiveCity?: boolean;
 }): Promise<ActiveRegion> {
   const requestedCode = requestedRegion(requested);
   if (requested && !requestedCode) {
@@ -47,11 +65,12 @@ export async function resolveActiveRegion({
 
   await connectDB();
   const user = await User.findById(userId)
-    .select("role region defaultRegionCode allowedRegionCodes")
+    .select("role region defaultRegionCode defaultCityCode allowedRegionCodes")
     .lean<{
       role?: string;
       region?: unknown;
       defaultRegionCode?: unknown;
+      defaultCityCode?: unknown;
       allowedRegionCodes?: unknown;
     }>();
   if (!user) throw new RegionAccessError(403, "Region access denied.");
@@ -86,10 +105,56 @@ export async function resolveActiveRegion({
     throw new RegionAccessError(403, "Region access denied.");
   }
 
+  if (!(await OperatingCity.exists({ regionCode: activeCode }))) {
+    await ensureOperatingCitySeed();
+  }
+  const requestedCityCode = requestedCity?.trim().toLowerCase() ||
+    (typeof user.defaultCityCode === "string" ? user.defaultCityCode : null);
+  const savedCity = requestedCityCode
+    ? await OperatingCity.findOne({
+          regionCode: activeCode,
+          cityCode: requestedCityCode,
+        }).lean()
+    : null;
+  if (requestedCity && !savedCity) {
+    throw new RegionAccessError(400, "Invalid City/State for this Region.");
+  }
+  if (savedCity && !savedCity.active && !allowInactiveCity) {
+    throw new RegionAccessError(403, "The selected City/State is inactive.");
+  }
+  const city =
+    (savedCity && (savedCity.active || allowInactiveCity) ? savedCity : null) ??
+    (await OperatingCity.findOne({
+      regionCode: activeCode,
+      isCapital: true,
+      ...(allowInactiveCity ? {} : { active: true }),
+    }).lean());
+  if (!city) {
+    throw new RegionAccessError(403, "No active City/State is configured.");
+  }
+
   return {
     code: activeCode,
-    config: REGIONS[activeCode],
+    config: {
+      ...REGIONS[activeCode],
+      timezone: city.timezone,
+      map: {
+        ...REGIONS[activeCode].map,
+        defaultCenter: city.mapCenter,
+        defaultZoom: city.mapZoom,
+        bounds: city.bounds ?? REGIONS[activeCode].map.bounds,
+      },
+    },
     allowedRegionCodes: effectiveAllowedRegionCodes,
+    cityCode: city.cityCode || capitalCityCode(activeCode),
+    city: {
+      name: city.name,
+      nameAr: city.nameAr,
+      timezone: city.timezone,
+      mapCenter: city.mapCenter,
+      mapZoom: city.mapZoom,
+      active: city.active,
+    },
   };
 }
 

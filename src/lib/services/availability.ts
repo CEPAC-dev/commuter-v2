@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
 import { Station } from "@/models/Station";
 import type { RegionCode } from "@/lib/config/regions";
+import { CAPITAL_CITY_CODES } from "@/lib/config/regions";
 import { findNearestStation } from "@/lib/geo/stations";
 import type { GeoPoint } from "@/types/geo";
 import {
@@ -29,6 +30,7 @@ export {
 export interface AvailabilityRecord {
   _id: string;
   regionCode: RegionCode;
+  cityCode: string;
   dayOfWeek: DayOfWeek;
   origin: GeoPoint;
   destination?: GeoPoint | null;
@@ -52,12 +54,27 @@ export interface AvailabilityRecord {
 export async function listDriverAvailability(
   driverId: string,
   regionCode: RegionCode,
+  cityCode: string,
 ): Promise<AvailabilityRecord[]> {
   await connectDB();
-  const records = await Availability.find({ driverId, regionCode }).lean<
+  const cityScope =
+    cityCode === CAPITAL_CITY_CODES[regionCode]
+      ? {
+          $or: [
+            { cityCode },
+            { cityCode: { $exists: false } },
+          ],
+        }
+      : { cityCode };
+  const records = await Availability.find({
+    driverId,
+    regionCode,
+    ...cityScope,
+  }).lean<
     {
       _id: unknown;
       regionCode: RegionCode;
+      cityCode?: string;
       dayOfWeek?: DayOfWeek;
       origin?: unknown;
       destination?: unknown;
@@ -110,6 +127,7 @@ export async function listDriverAvailability(
       {
         _id: String(record._id),
         regionCode,
+        cityCode: record.cityCode ?? cityCode,
         dayOfWeek,
         origin,
         destination,
@@ -122,7 +140,13 @@ export async function listDriverAvailability(
     ];
   });
 
-  const stations = await Station.find({ active: true, regionCode })
+  const stations = await Station.find({
+    active: true,
+    regionCode,
+    ...(cityCode === CAPITAL_CITY_CODES[regionCode]
+      ? { $or: [{ cityCode }, { cityCode: { $exists: false } }] }
+      : { cityCode }),
+  })
     .select(
       "objectId name direction stationType zones description landmark lat lng",
     )
@@ -203,6 +227,7 @@ export async function listDriverAvailability(
     ({ record, startNearestStation, destinationNearestStation }) => ({
       _id: String(record._id),
       regionCode: record.regionCode,
+      cityCode: record.cityCode,
       dayOfWeek: record.dayOfWeek,
       origin: record.origin,
       destination: record.destination,

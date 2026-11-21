@@ -38,6 +38,7 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
   const auth = await adminAuth(
     PERMISSIONS.STATIONS_MANAGE,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
 
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
   const request = await StationSuggestion.findOne({
     _id: id,
     regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
   }).lean();
   if (!request) {
     return NextResponse.json(
@@ -63,6 +65,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const auth = await adminAuth(
     PERMISSIONS.STATIONS_MANAGE,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
 
@@ -89,6 +92,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const suggestion = await StationSuggestion.findOne({
     _id: id,
     regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
   });
   if (!suggestion) {
     return NextResponse.json(
@@ -112,7 +116,12 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
         ? body.rejectionReason.trim().slice(0, 400)
         : "";
     const rejected = await StationSuggestion.findOneAndUpdate(
-      { _id: id, status: "pending" },
+      {
+        _id: id,
+        regionCode: auth.region.code,
+        cityCode: auth.region.cityCode,
+        status: "pending",
+      },
       {
         $set: {
           status: "rejected",
@@ -152,7 +161,10 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const lat = stationInput?.lat;
   const lng = stationInput?.lng;
   const stationType = stationInput?.stationType;
-  const zones = await loadServiceZones(auth.region.code);
+  const zones = await loadServiceZones(
+    auth.region.code,
+    auth.region.cityCode,
+  );
   const finalZoneName =
     validCoordinate(lat, -90, 90) && validCoordinate(lng, -180, 180)
       ? getZoneName(findZoneAtPoint([lng, lat], zones))
@@ -179,7 +191,12 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   }
 
   const locked = await StationSuggestion.findOneAndUpdate(
-    { _id: id, status: "pending" },
+    {
+      _id: id,
+      regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
+      status: "pending",
+    },
     {
       $set: {
         status: "processing",
@@ -196,7 +213,10 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     );
   }
 
-  const maximumStation = await Station.findOne()
+  const maximumStation = await Station.findOne({
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  })
     .sort({ objectId: -1 })
     .select("objectId")
     .lean<{ objectId?: number } | null>();
@@ -225,19 +245,27 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       lng,
       active: true,
       regionCode: suggestion.regionCode,
+      cityCode: suggestion.cityCode ?? auth.region.cityCode,
     });
     stationId = station._id;
     stationName = station.name;
     const auditLog = await StationAuditLog.create({
       action: "manual_create",
       regionCode: suggestion.regionCode,
+      cityCode: suggestion.cityCode ?? auth.region.cityCode,
       actorId: auth.userId,
       stationId: station._id,
       metadata: { objectId, after: station.toObject() },
     });
     auditLogId = auditLog._id;
     approved = await StationSuggestion.findOneAndUpdate(
-      { _id: id, status: "processing", reviewedBy: auth.userId },
+      {
+        _id: id,
+        regionCode: auth.region.code,
+        cityCode: auth.region.cityCode,
+        status: "processing",
+        reviewedBy: auth.userId,
+      },
       {
         $set: {
           status: "approved",
@@ -256,7 +284,13 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       await StationAuditLog.deleteOne({ _id: auditLogId });
     }
     await StationSuggestion.updateOne(
-      { _id: id, status: "processing", reviewedBy: auth.userId },
+      {
+        _id: id,
+        regionCode: auth.region.code,
+        cityCode: auth.region.cityCode,
+        status: "processing",
+        reviewedBy: auth.userId,
+      },
       {
         $set: { status: "pending" },
         $unset: { reviewedBy: 1, reviewedAt: 1 },

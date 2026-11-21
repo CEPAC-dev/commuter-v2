@@ -19,6 +19,7 @@ export async function POST(
   const auth = await adminAuth(
     undefined,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
   const { id } = await params;
@@ -30,6 +31,7 @@ export async function POST(
     {
       _id: id,
       regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
       status: { $in: ["UPLOADED", "VALID", "INVALID"] },
     },
     { $set: { status: "VALIDATING" } },
@@ -55,6 +57,7 @@ export async function POST(
     const validation = validateStationGeoJson(parsed, auth.region.code);
     const active = await Station.find({
       regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
       active: true,
     })
       .select(
@@ -64,7 +67,12 @@ export async function POST(
     const diff = diffStationDataset(validation.records, active);
     const status = validation.errors.length === 0 ? "VALID" : "INVALID";
     await StationDataset.updateOne(
-      { _id: dataset._id, status: "VALIDATING" },
+      {
+        _id: dataset._id,
+        regionCode: auth.region.code,
+        cityCode: auth.region.cityCode,
+        status: "VALIDATING",
+      },
       {
         $set: {
           status,
@@ -82,6 +90,7 @@ export async function POST(
     await StationAuditLog.create({
       action: "validate",
       regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
       datasetVersionId: dataset._id,
       actorId: auth.userId,
       metadata: { status, ...diff },
@@ -94,7 +103,11 @@ export async function POST(
     });
   } catch (error) {
     await StationDataset.updateOne(
-      { _id: dataset._id },
+      {
+        _id: dataset._id,
+        regionCode: auth.region.code,
+        cityCode: auth.region.cityCode,
+      },
       {
         $set: {
           status: "INVALID",
@@ -112,6 +125,7 @@ export async function POST(
     await StationAuditLog.create({
       action: "failed",
       regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
       datasetVersionId: dataset._id,
       actorId: auth.userId,
       metadata: {

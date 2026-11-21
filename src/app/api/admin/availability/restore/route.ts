@@ -4,14 +4,22 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Availability } from "@/models/Availability";
 import { User } from "@/models/User";
 import { DAYS_OF_WEEK } from "@/lib/services/availability";
-import { isRegionCode, normalizeRegion } from "@/lib/config/regions";
+import {
+  CAPITAL_CITY_CODES,
+  isRegionCode,
+  normalizeRegion,
+} from "@/lib/config/regions";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await adminAuth();
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
+  );
   if (!auth.authorized) return auth.response;
 
   const formData = await req.formData();
@@ -74,8 +82,10 @@ export async function POST(req: NextRequest) {
     ]),
   );
 
-  let createdCount = 0;
-  let updatedCount = 0;
+  const restoreRecords: Array<{
+    availabilityNumber: number;
+    payload: Record<string, unknown>;
+  }> = [];
 
   for (const item of raw) {
     if (!isPlainObject(item)) {
@@ -98,6 +108,12 @@ export async function POST(req: NextRequest) {
     const regionCode = isRegionCode(record.regionCode)
       ? record.regionCode
       : driverRegionById.get(driverId ?? "");
+    const cityCode =
+      typeof record.cityCode === "string" && record.cityCode.trim()
+        ? record.cityCode.trim().toLowerCase()
+        : regionCode
+          ? CAPITAL_CITY_CODES[regionCode]
+          : null;
 
     if (
       !Number.isFinite(availabilityNumber) ||
@@ -107,33 +123,61 @@ export async function POST(req: NextRequest) {
       !startTime ||
       !endTime ||
       !regionCode ||
+      !cityCode ||
       !isPlainObject(origin) ||
       !isPlainObject(destination)
     ) {
       continue;
     }
 
-    const payload = {
-      driverId,
-      regionCode,
-      dayOfWeek,
-      origin,
-      destination,
-      startNearestStation: record.startNearestStation ?? undefined,
-      destinationNearestStation:
-        record.destinationNearestStation ??
-        record.endNearestStation ??
-        undefined,
-      startTime,
-      endTime,
-      active: record.active !== false,
-    };
+    if (
+      regionCode !== auth.region.code ||
+      cityCode !== auth.region.cityCode
+    ) {
+      return NextResponse.json(
+        { error: "The backup contains records outside the selected City/State." },
+        { status: 400 },
+      );
+    }
 
-    const existing = await Availability.findOne({ availabilityNumber }).lean();
+    restoreRecords.push({
+      availabilityNumber,
+      payload: {
+        driverId,
+        regionCode,
+        cityCode,
+        dayOfWeek,
+        origin,
+        destination,
+        startNearestStation: record.startNearestStation ?? undefined,
+        destinationNearestStation:
+          record.destinationNearestStation ??
+          record.endNearestStation ??
+          undefined,
+        startTime,
+        endTime,
+        active: record.active !== false,
+      },
+    });
+  }
+
+  let createdCount = 0;
+  let updatedCount = 0;
+
+  for (const { availabilityNumber, payload } of restoreRecords) {
+    const existing = await Availability.findOne({
+      availabilityNumber,
+      regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
+    }).lean();
 
     if (existing) {
       await Availability.updateOne(
-        { availabilityNumber },
+        {
+          availabilityNumber,
+          regionCode: auth.region.code,
+          cityCode: auth.region.cityCode,
+        },
         { $set: payload },
         { upsert: true },
       );

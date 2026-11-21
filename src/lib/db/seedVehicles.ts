@@ -2,6 +2,7 @@ import "server-only";
 import { connectDB } from "@/lib/db/mongoose";
 import { VEHICLE_LIST } from "@/lib/config/vehicles";
 import {
+  CAPITAL_CITY_CODES,
   getCurrencyConfig,
   REGION_CODES,
   VEHICLE_REGIONS,
@@ -30,6 +31,7 @@ export async function ensureVehicleSeed() {
               ).map((regionCode) => ({
                 ...vehicle,
                 regionCode,
+                cityCode: CAPITAL_CITY_CODES[regionCode],
                 currencyCode: getCurrencyConfig(regionCode).code,
                 pricingConfigured: false,
                 active: true,
@@ -65,6 +67,8 @@ export async function ensureVehicleSeed() {
           $set: {
             regionConfigs: regions.map((regionCode: string) => ({
               regionCode,
+              cityCode:
+                CAPITAL_CITY_CODES[regionCode as keyof typeof CAPITAL_CITY_CODES],
               currencyCode: getCurrencyConfig(regionCode).code,
               pricingConfigured: false,
               active: vehicle.active !== false,
@@ -84,5 +88,30 @@ export async function ensureVehicleSeed() {
         },
       );
     }),
+  );
+  const missingCityCodes = await Vehicle.find({
+    "regionConfigs.0": { $exists: true },
+    "regionConfigs.cityCode": { $exists: false },
+  }).lean();
+  await Promise.all(
+    missingCityCodes.map((vehicle) =>
+      Vehicle.updateOne(
+        { _id: vehicle._id },
+        {
+          $set: {
+            regionConfigs: (vehicle.regionConfigs ?? []).map(
+              (config: { regionCode: string; cityCode?: string }) => ({
+                ...config,
+                cityCode:
+                  config.cityCode ??
+                  CAPITAL_CITY_CODES[
+                    config.regionCode as keyof typeof CAPITAL_CITY_CODES
+                  ],
+              }),
+            ),
+          },
+        },
+      ),
+    ),
   );
 }

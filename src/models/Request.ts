@@ -14,6 +14,7 @@ const RequestSchema = new Schema(
       default: null,
       index: true,
     },
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
     currencyCode: {
       type: String,
       enum: ["EGP", "SAR", "AED"],
@@ -94,6 +95,11 @@ export type RequestDoc = InferSchemaType<typeof RequestSchema>;
 const existingRequestModel = models.Request;
 if (existingRequestModel && !existingRequestModel.schema.path("regionCode")) {
   existingRequestModel.schema.add({ regionCode: RequestSchema.obj.regionCode });
+}
+if (existingRequestModel && !existingRequestModel.schema.path("cityCode")) {
+  existingRequestModel.schema.add({
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
+  });
 }
 
 const requestSchema = existingRequestModel?.schema ?? RequestSchema;

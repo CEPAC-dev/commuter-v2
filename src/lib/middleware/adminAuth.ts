@@ -27,6 +27,7 @@ type RegionAdminAuthSuccess = AdminAuthSuccess & {
 export function adminAuth(
   requiredPermission: PermissionKey | undefined,
   requestedRegion: string | null,
+  requestedCity?: string | null,
 ): Promise<AdminAuthFailure | RegionAdminAuthSuccess>;
 export function adminAuth(
   requiredPermission?: PermissionKey,
@@ -34,6 +35,7 @@ export function adminAuth(
 export async function adminAuth(
   requiredPermission?: PermissionKey,
   requestedRegion?: string | null,
+  requestedCity?: string | null,
 ): Promise<AdminAuthFailure | AdminAuthSuccess | RegionAdminAuthSuccess> {
   const session = await getSession();
   if (!session) {
@@ -76,6 +78,8 @@ export async function adminAuth(
       const region = await resolveActiveRegion({
         userId: session.userId,
         requested: requestedRegion,
+        requestedCity,
+        allowInactiveCity: true,
       });
       return {
         authorized: true as const,

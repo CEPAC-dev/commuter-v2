@@ -57,6 +57,15 @@ interface Props {
   setGender: (v: "male" | "female" | "") => void;
   referralCode: string;
   region?: RegionCode;
+  setRegion: (v: RegionCode) => void;
+  cityCode: string;
+  setCityCode: (v: string) => void;
+  cities: Array<{
+    regionCode: RegionCode;
+    cityCode: string;
+    name: string;
+    nameAr: string;
+  }>;
   onSuccess: () => void;
 }
 
@@ -75,6 +84,10 @@ export default function DriverRegisterForm({
   setGender,
   referralCode,
   region = "EG-CAIRO",
+  setRegion,
+  cityCode,
+  setCityCode,
+  cities,
   onSuccess,
 }: Props) {
   const { t, locale } = useClientLocale();
@@ -137,6 +150,7 @@ export default function DriverRegisterForm({
           vehicleColor: normalizeCarColor(vehicleColor),
           referralCodeUsed: referralCode || undefined,
           regionCode: region,
+          cityCode,
           ...(verificationMethod === "security_question" && {
             securityQuestionId,
             securityAnswer: securityAnswer.trim(),
@@ -159,6 +173,48 @@ export default function DriverRegisterForm({
   return (
     <form onSubmit={handleSubmit} noValidate>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div>
+          <label htmlFor="driver-register-region" style={labelStyle}>
+            Region
+          </label>
+          <select
+            id="driver-register-region"
+            required
+            value={region}
+            onChange={(event) => {
+              setRegion(event.target.value as RegionCode);
+              setCityCode("");
+            }}
+            style={selectStyle}
+          >
+            <option value="EG-CAIRO">Egypt</option>
+            <option value="SA">Saudi Arabia</option>
+            <option value="AE-ABU-DHABI">United Arab Emirates</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="driver-register-city" style={labelStyle}>
+            City/State
+          </label>
+          <select
+            id="driver-register-city"
+            required
+            value={cityCode}
+            onChange={(event) => setCityCode(event.target.value)}
+            style={selectStyle}
+          >
+            <option value="" disabled>
+              Select a City/State
+            </option>
+            {cities
+              .filter((city) => city.regionCode === region)
+              .map((city) => (
+                <option key={city.cityCode} value={city.cityCode}>
+                  {locale === "ar" ? city.nameAr : city.name}
+                </option>
+              ))}
+          </select>
+        </div>
         <div>
           <label htmlFor="d-name" style={labelStyle}>
             {t("auth.driver.full_name")}{" "}

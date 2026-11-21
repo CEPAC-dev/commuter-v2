@@ -123,6 +123,7 @@ const TripSchema = new Schema(
       default: null,
       index: true,
     },
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
     currencyCode: {
       type: String,
       enum: ["EGP", "SAR", "AED"],
@@ -368,6 +369,11 @@ export type TripDoc = InferSchemaType<typeof TripSchema>;
 const existingTripModel = models.Trip;
 if (existingTripModel && !existingTripModel.schema.path("regionCode")) {
   existingTripModel.schema.add({ regionCode: TripSchema.obj.regionCode });
+}
+if (existingTripModel && !existingTripModel.schema.path("cityCode")) {
+  existingTripModel.schema.add({
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
+  });
 }
 if (existingTripModel && !existingTripModel.schema.path("preferedGender")) {
   existingTripModel.schema.add({

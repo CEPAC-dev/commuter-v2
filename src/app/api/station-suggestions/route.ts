@@ -67,14 +67,14 @@ export async function POST(req: NextRequest) {
 
   await connectDB();
   const region = await resolveActiveRegion({ userId: session.userId });
-  const mapSettings = await getMapSettings(region.code);
+  const mapSettings = await getMapSettings(region.code, region.cityCode);
   if (!mapSettings.showZones) {
     return NextResponse.json(
       { error: "Station suggestions require an active service zone." },
       { status: 400 },
     );
   }
-  const zones = await loadServiceZones(region.code);
+  const zones = await loadServiceZones(region.code, region.cityCode);
   const containingZone = findZoneAtPoint(
     [suggestedPoint.lng, suggestedPoint.lat],
     zones,
@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
       phone: requester.phone,
     },
     regionCode: region.code,
+    cityCode: region.cityCode,
     locationType,
     targetLocation: {
       address: targetLocationRecord.address.trim(),
@@ -139,6 +140,7 @@ export async function POST(req: NextRequest) {
         requestNumber,
         requester: request.requester,
         regionCode: region.code,
+        cityCode: region.cityCode,
       },
     }),
   ]);

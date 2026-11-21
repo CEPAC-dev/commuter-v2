@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { adminAuth } from "@/lib/middleware/adminAuth";
 import { connectDB } from "@/lib/db/mongoose";
-import { isRegionCode, type RegionCode } from "@/lib/config/regions";
+import { isRegionCode } from "@/lib/config/regions";
 import type { ZoneFeature } from "@/lib/geo/zones";
 import { getServiceZoneConfig } from "@/lib/geo/zones.server";
-import { ZoneDataset } from "@/models/ZoneDataset";
+import { OperatingCity } from "@/models/OperatingCity";
 import { validateMutationRequest } from "@/lib/security/request";
 
 const MAX_GEOJSON_BYTES = 8 * 1024 * 1024;
@@ -113,16 +113,14 @@ function normalizeFeatures(value: unknown): ZoneFeature[] | null {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getSession();
-  if (session?.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
   const regionCode = request.nextUrl.searchParams.get("regionCode");
-  if (!isRegionCode(regionCode)) {
-    return NextResponse.json({ error: "Invalid region." }, { status: 400 });
+  const cityCode = request.nextUrl.searchParams.get("cityCode")?.trim().toLowerCase();
+  if (!isRegionCode(regionCode) || !cityCode) {
+    return NextResponse.json({ error: "Choose a valid Region and City/State." }, { status: 400 });
   }
-
-  return NextResponse.json(await getServiceZoneConfig(regionCode));
+  const auth = await adminAuth(undefined, regionCode, cityCode);
+  if (!auth.authorized) return auth.response;
+  return NextResponse.json(await getServiceZoneConfig(regionCode, cityCode));
 }
 
 export async function PUT(request: NextRequest) {
@@ -130,11 +128,6 @@ export async function PUT(request: NextRequest) {
     maxBytes: MAX_GEOJSON_BYTES,
   });
   if (invalidRequest) return invalidRequest;
-
-  const session = await getSession();
-  if (session?.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   try {
     const rawBody = await request.text();
@@ -146,9 +139,14 @@ export async function PUT(request: NextRequest) {
     }
     const body = JSON.parse(rawBody) as Record<string, unknown>;
     const regionCode = body.regionCode;
-    if (!isRegionCode(regionCode)) {
-      return NextResponse.json({ error: "Invalid region." }, { status: 400 });
+    const cityCode =
+      typeof body.cityCode === "string" ? body.cityCode.trim().toLowerCase() : "";
+    if (!isRegionCode(regionCode) || !cityCode) {
+      return NextResponse.json({ error: "Choose a valid Region and City/State." }, { status: 400 });
     }
+    const auth = await adminAuth(undefined, regionCode, cityCode);
+    if (!auth.authorized) return auth.response;
+    await connectDB();
     const features = normalizeFeatures(body.geojson);
     if (!features) {
       return NextResponse.json(
@@ -164,21 +162,31 @@ export async function PUT(request: NextRequest) {
         ? body.sourceName.trim().slice(0, 160)
         : "admin-upload.geojson";
 
-    await connectDB();
-    const data = await ZoneDataset.findOneAndUpdate(
-      { regionCode: regionCode as RegionCode },
+    const data = await OperatingCity.findOneAndUpdate(
+      { regionCode, cityCode },
       {
         $set: {
-          regionCode,
-          sourceName,
-          features,
-          featureCount: features.length,
-          updatedBy: session.userId,
+          zoneFeatures: features,
+          zoneSourceName: sourceName,
         },
       },
-      { upsert: true, returnDocument: "after", runValidators: true },
+      { returnDocument: "after", runValidators: true },
     ).lean();
-    return NextResponse.json({ data });
+    if (!data) {
+      return NextResponse.json(
+        { error: "Invalid City/State for this Region." },
+        { status: 400 },
+      );
+    }
+    return NextResponse.json({
+      data: {
+        regionCode,
+        cityCode,
+        sourceName,
+        features,
+        featureCount: features.length,
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       {

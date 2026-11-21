@@ -2,18 +2,33 @@ import "server-only";
 
 import { connectDB } from "@/lib/db/mongoose";
 import { defaultMapSettings, type MapSettings } from "@/lib/config/mapSettings";
-import type { RegionCode } from "@/lib/config/regions";
+import {
+  CAPITAL_CITY_CODES,
+  type RegionCode,
+} from "@/lib/config/regions";
 import { MapSettingsModel } from "@/models/MapSettings";
 
 export async function getMapSettings(
   regionCode: RegionCode,
+  cityCode: string,
 ): Promise<MapSettings> {
   await connectDB();
-  const stored = await MapSettingsModel.findOne({ regionCode }).lean();
-  const fallback = defaultMapSettings(regionCode);
+  let stored = await MapSettingsModel.findOne({ regionCode, cityCode }).lean();
+  if (!stored && cityCode === CAPITAL_CITY_CODES[regionCode]) {
+    stored = await MapSettingsModel.findOne({
+      regionCode,
+      $or: [
+        { cityCode: { $exists: false } },
+        { cityCode: null },
+        { cityCode: "" },
+      ],
+    }).lean();
+  }
+  const fallback = defaultMapSettings(regionCode, cityCode);
   return stored
     ? {
         regionCode,
+        cityCode,
         provider: stored.provider ?? fallback.provider,
         canvasStyle: stored.canvasStyle ?? fallback.canvasStyle,
         osmTheme: stored.osmTheme ?? fallback.osmTheme,

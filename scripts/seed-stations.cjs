@@ -20,6 +20,8 @@ try {
 const fs = require("fs");
 const path = require("path");
 const { MongoClient } = require("mongodb");
+const REGION_CODE = "EG-CAIRO";
+const CITY_CODE = "cairo";
 
 async function main() {
     const uri = process.env.MONGODB_URI;
@@ -46,6 +48,10 @@ async function main() {
             stationType: String(f.properties?.station_type ?? ""),
             lat,
             lng,
+            regionCode: REGION_CODE,
+            cityCode: CITY_CODE,
+            sourceObjectId: f.properties?.OBJECTID ?? f.id,
+            sourceKind: "dataset",
             active: true,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -57,9 +63,12 @@ async function main() {
     const db = client.db(process.env.DB_NAME);
     const col = db.collection("stations");
 
-    await col.deleteMany({});
+    await col.deleteMany({ regionCode: REGION_CODE, cityCode: CITY_CODE });
     await col.insertMany(docs);
-    await col.createIndex({ objectId: 1 }, { unique: true });
+    await col.createIndex(
+        { regionCode: 1, cityCode: 1, objectId: 1 },
+        { unique: true },
+    );
     await col.createIndex({ lat: 1, lng: 1 });
 
     console.log(`Seeded ${docs.length} station points.`);

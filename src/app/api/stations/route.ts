@@ -9,11 +9,15 @@ import {
 import { adminAuth } from "@/lib/middleware/adminAuth";
 import { StationAuditLog } from "@/models/StationAuditLog";
 import { PERMISSIONS } from "@/lib/auth/permissions";
-import type { RegionCode } from "@/lib/config/regions";
+import {
+  CAPITAL_CITY_CODES,
+  type RegionCode,
+} from "@/lib/config/regions";
 
 interface StationSource {
   objectId?: number;
   regionCode?: RegionCode;
+  cityCode?: string;
   name?: string;
   direction?: string;
   zones?: string;
@@ -28,6 +32,7 @@ function serialize(s: StationSource) {
   return {
     id: s.objectId,
     regionCode: s.regionCode,
+    cityCode: s.cityCode,
     name: s.name || s.direction || "",
     direction: s.direction,
     zones: s.zones || "",
@@ -55,6 +60,7 @@ export async function GET(req: NextRequest) {
     region = await resolveActiveRegion({
       userId: session.userId,
       requested: url.searchParams.get("region"),
+      requestedCity: url.searchParams.get("cityCode"),
     });
   } catch (error) {
     const status = error instanceof RegionAccessError ? error.status : 403;
@@ -67,11 +73,21 @@ export async function GET(req: NextRequest) {
   }
 
   await connectDB();
+  const cityFilter =
+    region.cityCode === CAPITAL_CITY_CODES[region.code]
+      ? {
+          $or: [
+            { cityCode: region.cityCode },
+            { cityCode: { $exists: false } },
+          ],
+        }
+      : { cityCode: region.cityCode };
 
   if (stationId) {
     const station = await Station.findOne({
       _id: stationId,
       regionCode: region.code,
+      ...cityFilter,
     }).lean();
     if (!station) {
       return NextResponse.json({ error: "Station not found" }, { status: 404 });
@@ -91,6 +107,7 @@ export async function GET(req: NextRequest) {
     const station = await Station.findOne({
       objectId,
       regionCode: region.code,
+      ...cityFilter,
     }).lean();
     if (!station) {
       return NextResponse.json({ error: "Station not found" }, { status: 404 });
@@ -101,6 +118,7 @@ export async function GET(req: NextRequest) {
   const stations = await Station.find({
     regionCode: region.code,
     active: true,
+    ...cityFilter,
   }).lean();
   return NextResponse.json({ stations: stations.map(serialize) });
 }
@@ -110,6 +128,7 @@ export async function POST(req: NextRequest) {
   const auth = await adminAuth(
     PERMISSIONS.STATIONS_MANAGE,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
 
@@ -132,8 +151,12 @@ export async function POST(req: NextRequest) {
   if (!Number.isInteger(objectId) || objectId < 0) {
     return NextResponse.json({ error: "A non-negative objectId is required." }, { status: 400 });
   }
-  const duplicate = await Station.exists({ objectId });
-  if (duplicate) return NextResponse.json({ error: "objectId already exists; the legacy global identity index remains in force." }, { status: 409 });
+  const duplicate = await Station.exists({
+    objectId,
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  });
+  if (duplicate) return NextResponse.json({ error: "That objectId already exists in this City/State." }, { status: 409 });
 
   const station = await Station.create({
     objectId,
@@ -149,11 +172,13 @@ export async function POST(req: NextRequest) {
     lng,
     active: body.active !== false,
     regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
   });
 
   await StationAuditLog.create({
     action: "manual_create",
     regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
     actorId: auth.userId,
     stationId: station._id,
     metadata: { objectId: station.objectId, after: station.toObject() },

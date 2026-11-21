@@ -29,6 +29,7 @@ export async function getEligibleDriverIds(ride: {
   _id: unknown;
   date: string;
   regionCode?: string | null;
+  cityCode?: string | null;
   startTime: string;
   endTime: string;
   vehicleType: string;
@@ -41,13 +42,14 @@ export async function getEligibleDriverIds(ride: {
   }[];
 }): Promise<Types.ObjectId[]> {
   const settings = await getAdminSettings();
-  if (!isRegionCode(ride.regionCode)) return [];
+  if (!isRegionCode(ride.regionCode) || !ride.cityCode) return [];
   const dayOfWeek = availabilityDayOfWeek(ride.date);
   if (!dayOfWeek) return [];
   const availability = await Availability.find({
     dayOfWeek,
     active: true,
     regionCode: ride.regionCode,
+    cityCode: ride.cityCode,
   })
     .select(
       "driverId origin startNearestStation destinationNearestStation startTime endTime",

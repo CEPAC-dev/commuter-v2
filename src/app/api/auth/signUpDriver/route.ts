@@ -31,6 +31,7 @@ import {
 } from "@/lib/config/regions";
 import { createWelcomeNotification } from "@/lib/notifications/welcomeNotification";
 import { normalizeCarColor } from "@/lib/carColors";
+import { isOperatingCityInRegion } from "@/lib/regions/cities";
 
 export async function POST(req: NextRequest) {
   const invalidRequest = validateMutationRequest(req);
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       securityQuestionId,
       securityAnswer,
       regionCode,
+      cityCode,
     } = await req.json();
     const safeName = normalizePlainText(name, { maxLength: 100 });
     const safeVehicleColor = normalizeCarColor(vehicleColor);
@@ -94,6 +96,12 @@ export async function POST(req: NextRequest) {
     const selectedRegion: RegionCode = isRegionCode(regionCode)
       ? regionCode
       : DEFAULT_REGION;
+    if (!(await isOperatingCityInRegion(selectedRegion, cityCode))) {
+      return NextResponse.json(
+        { error: "Choose an active City/State within the selected Region." },
+        { status: 400 },
+      );
+    }
 
     console.log(
       "Phase 1: Input validation passed. Proceeding to database operations.",
@@ -171,6 +179,7 @@ export async function POST(req: NextRequest) {
             ? "EG"
             : selectedRegion,
       defaultRegionCode: selectedRegion,
+      defaultCityCode: String(cityCode).trim().toLowerCase(),
       allowedRegionCodes: [selectedRegion],
       referralCode,
       gender,

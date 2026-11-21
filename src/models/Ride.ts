@@ -102,6 +102,7 @@ const RideSchema = new Schema(
       default: null,
       index: true,
     },
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
     availabilityId: {
       type: Types.ObjectId,
       ref: "Availability",
@@ -189,6 +190,11 @@ RideSchema.index({ "passengers.tripId": 1 });
 const existingRideModel = models.Ride;
 if (existingRideModel && !existingRideModel.schema.path("regionCode")) {
   existingRideModel.schema.add({ regionCode: RideSchema.obj.regionCode });
+}
+if (existingRideModel && !existingRideModel.schema.path("cityCode")) {
+  existingRideModel.schema.add({
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
+  });
 }
 if (existingRideModel && !existingRideModel.schema.path("passengersCount")) {
   existingRideModel.schema.add({

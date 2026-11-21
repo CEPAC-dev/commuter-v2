@@ -73,6 +73,7 @@ const UserSchema = new Schema(
       enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI", null],
       index: true,
     },
+    defaultCityCode: { type: String, default: null, trim: true, lowercase: true },
     allowedRegionCodes: {
       type: [String],
       default: [],
@@ -116,6 +117,11 @@ if (existingUserModel) {
         enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI", null],
         index: true,
       },
+    });
+  }
+  if (!existingUserModel.schema.path("defaultCityCode")) {
+    existingUserModel.schema.add({
+      defaultCityCode: { type: String, default: null, trim: true, lowercase: true },
     });
   }
   if (!existingUserModel.schema.path("allowedRegionCodes")) {

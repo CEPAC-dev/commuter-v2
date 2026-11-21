@@ -11,6 +11,7 @@ export async function GET(
   const auth = await adminAuth(
     undefined,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
   const { id } = await params;
@@ -20,6 +21,7 @@ export async function GET(
   const dataset = await StationDataset.findOne({
     _id: id,
     regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
   }).lean();
   if (!dataset)
     return NextResponse.json({ error: "Dataset not found." }, { status: 404 });

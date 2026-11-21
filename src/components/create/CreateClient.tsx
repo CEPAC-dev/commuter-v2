@@ -51,6 +51,7 @@ import {
   DEFAULT_REGION,
   getMapConfig,
   type RegionCode,
+  type RegionConfig,
 } from "@/lib/config/regions";
 import type { MapSettings } from "@/lib/config/mapSettings";
 import { MapSearchProvider } from "@/lib/MapSearchContext";
@@ -60,6 +61,8 @@ interface Props {
   userName: string;
   userGender: "male" | "female" | null;
   region?: RegionCode;
+  cityCode: string;
+  mapConfig?: RegionConfig["map"];
   mapSettings: MapSettings;
   multiDayRequestsEnabled: boolean;
   onAddressSaved?: (saved: SavedAddress) => void;
@@ -121,10 +124,12 @@ export default function CreateClient({
   userName,
   userGender: initialUserGender,
   region = DEFAULT_REGION,
+  cityCode,
+  mapConfig: suppliedMapConfig,
   mapSettings,
   multiDayRequestsEnabled,
 }: Props) {
-  const mapConfig = getMapConfig(region);
+  const mapConfig = suppliedMapConfig ?? getMapConfig(region);
   const { pickup, dropoff } = useTripStore();
   const [mounted, setMounted] = useState(false);
   const [bookingDates, setBookingDates] = useState<string[]>([]);
@@ -334,15 +339,18 @@ export default function CreateClient({
 
   // Load wallet balance, saved addresses, and transit stations
   useEffect(() => {
-    fetch(`/api/stations?region=${encodeURIComponent(region)}`, {
+    fetch(
+      `/api/stations?region=${encodeURIComponent(region)}&cityCode=${encodeURIComponent(cityCode)}`,
+      {
       cache: "no-store",
-    })
+      },
+    )
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.stations) setStations(d.stations as Station[]);
       })
       .catch(() => {});
-  }, [region]);
+  }, [region, cityCode]);
 
   useEffect(() => {
     (async () => {
@@ -377,9 +385,12 @@ export default function CreateClient({
 
   // Vehicles — DB-hydrated (mobile-parity source of truth); falls back to static config on failure
   useEffect(() => {
-    fetch(`/api/vehicles?region=${encodeURIComponent(region)}`, {
+    fetch(
+      `/api/vehicles?region=${encodeURIComponent(region)}&cityCode=${encodeURIComponent(cityCode)}`,
+      {
       cache: "no-store",
-    })
+      },
+    )
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!Array.isArray(d?.vehicles)) return;
@@ -392,7 +403,7 @@ export default function CreateClient({
         setVehiclesMap(map);
       })
       .catch(() => {});
-  }, [region]);
+  }, [region, cityCode]);
 
   const handleMapPick = useCallback(
     (point: TripPoint) => {
@@ -515,6 +526,7 @@ export default function CreateClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          cityCode,
           date: selectedDates[0],
           dates: selectedDates,
           note: bookingNote,
@@ -1394,6 +1406,7 @@ export default function CreateClient({
                       index={i}
                       canRemove={trips.length > 1}
                       regionCode={region}
+                      cityCode={cityCode}
                       mapSettings={mapSettings}
                       onChange={(updated) => updateTrip(trip.id, updated)}
                       onRemove={() => removeTrip(trip.id)}

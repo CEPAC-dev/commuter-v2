@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
   if (invalidRequest) return invalidRequest;
 
   const requestedRegion = req.nextUrl.searchParams.get("region");
-  const auth = await adminAuth(undefined, requestedRegion);
+  const requestedCity = req.nextUrl.searchParams.get("cityCode");
+  const auth = await adminAuth(undefined, requestedRegion, requestedCity);
   if (!auth.authorized) return auth.response;
 
   let file: File | null = null;
@@ -58,10 +59,10 @@ export async function POST(req: NextRequest) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const checksumSha256 = createHash("sha256").update(bytes).digest("hex");
   const datasetId = new Types.ObjectId();
-  const storageKey = `station-datasets/${auth.region.code}/${datasetId}/source.geojson`;
+  const storageKey = `station-datasets/${auth.region.code}/${auth.region.cityCode}/${datasetId}/source.geojson`;
 
   await connectDB();
-  const version = await nextSequence(`station-dataset:${auth.region.code}`);
+  const version = await nextSequence(`station-dataset:${auth.region.code}:${auth.region.cityCode}`);
   try {
     await putStationDatasetSource({
       storageKey,
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
     const dataset = await StationDataset.create({
       _id: datasetId,
       regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
       version,
       status: "UPLOADED",
       file: {
@@ -84,6 +86,7 @@ export async function POST(req: NextRequest) {
     await StationAuditLog.create({
       action: "upload",
       regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
       datasetVersionId: dataset._id,
       actorId: auth.userId,
       metadata: { version, checksumSha256, size: file.size },
@@ -97,6 +100,7 @@ export async function POST(req: NextRequest) {
     await StationAuditLog.create({
       action: "failed",
       regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
       actorId: auth.userId,
       metadata: {
         operation: "upload",

@@ -33,6 +33,7 @@ const StationDatasetSchema = new Schema(
       enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
       index: true,
     },
+    cityCode: { type: String, required: true, trim: true, lowercase: true, index: true },
     version: { type: Number, required: true, min: 1 },
     status: {
       type: String,
@@ -78,8 +79,11 @@ const StationDatasetSchema = new Schema(
   { timestamps: true, suppressReservedKeysWarning: true },
 );
 
-StationDatasetSchema.index({ regionCode: 1, version: 1 }, { unique: true });
-StationDatasetSchema.index({ regionCode: 1, createdAt: -1 });
+StationDatasetSchema.index(
+  { regionCode: 1, cityCode: 1, version: 1 },
+  { unique: true },
+);
+StationDatasetSchema.index({ regionCode: 1, cityCode: 1, createdAt: -1 });
 
 export type StationDatasetDoc = InferSchemaType<typeof StationDatasetSchema>;
 export const StationDataset =
