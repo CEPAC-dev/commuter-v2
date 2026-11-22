@@ -358,6 +358,11 @@ const TripSchema = new Schema(
 
 TripSchema.index({ requestId: 1, date: 1 });
 TripSchema.index({ userId: 1, date: -1 });
+TripSchema.index({ userId: 1, createdAt: -1 });
+TripSchema.index({ userId: 1, requestId: 1, createdAt: -1 });
+TripSchema.index({ userId: 1, status: 1, date: -1 });
+TripSchema.index({ userId: 1, paymentStatus: 1, date: -1 });
+TripSchema.index({ userId: 1, regionCode: 1, cityCode: 1, date: -1 });
 TripSchema.index({ driverId: 1, date: -1 });
 TripSchema.index(
   { status: 1 },

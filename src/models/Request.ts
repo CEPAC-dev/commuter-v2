@@ -103,6 +103,13 @@ if (existingRequestModel && !existingRequestModel.schema.path("cityCode")) {
 }
 
 const requestSchema = existingRequestModel?.schema ?? RequestSchema;
+requestSchema.index({ userId: 1, createdAt: -1 });
+requestSchema.index({
+  userId: 1,
+  status: 1,
+  paymentStatus: 1,
+  createdAt: -1,
+});
 requestSchema.pre(
   "save",
   function (this: {

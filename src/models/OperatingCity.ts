@@ -33,6 +33,7 @@ const OperatingCitySchema = new Schema(
 );
 
 OperatingCitySchema.index({ regionCode: 1, cityCode: 1 }, { unique: true });
+OperatingCitySchema.index({ regionCode: 1, active: 1, isCapital: -1, name: 1 });
 OperatingCitySchema.index(
   { regionCode: 1, isCapital: 1 },
   { unique: true, partialFilterExpression: { isCapital: true } },

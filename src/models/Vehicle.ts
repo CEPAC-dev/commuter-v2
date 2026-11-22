@@ -59,5 +59,10 @@ const VehicleSchema = new Schema(
   { timestamps: true },
 );
 
+VehicleSchema.index({
+  "regionConfigs.regionCode": 1,
+  "regionConfigs.cityCode": 1,
+});
+
 export type VehicleDoc = InferSchemaType<typeof VehicleSchema>;
 export const Vehicle = models.Vehicle || model("Vehicle", VehicleSchema);

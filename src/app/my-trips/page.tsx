@@ -857,10 +857,16 @@ export default async function MyTripsPage({
       : normalizePassengerTabKey(groupFilter ?? "all");
 
   const passengerListOptions = {
-    page: 1,
+    page,
     pageSize: PAGE_SIZE,
     groupByRequest: true,
-    fetchAll: true,
+    fetchAll: false,
+    statusGroup:
+      groupFilter === "ongoing" ||
+      groupFilter === "upcoming" ||
+      groupFilter === "pending_payment"
+        ? groupFilter
+        : undefined,
     dateFrom,
     dateTo,
   };
@@ -928,11 +934,8 @@ export default async function MyTripsPage({
     const view = buildTripTabView(result.rows, selectedTab, displayNow);
     tabCounts = view.counts;
     total = view.items.length;
-    paginationTotal = total;
-    const pageItems = view.items.slice(
-      (page - 1) * PAGE_SIZE,
-      page * PAGE_SIZE,
-    );
+    paginationTotal = result.totalRequests ?? result.total;
+    const pageItems = view.items;
     tripRows = pageItems.flatMap((item) =>
       item.kind === "request" ? item.trips : [item.trip],
     );

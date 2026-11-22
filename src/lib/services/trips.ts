@@ -186,8 +186,13 @@ export interface StationOption extends StationSelection {
 type StatusGroup = "pending_payment" | "upcoming" | "ongoing" | "previous";
 
 const STATUS_GROUPS = {
-  pending_payment: ["pending_payment", "private_ride_offered"],
-  upcoming: ["submitted", "confirmed"],
+  pending_payment: [
+    "pending_payment",
+    "private_ride_offered",
+    "waiting_list",
+    "approved",
+  ],
+  upcoming: ["submitted", "confirmed", "matched", "nomatch"],
   ongoing: ["active", "matched"],
   previous: ["completed", "no_show", "cancelled", "time_out", "nomatch"],
 } satisfies Record<StatusGroup, TripStatus[]>;

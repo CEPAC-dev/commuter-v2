@@ -35,6 +35,7 @@ StationSchema.index(
   { regionCode: 1, cityCode: 1, objectId: 1 },
   { unique: true },
 );
+StationSchema.index({ regionCode: 1, cityCode: 1, active: 1 });
 StationSchema.index({ lat: 1, lng: 1 });
 
 export type StationDoc = InferSchemaType<typeof StationSchema>;

@@ -189,6 +189,7 @@ UserSchema.index(
   { email: 1, role: 1 },
   { unique: true, partialFilterExpression: { email: { $type: "string" } } },
 );
+UserSchema.index({ defaultRegionCode: 1, defaultCityCode: 1 });
 
 // const existingUserModel = models.User;
 // if (existingUserModel && !existingUserModel.schema.path("userNumber")) {
