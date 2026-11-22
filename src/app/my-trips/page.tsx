@@ -840,7 +840,7 @@ export default async function MyTripsPage({
   const dateFrom =
     typeof params.dateFrom === "string" ? params.dateFrom : undefined;
   const dateTo = typeof params.dateTo === "string" ? params.dateTo : undefined;
-  let page = Math.max(1, Number(params.page) || 1);
+  const page = Math.max(1, Number(params.page) || 1);
 
   if (isDriver && groupFilter === "upcoming") {
     const qs = new URLSearchParams();
@@ -856,11 +856,25 @@ export default async function MyTripsPage({
       ? "pending"
       : normalizePassengerTabKey(groupFilter ?? "all");
 
+  const passengerStatusGroup:
+    | "pending_payment"
+    | "upcoming"
+    | "ongoing"
+    | undefined =
+    groupFilter === "pending" || groupFilter === "pending_payment"
+      ? "pending_payment"
+      : groupFilter === "upcoming"
+        ? "upcoming"
+        : groupFilter === "ongoing"
+          ? "ongoing"
+          : undefined;
+
   const passengerListOptions = {
-    page: 1,
+    page,
     pageSize: PAGE_SIZE,
     groupByRequest: true,
-    fetchAll: true,
+    fetchAll: false,
+    statusGroup: passengerStatusGroup,
     dateFrom,
     dateTo,
   };
@@ -928,14 +942,8 @@ export default async function MyTripsPage({
     const view = buildTripTabView(result.rows, selectedTab, displayNow);
     tabCounts = view.counts;
     total = view.items.length;
-    paginationTotal = total;
-    const passengerTotalPages = Math.ceil(paginationTotal / PAGE_SIZE);
-    if (passengerTotalPages > 0 && page > passengerTotalPages) page = passengerTotalPages;
-    else if (passengerTotalPages === 0) page = 1;
-    const pageItems = view.items.slice(
-      (page - 1) * PAGE_SIZE,
-      page * PAGE_SIZE,
-    );
+    paginationTotal = result.totalRequests ?? result.total;
+    const pageItems = view.items;
     tripRows = pageItems.flatMap((item) =>
       item.kind === "request" ? item.trips : [item.trip],
     );
