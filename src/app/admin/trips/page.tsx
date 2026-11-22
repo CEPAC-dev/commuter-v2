@@ -381,6 +381,7 @@ export default function AdminTripsPage() {
   const detailRequestBadge = getRequestStatusBadge(detail?.requestId?.status);
 
   const [reloadKey, setReloadKey] = useState(0);
+  const [initialQueryReady, setInitialQueryReady] = useState(false);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -388,6 +389,28 @@ export default function AdminTripsPage() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    const params = new URLSearchParams(window.location.search);
+    const query = params.get("q") ?? params.get("tripNumber") ?? "";
+    const mode: SearchMode =
+      params.get("searchBy") === "userNumber" ? "userNumber" : "tripNumber";
+    const dateFrom = params.get("dateFrom") ?? "";
+    const dateTo = params.get("dateTo") ?? "";
+    queueMicrotask(() => {
+      if (!active) return;
+      setSearchInput(query);
+      setSearchMode(mode);
+      setRange({ dateFrom, dateTo });
+      setFilters({ q: query, searchBy: mode, dateFrom, dateTo });
+      setInitialQueryReady(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!initialQueryReady) return;
     let active = true;
 
     const run = async () => {
@@ -433,7 +456,7 @@ export default function AdminTripsPage() {
     return () => {
       active = false;
     };
-  }, [page, filters, reloadKey]);
+  }, [initialQueryReady, page, filters, reloadKey]);
 
   const visibleIds = useMemo(() => trips.map((t) => t._id), [trips]);
   const allVisibleSelected =

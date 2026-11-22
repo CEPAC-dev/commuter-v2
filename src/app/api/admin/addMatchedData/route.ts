@@ -1283,6 +1283,7 @@ export async function POST(req: NextRequest) {
 
         type RoutePassenger = {
           tripId: unknown;
+          tripNumber: number;
           userId: unknown;
           pickup: { address: string; lat: number; lng: number };
           dropoff: { address: string; lat: number; lng: number };
@@ -1416,6 +1417,7 @@ export async function POST(req: NextRequest) {
                 : undefined;
           return {
             tripId: tripRecord._id,
+            tripNumber: tripRecord.tripNumber,
             userId: userIdRaw,
             pickup: {
               address: pickup.address ?? "",
@@ -1485,6 +1487,12 @@ export async function POST(req: NextRequest) {
             tripId != null && String(tripId).trim() !== "",
         );
         if (matchedTripIds.length === 0) continue;
+        const ridePassengersByTrip = new Map<string, RoutePassenger>();
+        for (const stop of route) {
+          for (const passenger of [...stop.boarding, ...stop.alighting]) {
+            ridePassengersByTrip.set(String(passenger.tripId), passenger);
+          }
+        }
 
         const rideNumber = await nextSequence("rideNumber");
         const firstPoint = route[0]?.point;
@@ -1562,7 +1570,24 @@ export async function POST(req: NextRequest) {
           dropoffStation: toStationShape(lastPoint),
           startTime: availability.startTime ?? "00:00",
           endTime: availability.endTime ?? "00:00",
-          passengers: [],
+          passengers: [...ridePassengersByTrip.values()]
+            .filter((passenger) =>
+              Types.ObjectId.isValid(String(passenger.userId ?? "")),
+            )
+            .map((passenger) => ({
+              tripId: passenger.tripId,
+              tripNumber: passenger.tripNumber,
+              userId: passenger.userId,
+              pickup: passenger.pickup,
+              dropoff: passenger.dropoff,
+              pickupOrder: passenger.pickupOrder,
+              dropoffOrder: passenger.dropoffOrder,
+              numberOfPassengers: passenger.numberOfPassengers,
+              tripCost: passenger.tripCost,
+              seatNumbers:
+                passenger.seatNumber != null ? [passenger.seatNumber] : [],
+              status: "waiting",
+            })),
           passengersCount: countRidePassengers([
             ...passengerCountsByTrip.values(),
           ]),

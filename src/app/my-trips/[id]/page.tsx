@@ -275,6 +275,19 @@ export default async function TripDetailPage({
 
   const otherTrips = trip.otherTrips ?? [];
   const vLabel = translate(locale, `vehicles.${trip.vehicleType}`);
+  const attachedTripNumbers = trip.rideDetails
+    ? [
+        ...new Set([
+          ...(trip.rideDetails.passengers ?? [])
+            .map((passenger) => passenger.tripNumber)
+            .filter(
+              (tripNumber): tripNumber is number =>
+                typeof tripNumber === "number",
+            ),
+          trip.tripNumber,
+        ]),
+      ]
+    : [];
   const paymentStatus = (trip.paymentStatus as PaymentStatus) ?? "pending";
   const status = (trip.status as TripStatus) ?? "pending_payment";
   const ridePassenger = trip.rideDetails?.passengers?.find(
@@ -1036,6 +1049,18 @@ export default async function TripDetailPage({
               >
                 {translate(locale, "trip_detail.summary")}
               </h2>
+              <div>
+                <p className="trip-summary-label">
+                  {translate(locale, "trip_detail.attached_trips")}
+                </p>
+                <p style={{ margin: "6px 0 0", color: "#405555", fontSize: 13 }}>
+                  {attachedTripNumbers.length
+                    ? attachedTripNumbers
+                        .map((tripNumber) => `#${String(tripNumber).padStart(3, "0")}`)
+                        .join(", ")
+                    : "—"}
+                </p>
+              </div>
               <div>
                 <p className="trip-summary-label">
                   {translate(locale, "trip_detail.status")}

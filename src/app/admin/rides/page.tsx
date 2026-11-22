@@ -29,6 +29,7 @@ type RidePassenger = {
 type RidePassengerDetail = {
   userId: string;
   tripId?: string;
+  tripNumber?: number | null;
   pickupOrder?: number;
   dropoffOrder?: number;
   numberOfPassengers: number;
@@ -1632,7 +1633,7 @@ export default function AdminRidesPage() {
                         return (
                           <div
                             className="passenger-row"
-                            key={passenger.userId}
+                            key={passenger.tripId ?? passenger.userId}
                             style={
                               isNoShow
                                 ? {
@@ -1670,6 +1671,25 @@ export default function AdminRidesPage() {
                                   ? ` · ${passenger.user.phone}`
                                   : ""}
                               </span>
+                              {passenger.tripNumber != null && (
+                                <Link
+                                  href={`/admin/trips?q=${encodeURIComponent(String(passenger.tripNumber))}&searchBy=tripNumber`}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    marginTop: 4,
+                                    padding: "3px 8px",
+                                    border: "1px solid var(--color-secondary)",
+                                    borderRadius: 999,
+                                    color: "var(--color-secondary-deep)",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    textDecoration: "none",
+                                  }}
+                                >
+                                  Trip #{String(passenger.tripNumber).padStart(3, "0")}
+                                </Link>
+                              )}
                               {isNoShow ? (
                                 <span
                                   style={{

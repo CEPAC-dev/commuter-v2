@@ -56,3 +56,4 @@ backup
 
 /scripts/*
 !/scripts/migrate-region-codes.cjs
+!/scripts/backfill-ride-passenger-trip-numbers.cjs

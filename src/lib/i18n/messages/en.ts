@@ -504,6 +504,7 @@ export const en = {
   "rejection.reviewed_date": "Reviewed {date}",
   "rejection.book_again": "Book again",
   "trip_detail.summary": "Trip summary",
+  "trip_detail.attached_trips": "Attached trips",
   "trip_detail.status": "Status",
   "trip_detail.trip_price": "Trip price",
   "trip_detail.price_breakdown": "Price breakdown",

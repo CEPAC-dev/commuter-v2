@@ -199,12 +199,13 @@ async function createRide(matchResult: MatchResult) {
     }
     const trips = await Trip.find({ _id: { $in: tripIds } })
       .select(
-        "regionCode cityCode pickupStation dropoffStation numberOfPassengers extraPassengers",
+        "regionCode cityCode tripNumber pickupStation dropoffStation numberOfPassengers extraPassengers",
       )
       .session(session)
       .lean<
         {
           _id: unknown;
+          tripNumber?: number;
           regionCode?: RegionCode | null;
           cityCode?: string;
           pickupStation?: StationSelection;
@@ -238,6 +239,9 @@ async function createRide(matchResult: MatchResult) {
       }
       return {
         tripId: p.tripId,
+        ...(typeof trip?.tripNumber === "number"
+          ? { tripNumber: trip.tripNumber }
+          : {}),
         userId: p.userId || null,
         pickup: p.pickup,
         dropoff: p.dropoff,
@@ -571,7 +575,23 @@ function toStation(value: unknown): StationSelection | null {
 function getRidePassengers(
   ride: Record<string, unknown>,
 ): Record<string, unknown>[] {
-  return normalizeSharedRidePassengers(ride);
+  const passengers = normalizeSharedRidePassengers(ride);
+  if (passengers.length > 0) return passengers;
+
+  const passengersByTripId = new Map<string, Record<string, unknown>>();
+  for (const stop of recordArray(ride.route)) {
+    for (const entry of [
+      ...recordArray(stop.boarding),
+      ...recordArray(stop.alighting),
+    ]) {
+      if (!entry.tripId) continue;
+      const tripId = String(entry.tripId);
+      if (!passengersByTripId.has(tripId)) {
+        passengersByTripId.set(tripId, entry);
+      }
+    }
+  }
+  return [...passengersByTripId.values()];
 }
 
 function mapPassengerRow(
@@ -597,6 +617,7 @@ function mapPassengerRow(
 
   return {
     tripId: String(p.tripId),
+    ...(typeof p.tripNumber === "number" ? { tripNumber: p.tripNumber } : {}),
     userId: p.userId ? String(p.userId) : undefined,
     pickupAddress: pickup?.address ?? "—",
     dropoffAddress: dropoff?.address ?? "—",
@@ -791,6 +812,37 @@ export async function ensureRidePassengerNumbers(
     normalizedPassengers,
     currentSequence,
   );
+  const missingTripIds = new Set<string>();
+  const collectMissingTripNumbers = (entries: unknown) => {
+    if (!Array.isArray(entries)) return;
+    for (const entry of entries) {
+      if (!entry || typeof entry !== "object") continue;
+      const passenger = entry as Record<string, unknown>;
+      if (
+        passenger.tripId &&
+        (typeof passenger.tripNumber !== "number" ||
+          !Number.isSafeInteger(passenger.tripNumber))
+      ) {
+        missingTripIds.add(String(passenger.tripId));
+      }
+    }
+  };
+  collectMissingTripNumbers(ride.passengers);
+  for (const stop of ride.route ?? []) {
+    collectMissingTripNumbers(stop.boarding);
+    collectMissingTripNumbers(stop.alighting);
+  }
+  const tripNumberById = new Map<string, number>();
+  if (missingTripIds.size > 0) {
+    const trips = await Trip.find({ _id: { $in: [...missingTripIds] } })
+      .select("_id tripNumber")
+      .lean<{ _id: unknown; tripNumber?: number }[]>();
+    for (const trip of trips) {
+      if (typeof trip.tripNumber === "number") {
+        tripNumberById.set(String(trip._id), trip.tripNumber);
+      }
+    }
+  }
   const numberByTripId = new Map(
     passengers.map((passenger) => [
       String(passenger.tripId),
@@ -800,6 +852,11 @@ export async function ensureRidePassengerNumbers(
   let changed = sequence !== currentSequence;
 
   for (const passenger of ride.passengers) {
+    const tripNumber = tripNumberById.get(String(passenger.tripId));
+    if (tripNumber != null && passenger.tripNumber !== tripNumber) {
+      passenger.tripNumber = tripNumber;
+      changed = true;
+    }
     const assignedNumber = numberByTripId.get(String(passenger.tripId));
     if (assignedNumber && passenger.passengerNumber !== assignedNumber) {
       passenger.passengerNumber = assignedNumber;
@@ -815,6 +872,11 @@ export async function ensureRidePassengerNumbers(
       for (const entry of entries) {
         if (!entry || typeof entry !== "object") continue;
         const passenger = entry as Record<string, unknown>;
+        const tripNumber = tripNumberById.get(String(passenger.tripId));
+        if (tripNumber != null && passenger.tripNumber !== tripNumber) {
+          passenger.tripNumber = tripNumber;
+          changed = true;
+        }
         const assignedNumber = numberByTripId.get(String(passenger.tripId));
         if (assignedNumber && passenger.passengerNumber !== assignedNumber) {
           passenger.passengerNumber = assignedNumber;

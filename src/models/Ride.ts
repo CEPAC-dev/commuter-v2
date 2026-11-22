@@ -26,6 +26,7 @@ export const AssignedDriverSchema = new Schema(
 const RidePassengerSchema = new Schema(
   {
     tripId: { type: Types.ObjectId, ref: "Trip", required: true },
+    tripNumber: { type: Number, required: false },
     userId: { type: Types.ObjectId, ref: "User", required: true },
     passengerNumber: { type: Number, required: false, min: 1 },
     pickup: { type: PointSchema, required: true },
@@ -209,6 +210,15 @@ if (existingRideModel && !existingRideModel.schema.path("hasOpenIncident")) {
 if (existingRideModel && !existingRideModel.schema.path("routeCoordinates")) {
   existingRideModel.schema.add({
     routeCoordinates: RideSchema.obj.routeCoordinates,
+  });
+}
+const existingPassengersPath = existingRideModel?.schema.path("passengers");
+if (
+  existingPassengersPath instanceof Schema.Types.DocumentArray &&
+  !existingPassengersPath.schema.path("tripNumber")
+) {
+  existingPassengersPath.schema.add({
+    tripNumber: RidePassengerSchema.obj.tripNumber,
   });
 }
 
