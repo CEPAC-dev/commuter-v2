@@ -275,7 +275,7 @@ export default async function TripDetailPage({
 
   const otherTrips = trip.otherTrips ?? [];
   const vLabel = translate(locale, `vehicles.${trip.vehicleType}`);
-  const attachedTripNumbers = trip.rideDetails
+  const attachedTripNumbers = isDriver && trip.rideDetails
     ? [
         ...new Set([
           ...(trip.rideDetails.passengers ?? [])
@@ -1049,18 +1049,28 @@ export default async function TripDetailPage({
               >
                 {translate(locale, "trip_detail.summary")}
               </h2>
-              <div>
-                <p className="trip-summary-label">
-                  {translate(locale, "trip_detail.attached_trips")}
-                </p>
-                <p style={{ margin: "6px 0 0", color: "#405555", fontSize: 13 }}>
-                  {attachedTripNumbers.length
-                    ? attachedTripNumbers
-                        .map((tripNumber) => `#${String(tripNumber).padStart(3, "0")}`)
-                        .join(", ")
-                    : "—"}
-                </p>
-              </div>
+              {isDriver && (
+                <div>
+                  <p className="trip-summary-label">
+                    {translate(locale, "trip_detail.attached_trips")}
+                  </p>
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      color: "#405555",
+                      fontSize: 13,
+                    }}
+                  >
+                    {attachedTripNumbers.length
+                      ? attachedTripNumbers
+                          .map((tripNumber) =>
+                            `#${String(tripNumber).padStart(3, "0")}`,
+                          )
+                          .join(", ")
+                      : "—"}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="trip-summary-label">
                   {translate(locale, "trip_detail.status")}
