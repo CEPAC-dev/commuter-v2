@@ -286,6 +286,11 @@ export default function AdminRidesPage() {
   >({});
   const [assigningRideId, setAssigningRideId] = useState<string | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
+  const [reofferRideType, setReofferRideType] = useState("shared");
+  const [reofferVehicleType, setReofferVehicleType] = useState("taxi_shared");
+  const [reofferBusy, setReofferBusy] = useState(false);
+  const [reofferError, setReofferError] = useState<string | null>(null);
+  const [reofferSuccess, setReofferSuccess] = useState<string | null>(null);
 
   const detailMapPoints = useMemo(
     () => (detail ? rideMapPoints(detail) : []),
@@ -317,6 +322,15 @@ export default function AdminRidesPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!detail) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReofferRideType(detail.rideType);
+    setReofferVehicleType(detail.vehicleType);
+    setReofferError(null);
+    setReofferSuccess(null);
+  }, [detail]);
+
   async function assignDriver(rideId: string) {
     const driverId = assignDriverByRide[rideId];
     if (!driverId) {
@@ -338,6 +352,43 @@ export default function AdminRidesPage() {
       setAssignError(err instanceof Error ? err.message : "Failed to assign driver");
     } finally {
       setAssigningRideId(null);
+    }
+  }
+
+  async function reofferRide() {
+    if (!detail) return;
+    setReofferBusy(true);
+    setReofferError(null);
+    setReofferSuccess(null);
+    try {
+      const res = await fetch(`/api/admin/rides/${detail._id}/reoffer`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rideType: reofferRideType,
+          vehicleType: reofferVehicleType,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "Failed to reoffer ride");
+      const offeredCount = data?.offeredToDriverIds?.length ?? 0;
+      setReofferSuccess(
+        offeredCount
+          ? `Ride reoffered to ${offeredCount} eligible driver${offeredCount === 1 ? "" : "s"}`
+          : "No eligible drivers found. Manual assignment is required.",
+      );
+      setDetail({
+        ...detail,
+        rideType: reofferRideType,
+        vehicleType: reofferVehicleType,
+      });
+      refresh();
+    } catch (err) {
+      setReofferError(
+        err instanceof Error ? err.message : "Failed to reoffer ride",
+      );
+    } finally {
+      setReofferBusy(false);
     }
   }
 
@@ -1537,6 +1588,113 @@ export default function AdminRidesPage() {
                       </div>
                     </div>
                   </section>
+
+                  {detail.status === "matched" ? (
+                    <section className="detail-section">
+                      <h4
+                        className="display"
+                        style={{
+                          margin: "0 0 4px",
+                          color: "var(--color-primary)",
+                          fontSize: 15,
+                        }}
+                      >
+                        Reoffer to drivers
+                      </h4>
+                      <p
+                        style={{
+                          margin: "0 0 12px",
+                          color: "var(--color-muted)",
+                          fontSize: 12,
+                        }}
+                      >
+                        Date and time stay fixed to this matched ride.
+                      </p>
+                      <div className="detail-grid">
+                        <div>
+                          <span className="detail-label">Date</span>
+                          <strong style={{ color: "var(--color-primary)", fontSize: 14 }}>
+                            {detail.date}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="detail-label">Time</span>
+                          <strong style={{ color: "var(--color-primary)", fontSize: 14 }}>
+                            {to12h(detail.startTime)} - {to12h(detail.endTime)}
+                          </strong>
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                          gap: 10,
+                          marginTop: 12,
+                        }}
+                      >
+                        <label style={{ display: "grid", gap: 6 }}>
+                          <span className="detail-label">Ride type</span>
+                          <select
+                            className="field"
+                            value={reofferRideType}
+                            onChange={(event) => setReofferRideType(event.target.value)}
+                            disabled={reofferBusy}
+                          >
+                            <option value="shared">Shared</option>
+                            <option value="private">Private</option>
+                          </select>
+                        </label>
+                        <label style={{ display: "grid", gap: 6 }}>
+                          <span className="detail-label">Vehicle type</span>
+                          <select
+                            className="field"
+                            value={reofferVehicleType}
+                            onChange={(event) => setReofferVehicleType(event.target.value)}
+                            disabled={reofferBusy}
+                          >
+                            {Object.entries(VEHICLES).map(([key, vehicle]) => (
+                              <option key={key} value={key}>
+                                {vehicle.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      {reofferError ? (
+                        <p
+                          role="alert"
+                          style={{
+                            margin: "10px 0 0",
+                            color: "var(--color-danger)",
+                            fontSize: 13,
+                          }}
+                        >
+                          {reofferError}
+                        </p>
+                      ) : null}
+                      {reofferSuccess ? (
+                        <p
+                          role="status"
+                          style={{
+                            margin: "10px 0 0",
+                            color: "var(--color-secondary-deep)",
+                            fontSize: 13,
+                          }}
+                        >
+                          {reofferSuccess}
+                        </p>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="submit-btn"
+                        onClick={() => void reofferRide()}
+                        disabled={reofferBusy}
+                        style={{ width: "100%", marginTop: 12 }}
+                      >
+                        {reofferBusy ? "Reoffering..." : "Reoffer to drivers"}
+                      </button>
+                    </section>
+                  ) : null}
 
                   <section className="detail-section">
                     <h4
