@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import toast, { Toaster } from "react-hot-toast";
 import {
   ChevronLeft,
   ChevronRight,
@@ -372,11 +373,15 @@ export default function AdminRidesPage() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "Failed to reoffer ride");
       const offeredCount = data?.offeredToDriverIds?.length ?? 0;
-      setReofferSuccess(
-        offeredCount
-          ? `Ride reoffered to ${offeredCount} eligible driver${offeredCount === 1 ? "" : "s"}`
-          : "No eligible drivers found. Manual assignment is required.",
-      );
+      const message = offeredCount
+        ? `Ride reoffered to ${offeredCount} eligible driver${offeredCount === 1 ? "" : "s"}`
+        : "No eligible drivers found. Manual assignment is required.";
+      setReofferSuccess(message);
+      if (offeredCount) {
+        toast.success(message);
+      } else {
+        toast.error(message);
+      }
       setDetail({
         ...detail,
         rideType: reofferRideType,
@@ -672,6 +677,7 @@ export default function AdminRidesPage() {
 
   return (
     <main className="rides-board">
+      <Toaster position="top-right" />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
 
