@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Loader2, MapPin, Route, X } from "lucide-react";
 import { useClientLocale } from "@/lib/locale.client";
 import { formatDate, formatDistanceKm, formatEgp, formatTime } from "@/lib/i18n";
@@ -36,8 +35,13 @@ function routeDistanceKm(route: Stop[] | undefined): number | null {
   return totalKm;
 }
 
-export default function RideOfferCard({ ride }: { ride: RideOffer }) {
-  const router = useRouter();
+export default function RideOfferCard({
+  ride,
+  onResponse,
+}: {
+  ride: RideOffer;
+  onResponse: () => void;
+}) {
   const { locale, dir, t } = useClientLocale();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -54,7 +58,7 @@ export default function RideOfferCard({ ride }: { ride: RideOffer }) {
       const response = await fetch(`/api/driver/rides/${ride._id}/${action}`, { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? t("ride_requests.unavailable"));
-      router.refresh();
+      onResponse();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t("ride_requests.unavailable"));
     } finally {

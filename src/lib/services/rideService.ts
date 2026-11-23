@@ -1022,6 +1022,9 @@ async function listDriverRideOffers(driverId: string | Types.ObjectId) {
     driverId: null,
     status: "matched",
   })
+    .select(
+      "_id date startTime endTime totalCost route.point route.boardingNumber route.alightingNumber passengers.numberOfPassengers",
+    )
     .sort({ date: 1, startTime: 1 })
     .lean();
 }
