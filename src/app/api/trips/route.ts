@@ -182,6 +182,7 @@ export async function POST(req: NextRequest) {
   let requestGroupTripCount = 0;
 
   let body: {
+    cityCode?: string;
     date?: string;
     dates?: string[];
     trips: TripInput[];
@@ -192,6 +193,9 @@ export async function POST(req: NextRequest) {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  if (body.cityCode !== undefined && typeof body.cityCode !== "string") {
+    return NextResponse.json({ error: "Invalid City/State." }, { status: 400 });
   }
 
   const { trips } = body;
@@ -242,7 +246,10 @@ export async function POST(req: NextRequest) {
 
   await connectDB();
 
-  const activeRegion = await resolveActiveRegion({ userId });
+  const activeRegion = await resolveActiveRegion({
+    userId,
+    requestedCity: body.cityCode,
+  });
   const allowedBookingDates = bookingWindow(
     new Date(),
     activeRegion.config.timezone,
@@ -273,33 +280,28 @@ export async function POST(req: NextRequest) {
     );
   }
   const userRegion = activeRegion.code;
-  const mapSettings = await getMapSettings(userRegion);
-  const vehiclesMap = await getVehicles(userRegion);
-  const zoneFeatures =
-    mapSettings.stationAssignmentMode === "zones" || mapSettings.showZones
-      ? await loadServiceZones(userRegion)
-      : [];
-  if (
-    (mapSettings.showZones || mapSettings.stationAssignmentMode === "zones") &&
-    !zoneFeatures.length
-  ) {
+  const mapSettings = await getMapSettings(userRegion, activeRegion.cityCode);
+  const vehiclesMap = await getVehicles(userRegion, activeRegion.cityCode);
+  const zoneFeatures = await loadServiceZones(
+    userRegion,
+    activeRegion.cityCode,
+  );
+  if (!zoneFeatures.length) {
     return NextResponse.json(
-      { error: "Service zones are not configured for this region." },
+      { error: "Service zones are not configured for this City/State." },
       { status: 503 },
     );
   }
-  if (mapSettings.showZones) {
-    for (const trip of trips) {
-      for (const point of [trip.pickup, trip.dropoff]) {
-        if (point && !isPointInAnyZone([point.lng, point.lat], zoneFeatures)) {
-          return NextResponse.json(
-            {
-              error:
-                "Pickup and dropoff must be inside this region’s service zones.",
-            },
-            { status: 400 },
-          );
-        }
+  for (const trip of trips) {
+    for (const point of [trip.pickup, trip.dropoff]) {
+      if (!point || !isPointInAnyZone([point.lng, point.lat], zoneFeatures)) {
+        return NextResponse.json(
+          {
+            error:
+              "Pickup and dropoff must be inside the selected City/State’s service area.",
+          },
+          { status: 400 },
+        );
       }
     }
   }
@@ -327,6 +329,7 @@ export async function POST(req: NextRequest) {
   );
   const stationDocs = await Station.find({
     regionCode: userRegion,
+    cityCode: activeRegion.cityCode,
     active: true,
   }).lean();
   const canonicalStations: GeoStation[] = stationDocs.map((station) => ({
@@ -1058,6 +1061,7 @@ export async function POST(req: NextRequest) {
         _id: instance.id,
         tripNumber: await nextSequence("tripNumber"),
         regionCode: userRegion,
+        cityCode: activeRegion.cityCode,
         currencyCode: getCurrencyConfig(userRegion).code,
         userId: new Types.ObjectId(userId),
         date: candidate.date,

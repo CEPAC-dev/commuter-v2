@@ -19,8 +19,11 @@ export function invalidateVehiclesCache() {
 }
 
 /** DB-authoritative vehicle config map, cached briefly, falls back to the static seed. */
-export async function getVehicles(region?: RegionCode): Promise<Record<string, VehicleConfig>> {
-  if (!region && cache && cache.expiresAt > Date.now()) return cache.map;
+export async function getVehicles(
+  region?: RegionCode,
+  cityCode?: string,
+): Promise<Record<string, VehicleConfig>> {
+  if (!region && !cityCode && cache && cache.expiresAt > Date.now()) return cache.map;
 
   try {
     await ensureVehicleSeed();
@@ -28,7 +31,7 @@ export async function getVehicles(region?: RegionCode): Promise<Record<string, V
 
     const map: Record<string, VehicleConfig> = {};
     for (const d of docs) {
-      const scoped = region ? vehicleForRegion(d, region) : d;
+      const scoped = region ? vehicleForRegion(d, region, cityCode) : d;
       if (!scoped) continue;
       const fallback = VEHICLES[scoped.key];
       map[scoped.key] = {
@@ -50,7 +53,7 @@ export async function getVehicles(region?: RegionCode): Promise<Record<string, V
         sortOrder: d.sortOrder ?? 0,
       };
     }
-    if (!region) cache = { map, expiresAt: Date.now() + TTL_MS };
+    if (!region && !cityCode) cache = { map, expiresAt: Date.now() + TTL_MS };
     return map;
   } catch {
     return VEHICLES;

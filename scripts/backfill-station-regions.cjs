@@ -1,5 +1,5 @@
 /**
- * Assigns unassigned legacy stations to approved EG-CAIRO scope.
+ * Assigns unassigned legacy stations to approved Egypt (EGY) scope.
  * Usage: node scripts/backfill-station-regions.cjs --apply
  * Idempotent: only documents without regionCode change. No indexes change.
  */
@@ -28,10 +28,10 @@ async function main() {
         const stations = db.collection("stations");
         const filter = { $or: [{ regionCode: { $exists: false } }, { regionCode: null }] };
         const before = await stations.countDocuments(filter);
-        const result = await stations.updateMany(filter, { $set: { regionCode: "EG-CAIRO" } });
+        const result = await stations.updateMany(filter, { $set: { regionCode: "EGY" } });
         const remaining = await stations.countDocuments(filter);
         if (remaining !== 0) throw new Error(`Backfill incomplete: ${remaining} station(s) remain unassigned.`);
-        console.log(JSON.stringify({ approvedScope: "EG-CAIRO", matched: before, modified: result.modifiedCount, remaining }, null, 2));
+        console.log(JSON.stringify({ approvedScope: "EGY", matched: before, modified: result.modifiedCount, remaining }, null, 2));
     } finally {
         await client.close();
     }

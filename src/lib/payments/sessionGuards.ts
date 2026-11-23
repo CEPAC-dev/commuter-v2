@@ -1,3 +1,5 @@
+import { parseAppUrls } from "../appUrl.ts";
+
 const ACTIVE_PAYMENT_STATUSES = new Set([
   "created",
   "wallet_reserved",
@@ -103,6 +105,7 @@ export interface PaymentAppUrlEnvironment {
   nodeEnv?: string;
   appEnv?: string;
   kashierMode?: string;
+  preferredOrigin?: string;
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -118,7 +121,38 @@ export function validatePaymentAppUrl(
   value: string | undefined,
   environment: PaymentAppUrlEnvironment,
 ): PaymentAppUrlValidation {
-  if (!value) return { valid: false, host: null };
+  const values = parseAppUrls(value);
+  if (values.length === 0) return { valid: false, host: null };
+
+  let firstInvalidHost: string | null = null;
+  const valid: Array<{ baseUrl: string; host: string }> = [];
+  for (const appUrl of values) {
+    const result = validateSinglePaymentAppUrl(appUrl, environment);
+    if (result.valid) {
+      valid.push({ baseUrl: result.baseUrl, host: result.host });
+    } else if (firstInvalidHost === null) {
+      firstInvalidHost = result.host;
+    }
+  }
+
+  if (valid.length === 0) return { valid: false, host: firstInvalidHost };
+
+  if (environment.preferredOrigin) {
+    try {
+      const preferredHost = new URL(environment.preferredOrigin).host;
+      const preferred = valid.find((item) => item.host === preferredHost);
+      if (preferred) return { valid: true, ...preferred };
+    } catch {
+      // Fall back to the first valid configured URL.
+    }
+  }
+  return { valid: true, ...valid[0] };
+}
+
+function validateSinglePaymentAppUrl(
+  value: string,
+  environment: PaymentAppUrlEnvironment,
+): PaymentAppUrlValidation {
   try {
     const parsed = new URL(value);
     const host = parsed.host || null;

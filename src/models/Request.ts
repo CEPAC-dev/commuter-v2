@@ -10,10 +10,11 @@ const RequestSchema = new Schema(
     userId: { type: Types.ObjectId, ref: "User", required: true, index: true },
     regionCode: {
       type: String,
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      enum: ["EGY", "KSA", "UAE"],
       default: null,
       index: true,
     },
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
     currencyCode: {
       type: String,
       enum: ["EGP", "SAR", "AED"],
@@ -95,8 +96,20 @@ const existingRequestModel = models.Request;
 if (existingRequestModel && !existingRequestModel.schema.path("regionCode")) {
   existingRequestModel.schema.add({ regionCode: RequestSchema.obj.regionCode });
 }
+if (existingRequestModel && !existingRequestModel.schema.path("cityCode")) {
+  existingRequestModel.schema.add({
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
+  });
+}
 
 const requestSchema = existingRequestModel?.schema ?? RequestSchema;
+requestSchema.index({ userId: 1, createdAt: -1 });
+requestSchema.index({
+  userId: 1,
+  status: 1,
+  paymentStatus: 1,
+  createdAt: -1,
+});
 requestSchema.pre(
   "save",
   function (this: {

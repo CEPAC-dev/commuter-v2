@@ -1214,11 +1214,11 @@
                 "value": "application/json"
               }
             ],
-            "description": "Create a booking request containing one or more trips.\n\nAccess: Authenticated session required.\nAuthenticated passenger. dates use YYYY-MM-DD and arrivalTime uses 24-hour HH:MM. Server recomputes route distance, pickup time, fare, discounts, and totals; client priceEgp is illustrative and must never be trusted. Shared rides may require station metadata. The response identifies the request/booking and created trips.\nThe example body is editable JSON unless the request is documented as multipart form-data.",
+            "description": "Create a booking request containing one or more trips.\n\nAccess: Authenticated session required.\nAuthenticated passenger. Send cityCode for the selected City/State (the user's saved default is used when omitted); both pickup and dropoff must be inside that active city's service area. dates use YYYY-MM-DD and arrivalTime uses 24-hour HH:MM. Server recomputes route distance, pickup time, fare, discounts, and totals; client priceEgp is illustrative and must never be trusted. Shared rides may require station metadata. The response identifies the request/booking and created trips.\nThe example body is editable JSON unless the request is documented as multipart form-data.",
             "url": "{{baseUrl}}/api/trips",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"dates\": [\n    \"2026-08-25\"\n  ],\n  \"trips\": [\n    {\n      \"pickup\": {\n        \"address\": \"Nasr City, Cairo\",\n        \"lat\": 30.0561,\n        \"lng\": 31.3301\n      },\n      \"dropoff\": {\n        \"address\": \"Maadi, Cairo\",\n        \"lat\": 29.9602,\n        \"lng\": 31.2569\n      },\n      \"vehicleType\": \"private_car\",\n      \"arrivalTime\": \"09:30\",\n      \"numberOfPassengers\": 1,\n      \"priceEgp\": 100\n    }\n  ],\n  \"note\": \"Call when you arrive\",\n  \"promoCode\": \"FRIEND20\"\n}",
+              "raw": "{\n  \"cityCode\": \"cairo\",\n  \"dates\": [\n    \"2026-08-25\"\n  ],\n  \"trips\": [\n    {\n      \"pickup\": {\n        \"address\": \"Nasr City, Cairo\",\n        \"lat\": 30.0561,\n        \"lng\": 31.3301\n      },\n      \"dropoff\": {\n        \"address\": \"Maadi, Cairo\",\n        \"lat\": 29.9602,\n        \"lng\": 31.2569\n      },\n      \"vehicleType\": \"private_car\",\n      \"arrivalTime\": \"09:30\",\n      \"numberOfPassengers\": 1,\n      \"priceEgp\": 100\n    }\n  ],\n  \"note\": \"Call when you arrive\",\n  \"promoCode\": \"FRIEND20\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1241,11 +1241,11 @@
                     "value": "application/json"
                   }
                 ],
-                "description": "Create a booking request containing one or more trips.\n\nAccess: Authenticated session required.\nAuthenticated passenger. dates use YYYY-MM-DD and arrivalTime uses 24-hour HH:MM. Server recomputes route distance, pickup time, fare, discounts, and totals; client priceEgp is illustrative and must never be trusted. Shared rides may require station metadata. The response identifies the request/booking and created trips.\nThe example body is editable JSON unless the request is documented as multipart form-data.",
+                "description": "Create a booking request containing one or more trips.\n\nAccess: Authenticated session required.\nAuthenticated passenger. Send cityCode for the selected City/State (the user's saved default is used when omitted); both pickup and dropoff must be inside that active city's service area. dates use YYYY-MM-DD and arrivalTime uses 24-hour HH:MM. Server recomputes route distance, pickup time, fare, discounts, and totals; client priceEgp is illustrative and must never be trusted. Shared rides may require station metadata. The response identifies the request/booking and created trips.\nThe example body is editable JSON unless the request is documented as multipart form-data.",
                 "url": "{{baseUrl}}/api/trips",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"dates\": [\n    \"2026-08-25\"\n  ],\n  \"trips\": [\n    {\n      \"pickup\": {\n        \"address\": \"Nasr City, Cairo\",\n        \"lat\": 30.0561,\n        \"lng\": 31.3301\n      },\n      \"dropoff\": {\n        \"address\": \"Maadi, Cairo\",\n        \"lat\": 29.9602,\n        \"lng\": 31.2569\n      },\n      \"vehicleType\": \"private_car\",\n      \"arrivalTime\": \"09:30\",\n      \"numberOfPassengers\": 1,\n      \"priceEgp\": 100\n    }\n  ],\n  \"note\": \"Call when you arrive\",\n  \"promoCode\": \"FRIEND20\"\n}",
+                  "raw": "{\n  \"cityCode\": \"cairo\",\n  \"dates\": [\n    \"2026-08-25\"\n  ],\n  \"trips\": [\n    {\n      \"pickup\": {\n        \"address\": \"Nasr City, Cairo\",\n        \"lat\": 30.0561,\n        \"lng\": 31.3301\n      },\n      \"dropoff\": {\n        \"address\": \"Maadi, Cairo\",\n        \"lat\": 29.9602,\n        \"lng\": 31.2569\n      },\n      \"vehicleType\": \"private_car\",\n      \"arrivalTime\": \"09:30\",\n      \"numberOfPassengers\": 1,\n      \"priceEgp\": 100\n    }\n  ],\n  \"note\": \"Call when you arrive\",\n  \"promoCode\": \"FRIEND20\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"

@@ -64,19 +64,20 @@ const UserSchema = new Schema(
     region: {
       type: String,
       default: null,
-      enum: ["EG", "KSA", "AE-ABU-DHABI", null],
+      enum: ["EGY", "KSA", "UAE", null],
       index: true,
     },
     defaultRegionCode: {
       type: String,
       default: null,
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI", null],
+      enum: ["EGY", "KSA", "UAE", null],
       index: true,
     },
+    defaultCityCode: { type: String, default: null, trim: true, lowercase: true },
     allowedRegionCodes: {
       type: [String],
       default: [],
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      enum: ["EGY", "KSA", "UAE"],
     },
     savedAddresses: { type: [SavedAddressSchema], default: [] },
     // Fine-grained admin permissions (e.g. "transactions.view"). Empty/absent
@@ -103,7 +104,7 @@ if (existingUserModel) {
       region: {
         type: String,
         default: null,
-        enum: ["EG", "KSA", "AE-ABU-DHABI", null],
+        enum: ["EGY", "KSA", "UAE", null],
         index: true,
       },
     });
@@ -113,9 +114,14 @@ if (existingUserModel) {
       defaultRegionCode: {
         type: String,
         default: null,
-        enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI", null],
+        enum: ["EGY", "KSA", "UAE", null],
         index: true,
       },
+    });
+  }
+  if (!existingUserModel.schema.path("defaultCityCode")) {
+    existingUserModel.schema.add({
+      defaultCityCode: { type: String, default: null, trim: true, lowercase: true },
     });
   }
   if (!existingUserModel.schema.path("allowedRegionCodes")) {
@@ -123,7 +129,7 @@ if (existingUserModel) {
       allowedRegionCodes: {
         type: [String],
         default: [],
-        enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+        enum: ["EGY", "KSA", "UAE"],
       },
     });
   }
@@ -183,6 +189,7 @@ UserSchema.index(
   { email: 1, role: 1 },
   { unique: true, partialFilterExpression: { email: { $type: "string" } } },
 );
+UserSchema.index({ defaultRegionCode: 1, defaultCityCode: 1 });
 
 // const existingUserModel = models.User;
 // if (existingUserModel && !existingUserModel.schema.path("userNumber")) {

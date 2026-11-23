@@ -61,7 +61,11 @@ function getTomorrowDate() {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth();
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
+  );
   if (!auth.authorized) return auth.response;
 
   await connectDB();
@@ -70,6 +74,8 @@ export async function GET(req: NextRequest) {
 
   const availabilities = await Availability.find({
     date: tomorrow,
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
   }).lean<
     {
       availabilityNumber: number;

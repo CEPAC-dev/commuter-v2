@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
     nodeEnv: process.env.NODE_ENV,
     appEnv: process.env.APP_ENV,
     kashierMode: process.env.KASHIER_MODE,
+    preferredOrigin: new URL(req.url).origin,
   });
   if (!validation.valid) {
     console.error("Invalid APP_URL for Kashier top-up", {

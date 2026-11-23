@@ -7,22 +7,41 @@ import { adminAuth } from "@/lib/middleware/adminAuth";
 import { buildEligibleMatchTripFilter } from "@/lib/matchingEndpointGuards";
 
 export async function GET(req: NextRequest) {
-  const auth = await adminAuth();
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
+  );
   if (!auth.authorized) return auth.response;
 
   try {
     await connectDB();
 
+    const cityDriverIds = await Availability.distinct("driverId", {
+      regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
+    });
     const [availabilities, drivers, trips] = await Promise.all([
-      Availability.find({ status: { $in: ["open", "matched"] } })
+      Availability.find({
+        regionCode: auth.region.code,
+        cityCode: auth.region.cityCode,
+        status: { $in: ["open", "matched"] },
+      })
         .select("_id date startTime endTime")
         .sort({ date: 1, startTime: 1 })
         .lean(),
-      User.find({ role: "driver" })
+      User.find({
+        _id: { $in: cityDriverIds },
+        role: "driver",
+      })
         .select("_id name phone email")
         .sort({ name: 1 })
         .lean(),
-      Trip.find(buildEligibleMatchTripFilter())
+      Trip.find({
+        ...buildEligibleMatchTripFilter(),
+        regionCode: auth.region.code,
+        cityCode: auth.region.cityCode,
+      })
         .select(
           "_id tripNumber date pickupTime arrivalTime pickup dropoff vehicleType rideType priceEgp numberOfPassengers extraPassengers userId",
         )

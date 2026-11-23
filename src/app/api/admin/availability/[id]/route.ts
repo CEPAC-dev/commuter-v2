@@ -9,6 +9,8 @@ import {
 import { shiftsOverlap } from "@/lib/time/availabilityWindow";
 import { isRegionCode, regionFromCoordinates } from "@/lib/config/regions";
 import type { GeoPoint } from "@/types/geo";
+import { loadServiceZones } from "@/lib/geo/zones.server";
+import { isPointInAnyZone } from "@/lib/geo/zones";
 
 function validPoint(value: unknown): value is GeoPoint {
   const point = value as GeoPoint;
@@ -22,13 +24,21 @@ function validPoint(value: unknown): value is GeoPoint {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth();
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
+  );
   if (!auth.authorized) return auth.response;
   await connectDB();
-  const record = await Availability.findById((await params).id)
+  const record = await Availability.findOne({
+    _id: (await params).id,
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  })
     .populate("driverId", "name phone email")
     .lean();
   return record
@@ -43,11 +53,19 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth();
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
+  );
   if (!auth.authorized) return auth.response;
   await connectDB();
   const id = (await params).id;
-  const existing = await Availability.findById(id).lean();
+  const existing = await Availability.findOne({
+    _id: id,
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  }).lean();
   if (!existing)
     return NextResponse.json(
       { error: "Availability not found" },
@@ -72,9 +90,16 @@ export async function PATCH(
     const regionCode =
       regionFromCoordinates(origin.lat, origin.lng) ??
       (isRegionCode(existing.regionCode) ? existing.regionCode : null);
-    if (!regionCode) {
+    if (!regionCode || regionCode !== auth.region.code) {
       return NextResponse.json(
-        { error: "Availability must belong to a supported region." },
+        { error: "Availability must belong to the selected Region." },
+        { status: 400 },
+      );
+    }
+    const zones = await loadServiceZones(regionCode, auth.region.cityCode);
+    if (!zones.length || !isPointInAnyZone([origin.lng, origin.lat], zones)) {
+      return NextResponse.json(
+        { error: "Availability origin must be inside the selected City/State service area." },
         { status: 400 },
       );
     }
@@ -84,6 +109,7 @@ export async function PATCH(
     const sameDayShifts = await Availability.find({
       driverId: existing.driverId,
       regionCode,
+      cityCode: auth.region.cityCode,
       dayOfWeek,
       _id: { $ne: id },
     })
@@ -102,6 +128,7 @@ export async function PATCH(
           dayOfWeek,
           origin,
           regionCode,
+          cityCode: auth.region.cityCode,
           startTime,
           endTime,
           active: body.active ?? existing.active,
@@ -124,13 +151,21 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await adminAuth();
+  const auth = await adminAuth(
+    undefined,
+    req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
+  );
   if (!auth.authorized) return auth.response;
   await connectDB();
-  const result = await Availability.deleteOne({ _id: (await params).id });
+  const result = await Availability.deleteOne({
+    _id: (await params).id,
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  });
   return result.deletedCount
     ? NextResponse.json({ ok: true })
     : NextResponse.json({ error: "Availability not found" }, { status: 404 });

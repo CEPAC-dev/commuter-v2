@@ -119,10 +119,11 @@ const TripSchema = new Schema(
     batchId: { type: String, required: false, index: true },
     regionCode: {
       type: String,
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      enum: ["EGY", "KSA", "UAE"],
       default: null,
       index: true,
     },
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
     currencyCode: {
       type: String,
       enum: ["EGP", "SAR", "AED"],
@@ -357,6 +358,11 @@ const TripSchema = new Schema(
 
 TripSchema.index({ requestId: 1, date: 1 });
 TripSchema.index({ userId: 1, date: -1 });
+TripSchema.index({ userId: 1, createdAt: -1 });
+TripSchema.index({ userId: 1, requestId: 1, createdAt: -1 });
+TripSchema.index({ userId: 1, status: 1, date: -1 });
+TripSchema.index({ userId: 1, paymentStatus: 1, date: -1 });
+TripSchema.index({ userId: 1, regionCode: 1, cityCode: 1, date: -1 });
 TripSchema.index({ driverId: 1, date: -1 });
 TripSchema.index(
   { status: 1 },
@@ -368,6 +374,11 @@ export type TripDoc = InferSchemaType<typeof TripSchema>;
 const existingTripModel = models.Trip;
 if (existingTripModel && !existingTripModel.schema.path("regionCode")) {
   existingTripModel.schema.add({ regionCode: TripSchema.obj.regionCode });
+}
+if (existingTripModel && !existingTripModel.schema.path("cityCode")) {
+  existingTripModel.schema.add({
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
+  });
 }
 if (existingTripModel && !existingTripModel.schema.path("preferedGender")) {
   existingTripModel.schema.add({

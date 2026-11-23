@@ -12,12 +12,12 @@ export default async function AvailabilityPage() {
   if (!session) redirect("/login?redirect=/availability");
   if (session.role === "admin") redirect("/admin/dashboard");
   if (session.role !== "driver") redirect("/my-trips");
-  const { code: regionCode } = await resolveActiveRegion({
+  const { code: regionCode, cityCode } = await resolveActiveRegion({
     userId: session.userId,
   });
 
   const [records, profile] = await Promise.all([
-    listDriverAvailability(session.userId, regionCode),
+    listDriverAvailability(session.userId, regionCode, cityCode),
     getProfile(session.userId, session.role),
   ]);
   if (!profile || profile.role !== "driver") redirect("/login");

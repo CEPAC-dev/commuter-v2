@@ -48,13 +48,19 @@ export default async function TripHistoryPage({
   const parsed = parseHistoryParams(params);
   const filter: TripHistoryFilter = parsed.status;
   const page = parsed.page;
+  const serverPaginated =
+    !parsed.error &&
+    filter === "all" &&
+    parsed.tripNumber == null &&
+    !parsed.from &&
+    !parsed.to;
   const result = parsed.error
     ? { rows: [] as TripListRow[], totalRequests: 0 }
     : await listUserTrips(session.userId, {
-        page: 1,
+        page: serverPaginated ? page : 1,
         pageSize: PAGE_SIZE,
         groupByRequest: true,
-        fetchAll: true,
+        fetchAll: !serverPaginated,
         tripNumber: parsed.tripNumber ?? undefined,
         dateFrom: parsed.from || undefined,
         dateTo: parsed.to || undefined,
@@ -84,8 +90,13 @@ export default async function TripHistoryPage({
     .sort((left, right) =>
       (right.trips[0].createdAt ?? "").localeCompare(left.trips[0].createdAt ?? ""),
     );
-  const totalPages = Math.ceil(filteredItems.length / PAGE_SIZE);
-  const pageItems = filteredItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalItems = serverPaginated
+    ? (result.totalRequests ?? result.rows.length)
+    : filteredItems.length;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  const pageItems = serverPaginated
+    ? filteredItems
+    : filteredItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const validationMessage = parsed.error
     ? translate(locale, `history.error_${parsed.error}`)
     : null;

@@ -1,11 +1,11 @@
 /**
- * Approved backfill: historical operational records default to EG-CAIRO when regionCode is missing.
+ * Approved backfill: historical operational records default to EG when regionCode is missing.
  * Usage: node scripts/backfill-operational-regions.cjs
  */
 const fs = require("fs");
 const { MongoClient } = require("mongodb");
 
-const DEFAULT_REGION = "EG-CAIRO";
+const DEFAULT_REGION = "EGY";
 const COLLECTIONS = ["requests", "trips", "rides", "availabilities"];
 
 function loadEnv() {

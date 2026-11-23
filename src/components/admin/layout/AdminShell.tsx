@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import AdminActivityBell from "@/components/admin/layout/AdminActivityBell";
 import AdminAccountMenu from "@/components/admin/layout/AdminAccountMenu";
-import type { RegionSlug } from "@/lib/config/regions";
+import type { RegionCode, RegionSlug } from "@/lib/config/regions";
 import { useClientLocale } from "@/lib/i18n/client";
 
 interface AdminIdentity {
@@ -44,9 +44,17 @@ interface AdminRegionOption {
   label: string;
 }
 
+interface AdminCityOption {
+  code: string;
+  label: string;
+}
+
 interface AdminShellProps {
   children: ReactNode;
   activeRegionSlug?: RegionSlug;
+  activeRegionCode?: RegionCode;
+  activeCityCode?: string;
+  operatingCities?: AdminCityOption[];
   allowedRegions?: AdminRegionOption[];
   adminIdentity?: AdminIdentity | null;
 }
@@ -118,6 +126,7 @@ const sections = [
     statKey: null,
   },
   { href: "/admin/vehicles", label: "Vehicles", icon: CarFront, statKey: null },
+  { href: "/admin/regions", label: "Regions", icon: MapPinned, statKey: null },
   {
     href: "/admin/availability",
     label: "Availability",
@@ -197,6 +206,9 @@ export function AdminTopbarActions({ children }: { children: ReactNode }) {
 export default function AdminShell({
   children,
   activeRegionSlug,
+  activeRegionCode,
+  activeCityCode,
+  operatingCities = [],
   allowedRegions = [],
   adminIdentity,
 }: AdminShellProps) {
@@ -362,6 +374,21 @@ export default function AdminShell({
     router.refresh();
   }
 
+  async function changeCity(cityCode: string) {
+    if (!activeRegionCode) return;
+    const response = await fetch("/api/admin/active-city", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ regionCode: activeRegionCode, cityCode }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      window.alert(data.error ?? "Could not change active City/State.");
+      return;
+    }
+    router.refresh();
+  }
+
   function sidebarHref(href: string) {
     if (activeRegionSlug && href === "/admin/profile") {
       return `/${activeRegionSlug}${href}`;
@@ -497,6 +524,33 @@ export default function AdminShell({
                   {allowedRegions.map((region) => (
                     <option key={region.code} value={region.slug}>
                       {region.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {activeCityCode && operatingCities.length > 0 ? (
+              <label
+                className="admin-region-control"
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <span className="admin-region-label" style={{ fontSize: 13, fontWeight: 600 }}>
+                  Active City/State
+                </span>
+                <select
+                  aria-label="Active City/State"
+                  value={activeCityCode}
+                  onChange={(event) => void changeCity(event.target.value)}
+                  style={{
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                    background: "var(--color-panel)",
+                    padding: "8px 10px",
+                  }}
+                >
+                  {operatingCities.map((city) => (
+                    <option key={city.code} value={city.code}>
+                      {city.label}
                     </option>
                   ))}
                 </select>

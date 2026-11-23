@@ -6,8 +6,14 @@
 const fs = require("fs");
 const { MongoClient } = require("mongodb");
 
-const REGION_CODES = ["EG-CAIRO", "SA", "AE-ABU-DHABI"];
-const LEGACY_ALIASES = { EG: "EG-CAIRO", KSA: "SA" };
+const REGION_CODES = ["EGY", "KSA", "UAE"];
+const LEGACY_ALIASES = {
+    "EG-CAIRO": "EGY",
+    EG: "EGY",
+    SA: "KSA",
+    "AE-ABU-DHABI": "UAE",
+    AE: "UAE",
+};
 
 function loadEnv() {
     if (!fs.existsSync(".env.local")) return;
@@ -19,7 +25,7 @@ function loadEnv() {
 
 function canonicalRegion(value) {
     if (REGION_CODES.includes(value)) return value;
-    return LEGACY_ALIASES[value] ?? "EG-CAIRO";
+    return LEGACY_ALIASES[value] ?? "EGY";
 }
 
 async function main() {

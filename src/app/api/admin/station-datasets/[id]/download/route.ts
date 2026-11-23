@@ -15,6 +15,7 @@ export async function GET(
   const auth = await adminAuth(
     undefined,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
   if (!auth.region)
@@ -30,6 +31,7 @@ export async function GET(
   const dataset = await StationDataset.findOne({
     _id: id,
     regionCode: region.code,
+    cityCode: region.cityCode,
   }).lean();
 
   if (!dataset)
@@ -40,6 +42,7 @@ export async function GET(
     await StationAuditLog.create({
       action: "download",
       regionCode: region.code,
+      cityCode: region.cityCode,
       datasetVersionId: dataset._id,
       actorId: auth.userId,
     });

@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   const auth = await adminAuth(
     PERMISSIONS.STATIONS_MANAGE,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
 
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
     {
       status: "processing",
       regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
       updatedAt: { $lt: new Date(Date.now() - 15 * 60 * 1000) },
     },
     {
@@ -49,6 +51,7 @@ export async function GET(req: NextRequest) {
     .slice(0, 100);
   const filter: Record<string, unknown> = {
     regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
     ...(status !== "all" && { status }),
   };
   if (search) {
@@ -78,7 +81,7 @@ export async function GET(req: NextRequest) {
     StationSuggestion.countDocuments(filter),
   ]);
   const zones = requests.some((request) => !request.zoneName)
-    ? await loadServiceZones(auth.region.code)
+    ? await loadServiceZones(auth.region.code, auth.region.cityCode)
     : [];
 
   return NextResponse.json({

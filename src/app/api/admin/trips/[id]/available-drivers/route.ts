@@ -19,11 +19,12 @@ export async function GET(
 
   const trip = await Trip.findById(id)
     .select(
-      "date regionCode pickupTime arrivalTime vehicleType pickupStation dropoffStation status paymentStatus rideId",
+      "date regionCode cityCode pickupTime arrivalTime vehicleType pickupStation dropoffStation status paymentStatus rideId",
     )
     .lean<{
       date?: string;
       regionCode?: string | null;
+      cityCode?: string | null;
       pickupTime?: string;
       arrivalTime?: string;
       vehicleType?: string;
@@ -58,6 +59,7 @@ export async function GET(
     _id: id,
     date: trip.date!,
     regionCode: trip.regionCode,
+    cityCode: trip.cityCode,
     startTime: trip.pickupTime,
     endTime: trip.arrivalTime,
     vehicleType: trip.vehicleType,
@@ -71,6 +73,8 @@ export async function GET(
   const availability = await Availability.find({
     dayOfWeek,
     active: true,
+    regionCode: trip.regionCode,
+    cityCode: trip.cityCode,
     driverId: { $in: eligibleDriverIds },
     startTime: { $lte: trip.pickupTime },
     endTime: { $gte: trip.arrivalTime },

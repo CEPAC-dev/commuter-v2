@@ -14,6 +14,7 @@ export async function GET(
   const auth = await adminAuth(
     undefined,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
   if (!auth.region)
@@ -29,6 +30,7 @@ export async function GET(
   const dataset = await StationDataset.findOne({
     _id: id,
     regionCode: region.code,
+    cityCode: region.cityCode,
   })
     .select("+normalizedStations")
     .lean();
@@ -42,6 +44,7 @@ export async function GET(
   }
   const active = await Station.find({
     regionCode: region.code,
+    cityCode: region.cityCode,
     active: true,
   })
     .select(
@@ -49,10 +52,14 @@ export async function GET(
     )
     .lean();
   const diff = diffStationDatasetDetailed(dataset.normalizedStations, active);
-  await StationDataset.updateOne({ _id: dataset._id }, { $set: diff });
+  await StationDataset.updateOne(
+    { _id: dataset._id, regionCode: region.code, cityCode: region.cityCode },
+    { $set: diff },
+  );
   await StationAuditLog.create({
     action: "preview",
     regionCode: region.code,
+    cityCode: region.cityCode,
     datasetVersionId: dataset._id,
     actorId: auth.userId,
     metadata: diff,
@@ -60,6 +67,7 @@ export async function GET(
   return NextResponse.json({
     datasetId: String(dataset._id),
     regionCode: dataset.regionCode,
+    cityCode: dataset.cityCode,
     version: dataset.version,
     status: dataset.status,
     file: dataset.file,

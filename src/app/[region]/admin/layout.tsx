@@ -8,6 +8,7 @@ import {
   resolveActiveRegion,
 } from "@/lib/regions/resolveActiveRegion";
 import { getAdminIdentity } from "@/lib/admin/getAdminIdentity";
+import { getOperatingCities } from "@/lib/regions/cities";
 
 export default async function RegionalAdminLayout({
   children,
@@ -26,6 +27,7 @@ export default async function RegionalAdminLayout({
     activeRegion = await resolveActiveRegion({
       userId: session.userId,
       requested: requestedRegion,
+      allowInactiveCity: true,
     });
   } catch (error) {
     if (error instanceof RegionAccessError) notFound();
@@ -40,9 +42,16 @@ export default async function RegionalAdminLayout({
     }),
   );
   const adminIdentity = await getAdminIdentity(session.userId);
+  const cities = await getOperatingCities(activeRegion.code, true);
   return (
     <AdminShell
       activeRegionSlug={activeRegion.config.urlSlug}
+      activeRegionCode={activeRegion.code}
+      activeCityCode={activeRegion.cityCode}
+      operatingCities={cities.map((city) => ({
+        code: city.cityCode,
+        label: city.name,
+      }))}
       allowedRegions={allowedRegions}
       adminIdentity={adminIdentity}
     >

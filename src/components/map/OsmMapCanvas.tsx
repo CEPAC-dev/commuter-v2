@@ -21,7 +21,7 @@ interface ZonePreviewSettings {
   showZones: boolean;
   showZoneLabels: boolean;
   maskOutsideZones: boolean;
-  regionCode: "EG-CAIRO" | "SA" | "AE-ABU-DHABI";
+  regionCode: "EGY" | "KSA" | "UAE";
 }
 
 interface PreviewStation {

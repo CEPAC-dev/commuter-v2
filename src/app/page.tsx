@@ -6,8 +6,9 @@ import WhyCommuter from "@/components/landing/WhyCommuter";
 import CTA from "@/components/landing/CTA";
 import Footer from "@/components/layout/Footer";
 import { getSession } from "@/lib/auth/session";
+import { getPrimaryAppUrl } from "@/lib/appUrl";
 
-const siteUrl = process.env.APP_URL ?? "http://localhost:3000";
+const siteUrl = getPrimaryAppUrl(process.env.APP_URL);
 
 export default async function Home({
   searchParams,

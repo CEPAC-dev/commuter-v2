@@ -52,6 +52,7 @@ export type RideStatus =
 
 export interface RidePassengerRow {
   tripId: string;
+  tripNumber?: number;
   userId?: string;
   pickupAddress: string;
   dropoffAddress: string;

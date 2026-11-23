@@ -1,4 +1,8 @@
-import { REGIONS, REGION_CODES } from "@/lib/config/regions";
+import {
+  CAPITAL_CITY_CODES,
+  REGIONS,
+  REGION_CODES,
+} from "@/lib/config/regions";
 import { normalizePlainText } from "@/lib/security/request";
 
 const numericFields = ["rate", "additional_rate", "buffer", "window", "capacity", "occupancy", "min_occupancy", "minimum_charge", "vehicle_type", "trip_type", "sortOrder"] as const;
@@ -11,8 +15,16 @@ function cleanRegionConfig(input: unknown) {
   if (value.active !== undefined && typeof value.active !== "boolean") return { error: `Invalid active flag for ${value.regionCode}.` };
   if (value.pricingConfigured !== undefined && typeof value.pricingConfigured !== "boolean") return { error: `Invalid pricing flag for ${value.regionCode}.` };
   const regionCode = value.regionCode as (typeof REGION_CODES)[number];
+  const cityCode =
+    typeof value.cityCode === "string" && value.cityCode.trim()
+      ? value.cityCode.trim().toLowerCase()
+      : CAPITAL_CITY_CODES[regionCode];
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cityCode)) {
+    return { error: `Invalid City/State for ${value.regionCode}.` };
+  }
   const config: Record<string, string | number | boolean> = {
     regionCode,
+    cityCode,
     // Currency belongs to the region; never accept a client-supplied currency.
     currencyCode: REGIONS[regionCode].currency.code,
     pricingConfigured: value.pricingConfigured === true,
@@ -62,7 +74,7 @@ export function cleanVehicle(
     const failed = parsed.find((result) => "error" in result);
     if (failed?.error) return { error: failed.error };
     const configs = parsed.map((result) => result.config as Record<string, string | number | boolean>);
-    if (new Set(configs.map((config) => config.regionCode)).size !== configs.length) return { error: "Each region can be configured once." };
+    if (new Set(configs.map((config) => `${config.regionCode}:${config.cityCode}`)).size !== configs.length) return { error: "Each City/State can be configured once." };
     update.regionConfigs = configs;
     update.regionCodes = configs.map((config) => config.regionCode);
     if (configs[0]) Object.assign(update, configs[0]);

@@ -491,6 +491,7 @@ export const ar: Record<MessageKey, string> = {
   "rejection.reviewed_date": "اتراجع يوم {date}",
   "rejection.book_again": "احجز رحلة تانية",
   "trip_detail.summary": "ملخص الرحلة",
+  "trip_detail.attached_trips": "الرحلات المرتبطة",
   "trip_detail.status": "الحالة",
   "trip_detail.trip_price": "سعر الرحلة",
   "trip_detail.price_breakdown": "تفاصيل السعر",

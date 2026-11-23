@@ -6,6 +6,7 @@ import { deleteRideAndRestoreTrips } from "@/lib/services/rideService";
 import { normalizeSharedRidePassengers } from "@/lib/services/sharedRideManifest";
 import "@/models/Availability";
 import { Ride } from "@/models/Ride";
+import { Trip } from "@/models/Trip";
 import { User } from "@/models/User";
 
 function toObjectIdString(value: unknown) {
@@ -39,12 +40,34 @@ export async function GET(
   const manifestPassengers = normalizeSharedRidePassengers(
     ride as unknown as Record<string, unknown>,
   );
+  if (manifestPassengers.length === 0) {
+    const routePassengersByTripId = new Map<string, Record<string, unknown>>();
+    for (const stop of ride.route ?? []) {
+      for (const passenger of [
+        ...(stop.boarding ?? []),
+        ...(stop.alighting ?? []),
+      ]) {
+        if (
+          passenger &&
+          typeof passenger === "object" &&
+          passenger.tripId
+        ) {
+          routePassengersByTripId.set(
+            String(passenger.tripId),
+            passenger as Record<string, unknown>,
+          );
+        }
+      }
+    }
+    manifestPassengers.push(...routePassengersByTripId.values());
+  }
 
-  const passengerByUserId = new Map<
+  const passengerByTripId = new Map<
     string,
     {
       userId: string;
       tripId?: string;
+      tripNumber?: number;
       pickupOrder?: number;
       dropoffOrder?: number;
       numberOfPassengers: number;
@@ -54,9 +77,14 @@ export async function GET(
   for (const passenger of manifestPassengers) {
     const userId = toObjectIdString(passenger.userId);
     if (!userId) continue;
-    passengerByUserId.set(userId, {
+    const tripId = toObjectIdString(passenger.tripId) ?? undefined;
+    passengerByTripId.set(tripId ?? userId, {
       userId,
-      tripId: toObjectIdString(passenger.tripId) ?? undefined,
+      tripId,
+      tripNumber:
+        typeof passenger.tripNumber === "number"
+          ? passenger.tripNumber
+          : undefined,
       pickupOrder:
         typeof passenger.pickupOrder === "number"
           ? passenger.pickupOrder
@@ -71,7 +99,11 @@ export async function GET(
     });
   }
 
-  const passengerIds = [...passengerByUserId.keys()];
+  const passengerIds = [
+    ...new Set(
+      [...passengerByTripId.values()].map((passenger) => passenger.userId),
+    ),
+  ];
   const users = passengerIds.length
     ? await User.find({ _id: { $in: passengerIds } })
         .select("userNumber name phone profilePic")
@@ -85,10 +117,26 @@ export async function GET(
           }[]
         >()
     : [];
+  const tripIds = [...new Set(
+    [...passengerByTripId.values()]
+      .filter((passenger) => passenger.tripNumber == null)
+      .map((passenger) => passenger.tripId)
+      .filter((tripId): tripId is string => Boolean(tripId)),
+  )];
+  const trips = tripIds.length
+    ? await Trip.find({ _id: { $in: tripIds } })
+        .select("_id tripNumber")
+        .lean<{ _id: unknown; tripNumber?: number }[]>()
+    : [];
+  const tripNumbersById = new Map(
+    trips.map((trip) => [String(trip._id), trip.tripNumber]),
+  );
   const usersById = new Map(users.map((user) => [String(user._id), user]));
-  const passengerDetails = [...passengerByUserId.values()]
+  const passengerDetails = [...passengerByTripId.values()]
     .map((passenger) => ({
       ...passenger,
+      tripNumber:
+        passenger.tripNumber ?? tripNumbersById.get(passenger.tripId ?? ""),
       user: usersById.get(passenger.userId) ?? null,
     }))
     .sort(

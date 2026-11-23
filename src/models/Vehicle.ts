@@ -2,7 +2,8 @@ import { Schema, model, models, type InferSchemaType } from "mongoose";
 
 const VehicleRegionConfigSchema = new Schema(
   {
-    regionCode: { type: String, required: true },
+    regionCode: { type: String, required: true, enum: ["EGY", "KSA", "UAE"] },
+    cityCode: { type: String, required: false, trim: true, lowercase: true },
     currencyCode: { type: String, required: true, enum: ["EGP", "SAR", "AED"] },
     pricingConfigured: { type: Boolean, required: true, default: false },
     active: { type: Boolean, required: true, default: true },
@@ -41,7 +42,12 @@ const VehicleSchema = new Schema(
     minimum_charge: { type: Number, required: true, default: 0 },
     vehicle_type: { type: Number, required: true, default: 0 },
     trip_type: { type: Number, required: true, default: 0 },
-    regionCodes: { type: [String], required: true, default: [] },
+    regionCodes: {
+      type: [String],
+      required: true,
+      default: [],
+      enum: ["EGY", "KSA", "UAE"],
+    },
     regionConfigs: {
       type: [VehicleRegionConfigSchema],
       required: true,
@@ -52,6 +58,11 @@ const VehicleSchema = new Schema(
   },
   { timestamps: true },
 );
+
+VehicleSchema.index({
+  "regionConfigs.regionCode": 1,
+  "regionConfigs.cityCode": 1,
+});
 
 export type VehicleDoc = InferSchemaType<typeof VehicleSchema>;
 export const Vehicle = models.Vehicle || model("Vehicle", VehicleSchema);

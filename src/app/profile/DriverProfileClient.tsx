@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   User,
@@ -19,6 +19,11 @@ import SavedAddressesSection from "@/components/shared/SavedAddressesSection";
 import type { CarType } from "@/lib/config/driver";
 import type { SavedAddress } from "@/types/shared";
 import { useClientLocale } from "@/lib/locale.client";
+import {
+  DEFAULT_REGION,
+  REGION_LIST,
+  type RegionCode,
+} from "@/lib/config/regions";
 
 interface Props {
   userNumber: number;
@@ -43,6 +48,8 @@ interface Props {
   verificationStatus: "incomplete" | "pending" | "verified";
   profileSince: string;
   initialSavedAddresses: SavedAddress[];
+  initialRegion: RegionCode | null;
+  initialCityCode: string | null;
 }
 
 const labelStyle: React.CSSProperties = {
@@ -130,6 +137,8 @@ export default function DriverProfileClient({
   documents,
   verificationStatus,
   initialSavedAddresses,
+  initialRegion,
+  initialCityCode,
 }: Props) {
   const { dir, t } = useClientLocale();
   const selectStyle = getSelectStyle(dir);
@@ -137,11 +146,42 @@ export default function DriverProfileClient({
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
   const [gender, setGender] = useState(initialGender);
+  const [region, setRegion] = useState(initialRegion ?? DEFAULT_REGION);
+  const [cityCode, setCityCode] = useState(initialCityCode ?? "");
+  const [cities, setCities] = useState<
+    Array<{ regionCode: RegionCode; cityCode: string; name: string; nameAr: string }>
+  >([]);
   const [savingPersonal, setSavingPersonal] = useState(false);
   const [personalMsg, setPersonalMsg] = useState<{
     ok: boolean;
     text: string;
   } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/regions", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load operating cities.");
+        return (await response.json()) as {
+          cities: Array<{
+            regionCode: RegionCode;
+            cityCode: string;
+            name: string;
+            nameAr: string;
+          }>;
+        };
+      })
+      .then((data) => {
+        if (!cancelled) setCities(data.cities);
+      })
+      .catch(() => {
+        if (!cancelled)
+          setPersonalMsg({ ok: false, text: "Unable to load available cities." });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function savePersonal(e: React.FormEvent) {
     e.preventDefault();
@@ -159,6 +199,8 @@ export default function DriverProfileClient({
           name: name.trim(),
           phone: phone.trim(),
           gender,
+          regionCode: region,
+          cityCode,
         }),
       });
       const data = await res.json();
@@ -392,6 +434,54 @@ export default function DriverProfileClient({
               >
                 <option value="male">{t("gender.male")}</option>
                 <option value="female">{t("gender.female")}</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="driver-region" style={labelStyle}>
+                Region
+              </label>
+              <select
+                id="driver-region"
+                required
+                value={region}
+                onChange={(event) => {
+                  setRegion(event.target.value as RegionCode);
+                  setCityCode("");
+                }}
+                style={selectStyle}
+              >
+                {REGION_LIST.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.countryCode === "EG"
+                      ? "Egypt"
+                      : item.countryCode === "SA"
+                        ? "Saudi Arabia"
+                        : "United Arab Emirates"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="driver-city" style={labelStyle}>
+                City/State
+              </label>
+              <select
+                id="driver-city"
+                required
+                value={cityCode}
+                onChange={(event) => setCityCode(event.target.value)}
+                style={selectStyle}
+              >
+                <option value="" disabled>
+                  Select a City/State
+                </option>
+                {cities
+                  .filter((city) => city.regionCode === region)
+                  .map((city) => (
+                    <option key={city.cityCode} value={city.cityCode}>
+                      {city.name}
+                    </option>
+                  ))}
               </select>
             </div>
             {personalMsg && (

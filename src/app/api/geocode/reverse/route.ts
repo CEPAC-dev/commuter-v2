@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getPrimaryAppUrl } from "@/lib/appUrl";
 
 export async function GET(req: NextRequest) {
   const lat = req.nextUrl.searchParams.get("lat");
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
   const res = await fetch(url.toString(), {
     headers: {
       "User-Agent": "Commuter/1.0 (OpenStreetMap reverse geocode)",
-      Referer: process.env.APP_URL ?? "http://localhost:3000",
+      Referer: getPrimaryAppUrl(process.env.APP_URL),
     },
     next: { revalidate: 60 },
   });

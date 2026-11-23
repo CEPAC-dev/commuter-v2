@@ -29,7 +29,7 @@ const mockedModules = new Map([
   ],
   [
     "@/lib/config/regions",
-    `export function isRegionCode(value) { return ["EG-CAIRO", "EG-ALEX"].includes(value); }`,
+    `export function isRegionCode(value) { return ["EGY", "KSA", "UAE"].includes(value); }`,
   ],
   [
     "@/models/User",
@@ -94,18 +94,18 @@ test("role changes are rejected without writing", async () => {
 });
 
 test("region-only updates still succeed", async () => {
-  const response = await patchUser({ defaultRegionCode: "EG-CAIRO" });
+  const response = await patchUser({ defaultRegionCode: "EGY" });
   const body = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(body.data.defaultRegionCode, "EG-CAIRO");
-  assert.deepEqual(state.writes, [{ defaultRegionCode: "EG-CAIRO" }]);
+  assert.equal(body.data.defaultRegionCode, "EGY");
+  assert.deepEqual(state.writes, [{ defaultRegionCode: "EGY" }]);
 });
 
 test("non-admin requests are rejected before the update", async () => {
   state.authorized = false;
 
-  const response = await patchUser({ defaultRegionCode: "EG-CAIRO" });
+  const response = await patchUser({ defaultRegionCode: "EGY" });
 
   assert.equal(response.status, 401);
   assert.equal(state.writes.length, 0);

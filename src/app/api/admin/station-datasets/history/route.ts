@@ -7,12 +7,16 @@ export async function GET(req: NextRequest) {
   const auth = await adminAuth(
     undefined,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
   await connectDB();
-  const datasets = await StationDataset.find({ regionCode: auth.region.code })
+  const datasets = await StationDataset.find({
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  })
     .select(
-      "regionCode version status file uploadedBy uploadedAt validatedAt publishedAt publishedBy stationCount validCount invalidCount newCount updatedCount removedCount unchangedCount createdAt",
+      "regionCode cityCode version status file uploadedBy uploadedAt validatedAt publishedAt publishedBy stationCount validCount invalidCount newCount updatedCount removedCount unchangedCount createdAt",
     )
     .sort({ version: -1 })
     .limit(100)

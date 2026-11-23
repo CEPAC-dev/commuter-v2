@@ -64,6 +64,7 @@ export async function GET(req: NextRequest) {
   const auth = await adminAuth(
     undefined,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
 
@@ -104,7 +105,10 @@ export async function GET(req: NextRequest) {
       : new Date().toISOString();
 
   await connectDB();
-  const stations = await Station.find({ regionCode: auth.region.code })
+  const stations = await Station.find({
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  })
     .select("objectId lat lng name zones description landmark direction")
     .sort({ objectId: 1 })
     .lean<StationRow[]>();

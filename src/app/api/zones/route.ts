@@ -18,10 +18,11 @@ export async function GET(request: NextRequest) {
     const region = await resolveActiveRegion({
       userId: session.userId,
       requested: request.nextUrl.searchParams.get("region"),
+      requestedCity: request.nextUrl.searchParams.get("cityCode"),
     });
     const [serviceZones, mapSettings] = await Promise.all([
-      getServiceZoneConfig(region.code),
-      getMapSettings(region.code),
+      getServiceZoneConfig(region.code, region.cityCode),
+      getMapSettings(region.code, region.cityCode),
     ]);
 
     return NextResponse.json(

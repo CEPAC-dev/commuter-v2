@@ -26,6 +26,7 @@ export const AssignedDriverSchema = new Schema(
 const RidePassengerSchema = new Schema(
   {
     tripId: { type: Types.ObjectId, ref: "Trip", required: true },
+    tripNumber: { type: Number, required: false },
     userId: { type: Types.ObjectId, ref: "User", required: true },
     passengerNumber: { type: Number, required: false, min: 1 },
     pickup: { type: PointSchema, required: true },
@@ -98,10 +99,11 @@ const RideSchema = new Schema(
     },
     regionCode: {
       type: String,
-      enum: ["EG-CAIRO", "SA", "AE-ABU-DHABI"],
+      enum: ["EGY", "KSA", "UAE"],
       default: null,
       index: true,
     },
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
     availabilityId: {
       type: Types.ObjectId,
       ref: "Availability",
@@ -190,6 +192,11 @@ const existingRideModel = models.Ride;
 if (existingRideModel && !existingRideModel.schema.path("regionCode")) {
   existingRideModel.schema.add({ regionCode: RideSchema.obj.regionCode });
 }
+if (existingRideModel && !existingRideModel.schema.path("cityCode")) {
+  existingRideModel.schema.add({
+    cityCode: { type: String, required: false, trim: true, lowercase: true, index: true },
+  });
+}
 if (existingRideModel && !existingRideModel.schema.path("passengersCount")) {
   existingRideModel.schema.add({
     passengersCount: RideSchema.obj.passengersCount,
@@ -203,6 +210,15 @@ if (existingRideModel && !existingRideModel.schema.path("hasOpenIncident")) {
 if (existingRideModel && !existingRideModel.schema.path("routeCoordinates")) {
   existingRideModel.schema.add({
     routeCoordinates: RideSchema.obj.routeCoordinates,
+  });
+}
+const existingPassengersPath = existingRideModel?.schema.path("passengers");
+if (
+  existingPassengersPath instanceof Schema.Types.DocumentArray &&
+  !existingPassengersPath.schema.path("tripNumber")
+) {
+  existingPassengersPath.schema.add({
+    tripNumber: RidePassengerSchema.obj.tripNumber,
   });
 }
 

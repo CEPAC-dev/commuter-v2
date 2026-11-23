@@ -30,6 +30,7 @@ export interface VehicleConfig {
 
 export interface VehicleRegionConfig {
   regionCode: string;
+  cityCode?: string;
   currencyCode: CurrencyCode;
   pricingConfigured: boolean;
   /** Regional availability. Inactive types remain visible but cannot be booked. */

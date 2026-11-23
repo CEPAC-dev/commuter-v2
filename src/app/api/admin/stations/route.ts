@@ -8,6 +8,7 @@ export async function GET(req: NextRequest) {
   const auth = await adminAuth(
     PERMISSIONS.STATIONS_MANAGE,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
 
@@ -23,7 +24,10 @@ export async function GET(req: NextRequest) {
   const limit = requestedLimit === "all"
     ? 0
     : Math.min(Math.max(Number(requestedLimit), 1), 100);
-  const filter: Record<string, unknown> = { regionCode: auth.region.code };
+  const filter: Record<string, unknown> = {
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  };
   if (active === "true" || active === "false") filter.active = active === "true";
   if (stationType) filter.stationType = stationType;
   if (zone) filter.zones = zone;
@@ -44,8 +48,8 @@ export async function GET(req: NextRequest) {
       .limit(limit || 0)
       .lean(),
     Station.countDocuments(filter),
-    Station.distinct("zones", { regionCode: auth.region.code, zones: { $ne: "" } }),
-    Station.distinct("stationType", { regionCode: auth.region.code, stationType: { $ne: "" } }),
+    Station.distinct("zones", { ...filter, zones: { $ne: "" } }),
+    Station.distinct("stationType", { ...filter, stationType: { $ne: "" } }),
   ]);
 
   return NextResponse.json({ stations, page, limit: requestedLimit, total, totalPages: limit ? Math.ceil(total / limit) : 1, filters: { zones: zoneValues.sort(), stationTypes: typeValues.sort() } });

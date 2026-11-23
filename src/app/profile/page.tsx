@@ -39,6 +39,8 @@ export default async function ProfilePage() {
         verificationStatus={profile.verificationStatus}
         profileSince={profile.profileSince}
         initialSavedAddresses={profile.savedAddresses}
+        initialRegion={profile.region}
+        initialCityCode={profile.cityCode}
       />
     );
   }
@@ -52,6 +54,7 @@ export default async function ProfilePage() {
       initialPhoneVerified={Boolean(profile.phoneVerifiedAt)}
       initialHasSecurityQuestion={profile.hasSecurityQuestion}
       initialRegion={profile.region}
+      initialCityCode={profile.cityCode}
       initialGender={profile.gender}
       initialProfilePic={profile.profilePic}
       initialSavedAddresses={profile.savedAddresses}

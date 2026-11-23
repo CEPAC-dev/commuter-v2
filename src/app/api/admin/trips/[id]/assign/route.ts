@@ -54,6 +54,7 @@ export async function PATCH(
     _id: trip._id,
     date: trip.date,
     regionCode: trip.regionCode,
+    cityCode: trip.cityCode,
     startTime: trip.pickupTime,
     endTime: trip.arrivalTime,
     vehicleType: trip.vehicleType,

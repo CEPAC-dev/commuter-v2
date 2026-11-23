@@ -14,6 +14,7 @@ export async function PATCH(
   const auth = await adminAuth(
     PERMISSIONS.STATIONS_MANAGE,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
 
@@ -55,11 +56,15 @@ export async function PATCH(
 
   if (patch.lat !== undefined && (Number(patch.lat) < -90 || Number(patch.lat) > 90) || patch.lng !== undefined && (Number(patch.lng) < -180 || Number(patch.lng) > 180)) return NextResponse.json({ error: "Coordinates are outside valid ranges." }, { status: 400 });
   await connectDB();
-  const before = await Station.findOne({ objectId, regionCode: auth.region.code });
+  const before = await Station.findOne({
+    objectId,
+    regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
+  });
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const station = await Station.findByIdAndUpdate(before._id, { $set: patch }, { returnDocument: "after" });
   await StationOverride.findOneAndUpdate(
-    { regionCode: auth.region.code, objectId },
+    { regionCode: auth.region.code, cityCode: auth.region.cityCode, objectId },
     { $set: { stationId: before._id, fields: patch, actorId: auth.userId, sourceRemoved: false } },
     { upsert: true },
   );
@@ -67,6 +72,7 @@ export async function PATCH(
   await StationAuditLog.create({
     action: "manual_update",
     regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
     actorId: auth.userId,
     stationId: before._id,
     metadata: { objectId, fields: Object.keys(patch), before: before.toObject(), after: station?.toObject() },
@@ -92,6 +98,7 @@ export async function DELETE(
   const auth = await adminAuth(
     PERMISSIONS.STATIONS_MANAGE,
     req.nextUrl.searchParams.get("region"),
+    req.nextUrl.searchParams.get("cityCode"),
   );
   if (!auth.authorized) return auth.response;
 
@@ -103,7 +110,11 @@ export async function DELETE(
 
   await connectDB();
   const station = await Station.findOneAndUpdate(
-    { objectId, regionCode: auth.region.code },
+    {
+      objectId,
+      regionCode: auth.region.code,
+      cityCode: auth.region.cityCode,
+    },
     { $set: { active: false } },
   );
   if (!station)
@@ -112,6 +123,7 @@ export async function DELETE(
   await StationAuditLog.create({
     action: "manual_deactivate",
     regionCode: auth.region.code,
+    cityCode: auth.region.cityCode,
     actorId: auth.userId,
     stationId: station._id,
     metadata: { objectId, softDeactivate: true },
