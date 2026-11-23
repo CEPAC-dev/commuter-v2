@@ -243,7 +243,8 @@ export default function TransactionDetailClient({
     (trip) =>
       (trip.status === "submitted" ||
         trip.status === "matched" ||
-        trip.status === "nomatch") &&
+        trip.status === "nomatch" ||
+        trip.status === "confirmed") &&
       (!trip.adminRefund ||
         (trip.adminRefund.status === "failed" &&
           trip.adminRefund.retryAllowed === true)),
@@ -509,7 +510,7 @@ export default function TransactionDetailClient({
                 marginBottom: 8,
               }}
             >
-              Submitted/matched/nomatch: full trip cost refunded once.
+              Submitted/matched/nomatch/confirmed: full trip cost refunded once.
               Compensation is a wallet credit on top. Refundable remaining:{" "}
               <strong style={{ color: "var(--color-primary)" }}>
                 {maxRefundable} EGP

@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const eligibleStatuses = ["submitted", "matched", "nomatch"];
+  const eligibleStatuses = ["submitted", "matched", "nomatch", "confirmed"];
   const tripRefundFilter = {
     _id: tripId,
     ...(payableBooking.kind === "trip"
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Trip is not refundable. It must be submitted, matched, or nomatch, and not already refunded successfully.",
+          "Trip is not refundable. It must be submitted, matched, nomatch, or confirmed, and not already refunded successfully.",
       },
       { status: 409 },
     );
@@ -267,15 +267,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Trip is not refundable. It must be submitted, matched, or nomatch, and not already refunded successfully.",
+          "Trip is not refundable. It must be submitted, matched, nomatch, or confirmed, and not already refunded successfully.",
       },
       { status: 409 },
     );
   }
 
-  const isBaseRefundEligible = ["submitted", "matched", "nomatch"].includes(
-    trip.status,
-  );
+  const isBaseRefundEligible = [
+    "submitted",
+    "matched",
+    "nomatch",
+    "confirmed",
+  ].includes(trip.status);
   const amountEgp = isBaseRefundEligible
     ? Math.max(0, Number(trip.priceEgp) - retryRefundBaseEgp)
     : 0;
